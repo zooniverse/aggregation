@@ -24,9 +24,9 @@ setup(
         description='Reduces crowdsourced data from Zooniverse projects',
         long_description=open('README.md').read(),
         install_requires=[
-            "numpy==1.8.1",
-            "argparse==1.2.1",
+            "networkx==1.8.1",
             "pymongo==2.7",
             "scipy==0.13.3",
+            "numpy==1.8.1",
             ]
         )
