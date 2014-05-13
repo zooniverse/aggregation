@@ -21,7 +21,7 @@ class Graph(object):
                 degree = self._parent.degree(n)
                 yield n,degree,attr,neighbors
 
-    class UserSet(NodeSet):
+    class WorkerSet(NodeSet):
         def __iter__(self):
             cond = lambda n: self._parent.node[n]['kind'] == 'task'
             for n,degree,attr,neighbors in super().__iter__(condition=cond):
@@ -32,7 +32,7 @@ class Graph(object):
 
     def __init__(self):
         self._graph = nx.Graph()
-        self._users = self.UserSet(self._graph)
+        self._workers = self.WorkerSet(self._graph)
         self._tasks = self.NodeSet(self._graph)
         self._gold_tasks = self.NodeSet(self._graph)
 
@@ -42,9 +42,9 @@ class Graph(object):
             if k != 'kind':
                 self._graph[id][k] = v 
 
-    def add_user(self, user_id, attributes={}):
-        self._add_node(user_id, 'user', attributes={})
-        self._users.add_node(user_id)
+    def add_worker(self, worker_id, attributes={}):
+        self._add_node(worker_id, 'worker', attributes={})
+        self._workers.add_node(worker_id)
 
     def add_task(self, task_id, attributes={}):
         self._add_node(task_id, 'task', attributes)
@@ -54,14 +54,14 @@ class Graph(object):
         self._add_node(gold_task_id, 'gold_task', attributes)
         self._gold_tasks.add_node(gold_task_id)
 
-    def add_answer(self, user_id, task_id, answer, attributes={}):
-        self._graph.add_edge(user_id, task_id, answer=answer)
+    def add_answer(self, worker_id, task_id, answer, attributes={}):
+        self._graph.add_edge(worker_id, task_id, answer=answer)
         for k,v in attributes.items():
             if k != 'answer':
-                self._graph.edge[user_id][task_id][k] = v 
+                self._graph.edge[worker_id][task_id][k] = v 
 
-    def users(self):
-        return self._users.__iter__()
+    def workers(self):
+        return self._workers.__iter__()
 
     def tasks(self):
         return self._tasks.__iter__()
