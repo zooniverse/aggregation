@@ -1,3 +1,6 @@
+from reduction.graph import Graph
+
+
 class Project(object):
 
     def __init__(self, config):
@@ -15,7 +18,16 @@ class OneDimensionalMarkingProject(BinaryQuestionProject):
 
 class TwoDimensionalMarkingProject(BinaryQuestionProject):
 
-    def __init__(self, config):
-        super().__init__(config)
+    def __init__(self, **kwargs):
+        self.x = kwargs['x']
+        self.y = kwargs['y']
+
+    def __call__(self, db, algo):
+        graph = self.build_graph(db)
+        return algo(graph)
+
+    def build_graph(self, db):
+        g = Graph()
+        return g
 
 
