@@ -13,7 +13,8 @@ class LPI:
 
     def __call__(self, graph):
         self.init_user(graph)
-        for _ in range(self.T):
+        for n in range(self.T):
+            print("Iteration: " + str(n) + " of " + str(self.T))
             self.sigma_task(graph)
             self.sigma_worker(graph)
 
@@ -35,7 +36,7 @@ class LPI:
         return reduce(self.polymultiply, polys)
 
     def sigma_worker_frac(self, exp_x, alpha_j, gamma_j):
-        return np.sum([self.local_factor(k + alpha, gamma_j) * exp_x[k] for k 
+        return np.sum([self.local_factor(k + alpha, gamma_j) * exp_x[k] for k
            in range(gamma_j)])
 
     def sigma_worker(self, graph):
@@ -49,7 +50,7 @@ class LPI:
         workers = graph.workers()
         dist = beta_dist(self.alpha, self.beta, len(workers))
         for i,(worker,_,_,_) in enumerate(workers):
-            worker.p = dist[i] 
+            worker.p = dist[i]
 
     def answer_map(self, graph):
         self.sigma_task(graph)
