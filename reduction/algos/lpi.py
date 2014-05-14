@@ -36,7 +36,7 @@ class LPI:
 
     def sigma_worker_frac(self, exp_x, alpha_j, gamma_j):
         return np.sum([self.local_factor(k + alpha, gamma_j) * exp_x[k] for k 
-           k in range(gamma_j)])
+           in range(gamma_j)])
 
     def sigma_worker(self, graph):
         for w,(gamma_j,alpha_j,_),_,delta in graph.workers():
