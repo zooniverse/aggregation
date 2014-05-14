@@ -54,4 +54,4 @@ class LPI:
 
     def answer_map(self, graph):
         self.sigma_task(graph)
-        return [(task.id, copysign(1, task.p)) for task in graph.tasks()]
+        return [(t.id, copysign(1, t.p)) for t, _, _, _ in graph.tasks()]
