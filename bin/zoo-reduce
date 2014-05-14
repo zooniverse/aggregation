@@ -5,12 +5,10 @@
 
 import argparse
 from reduction.config import Config
-from reduction.project import Project
 
 if __name__ == "__main__":
       parser = argparse.ArgumentParser(description="Reduce Mongo Dataset using Karger et al (2011)'s algorithim")
       parser.add_argument('config', help="Configuration file for run")
 
-      c = Config(file=parser.parse_args().config)
-      Project(c)()
+      print(c = Config(file=parser.parse_args().config)())
 
