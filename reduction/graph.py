@@ -1,4 +1,5 @@
 import networkx as nx
+
 class Node(object):
     def __init__(self, id, p):
         self.p = p
@@ -32,14 +33,15 @@ class NodeSet(object):
         self._type = type
 
     def add_node(self, node):
-        self._nodes.add(node)
+        if type(node) is self._type:
+          self._nodes.add(node)
 
-    def contains(self, n):
+    def __contains__(self, n):
         return self._type(n) in self._nodes
 
-    def neighbors_and_edges(self, id, condition):
-        return [(self._parent[id][n],self._parent.node[n]) for n 
-                    in self._parent.neighbors_iter(id)
+    def neighbors_and_edges(self, node, condition):
+        return [(self._parent[node][n],self._parent.node[n]) for n 
+                    in self._parent.neighbors_iter(node)
                     if condition(n)]
 
     def __iter__(self, condition=lambda n: True):
@@ -78,6 +80,9 @@ class Graph(object):
         elif type(n) is GoldTask:
             self._gold_tasks.add_node(n)
 
+    def __contains__(self, n):
+      return n in self._workers or n in self._tasks or n in self._gold_tasks
+
     def add_worker(self, worker_id, attributes={}):
         self._add_node(Worker(worker_id), attributes={})
 
@@ -88,16 +93,15 @@ class Graph(object):
         self._add_node(GoldTask(gold_task_id), attributes)
 
     def add_answer(self, worker_id, task_id, answer, attributes={}):
-        if self._tasks.contains(task_id):
+        if task_id in self._tasks:
             task = Task(task_id)
-        elif self._gold_tasks.contains(task_id):
+        elif task_id in self._gold_tasks:
             task = GoldTask(task_id)
         else:
             task = None
 
         worker = Worker(worker_id)
 
-        print(task)
         self._graph.add_edge(worker, task, answer=answer)
 
         for k,v in attributes.items():
