@@ -27,8 +27,12 @@ class Worker(Node):
 
 
 class GoldTask(Task):
-    def __init__(self, gt_id):
+    def __init__(self, gt_id, answer):
+        self.answer = answer
         super().__init__(gt_id, p=1)
+
+    def __str__(self):
+        return super().__str__() + " correct answer: " + str(self.answer)
 
 
 class NodeSet(object):
@@ -41,19 +45,17 @@ class NodeSet(object):
         if type(node) is self._type:
             self._nodes.add(node)
 
-
     def __contains__(self, n):
         return self._type(n) in self._nodes
 
-    def neighbors_and_edges(self, node, condition):
+    def neighbors_and_edges(self, node):
         return [(self._parent[node][n], n) for n
-                in self._parent.neighbors_iter(node)
-                if condition(n)]
+                in self._parent.neighbors_iter(node)]
 
-    def __iter__(self, condition=lambda n: True):
+    def __iter__(self):
         for n in self._nodes:
             attr = self._parent.node[n]
-            neighbors = self.neighbors_and_edges(n, condition)
+            neighbors = self.neighbors_and_edges(n)
             degree = self._parent.degree(n)
             yield n, degree, attr, neighbors
 
@@ -62,15 +64,13 @@ class WorkerSet(NodeSet):
     def __init__(self, graph):
         super().__init__(graph, Worker)
 
-    def cond(self, n):
-        return type(n) is Task
-
     def __iter__(self):
-        for n, d, a, ns in super().__iter__(condition=self.cond):
-            neighbor_d = len(ns)
-            excluded_d = d - neighbor_d
-            degree = d, excluded_d, neighbor_d
-            yield n, degree, a, ns
+        for n, d, a, ns in super().__iter__():
+            task_ns = [(e, t) for e, t in ns if type(t) == Task]
+            gold_correct = len([t for e, t in ns
+                                if type(t) is GoldTask
+                                if e['answer'] == t.answer])
+            yield n, d, gold_correct, a, task_ns
 
 
 class Graph(object):
@@ -100,8 +100,8 @@ class Graph(object):
     def add_task(self, task_id, attributes={}):
         self._add_node(Task(task_id), attributes)
 
-    def add_gold_task(self, gold_task_id, attributes={}):
-        self._add_node(GoldTask(gold_task_id), attributes)
+    def add_gold_task(self, gold_task_id, answer, attributes={}):
+        self._add_node(GoldTask(gold_task_id, answer), attributes)
 
     def add_answer(self, worker_id, task_id, answer, attributes={}):
         if task_id in self._tasks:
