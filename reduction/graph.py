@@ -27,7 +27,7 @@ class Worker(Node):
 
 
 class GoldTask(Task):
-    def __init__(self, gt_id, answer):
+    def __init__(self, gt_id, answer=None):
         self.answer = answer
         super().__init__(gt_id, p=1)
 
@@ -66,11 +66,10 @@ class WorkerSet(NodeSet):
 
     def __iter__(self):
         for n, d, a, ns in super().__iter__():
-            task_ns = [(e, t) for e, t in ns if type(t) == Task]
             gold_correct = len([t for e, t in ns
                                 if type(t) is GoldTask
                                 if e['answer'] == t.answer])
-            yield n, d, gold_correct, a, task_ns
+            yield n, d, gold_correct, a, ns
 
 
 class Graph(object):

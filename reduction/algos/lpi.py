@@ -2,6 +2,7 @@ from numpy.random import beta as beta_dist
 from numpy.polynomial.polynomial import polymul
 from math import exp, log, copysign
 from scipy.special import beta
+from functools import reduce
 import numpy as np
 
 
@@ -14,7 +15,7 @@ class LPI:
     def __call__(self, graph):
         self.init_user(graph)
         for n in range(self.T):
-            print("Iteration: " + str(n) + " of " + str(self.T))
+            print("Iteration: " + str(n + 1) + " of " + str(self.T))
             self.sigma_task(graph)
             self.sigma_worker(graph)
 
@@ -40,7 +41,7 @@ class LPI:
                        in range(gamma_j)])
 
     def sigma_worker(self, graph):
-        for w, (gamma_j, alpha_j, _), _, delta in graph.workers():
+        for w, gamma_j, alpha_j, _, delta in graph.workers():
             exp_x = self.exp_x(delta)
             numerator = self.sigma_worker_frac(exp_x, alpha_j + 1, gamma_j)
             denominator = self.sigma_worker_frac(exp_x, alpha_j, gamma_j)
@@ -49,7 +50,7 @@ class LPI:
     def init_user(self, graph):
         workers = graph.workers()
         dist = beta_dist(self.alpha, self.beta, len(graph._workers._nodes))
-        for i, (worker, _, _, _) in enumerate(workers):
+        for i, (worker, _, _, _, _) in enumerate(workers):
             worker.p = dist[i]
 
     def answer_map(self, graph):
