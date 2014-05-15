@@ -41,6 +41,7 @@ class NodeSet(object):
         if type(node) is self._type:
             self._nodes.add(node)
 
+
     def __contains__(self, n):
         return self._type(n) in self._nodes
 
@@ -58,6 +59,9 @@ class NodeSet(object):
 
 
 class WorkerSet(NodeSet):
+    def __init__(self, graph):
+        super().__init__(graph, Worker)
+
     def cond(self, n):
         return type(n) is Task
 
@@ -72,7 +76,7 @@ class WorkerSet(NodeSet):
 class Graph(object):
     def __init__(self):
         self._graph = nx.Graph()
-        self._workers = WorkerSet(self._graph, Worker)
+        self._workers = WorkerSet(self._graph)
         self._tasks = NodeSet(self._graph, Task)
         self._gold_tasks = NodeSet(self._graph, GoldTask)
 
@@ -80,12 +84,12 @@ class Graph(object):
         self._graph.add_node(n)
         for k, v in attributes.items():
             self._graph[n][k] = v
-            if type(n) is Worker:
-                self._workers.add_node(n)
-            elif type(n) is Task:
-                self._tasks.add_node(n)
-            elif type(n) is GoldTask:
-                self._gold_tasks.add_node(n)
+        if type(n) is Worker:
+            self._workers.add_node(n)
+        elif type(n) is Task:
+            self._tasks.add_node(n)
+        elif type(n) is GoldTask:
+            self._gold_tasks.add_node(n)
 
     def __contains__(self, n):
         return n in self._workers or n in self._tasks or n in self._gold_tasks
