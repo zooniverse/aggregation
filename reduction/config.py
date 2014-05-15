@@ -1,15 +1,18 @@
-import reducer.adapters
-import reducer.algos
-import reducer.project
-import ConfigParser
+import reduction.adapters.mysql
+import reduction.algos
+import reduction.project
+import configparser
+
 
 class Config(object):
-    parser = ConfigParser.SafeConfigParser()
+    parser = configparser.SafeConfigParser()
 
     def __init__(self, filename):
-        self.set_config(self.parser.read(filename))
+        self.parser.read(filename)
+        self.set_config(self.parser)
 
     def set_config(self, config):
+        print(config)
         self.db = self.set_db(config)
         self.project = self.set_project(config)
         self.algo = self.set_alog(config)
@@ -18,51 +21,45 @@ class Config(object):
         return self.project(self.db, self.algo)
 
     def set_db(self, config):
-        s = "Databse"
-        db_type = config.get(s, 'database')
+        s = "Database"
+        db_type = config.get(s, 'database_type')
         if db_type == 'mongo':
-            db = reducer.adpaters.mongo.Mongo
+            db = reduction.adpaters.mongo.Mongo
+        elif db_type == 'mysql':
+            db = reduction.adapters.mysql.Mysql
         else:
             raise Exception("No supported adapter")
-        host = config.get(s, 'host')
-        port = config.get(s, 'port')
-        user = config.get(s, 'user')
-        password = config.get(s, 'pass')
-        user_cmd = config.get(s, 'user')
-        clicks_cmd = config.get(s, 'clicks')
+        user_cmd = config.get(s, 'users_cmd')
+        clicks_cmd = config.get(s, 'clicks_cmd')
+        subjects_cmd = config.get(s, 'subjects_cmd')
+        conf = dict((key, value) for key, value in config.items(s)
+                    if key not in ["clicks_cmd", "users_cmd", "subjects_cmd"])
         return db(user_cmd,
                   clicks_cmd,
-                  host=host,
-                  port=port,
-                  user=user,
-                  password=password)
+                  subjects_cmd,
+                  **conf)
 
     def set_project(self, config):
-        s = "project"
+        s = "Project"
         project_type = config.get(s, 'project_type')
 
-        if project_type == 'binary':
-            project = reducer.project.BinaryQuestionProject
-        elif project_type == '1-Dimension':
-            project = reducer.project.OneDimensionalMarkingProject
-        elif project_type == '2-Dimensions':
-            project = reducer.project.TwoDimensionalMarkingProject
+        if project_type == 'PlanetHunters':
+            project = reduction.project.PlanetHunters
         else:
             raise Exception("No supported Project Type")
         conf = dict((key, value) for key, value in config.items(s))
         return project(**conf)
 
     def set_algo(self, config):
-        s = 'algo'
+        s = 'Algo'
 
         algo_type = config.get(s, 'algo_type')
 
         if algo_type == 'lpi':
-            algo = reducer.algos.lpi.LPI
+            algo = reduction.algos.lpi.LPI
         elif algo_type == 'kos':
-            algo = reducer.algos.kos.KOS
+            algo = reduction.algos.kos.KOS
         else:
             raise Exception("No support Algorithm Type")
         conf = dict((key, value) for key, value in config.items(s))
         return algo(**conf)
-
