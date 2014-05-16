@@ -1,16 +1,15 @@
 from numpy.random import beta as beta_dist
-from numpy.polynomial.polynomial import polymul
 from math import exp, log, copysign
 from scipy.special import beta
-from functools import reduce
+from itertools import chain
 import numpy as np
 
 
 class LPI:
     def __init__(self, iterations=100, alpha=2, beta=1):
-        self.alpha = alpha
-        self.beta = beta
-        self.T = iterations
+        self.alpha = int(alpha)
+        self.beta = int(beta)
+        self.T = int(iterations)
 
     def __call__(self, graph):
         self.init_user(graph)
@@ -22,19 +21,19 @@ class LPI:
         return self.answer_map(graph)
 
     def sigma_task(self, graph):
-        for t, _, _, d in graph.tasks():
+        for t, degree, _, d in graph.tasks():
             weighted_ans = [edge['answer'] * worker.p for edge, worker in d]
             t.p = np.sum(weighted_ans)
 
     def local_factor(self, cj, qj):
         return beta(self.alpha + cj, self.beta + qj - cj)
 
-    def polymultiply(self, memo, poly):
-        return polymul(memo, poly)
-
     def exp_x(self, delta):
-        polys = [[exp(task.p), 1] for edge, task in delta]
-        return reduce(self.polymultiply, polys)
+        delta_set = [exp(edge['answer'] * task.p) for edge, task in delta]
+        x = [1]
+        for i in delta_set:
+            x = [a + b * i for a, b in zip(chain([0], x), chain(x, [0]))]
+        return x
 
     def sigma_worker_frac(self, exp_x, alpha_j, gamma_j):
         return np.sum([self.local_factor(k + alpha_j, gamma_j) * exp_x[k] for k
@@ -48,9 +47,8 @@ class LPI:
             w.p = log(numerator/denominator)
 
     def init_user(self, graph):
-        workers = graph.workers()
         dist = beta_dist(self.alpha, self.beta, len(graph._workers._nodes))
-        for i, (worker, _, _, _, _) in enumerate(workers):
+        for i, (worker, _, _, _, _) in enumerate(graph.workers()):
             worker.p = dist[i]
 
     def answer_map(self, graph):

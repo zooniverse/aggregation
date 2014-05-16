@@ -8,7 +8,7 @@ class Mysql(object):
         port = kwargs.get('port', None) or 3306
         user = kwargs.get('user', None) or 'root'
         passwd = kwargs.get('password', None) or ''
-        db = kwargs.get('name', None) or 'project'
+        db = kwargs.get('db_name', None) or 'project'
 
         self.connection = pymysql.connect(host=host,
                                           port=port,
@@ -20,18 +20,19 @@ class Mysql(object):
         self._subjects_cmd = subjects_cmd
 
     def workers(self):
-        self._execute(self._workers_cmd)
+        return self._execute(self._workers_cmd)
 
     def clicks(self):
-        self._execute(self._clicks_cmd)
+        return self._execute(self._clicks_cmd)
 
     def subjects(self):
-        self._execute(self._subjects_cmd)
+        return self._execute(self._subjects_cmd)
 
     def _execute(self, cmd):
         cur = self.connection.cursor()
+        cur.execute(cmd)
 
-        for row in cur.execute(cmd):
+        for row in cur:
             yield row
 
         cur.close()

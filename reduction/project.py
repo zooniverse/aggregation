@@ -26,28 +26,28 @@ class PlanetHunters(Question):
         return algo(graph)
 
     def build_graph(self, db):
+        print("Build Graph")
         g = Graph()
-        self.add_graph_workers(g, db)
+        print("Adding Tasks")
         self.add_graph_tasks(g, db)
-        self.add_graph_answer(g, db)
+        print("Adding Workers and Answers")
+        self.add_graph_workers_and_answers(g, db)
         return g
-
-    def add_graph_workers(self, g, db):
-        for worker_id, session_id in db.workers():
-            if id:
-                g.add_worker(worker_id)
-            elif session_id:
-                g.add_worker(session_id)
 
     def add_graph_tasks(self, g, db):
         for task_id, kind in db.subjects():
             if kind == 'candidate':
                 g.add_task(task_id)
             elif kind == 'planet' or kind == 'simulation':
-                g.add_gold_task(task_id)
+                g.add_gold_task(task_id, 1)
 
-    def add_graph_answers(self, g, db):
-        for worker_id, light_curve_id, answer_id in db.clicks():
+    def add_graph_workers_and_answers(self, g, db):
+        for worker_id, light_curve_id, answer_id, session_id in db.clicks():
+            if not worker_id:
+                worker_id = session_id
+            if worker_id not in g:
+                g.add_worker(worker_id)
+
             if answer_id == 9:
                 g.add_answer(worker_id, light_curve_id, 1)
             else:

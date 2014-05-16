@@ -49,7 +49,7 @@ class NodeSet(object):
         return self._type(n) in self._nodes
 
     def neighbors_and_edges(self, node):
-        return [(self._parent[node][n], n) for n
+        return [(self._parent[node][n], self._parent.node[n]['data']) for n
                 in self._parent.neighbors_iter(node)]
 
     def __iter__(self):
@@ -57,7 +57,7 @@ class NodeSet(object):
             attr = self._parent.node[n]
             neighbors = self.neighbors_and_edges(n)
             degree = self._parent.degree(n)
-            yield n, degree, attr, neighbors
+            yield attr['data'], degree, attr, neighbors
 
 
 class WorkerSet(NodeSet):
@@ -80,9 +80,10 @@ class Graph(object):
         self._gold_tasks = NodeSet(self._graph, GoldTask)
 
     def _add_node(self, n, attributes):
-        self._graph.add_node(n)
+        self._graph.add_node(n, data=n)
         for k, v in attributes.items():
-            self._graph[n][k] = v
+            if k != 'data':
+                self._graph[n][k] = v
         if type(n) is Worker:
             self._workers.add_node(n)
         elif type(n) is Task:

@@ -1,5 +1,5 @@
 import reduction.adapters.mysql
-import reduction.algos
+import reduction.algos.lpi
 import reduction.project
 import configparser
 
@@ -12,10 +12,9 @@ class Config(object):
         self.set_config(self.parser)
 
     def set_config(self, config):
-        print(config)
         self.db = self.set_db(config)
         self.project = self.set_project(config)
-        self.algo = self.set_alog(config)
+        self.algo = self.set_algo(config)
 
     def __call__(self):
         return self.project(self.db, self.algo)
@@ -61,5 +60,6 @@ class Config(object):
             algo = reduction.algos.kos.KOS
         else:
             raise Exception("No support Algorithm Type")
-        conf = dict((key, value) for key, value in config.items(s))
+        conf = dict((key, value) for key, value in config.items(s)
+                    if key != "algo_type")
         return algo(**conf)
