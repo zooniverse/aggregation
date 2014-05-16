@@ -108,8 +108,6 @@ class Graph(object):
             task = Task(task_id)
         elif task_id in self._gold_tasks:
             task = GoldTask(task_id)
-        else:
-            task = None
 
         worker = Worker(worker_id)
 

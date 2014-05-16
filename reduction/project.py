@@ -36,6 +36,7 @@ class PlanetHunters(Question):
 
     def add_graph_tasks(self, g, db):
         for task_id, kind in db.subjects():
+            task_id = "lc" + str(task_id)
             if kind == 'candidate':
                 g.add_task(task_id)
             elif kind == 'planet' or kind == 'simulation':
@@ -43,12 +44,18 @@ class PlanetHunters(Question):
 
     def add_graph_workers_and_answers(self, g, db):
         for worker_id, light_curve_id, answer_id, session_id in db.clicks():
-            if not worker_id:
-                worker_id = session_id
-            if worker_id not in g:
-                g.add_worker(worker_id)
+            light_curve_id = "lc" + str(light_curve_id)
 
-            if answer_id == 9:
-                g.add_answer(worker_id, light_curve_id, 1)
-            else:
-                g.add_answer(worker_id, light_curve_id, -1)
+            if light_curve_id in g:
+                if not worker_id:
+                    worker_id = session_id
+
+                worker_id = "w" + str(worker_id)
+
+                if worker_id not in g:
+                    g.add_worker(worker_id)
+
+                if answer_id == 9:
+                    g.add_answer(worker_id, light_curve_id, 1)
+                else:
+                    g.add_answer(worker_id, light_curve_id, -1)

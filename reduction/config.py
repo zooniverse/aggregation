@@ -1,5 +1,6 @@
 import reduction.adapters.mysql
 import reduction.algos.lpi
+import reduction.algos.kos
 import reduction.project
 import configparser
 

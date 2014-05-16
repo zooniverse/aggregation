@@ -25,8 +25,8 @@ class LPI:
             weighted_ans = [edge['answer'] * worker.p for edge, worker in d]
             t.p = np.sum(weighted_ans)
 
-    def local_factor(self, cj, qj):
-        return beta(self.alpha + cj, self.beta + qj - cj)
+    def psi(self, cj, qj):
+        return beta(cj, qj)
 
     def exp_x(self, delta):
         delta_set = [exp(edge['answer'] * task.p) for edge, task in delta]
@@ -35,15 +35,25 @@ class LPI:
             x = [a + b * i for a, b in zip(chain([0], x), chain(x, [0]))]
         return x
 
-    def sigma_worker_frac(self, exp_x, alpha_j, gamma_j):
-        return np.sum([self.local_factor(k + alpha_j, gamma_j) * exp_x[k] for k
-                       in range(gamma_j)])
+    def sigma_worker_frac(self, exp_x, alpha_j, gamma_j, delta):
+        #print([(self.psi(k + alpha_j, gamma_j) * exp_x[k])
+                       #for k in range(gamma_j)])
+
+
+        return np.sum([self.psi(k + alpha_j, gamma_j) * exp_x[k]
+                       for k in range(gamma_j)])
 
     def sigma_worker(self, graph):
         for w, gamma_j, alpha_j, _, delta in graph.workers():
             exp_x = self.exp_x(delta)
-            numerator = self.sigma_worker_frac(exp_x, alpha_j + 1, gamma_j)
-            denominator = self.sigma_worker_frac(exp_x, alpha_j, gamma_j)
+            numerator = self.sigma_worker_frac(exp_x,
+                                               alpha_j + 1,
+                                               gamma_j,
+                                               delta)
+            denominator = self.sigma_worker_frac(exp_x,
+                                                 alpha_j,
+                                                 gamma_j,
+                                                 delta)
             w.p = log(numerator/denominator)
 
     def init_user(self, graph):
