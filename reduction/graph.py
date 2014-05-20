@@ -69,7 +69,8 @@ class WorkerSet(NodeSet):
             gold_correct = len([t for e, t in ns
                                 if type(t) is GoldTask
                                 if e['answer'] == t.answer])
-            yield n, d, gold_correct, a, ns
+            ns = [(e, t) for e, t in ns if type(t) is Task]
+            yield n, len(ns), gold_correct, a, ns
 
 
 class Graph(object):
