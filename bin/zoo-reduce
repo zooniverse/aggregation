@@ -10,5 +10,6 @@ if __name__ == "__main__":
       parser = argparse.ArgumentParser(description="Reduce Mongo Dataset using Karger et al (2011)'s algorithim")
       parser.add_argument('config', help="Configuration file for run")
 
-      print(c = Config(parser.parse_args().config)())
+      print([id[2:] for id, klass in Config(parser.parse_args().config)()
+             if klass == 1.0])
 

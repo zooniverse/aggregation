@@ -53,4 +53,5 @@ docs/_build/
 
 *.swp
 *~
-out.txt
+*.txt
+
