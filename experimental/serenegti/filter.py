@@ -1,4 +1,4 @@
-#!/Users/greghines/Library/Enthought/Canopy_64bit/User/bin/python
+#!/usr/bin/env python
 __author__ = 'greghines'
 import csv
 import time
@@ -14,7 +14,7 @@ try:
     next(classificationReader,None)
 
 except IOError:
-    csvfile = open('/home/ggdhines/Databases/serengeti/expert_classifications_raw.csv', 'rb')
+    csvfile = open('/home/ggdhines/Databases/serengeti/expert_classifications_raw.csv', 'rU')
     classificationReader = csv.reader(csvfile, delimiter=',')
 
 for row in classificationReader:

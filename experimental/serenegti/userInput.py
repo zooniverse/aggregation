@@ -1,4 +1,5 @@
-#!/Users/greghines/Library/Enthought/Canopy_64bit/User/bin/python
+#!/usr/bin/env python
+# !/Users/greghines/Library/Enthought/Canopy_64bit/User/bin/python
 __author__ = 'greghines'
 import cPickle as pickle
 import numpy

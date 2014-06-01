@@ -22,6 +22,7 @@ with open('/Users/greghines/Databases/filteredSerenegti.csv', 'rb') as csvfile:
         if (newPhoto != currentPhoto) or (newUser != currentUser):
             if currentPhoto != None:
                 if currentPhoto in photoDict:
+
                     photoDict[currentPhoto].append(speciesList[:])
                 else:
                     photoDict[currentPhoto] = [speciesList[:]]

@@ -1,11 +1,12 @@
 #!/usr/bin/env python
+#get the Serenegti data into a format that can be read by the pyIBCC program
 
 __author__ = 'ggdhines'
 import csv
 
 animal = "wildebeest"
 try:
-    f = open("/home/ggdhines/aws/2014-05-25_serengeti_classifications.csv", 'rb')
+    f = open("NA.csv", 'rb')
 except IOError:
     f = open("/home/ggdhines/Databases/serengeti/filtered.csv", "rb")
 
@@ -60,11 +61,31 @@ for row in reader:
     else:
         user[photoID] = (speciesStr == animal)
 
-for photoID in classifications:
-    for userID in classifications[photoID]:
-        if user[photoID] == True:
-            f = 1
-        else:
-            f = 0
-        print str(userID) + "," + str(photoID) + "," + str(f)
+# for photoID in classifications:
+#     for userID in classifications[photoID]:
+#         user = userDict[userID]
+#         if user[photoID] is True:
+#             f = 1
+#         else:
+#             f = 0
+#         print str(userID) + "," + str(photoID) + "," + str(f)
+
+try:
+    f = open("NA.csv", 'rb')
+except IOError:
+    f = open("/home/ggdhines/Databases/serengeti/expert_classifications_raw.csv", "rU")
+reader = csv.reader(f, delimiter=",")
+next(reader, None)
+expertClassifications = [0 for i in range(len(photoList))]
+
+for row in reader:
+    photoStr = row[2]
+    speciesStr = row[12]
+
+    photoID = photoList.index(photoStr)
+    if speciesStr == animal:
+        expertClassifications[photoID] = 1
+
+for photoID,classification in enumerate(expertClassifications):
+    print str(photoID) + "," + str(classification)
 
