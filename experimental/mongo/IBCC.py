@@ -20,7 +20,8 @@ class IBCC:
         self.client = pymongo.MongoClient()
         self.db = self.client['serengeti_2014-05-13']
 
-        self.species_groups = [["gazelleThomsons","gazelleGrants"],]
+        self.species_groups = [["gazelleThomsons", "gazelleGrants"], ]
+        self.species_groups = [["gazelleThomsons"], ["gazelleGrants"]]
         self.speciesList = ['elephant','zebra','warthog','impala','buffalo','wildebeest','gazelleThomsons','dikDik','giraffe','gazelleGrants','lionFemale','baboon','hippopotamus','ostrich','human','otherBird','hartebeest','secretaryBird','hyenaSpotted','mongoose','reedbuck','topi','guineaFowl','eland','aardvark','lionMale','porcupine','koriBustard','bushbuck','hyenaStriped','jackal','cheetah','waterbuck','leopard','reptiles','serval','aardwolf','vervetMonkey','rodents','honeyBadger','batEaredFox','rhinoceros','civet','genet','zorilla','hare','caracal','wildcat']
 
         self.cutoff = 5
@@ -85,47 +86,38 @@ class IBCC:
         print("inputFile = '/home/ggdhines/Databases/serengeti/ibcc/"+str(counter)+".in'", file=f)
         print("outputFile =  '/home/ggdhines/Databases/serengeti/ibcc/"+str(counter)+".out'", file=f)
         print("confMatFile = '/home/ggdhines/Databases/serengeti/ibcc/"+str(counter)+".mat'", file=f)
-        print("alpha0 = np.array([[2, 1, 1, 1], [1, 2, 1, 1], [1, 1, 2, 1], [1, 1, 1, 2]])", file=f)
-        print("nu0 = np.array([25.0, 25.0, 25.0, 25.0])", file=f)
+        if numClasses == 4:
+            print("alpha0 = np.array([[2, 2, 2, 2], [2, 2, 2, 2], [2, 2, 2, 2], [2, 2,2, 2]])", file=f)
+            print("nu0 = np.array([25.0, 25.0, 25.0, 1.0])", file=f)
+        elif numClasses == 2:
+            print("alpha0 = np.array([[2, 1], [1, 2],])", file=f)
+            print("nu0 = np.array([50.,50.])", file=f)
+        else:
+            assert(False)
         f.close()
 
     def __analyze_results__(self):
-        #read in the experts' classifications
+        #to save having to repeatedly read through the experts' classifications, read them all in now
+        expertClassifications = [[] for i in range(len(self.subject_list))]
+
         try:
             f = open("NA.csv", 'rb')
         except IOError:
             f = open("/home/ggdhines/Databases/serengeti/expert_classifications_raw.csv", "rU")
 
-        reader = csv.reader(f, delimiter=",")
-        next(reader, None)
-        expertClassifications = {}
-
-        for row in reader:
-            photoStr = row[2]
-            speciesStr = row[12]
-
-            subjectID = self.subject_list.index(photoStr)
-
-            #is this the first time we've encountered this photo?
-            if not(subjectID in expertClassifications):
-                expertClassifications[subjectID] = []
-
-            #add an species if ANY of the experts tag it, for the most part photos are only classified by one
-            #expert, so shouldn't be a problem
-            if not(speciesStr in expertClassifications[subjectID]):
-                expertClassifications[subjectID].append(speciesStr)
-
-
-        #to save having to repeatedly read through the experts' classifications, read them all in now
-        classificationReader = csv.reader(open('/home/ggdhines/Databases/serengeti/expert_classifications_raw.csv', 'rU'), delimiter=',')
-        next(classificationReader, None)
-        for row in classificationReader:
-            photoID = row[2]
-            photoIndex = self.photoMappings.index(photoID)
+        expertReader = csv.reader(f, delimiter=',')
+        next(expertReader, None)
+        for row in expertReader:
+            subjectID = row[2]
+            subjectIndex = self.subject_list.index(subjectID)
             species = row[12]
 
+            #has this species already been added to the list?
+            if not(species in expertClassifications[subjectIndex]):
+                expertClassifications[subjectIndex].append(species)
+
         #start off by assuming that we have classified all photos correctly
-        correct_classification = [True for i in range(len(expertClassifications.keys()))]
+        correct_classification = [1 for i in range(len(self.subject_list))]
 
         counter = -1
 
@@ -139,30 +131,29 @@ class IBCC:
             counter += 1
             ibcc_output_reader = csv.reader(open("/home/ggdhines/Databases/serengeti/ibcc/"+str(counter)+".out","rb"), delimiter=" ")
 
-            #go through each of the prediction
+            #go through the predictions for each of the photos (subjects)
             for row in ibcc_output_reader:
                 assert(len(row) == (len(required_l)+1))
 
                 #get the subject ID and the predictions
-                subjectID = int(float(row[0]))
+                subjectIndex = int(float(row[0]))
                 predictions = [float(r) for r in row[1:]]
                 predicted_class = predictions.index(max(predictions))
 
-            counter += 1
-
-            #read in each of the aggregated user classification and compare them to the expert classification
-            #for each photo, find out which subgroup the experts classified the photo as containing
-
-            for subjectID in range(self.subject_list):
-                classification = expertClassifications[subjectID]
-
-                meet_required = [sorted(list(set(classification).intersection(r))) == sorted(list(r)) for r in required_l]
-                meet_prohibited = [tuple(set(classification).intersection(p)) == () for p in prohibited_l]
+                #now get the experts' classification (and subject/photo + species group)
+                tagged = expertClassifications[subjectIndex]
+                meet_required = [sorted(list(set(tagged).intersection(r))) == sorted(list(r)) for r in required_l]
+                meet_prohibited = [tuple(set(tagged).intersection(p)) == () for p in prohibited_l]
 
                 meet_overall = [r and p for (r, p) in zip(meet_required, meet_prohibited)]
                 assert(sum([1. for o in meet_overall if o]) == 1)
 
-                expert_id = meet_overall.index(True)
+                expert_class = meet_overall.index(True)
+                if expert_class != predicted_class:
+                    correct_classification[subjectIndex] = 0
+
+
+        print(len(correct_classification) - sum(correct_classification))
 
 
     def __runIBCC__(self):
@@ -222,3 +213,4 @@ f = IBCC()
 #f.__csv_in__()
 #f.__IBCCoutput__([["gazelleThomsons","gazelleGrants"],])
 f.__runIBCC__()
+f.__analyze_results__()

@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 __author__ = 'ggdhines'
 import sys
 
@@ -12,6 +13,7 @@ def main():
     img2 = to_grayscale(imread(file2).astype(float))
     # compare
     n_m, n_0 = compare_images(img1, img2)
+    #return n_m, n_0
     print "Manhattan norm:", n_m, "/ per pixel:", n_m/img1.size
     print "Zero norm:", n_0, "/ per pixel:", n_0*1.0/img1.size
 
