@@ -3,8 +3,12 @@ from __future__ import print_function
 import csv
 import os.path
 import sys
-sys.path.append("/home/ggdhines/github/pyIBCC/python")
+if os.path.isdir("/Users/greghines/Code"):
+    sys.path.append("/Users/greghines/Code/pyIBCC/python")
+else:
+    sys.path.append("/home/ggdhines/github/pyIBCC/python")
 import ibcc
+import cPickle as pickle
 __author__ = 'ggdhines'
 
 
@@ -16,6 +20,11 @@ class IBCCsetup:
         else:
             self.cutOff = cutoff
 
+        if os.path.isdir("/Users/greghines/Databases/serengeti"):
+            self.baseDir = "/Users/greghines/Databases/serengeti/"
+        else:
+            self.baseDir = "/home/ggdhines/Databases/serengeti/"
+
         self.photoMappings = []
         self.__createPhotoMappings()
 
@@ -23,25 +32,29 @@ class IBCCsetup:
         print("making configuration files")
         for species in self.speciesList:
             #check to see whether or not this file exists
-            if not(os.path.isfile("/home/ggdhines/Databases/serengeti/ibcc/"+str(species)+str(self.cutOff)+"config.py")):
+            if not(os.path.isfile(self.baseDir+"ibcc/"+str(species)+str(self.cutOff)+"config.py")):
                 self.__createConfigFile(species,self.cutOff)
 
+        print("done making configuration files")
+
     def __filterUserClassifications__(self):
-        if not(os.path.isfile("/home/ggdhines/Databases/serengeti/goldFiltered.csv")):
-            self.__filterWithGoldStandard()
+        if not(os.path.isfile(self.baseDir+"goldFiltered.csv")):
+            print("making gold standard")
+            self._filterWithGoldStandard()
 
         for species in self.speciesList:
+            print(species)
             #check to see whether or not this file exists
-            if not(os.path.isfile("/home/ggdhines/Databases/serengeti/ibcc/"+species+"_ibcc.in"+str(self.cutOff))):
-                self.__filterWithSpecies(species,self.cutOff)
+            if not(os.path.isfile(self.baseDir+"ibcc/"+species+"_ibcc.in"+str(self.cutOff))):
+                self._filterWithSpecies(species,self.cutOff)
 
 
 
 
     def __createConfigFile(self,species,cutOff):
-        f = open("/home/ggdhines/Databases/serengeti/ibcc/"+str(species)+str(self.cutOff)+"config.py",'wb')
-        print("import numpy as np\nscores = np.array([0, 1])\nnClasses = 2\ninputFile =   '/home/ggdhines/Databases/serengeti/ibcc/"+species+"_ibcc.in"+str(cutOff)+"'",file=f)
-        print("outputFile =  '/home/ggdhines/Databases/serengeti/ibcc/"+species+"_ibcc.out"+str(cutOff)+"'\nconfMatFile = '/home/ggdhines/Databases/serengeti/ibcc/"+species+"_ibcc.mat"+str(cutOff)+"'",file=f)
+        f = open(self.baseDir+"ibcc/"+str(species)+str(self.cutOff)+"config.py",'wb')
+        print("import numpy as np\nscores = np.array([0, 1])\nnClasses = 2\ninputFile =   '"+self.baseDir+"ibcc/"+species+"_ibcc.in"+str(cutOff)+"'",file=f)
+        print("outputFile =  '"+self.baseDir+"ibcc/"+species+"_ibcc.out"+str(cutOff)+"'\nconfMatFile = '"+self.baseDir+"ibcc/"+species+"_ibcc.mat"+str(cutOff)+"'",file=f)
         f.close()
 
     def __createPhotoMappings(self):
@@ -49,11 +62,7 @@ class IBCCsetup:
         #use the photos listed in the expert classifications to create a mapping
         #so will have to change if we include photos with no corresponding expert classifications (but what won't)
 
-        try:
-            f = open("NA.csv", 'rb')
-        except IOError:
-            f = open("/home/ggdhines/Databases/serengeti/expert_classifications_raw.csv", "rU")
-        reader = csv.reader(f, delimiter=",")
+        reader = csv.reader(open(self.baseDir+"expert_classifications_raw.csv", "rU"), delimiter=",")
         next(reader, None)
 
         for row in reader:
@@ -62,14 +71,15 @@ class IBCCsetup:
                 self.photoMappings.append(photoStr)
 
 
-    def __filterWithGoldStandard(self):
+    def _filterWithGoldStandard(self):
         #select only classifications for which we have a gold standard
         #have to rewrite a couple of things if we want to generalize
         goldStandardDict = {}
         photoCount = {}
         timeDict = {}
 
-        f = open("/home/ggdhines/Databases/serengeti/goldFiltered.csv","wb")
+
+        f = open(self.baseDir+"goldFiltered.csv","wb")
 
         # #try to open the file first on my laptop, then try on my desktop
         # try:
@@ -110,22 +120,33 @@ class IBCCsetup:
             if photoID in self.photoMappings:
                 print(line[:-1], file=f)
 
-    def _filterWithSpecies(self, desiredSpecies,cutOff):
+        f.close()
+
+    def _filterWithSpecies(self, requiredSpecies,cutOff,prohibitedSpecies=[],fID = None):
         #select entries only with regards to a specific species
         #output format in pyIBCC format
         #for now, assume that we have already filtered based on whether or not there exists a gold standard for that photo
-        try:
-            f = open("NA.csv", 'rb')
-        except IOError:
-            f = open("/home/ggdhines/Databases/serengeti/goldFiltered.csv", "rb")
+        if type(requiredSpecies) != list:
+            assert(type(requiredSpecies) == str)
+            requiredSpecies = [requiredSpecies,]
 
-        reader = csv.reader(f, delimiter=",")
+        if prohibitedSpecies != []:
+            assert(prohibitedSpecies == list)
+            assert(prohibitedSpecies[0] == str)
 
+        if fID == None:
+            fID = requiredSpecies[0]
+
+        reader = csv.reader(open(self.baseDir+"goldFiltered.csv","rb"), delimiter=",")
+
+        #use indices in list to map from str to int
         userList = []
         photoList = []
 
+        #userDict maps from userID to the list of all photos that user has tagged
+        #photoDict maps form photos to the list of all users who have tagged that photo
         userDict = {}
-        classifications = {}
+        photoDict = {}
 
         next(reader, None)
         for row in reader:
@@ -137,72 +158,63 @@ class IBCCsetup:
             #based on index of list, if not in list, add to list
             try:
                 userID = userList.index(userStr)
+                user = userDict[userID]
             except ValueError:
                 userList.append(userStr)
                 userID = len(userList) -1
 
-            #userDict keeps track of all the photos this user has classified
-            #user keeps track of the individual classifications
-            try:
-                user = userDict[userID]
-            except KeyError:
                 userDict[userID] = {}
                 user = userDict[userID]
 
+
+
             photoID = self.photoMappings.index(photoStr)
-            #if this is the first time we've come across this photo?
-            if not(photoID in classifications):
-                classifications[photoID] = [userID]
+            #is this the first time we've encountered this photo?
+            if not(photoID in photoDict):
+                photoDict[photoID] = []
             else:
-                c = classifications[photoID]
-                #if this is the first time we've come across this particular user classifying this photo
-                if not(userID in c):
-                    #we've reached the desired max number of users for this photo
-                    if len(c) > cutOff:
-                        continue
-                    else:
-                        c.append(userID)
+                #since we assume that the cutoff is greater than 0 - only check this part if
+                #this is not the first time we've seen this photo
+                #have we already reached the max number of users for tagging this photo?
+                if (len(photoDict[photoID]) >= cutOff) and not(userID in photoDict[photoID]):
+                    continue
 
-            # #check to see if this photo has been tagged at all before
-            # try:
-            #     photoID = photoList.index(photoStr)
-            #     #if so, get the list of all the users who have tagged (or classified) this photo
-            #
-            #
-            #
-            #
-            # except ValueError:
-            #     photoList.append(photoStr)
-            #     photoID = len(photoList) - 1
-            #     classifications[photoID] = [userID]
+            if not(userID in photoDict[photoID]):
+                photoDict[photoID].append(userID)
 
-            #has the user already tagged this photo?
-            if photoID in user:
-                user[photoID] = (speciesStr == desiredSpecies) or user[photoID]
-            else:
-                user[photoID] = (speciesStr == desiredSpecies)
+            #if this is the first time we've come across this user tagging this photo?
+            if not(photoID in user):
+                user[photoID] = ([False for i in requiredSpecies],[False for i in prohibitedSpecies])
 
-        fOut = open("/home/ggdhines/Databases/serengeti/ibcc/"+desiredSpecies+"_ibcc.in"+str(self.cutOff),"wb")
+            #is this species a required one?
+            if speciesStr in requiredSpecies:
+                user[photoID][0][requiredSpecies.index(speciesStr)] = True
+            #else, is this species a prohibited one?
+            elif speciesStr in prohibitedSpecies:
+                userID[photoID][1][prohibitedSpecies.index(speciesStr)] = True
+
+
+        fOut = open(self.baseDir+"ibcc/"+str(fID)+"_ibcc.in"+str(self.cutOff),"wb")
         #print out the user classifications
-        for photoID in classifications:
-            for userID in classifications[photoID]:
-                user = userDict[userID]
-                if user[photoID] is True:
+        for userID in userDict:
+            user = userDict[userID]
+            for photoID in user:
+                classification = user[photoID]
+                if not(False in classification[0]) and not(True in classification[1]):
                     f = 1
                 else:
                     f = 0
                 print(str(userID) + "," + str(photoID) + "," + str(f),file=fOut)
         fOut.close()
 
+        #now write out the list of all users who have tagged a picture for which a gold standard exists
+        pickle.dump(userList,open(self.baseDir+"/userList"+str(cutOff),"wb"))
+
     def __expertFilter__(self,desiredSpecies):
         #take the expert classifications and filter them for a specific species
-
-        try:
-            f = open("NA.csv", 'rb')
-        except IOError:
-            f = open("/home/ggdhines/Databases/serengeti/expert_classifications_raw.csv", "rU")
-        reader = csv.reader(f, delimiter=",")
+        reader = csv.reader(open(self.baseDir+"expert_classifications_raw.csv", "rU"), delimiter=",")
         next(reader, None)
+
         expertClassifications = [0 for i in range(len(self.photoMappings))]
 
         for row in reader:
@@ -214,7 +226,7 @@ class IBCCsetup:
                 expertClassifications[photoID] = 1
 
         #print out the expert classifications
-        fOut = open("/home/ggdhines/Databases/serengeti/ibcc/"+desiredSpecies+"_ibcc.expert","wb")
+        fOut = open(self.baseDir+desiredSpecies+".expert","wb")
         for photoID,classification in enumerate(expertClassifications):
             print(str(photoID) + "," + str(classification),file=fOut)
         fOut.close()
@@ -222,8 +234,8 @@ class IBCCsetup:
     def __ibcc__(self):
         for species in self.speciesList:
             #check to see whether or not this file exists
-            if not(os.path.isfile("/home/ggdhines/Databases/serengeti/ibcc/"+species+"_ibcc.out"+str(self.cutOff))):
-                ibcc.runIbcc("/home/ggdhines/Databases/serengeti/ibcc/"+str(species)+str(self.cutOff)+"config.py")
+            if not(os.path.isfile(self.baseDir+"ibcc/"+species+"_ibcc.out"+str(self.cutOff))):
+                ibcc.runIbcc(self.baseDir+"ibcc/"+str(species)+str(self.cutOff)+"config.py")
 
 
 

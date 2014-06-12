@@ -2,14 +2,16 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="b947194c-c006-45c3-a9f6-30272d1b8f46" name="Default" comment="">
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/experimental/imageCompare/analyze.py" />
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/experimental/imageCompare/image2.py" />
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/experimental/imageCompare/sun.py" />
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/experimental/imageCompare/timeSeries.py" />
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/experimental/imageCompare/timeSeries2.py" />
-      <change type="DELETED" beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterPath="" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/experimental/classifier/__init__.py" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/experimental/classifier/graphicalEM.py" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/mongo/IBCC.py" afterPath="$PROJECT_DIR$/experimental/mongo/IBCC.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/imageCompare/image.py" afterPath="$PROJECT_DIR$/experimental/imageCompare/image.py" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/serenegti/IBCCanalyze.py" afterPath="$PROJECT_DIR$/experimental/serenegti/IBCCanalyze.py" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/serenegti/IBCCmajorityVote.py" afterPath="$PROJECT_DIR$/experimental/serenegti/IBCCmajorityVote.py" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/serenegti/IBCCmongo.py" afterPath="$PROJECT_DIR$/experimental/serenegti/IBCCmongo.py" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/serenegti/IBCCmultiClass.py" afterPath="$PROJECT_DIR$/experimental/serenegti/IBCCmultiClass.py" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/serenegti/IBCCsetup.py" afterPath="$PROJECT_DIR$/experimental/serenegti/IBCCsetup.py" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/misc.xml" afterPath="$PROJECT_DIR$/.idea/misc.xml" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/reduction.iml" afterPath="$PROJECT_DIR$/.idea/reduction.iml" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
     </list>
     <ignored path="reduction.iws" />
@@ -33,32 +35,10 @@
   </component>
   <component name="FileEditorManager">
     <leaf>
-      <file leaf-file-name="image.py" pinned="false" current="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image.py">
+      <file leaf-file-name="IBCC.py" pinned="false" current="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="16" column="63" selection-start="499" selection-end="512" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="735">
-              <folding>
-                <element signature="e#46#56#0" expanded="true" />
-              </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file leaf-file-name="image2.py" pinned="false" current="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image2.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state line="12" column="44" selection-start="129" selection-end="436" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="480">
-              <folding>
-                <element signature="e#22#40#0" expanded="true" />
-              </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file leaf-file-name="timeSeries.py" pinned="false" current="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/experimental/imageCompare/timeSeries.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state line="54" column="0" selection-start="1144" selection-end="1144" vertical-scroll-proportion="0.0" vertical-offset="270" max-vertical-offset="1395">
+            <state line="44" column="0" selection-start="1845" selection-end="1845" vertical-scroll-proportion="0.0" vertical-offset="270" max-vertical-offset="4170">
               <folding>
                 <element signature="e#22#59#0" expanded="true" />
               </folding>
@@ -66,60 +46,24 @@
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="timeSeries2.py" pinned="false" current="true" current-in-tab="true">
-        <entry file="file://$PROJECT_DIR$/experimental/imageCompare/timeSeries2.py">
+      <file leaf-file-name="graphicalEM.py" pinned="false" current="true" current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/experimental/classifier/graphicalEM.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="154" column="24" selection-start="4405" selection-end="4405" vertical-scroll-proportion="0.6451613" vertical-offset="1710" max-vertical-offset="3510">
+            <state line="75" column="48" selection-start="2100" selection-end="2100" vertical-scroll-proportion="0.68325794" vertical-offset="672" max-vertical-offset="1380">
               <folding>
-                <element signature="e#22#59#0" expanded="true" />
+                <element signature="e#25#66#0" expanded="true" />
               </folding>
             </state>
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="analyze.py" pinned="false" current="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/experimental/imageCompare/analyze.py">
+      <file leaf-file-name="IBCCmongo.py" pinned="false" current="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmongo.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="14" column="0" selection-start="279" selection-end="333" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1740">
+            <state line="123" column="58" selection-start="5130" selection-end="5408" vertical-scroll-proportion="0.0" vertical-offset="1335" max-vertical-offset="2820">
               <folding>
                 <element signature="e#22#59#0" expanded="true" />
               </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file leaf-file-name="IBCCmajorityVote.py" pinned="false" current="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmajorityVote.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state line="41" column="29" selection-start="1438" selection-end="1543" vertical-scroll-proportion="0.0" vertical-offset="615" max-vertical-offset="855">
-              <folding />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file leaf-file-name="IBCCmultiClass.py" pinned="false" current="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmultiClass.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state line="10" column="68" selection-start="231" selection-end="291" vertical-scroll-proportion="0.0" vertical-offset="150" max-vertical-offset="2160">
-              <folding />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file leaf-file-name="serenegtiExpertConsensus.py" pinned="false" current="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/experimental/serenegti/serenegtiExpertConsensus.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="840">
-              <folding />
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file leaf-file-name="IBCCsetup.py" pinned="false" current="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCsetup.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state line="13" column="0" selection-start="251" selection-end="812" vertical-scroll-proportion="0.0" vertical-offset="2653" max-vertical-offset="3570">
-              <folding />
             </state>
           </provider>
         </entry>
@@ -151,21 +95,22 @@
         <option value="$PROJECT_DIR$/experimental/serenegti/parseUsers.py" />
         <option value="$PROJECT_DIR$/experimental/serenegti/userInput.py" />
         <option value="$PROJECT_DIR$/experimental/mongo.py" />
-        <option value="$PROJECT_DIR$/experimental/mongo/IBCC.py" />
         <option value="$PROJECT_DIR$/experimental/imageCompare/analyze.py" />
         <option value="$PROJECT_DIR$/experimental/imageCompare/image.py" />
         <option value="$PROJECT_DIR$/experimental/imageCompare/image2.py" />
         <option value="$PROJECT_DIR$/experimental/imageCompare/sun.py" />
         <option value="$PROJECT_DIR$/experimental/imageCompare/timeSeries.py" />
         <option value="$PROJECT_DIR$/experimental/imageCompare/timeSeries2.py" />
+        <option value="$PROJECT_DIR$/experimental/mongo/IBCC.py" />
+        <option value="$PROJECT_DIR$/experimental/classifier/graphicalEM.py" />
       </list>
     </option>
   </component>
   <component name="ProjectFrameBounds">
-    <option name="x" value="-2" />
-    <option name="y" value="-3" />
-    <option name="width" value="1924" />
-    <option name="height" value="1052" />
+    <option name="x" value="5" />
+    <option name="y" value="22" />
+    <option name="width" value="1260" />
+    <option name="height" value="760" />
   </component>
   <component name="ProjectLevelVcsManager" settingsEditedManually="false">
     <OptionsSetting value="true" id="Add" />
@@ -257,25 +202,7 @@
               <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
             </PATH_ELEMENT>
             <PATH_ELEMENT>
-              <option name="myItemId" value="mongo" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-          </PATH>
-          <PATH>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="reduction" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="reduction" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="experimental" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="imageCompare" />
+              <option name="myItemId" value="classifier" />
               <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
             </PATH_ELEMENT>
           </PATH>
@@ -428,7 +355,7 @@
     <servers />
   </component>
   <component name="ToolWindowManager">
-    <frame x="-2" y="-3" width="1924" height="1052" extended-state="6" />
+    <frame x="5" y="22" width="1260" height="760" extended-state="0" />
     <editor active="true" />
     <layout>
       <window_info id="Changes" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
@@ -443,12 +370,12 @@
       <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Cvs" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="4" side_tool="false" content_ui="tabs" />
       <window_info id="Message" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
-      <window_info id="Find" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Ant Build" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
+      <window_info id="Find" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Messages" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.3299566" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Commander" active="false" anchor="right" auto_hide="false" internal_type="SLIDING" type="SLIDING" visible="false" weight="0.4" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
-      <window_info id="Inspection" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.4" sideWeight="0.5" order="5" side_tool="false" content_ui="tabs" />
       <window_info id="Hierarchy" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="2" side_tool="false" content_ui="combo" />
+      <window_info id="Inspection" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.4" sideWeight="0.5" order="5" side_tool="false" content_ui="tabs" />
     </layout>
   </component>
   <component name="Vcs.Log.UiProperties">
@@ -470,89 +397,116 @@
     <breakpoint-manager />
   </component>
   <component name="editorHistoryManager">
+    <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="26" column="8" selection-start="769" selection-end="769" vertical-scroll-proportion="0.0" vertical-offset="90" max-vertical-offset="4170">
+          <folding>
+            <element signature="e#22#59#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="16" column="63" selection-start="499" selection-end="512" vertical-scroll-proportion="0.0" vertical-offset="240" max-vertical-offset="735" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image2.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="12" column="44" selection-start="129" selection-end="436" vertical-scroll-proportion="0.0" vertical-offset="180" max-vertical-offset="480" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/timeSeries.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="54" column="0" selection-start="1144" selection-end="1144" vertical-scroll-proportion="0.0" vertical-offset="810" max-vertical-offset="1395" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/timeSeries2.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="154" column="24" selection-start="4405" selection-end="4405" vertical-scroll-proportion="0.0" vertical-offset="1800" max-vertical-offset="3510" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/analyze.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="14" column="0" selection-start="279" selection-end="333" vertical-scroll-proportion="0.0" vertical-offset="210" max-vertical-offset="1740" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmajorityVote.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="41" column="29" selection-start="1438" selection-end="1543" vertical-scroll-proportion="0.0" vertical-offset="615" max-vertical-offset="855" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmultiClass.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="10" column="68" selection-start="231" selection-end="291" vertical-scroll-proportion="0.0" vertical-offset="150" max-vertical-offset="2040" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/serenegti/serenegtiExpertConsensus.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="840" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCsetup.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="13" column="0" selection-start="251" selection-end="812" vertical-scroll-proportion="0.0" vertical-offset="195" max-vertical-offset="3750" />
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmongo.py">
       <provider selected="true" editor-type-id="text-editor">
         <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="105">
-          <folding />
+          <folding>
+            <element signature="e#22#59#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
       <provider selected="true" editor-type-id="text-editor">
         <state line="1" column="0" selection-start="22" selection-end="59" vertical-scroll-proportion="0.0" vertical-offset="913" max-vertical-offset="3315">
-          <folding />
+          <folding>
+            <element signature="e#22#59#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="0" column="0" selection-start="0" selection-end="21" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="735">
-          <folding>
-            <element signature="e#46#56#0" expanded="true" />
-          </folding>
-        </state>
+        <state line="0" column="0" selection-start="0" selection-end="21" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="735" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image2.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="17" column="55" selection-start="618" selection-end="618" vertical-scroll-proportion="0.0" vertical-offset="255" max-vertical-offset="480">
-          <folding>
-            <element signature="e#22#40#0" expanded="true" />
-          </folding>
-        </state>
+        <state line="17" column="55" selection-start="618" selection-end="618" vertical-scroll-proportion="0.0" vertical-offset="255" max-vertical-offset="480" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/imageCompare/timeSeries.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="105">
-          <folding>
-            <element signature="e#22#59#0" expanded="true" />
-          </folding>
-        </state>
+        <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="105" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/imageCompare/analyze.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="34" column="75" selection-start="877" selection-end="916" vertical-scroll-proportion="0.0" vertical-offset="270" max-vertical-offset="1740">
-          <folding>
-            <element signature="e#22#59#0" expanded="true" />
-          </folding>
-        </state>
+        <state line="34" column="75" selection-start="877" selection-end="916" vertical-scroll-proportion="0.0" vertical-offset="270" max-vertical-offset="1740" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmajorityVote.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="41" column="29" selection-start="1438" selection-end="1543" vertical-scroll-proportion="0.0" vertical-offset="615" max-vertical-offset="855">
-          <folding />
-        </state>
+        <state line="41" column="29" selection-start="1438" selection-end="1543" vertical-scroll-proportion="0.0" vertical-offset="615" max-vertical-offset="855" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmultiClass.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="10" column="68" selection-start="231" selection-end="291" vertical-scroll-proportion="0.0" vertical-offset="150" max-vertical-offset="2160">
-          <folding />
-        </state>
+        <state line="10" column="68" selection-start="231" selection-end="291" vertical-scroll-proportion="0.0" vertical-offset="150" max-vertical-offset="2160" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/serenegti/serenegtiExpertConsensus.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="840">
-          <folding />
-        </state>
+        <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="840" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCsetup.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="13" column="0" selection-start="251" selection-end="812" vertical-scroll-proportion="0.0" vertical-offset="2653" max-vertical-offset="3570">
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmultiClass.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="10" column="68" selection-start="231" selection-end="291" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="2160">
-          <folding />
-        </state>
+        <state line="13" column="0" selection-start="251" selection-end="812" vertical-scroll-proportion="0.0" vertical-offset="2653" max-vertical-offset="3570" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/mongo.py">
@@ -560,91 +514,79 @@
         <state line="8" column="28" selection-start="0" selection-end="2093" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1065" />
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/sun.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="122" column="0" selection-start="4204" selection-end="4204" vertical-scroll-proportion="1.967742" vertical-offset="0" max-vertical-offset="1935" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="16" column="63" selection-start="499" selection-end="512" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="735" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/timeSeries.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="54" column="0" selection-start="1144" selection-end="1144" vertical-scroll-proportion="0.0" vertical-offset="270" max-vertical-offset="1395" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image2.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="12" column="44" selection-start="129" selection-end="436" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="480" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/timeSeries2.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="154" column="24" selection-start="4405" selection-end="4405" vertical-scroll-proportion="0.0" vertical-offset="1800" max-vertical-offset="3510" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/analyze.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="14" column="0" selection-start="279" selection-end="333" vertical-scroll-proportion="-0.15837105" vertical-offset="210" max-vertical-offset="1635" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmajorityVote.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="41" column="29" selection-start="1438" selection-end="1543" vertical-scroll-proportion="0.6380091" vertical-offset="177" max-vertical-offset="840" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmultiClass.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="10" column="68" selection-start="231" selection-end="291" vertical-scroll-proportion="-0.115384616" vertical-offset="150" max-vertical-offset="1965" />
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/experimental/serenegti/serenegtiExpertConsensus.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="930">
-          <folding />
-        </state>
+        <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="930" />
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCsetup.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="13" column="0" selection-start="251" selection-end="812" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="3570">
-          <folding />
+        <state line="13" column="0" selection-start="251" selection-end="812" vertical-scroll-proportion="-0.06923077" vertical-offset="195" max-vertical-offset="3705" />
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="44" column="0" selection-start="1845" selection-end="1845" vertical-scroll-proportion="0.0" vertical-offset="270" max-vertical-offset="4170">
+          <folding>
+            <element signature="e#22#59#0" expanded="true" />
+          </folding>
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmongo.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="930">
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmajorityVote.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="41" column="29" selection-start="1438" selection-end="1543" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="855">
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="1" column="0" selection-start="22" selection-end="59" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="3315">
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/sun.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="122" column="0" selection-start="4204" selection-end="4204" vertical-scroll-proportion="1.967742" vertical-offset="0" max-vertical-offset="1935">
-          <folding>
-            <element signature="e#0#38#0" expanded="false" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/analyze.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="14" column="0" selection-start="279" selection-end="333" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1740">
+        <state line="123" column="58" selection-start="5130" selection-end="5408" vertical-scroll-proportion="0.0" vertical-offset="1335" max-vertical-offset="2820">
           <folding>
             <element signature="e#22#59#0" expanded="true" />
           </folding>
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image.py">
+    <entry file="file://$PROJECT_DIR$/experimental/classifier/graphicalEM.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="16" column="63" selection-start="499" selection-end="512" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="735">
+        <state line="75" column="48" selection-start="2100" selection-end="2100" vertical-scroll-proportion="0.68325794" vertical-offset="672" max-vertical-offset="1380">
           <folding>
-            <element signature="e#46#56#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/timeSeries.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="54" column="0" selection-start="1144" selection-end="1144" vertical-scroll-proportion="0.0" vertical-offset="270" max-vertical-offset="1395">
-          <folding>
-            <element signature="e#22#59#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image2.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="12" column="44" selection-start="129" selection-end="436" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="480">
-          <folding>
-            <element signature="e#22#40#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/timeSeries2.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="154" column="24" selection-start="4405" selection-end="4405" vertical-scroll-proportion="0.6451613" vertical-offset="1710" max-vertical-offset="3510">
-          <folding>
-            <element signature="e#22#59#0" expanded="true" />
+            <element signature="e#25#66#0" expanded="true" />
           </folding>
         </state>
       </provider>

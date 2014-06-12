@@ -6,7 +6,10 @@ from itertools import chain, combinations
 import shutil
 import os
 import sys
-sys.path.append("/home/ggdhines/github/pyIBCC/python")
+if os.path.exists("/home/ggdhines/github/pyIBCC/python"):
+    sys.path.append("/home/ggdhines/github/pyIBCC/python")
+else:
+    sys.path.append("/Users/greghines/Code/pyIBCC/python")
 import ibcc
 
 
@@ -29,6 +32,11 @@ class IBCC:
         self.user_list = None
         self.subject_list = None
 
+        if os.path.exists("/Users/greghines/Databases"):
+            self.baseDir = "/Users/greghines/Databases/serengeti/"
+        else:
+            pass
+
     def __csv_in__(self):
         #check to see if this collection already exists (for this particular cutoff) - if so, skip
         db = self.client["system"]
@@ -38,7 +46,7 @@ class IBCC:
             print("mongoDB collection already exists")
             return
 
-        reader = csv.reader(open("/home/ggdhines/Databases/serengeti/goldFiltered.csv", "rb"), delimiter=",")
+        reader = csv.reader(open(self.baseDir+"goldFiltered.csv", "rb"), delimiter=",")
         next(reader, None)
 
         curr_name = None
@@ -79,13 +87,13 @@ class IBCC:
         collection.insert(document)
 
     def __createConfigFile(self,counter,numClasses):
-        f = open("/home/ggdhines/Databases/serengeti/ibcc/"+str(counter)+"config.py",'wb')
+        f = open(self.baseDir+"ibcc/"+str(counter)+"config.py",'wb')
         print("import numpy as np\nscores = np.array("+str(range(numClasses))+")", file=f)
         print("nScores = len(scores)", file=f)
         print("nClasses = "+str(numClasses),file=f)
-        print("inputFile = '/home/ggdhines/Databases/serengeti/ibcc/"+str(counter)+".in'", file=f)
-        print("outputFile =  '/home/ggdhines/Databases/serengeti/ibcc/"+str(counter)+".out'", file=f)
-        print("confMatFile = '/home/ggdhines/Databases/serengeti/ibcc/"+str(counter)+".mat'", file=f)
+        print("inputFile = '"+self.baseDir+"ibcc/"+str(counter)+".in'", file=f)
+        print("outputFile =  '"+self.baseDir+"ibcc/"+str(counter)+".out'", file=f)
+        print("confMatFile = '"+self.baseDir+"ibcc/"+str(counter)+".mat'", file=f)
         if numClasses == 4:
             print("alpha0 = np.array([[2, 2, 2, 2], [2, 2, 2, 2], [2, 2, 2, 2], [2, 2,2, 2]])", file=f)
             print("nu0 = np.array([25.0, 25.0, 25.0, 1.0])", file=f)
@@ -103,7 +111,7 @@ class IBCC:
         try:
             f = open("NA.csv", 'rb')
         except IOError:
-            f = open("/home/ggdhines/Databases/serengeti/expert_classifications_raw.csv", "rU")
+            f = open(self.baseDir+"expert_classifications_raw.csv", "rU")
 
         expertReader = csv.reader(f, delimiter=',')
         next(expertReader, None)
@@ -129,7 +137,7 @@ class IBCC:
 
             #open up the prediction file corresponding to the next species group
             counter += 1
-            ibcc_output_reader = csv.reader(open("/home/ggdhines/Databases/serengeti/ibcc/"+str(counter)+".out","rb"), delimiter=" ")
+            ibcc_output_reader = csv.reader(open(self.baseDir+"ibcc/"+str(counter)+".out","rb"), delimiter=" ")
 
             #go through the predictions for each of the photos (subjects)
             for row in ibcc_output_reader:
@@ -162,8 +170,8 @@ class IBCC:
         self.user_list = []
         self.subject_list = []
 
-        shutil.rmtree("/home/ggdhines/Databases/serengeti/ibcc")
-        os.makedirs("/home/ggdhines/Databases/serengeti/ibcc")
+        shutil.rmtree(self.baseDir+"ibcc")
+        os.makedirs(self.baseDir+"ibcc")
 
         counter = -1
 
@@ -174,7 +182,7 @@ class IBCC:
             counter += 1
 
             self.__createConfigFile(counter,len(required_l))
-            ibcc_input_file = open("/home/ggdhines/Databases/serengeti/ibcc/"+str(counter)+".in","wb")
+            ibcc_input_file = open(self.baseDir+"ibcc/"+str(counter)+".in","wb")
 
 
             for document in collection.find():
@@ -207,10 +215,59 @@ class IBCC:
             ibcc_input_file.close()
 
             #now run IBCC
-            ibcc.runIbcc("/home/ggdhines/Databases/serengeti/ibcc/"+str(counter)+"config.py")
+            ibcc.runIbcc(self.baseDir+"ibcc/"+str(counter)+"config.py")
+
+    def __merege_predictions__(self):
+        counter = -1
+        overall_predictions = [[] for i in range(len(self.subject_list))]
+
+        for speciesGroup in self.species_groups:
+            required_l = list(powerset(speciesGroup))
+
+            counter += 1
+            ibcc_output_file = open(self.baseDir+"ibcc/"+str(counter)+".out","rb")
+            reader = csv.reader(ibcc_output_file, delimiter=' ')
+
+            for row in reader:
+                id = int(float(row[0]))
+                predictions = [float(c) for c in row[1:]]
+                predicted = required_l[predictions.index(max(predictions))]
+
+                overall_predictions[id].extend(predicted)
+
+
+        #find all of the possible subgroups
+        required_l = list(powerset(self.species_groups2[0]))
+        prohibited_l = [[s for s in self.species_groups2[0] if not(s in r)] for r in required_l]
+        m = [0 for i in range(len(required_l))]
+
+        for predict in overall_predictions:
+            meet_required = [sorted(list(set(predict).intersection(r))) == sorted(list(r)) for r in required_l]
+            meet_prohibited = [tuple(set(predict).intersection(p)) == () for p in prohibited_l]
+            meet_overall = [r and p for (r, p) in zip(meet_required, meet_prohibited)]
+
+            #print("===---")
+            #print(predict)
+            #print(required_l)
+            #print(meet_required)
+            #print(prohibited_l)
+            #print(meet_prohibited)
+            assert(sum([1. for o in meet_overall if o]) == 1)
+            class_id = meet_overall.index(True)
+            m[class_id] += 1
+        print(required_l)
+        print(m)
+
+    def __merge_confusion_matrcies__(self):
+        for speciesGroup in self.species_groups:
+            pass
+
+
+
 
 f = IBCC()
 #f.__csv_in__()
 #f.__IBCCoutput__([["gazelleThomsons","gazelleGrants"],])
 f.__runIBCC__()
-f.__analyze_results__()
+#f.__analyze_results__()
+#f.__merege_predictions__()

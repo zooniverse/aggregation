@@ -15,7 +15,7 @@ class IBCCmajorityVote(IBCCsetup):
         classifications = [[] for i in range(len(self.photoMappings))]
 
         for species in self.speciesList:
-            f = open("/home/ggdhines/Databases/serengeti/ibcc/"+species+"_ibcc.out"+str(self.cutOff),"rb")
+            f = open(self.baseDir+"ibcc/"+species+"_ibcc.out"+str(self.cutOff),"rb")
             reader = csv.reader(f, delimiter=" ")
 
             for row in reader:
@@ -33,7 +33,7 @@ class IBCCmajorityVote(IBCCsetup):
         print correct/float(len(classifications))
 
     def __getExpertClassifications__(self):
-        csvfile = open('/home/ggdhines/Databases/serengeti/expert_classifications_raw.csv', 'rU')
+        csvfile = open(self.baseDir+'/expert_classifications_raw.csv', 'rU')
         classificationReader = csv.reader(csvfile, delimiter=',')
         next(classificationReader, None)
         for row in classificationReader:
@@ -44,9 +44,9 @@ class IBCCmajorityVote(IBCCsetup):
             if not (species in self.goldStandard[photoIndex]):
                 self.goldStandard[photoIndex].append(species)
 
-i = IBCCmajorityVote(5)
-i.__createConfigs__()
-i.__filterUserClassifications__()
-i.__ibcc__()
+i = IBCCmajorityVote(10)
+#i.__createConfigs__()
+#i.__filterUserClassifications__()
+#i.__ibcc__()
 i.__getExpertClassifications__()
 i.__mergeUserClassifications__()
