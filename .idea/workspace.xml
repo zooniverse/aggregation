@@ -2,14 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="b947194c-c006-45c3-a9f6-30272d1b8f46" name="Default" comment="">
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/experimental/classifier/__init__.py" />
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/experimental/classifier/graphicalEM.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/mongo/IBCC.py" afterPath="$PROJECT_DIR$/experimental/mongo/IBCC.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/serenegti/IBCCanalyze.py" afterPath="$PROJECT_DIR$/experimental/serenegti/IBCCanalyze.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/serenegti/IBCCmajorityVote.py" afterPath="$PROJECT_DIR$/experimental/serenegti/IBCCmajorityVote.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/serenegti/IBCCmongo.py" afterPath="$PROJECT_DIR$/experimental/serenegti/IBCCmongo.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/serenegti/IBCCmultiClass.py" afterPath="$PROJECT_DIR$/experimental/serenegti/IBCCmultiClass.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/serenegti/IBCCsetup.py" afterPath="$PROJECT_DIR$/experimental/serenegti/IBCCsetup.py" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/classifier/graphicalEM.py" afterPath="$PROJECT_DIR$/experimental/classifier/graphicalEM.py" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/misc.xml" afterPath="$PROJECT_DIR$/.idea/misc.xml" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/reduction.iml" afterPath="$PROJECT_DIR$/.idea/reduction.iml" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
@@ -38,10 +31,8 @@
       <file leaf-file-name="IBCC.py" pinned="false" current="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="44" column="0" selection-start="1845" selection-end="1845" vertical-scroll-proportion="0.0" vertical-offset="270" max-vertical-offset="4170">
-              <folding>
-                <element signature="e#22#59#0" expanded="true" />
-              </folding>
+            <state line="52" column="0" selection-start="2147" selection-end="2147" vertical-scroll-proportion="0.0" vertical-offset="780" max-vertical-offset="4170">
+              <folding />
             </state>
           </provider>
         </entry>
@@ -49,7 +40,7 @@
       <file leaf-file-name="graphicalEM.py" pinned="false" current="true" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/experimental/classifier/graphicalEM.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="75" column="48" selection-start="2100" selection-end="2100" vertical-scroll-proportion="0.68325794" vertical-offset="672" max-vertical-offset="1380">
+            <state line="37" column="8" selection-start="982" selection-end="982" vertical-scroll-proportion="0.5483871" vertical-offset="45" max-vertical-offset="2550">
               <folding>
                 <element signature="e#25#66#0" expanded="true" />
               </folding>
@@ -60,10 +51,8 @@
       <file leaf-file-name="IBCCmongo.py" pinned="false" current="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmongo.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="123" column="58" selection-start="5130" selection-end="5408" vertical-scroll-proportion="0.0" vertical-offset="1335" max-vertical-offset="2820">
-              <folding>
-                <element signature="e#22#59#0" expanded="true" />
-              </folding>
+            <state line="51" column="85" selection-start="2195" selection-end="2243" vertical-scroll-proportion="0.0" vertical-offset="388" max-vertical-offset="2790">
+              <folding />
             </state>
           </provider>
         </entry>
@@ -107,10 +96,10 @@
     </option>
   </component>
   <component name="ProjectFrameBounds">
-    <option name="x" value="5" />
-    <option name="y" value="22" />
-    <option name="width" value="1260" />
-    <option name="height" value="760" />
+    <option name="x" value="-2" />
+    <option name="y" value="-3" />
+    <option name="width" value="1924" />
+    <option name="height" value="1052" />
   </component>
   <component name="ProjectLevelVcsManager" settingsEditedManually="false">
     <OptionsSetting value="true" id="Add" />
@@ -215,6 +204,15 @@
     <property name="last_opened_file_path" value="$PROJECT_DIR$" />
     <property name="FullScreen" value="false" />
     <property name="SearchEverywhereHistory" value="" />
+    <property name="options.lastSelected" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
+    <property name="options.splitter.main.proportions" value="0.3" />
+    <property name="options.splitter.details.proportions" value="0.2" />
+    <property name="options.searchVisible" value="true" />
+  </component>
+  <component name="PyConsoleOptionsProvider">
+    <option name="myPythonConsoleState">
+      <console-settings />
+    </option>
   </component>
   <component name="RunManager">
     <configuration default="true" type="tests" factoryName="py.test">
@@ -355,7 +353,7 @@
     <servers />
   </component>
   <component name="ToolWindowManager">
-    <frame x="5" y="22" width="1260" height="760" extended-state="0" />
+    <frame x="-2" y="-3" width="1924" height="1052" extended-state="6" />
     <editor active="true" />
     <layout>
       <window_info id="Changes" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
@@ -399,10 +397,31 @@
   <component name="editorHistoryManager">
     <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="26" column="8" selection-start="769" selection-end="769" vertical-scroll-proportion="0.0" vertical-offset="90" max-vertical-offset="4170">
+        <state line="44" column="0" selection-start="1886" selection-end="1886" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="3315">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/classifier/graphicalEM.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="75" column="48" selection-start="2100" selection-end="2100" vertical-scroll-proportion="0.0" vertical-offset="1125" max-vertical-offset="1380">
           <folding>
-            <element signature="e#22#59#0" expanded="true" />
+            <element signature="e#25#66#0" expanded="true" />
           </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmongo.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="1" column="0" selection-start="25" selection-end="25" vertical-scroll-proportion="0.0" vertical-offset="15" max-vertical-offset="105">
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state line="26" column="8" selection-start="769" selection-end="769" vertical-scroll-proportion="0.0" vertical-offset="90" max-vertical-offset="4170">
+          <folding />
         </state>
       </provider>
     </entry>
@@ -454,18 +473,14 @@
     <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmongo.py">
       <provider selected="true" editor-type-id="text-editor">
         <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="105">
-          <folding>
-            <element signature="e#22#59#0" expanded="true" />
-          </folding>
+          <folding />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
       <provider selected="true" editor-type-id="text-editor">
         <state line="1" column="0" selection-start="22" selection-end="59" vertical-scroll-proportion="0.0" vertical-offset="913" max-vertical-offset="3315">
-          <folding>
-            <element signature="e#22#59#0" expanded="true" />
-          </folding>
+          <folding />
         </state>
       </provider>
     </entry>
@@ -566,25 +581,21 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="44" column="0" selection-start="1845" selection-end="1845" vertical-scroll-proportion="0.0" vertical-offset="270" max-vertical-offset="4170">
-          <folding>
-            <element signature="e#22#59#0" expanded="true" />
-          </folding>
+        <state line="52" column="0" selection-start="2147" selection-end="2147" vertical-scroll-proportion="0.0" vertical-offset="780" max-vertical-offset="4170">
+          <folding />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/serenegti/IBCCmongo.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="123" column="58" selection-start="5130" selection-end="5408" vertical-scroll-proportion="0.0" vertical-offset="1335" max-vertical-offset="2820">
-          <folding>
-            <element signature="e#22#59#0" expanded="true" />
-          </folding>
+        <state line="51" column="85" selection-start="2195" selection-end="2243" vertical-scroll-proportion="0.0" vertical-offset="388" max-vertical-offset="2790">
+          <folding />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/classifier/graphicalEM.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="75" column="48" selection-start="2100" selection-end="2100" vertical-scroll-proportion="0.68325794" vertical-offset="672" max-vertical-offset="1380">
+        <state line="37" column="8" selection-start="982" selection-end="982" vertical-scroll-proportion="0.5483871" vertical-offset="45" max-vertical-offset="2550">
           <folding>
             <element signature="e#25#66#0" expanded="true" />
           </folding>
