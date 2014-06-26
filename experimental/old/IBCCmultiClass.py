@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 from __future__ import print_function
-from IBCCsetup import IBCCsetup
 import csv
 import os
 import cPickle as pickle
 from itertools import chain, combinations
+
+from experimental.old import IBCCsetup
 
 
 def powerset(iterable):

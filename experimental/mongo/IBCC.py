@@ -163,6 +163,29 @@ class IBCC:
 
         print(len(correct_classification) - sum(correct_classification))
 
+    def __find_nonempty__(self):
+        self.nonempty_list = []
+        total = 0
+        collection = self.db['merged_classifications'+str(self.cutoff)]
+        for document in collection.find():
+            total += 1
+            subject_zooniverse_id = document["subject_zooniverse_id"]
+            user_species_list = document["species_list"]
+
+            for speciesGroup in self.species_groups:
+                required_l = list(powerset(speciesGroup))
+                prohibited_l = [[s for s in speciesGroup if not(s in r)] for r in required_l]
+
+                meet_required = [sorted(list(set(user_species_list).intersection(r))) == sorted(list(r)) for r in required_l]
+                meet_prohibited = [tuple(set(user_species_list).intersection(p)) == () for p in prohibited_l]
+                meet_overall = [r and p for (r, p) in zip(meet_required, meet_prohibited)]
+                class_id = meet_overall.index(True)
+
+                if (class_id != 0) and not(subject_zooniverse_id in self.nonempty_list):
+                    self.nonempty_list.append(subject_zooniverse_id)
+
+        print((len(self.nonempty_list),total))
+
 
     def __runIBCC__(self):
         collection = self.db['merged_classifications'+str(self.cutoff)]
@@ -176,6 +199,10 @@ class IBCC:
         counter = -1
 
         for speciesGroup in self.species_groups:
+            self.user_list = []
+            self.subject_list = []
+
+            count = []
             required_l = list(powerset(speciesGroup))
             prohibited_l = [[s for s in speciesGroup if not(s in r)] for r in required_l]
 
@@ -190,12 +217,17 @@ class IBCC:
                 subject_zooniverse_id = document["subject_zooniverse_id"]
                 user_species_list = document["species_list"]
 
+                if not(subject_zooniverse_id in self.nonempty_list):
+                    continue
+
                 #IBCC requires an int ID for both user and subject - so convert
                 if user_name in self.user_list:
                     userID = self.user_list.index(user_name)
+                    count[userID] += 1
                 else:
                     self.user_list.append(user_name)
                     userID = len(self.user_list)-1
+                    count.append(1)
 
                 if subject_zooniverse_id in self.subject_list:
                     subjectID = self.subject_list.index(subject_zooniverse_id)
@@ -216,6 +248,7 @@ class IBCC:
 
             #now run IBCC
             ibcc.runIbcc(self.baseDir+"ibcc/"+str(counter)+"config.py")
+            print(count)
 
     def __merege_predictions__(self):
         counter = -1
@@ -266,6 +299,7 @@ class IBCC:
 
 
 f = IBCC()
+f.__find_nonempty__()
 #f.__csv_in__()
 #f.__IBCCoutput__([["gazelleThomsons","gazelleGrants"],])
 f.__runIBCC__()

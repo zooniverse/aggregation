@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 from __future__ import print_function
+from experimental.old import IBCCsetup
+
 __author__ = 'greghines'
 import csv
 import cPickle as pickle
-from IBCCsetup import IBCCsetup
 import urllib2
 import json
 
