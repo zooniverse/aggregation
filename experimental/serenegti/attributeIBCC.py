@@ -48,10 +48,10 @@ for userName, photoName, classification in reader:
 
 ibccClassifications = []
 
-
-
 for i, s in enumerate(species):
-    votes = {}
+    print(i)
+    createConfigFile(i)
+
 
     f = open(baseDir+"ibcc/"+str(i)+".in",'wb')
     for userName,photoName,classification in individualClassifications:
@@ -73,28 +73,24 @@ for i, s in enumerate(species):
             photoIndex = photos.index(photoName)
 
         if i in classification:
-            if photoIndex in votes:
-                votes[photoIndex].append(1)
-            else:
-                votes[photoIndex] = [1]
+            print(str(userIndex)+","+str(photoIndex)+",1", file=f)
         else:
-            if photoIndex in votes:
-                votes[photoIndex].append(0)
-            else:
-                votes[photoIndex] = [0]
+            print(str(userIndex)+","+str(photoIndex)+",0", file=f)
 
-
+    f.close()
+    ibcc.runIbcc(baseDir+"ibcc/"+str(i)+"config.py")
 
     #merge the results into the existing ones
     #assume all photos are now in the list - should be
     reader = csv.reader(open(baseDir+"ibcc/"+str(i)+".out","rU"), delimiter=" ")
-    for photoIndex in range(len(photos)):
-        v = votes[photoIndex]
+    for photoIndex, neg, pos in reader:
+        photoIndex = int(float(photoIndex))
+        pos = float(pos)
 
         if len(ibccClassifications) < (photoIndex+1):
             ibccClassifications.append([])
 
-        if sum(v)/float(len(v)) > 0.5:
+        if pos > 0.5:
             #print(photoIndex,len(ibccClassifications))
             ibccClassifications[photoIndex].append(s)
 
