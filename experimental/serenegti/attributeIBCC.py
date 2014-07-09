@@ -18,7 +18,7 @@ else:
 
 #species = ['elephant']#,'zebra','warthog','impala','buffalo','wildebeest','gazelleThomsons','dikDik','giraffe','gazelleGrants','lionFemale','baboon','hippopotamus','ostrich','human','otherBird','hartebeest','secretaryBird','hyenaSpotted','mongoose','reedbuck','topi','guineaFowl','eland','aardvark','lionMale','porcupine','koriBustard','bushbuck','hyenaStriped','jackal','cheetah','waterbuck','leopard','reptiles','serval','aardwolf','vervetMonkey','rodents','honeyBadger','batEaredFox','rhinoceros','civet','genet','zorilla','hare','caracal','wildcat']
 #species = ['gazelleThomsons']
-species = ['buffalo','wildebeest','zebra']
+species = ['buffalo']#,'wildebeest','zebra']
 users = []
 photos = []
 
@@ -31,6 +31,7 @@ def createConfigFile(classID):
     print("inputFile = '"+baseDir+"ibcc/"+str(classID)+".in'", file=f)
     print("outputFile =  '"+baseDir+"ibcc/"+str(classID)+".out'", file=f)
     print("confMatFile = '"+baseDir+"ibcc/"+str(classID)+".mat'", file=f)
+    print("nu0 = np.array([45.0,55.0])", file=f)
     # if numClasses == 4:
     #     print("alpha0 = np.array([[2, 2, 2, 2], [2, 2, 2, 2], [2, 2, 2, 2], [2, 2,2, 2]])", file=f)
     #     print("nu0 = np.array([25.0, 25.0, 25.0, 1.0])", file=f)
@@ -105,6 +106,8 @@ print("Reading in expert classification")
 reader = csv.reader(open(baseDir+"expert_classifications_raw.csv", "rU"), delimiter=",")
 next(reader, None)
 
+expertDict = {}
+
 for row in reader:
     photoName = row[2]
     photoIndex = photos.index(photoName)
@@ -113,6 +116,12 @@ for row in reader:
     if not(tagged in expertClassifications[photoIndex]) and (tagged in species):
         expertClassifications[photoIndex].append(tagged)
 
+    if not(tagged in expertDict):
+        expertDict[tagged] = [photoName]
+    elif not(photoName in expertDict[tagged]):
+        expertDict[tagged].append(photoName)
+
+
 
 total = 0.
 correct = 0
@@ -120,6 +129,9 @@ for u,e in zip(ibccClassifications,expertClassifications):
     total += 1
     if u == e:
         correct += 1
+
+
+print(len(expertDict["buffalo"])/total)
 
 
 

@@ -1,38 +1,41 @@
+#!/usr/bin/env python
 __author__ = 'greghines'
 import csv
 import os
+import pymongo
 
-class independence:
-    def __init__(self,userTemplate,photoTemplate):
-        self.userNodes = []
-        self.photoNodes = []
 
-        self.user_id_list = []
-        self.photo_id_list = []
+if os.path.isdir("/Users/greghines/Databases/serengeti"):
+    baseDir = "/Users/greghines/Databases/serengeti/"
+else:
+    baseDir = "/home/ggdhines/Databases/serengeti/"
 
-        self.limit = 10
 
-        self.userTemplate = userTemplate
-        self.photoTemplate = photoTemplate
+client = pymongo.MongoClient()
+db = client['serengeti_2014-06-01']
+collection = db["serengeti_subjects"]
 
-        if os.path.isdir("/Users/greghines/Databases/serengeti"):
-            self.baseDir = "/Users/greghines/Databases/serengeti/"
-        else:
-            self.baseDir = "/home/ggdhines/Databases/serengeti/"
+baseCoords = [-2.4281265793851357, 34.89354783753996]
 
-    def __readin_gold__(self):
-        print("Reading in expert classification")
-        reader = csv.reader(open(self.baseDir+"expert_classifications_raw.csv", "rU"), delimiter=",")
-        next(reader, None)
+r = []
 
-        for row in reader:
-            photoStr = row[2]
-            species = row[12]
+def __readin_gold__():
+    print("Reading in expert classification")
+    reader = csv.reader(open(baseDir+"expert_classifications_raw.csv", "rU"), delimiter=",")
+    next(reader, None)
 
-            try:
-                photoIndex = self.photo_id_list.index(photoStr)
-            except ValueError:
-                continue
-            photoNode = self.photoNodes[photoIndex]
+    for row in reader:
+        photoStr = row[2]
+        species = row[12]
 
-            photoNode.__updateGoldStandard__(species)
+        #find the coord where this photo was taken
+        subject = collection.find_one({"zooniverse_id":photoStr})
+        #where was this photo taken?
+        coord = subject["coords"]
+        if baseCoords == coord:
+            r.append((subject["metadata"]["timestamps"][0],species))
+
+
+__readin_gold__()
+r.sort(key=lambda x:x[0])
+print r
