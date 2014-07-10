@@ -14,7 +14,7 @@ def speciesString(l):
 
     retval = l[0]
     for s in l[1:]:
-        retval += " " + s
+        retval += "_" + s
 
     return retval
 

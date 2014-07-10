@@ -4,8 +4,10 @@ import sys
 
 # input comes from STDIN (standard input)
 for i,line in enumerate(sys.stdin):
-    (subject_zooniverse_id,user_name,species,capture_event_id) = line.strip().split()
-
+    try:
+        (subject_zooniverse_id,user_name,species,capture_event_id) = line.strip().split()
+    except ValueError:
+        #assume that this
 
     if (capture_event_id == "\"tutorial\"") or (capture_event_id == "tutorial"):
         continue
