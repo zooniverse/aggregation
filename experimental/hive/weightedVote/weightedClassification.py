@@ -18,4 +18,7 @@ for line in sys.stdin:
             maxWeight = weight
             bestClassification = classification
 
+    if bestClassification == None:
+        sys.stderr.write(line)
+        assert False
     print subject_zooniverse_id + "\t" + bestClassification

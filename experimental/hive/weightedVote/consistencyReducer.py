@@ -4,6 +4,9 @@ import sys
 current_zooniverse_id = None
 consistencies = None
 
+total = 0
+incorrect = 0
+
 # input comes from STDIN (standard input)
 for line in sys.stdin:
     subject_zooniverse_id, user_name, classification, voteDistributon = line.strip().split("\t")
@@ -43,12 +46,13 @@ for line in sys.stdin:
         else:
             consistency += (1-f)
 
-        if not found:
-            sys.stderr.write(line+"\n")
-            sys.stderr.write(classification+"\n")
-            sys.stderr.write(voteDistributon+"\n")
-            sys.stderr.write(c + "\n")
-            assert found
+
+
+    if not found:
+        incorrect += 1
+    total += 1
     consistency = consistency/numCategories
 
     print subject_zooniverse_id + "\t" + user_name + "\t%.3f" % consistency
+
+sys.stderr.write("out of " + str(total) + "there were "+ str(incorrect) +" incorrect\n")
