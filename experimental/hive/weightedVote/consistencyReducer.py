@@ -55,4 +55,4 @@ for line in sys.stdin:
 
     print subject_zooniverse_id + "\t" + user_name + "\t%.3f" % consistency
 
-sys.stderr.write("out of " + str(total) + "there were "+ str(incorrect) +" incorrect\n")
+sys.stderr.write("out of " + str(total) + " there were "+ str(incorrect) +" incorrect\n")
