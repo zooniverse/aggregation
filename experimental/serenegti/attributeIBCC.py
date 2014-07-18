@@ -18,7 +18,7 @@ else:
 
 #species = ['elephant']#,'zebra','warthog','impala','buffalo','wildebeest','gazelleThomsons','dikDik','giraffe','gazelleGrants','lionFemale','baboon','hippopotamus','ostrich','human','otherBird','hartebeest','secretaryBird','hyenaSpotted','mongoose','reedbuck','topi','guineaFowl','eland','aardvark','lionMale','porcupine','koriBustard','bushbuck','hyenaStriped','jackal','cheetah','waterbuck','leopard','reptiles','serval','aardwolf','vervetMonkey','rodents','honeyBadger','batEaredFox','rhinoceros','civet','genet','zorilla','hare','caracal','wildcat']
 #species = ['gazelleThomsons']
-species = ['buffalo']#,'wildebeest','zebra']
+species = ['wildebeest']#,'wildebeest','zebra']
 users = []
 photos = []
 
@@ -131,7 +131,7 @@ for u,e in zip(ibccClassifications,expertClassifications):
         correct += 1
 
 
-print(len(expertDict["buffalo"])/total)
+print(len(expertDict["wildebeest"])/total)
 
 
 

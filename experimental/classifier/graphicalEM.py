@@ -8,24 +8,68 @@ import pymongo
 import operator
 import os
 from copy import deepcopy
-
+import random
 
 def powerset(s):
     "powerset([1,2,3]) --> () (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)"
     return chain.from_iterable(combinations(s, r) for r in range(len(s)+1))
 
 class SubjectNode:
-    def __init__(self,subjectName):
+    def __init__(self,subjectName,debug = False):
         self.subjectName = subjectName
         self.users = []
         self.n = None
         self.classification = None
 
+        #only for testing purposes
+        self.goldStandard = None
+        self.currentGold = None
+        self.debug = debug
+
+    def __getName__(self):
+        return self.subjectName
+
+    def __getNumUsers__(self):
+        return len(self.users)
+
     def __addUser__(self,uNode):
         self.users.append(uNode)
 
+    def __contains__(self):
+        assert(self.classification is not None)
+        return self.classification > 0
+
+    def __correct__(self, classification=None):
+        assert(self.currentGold is not None)
+
+        if classification is not None:
+            return classification == self.currentGold
+        else:
+            assert(self.classification is not None)
+            return self.classification == self.currentGold
+
+
+
+
     def __setSpecies__(self,species):
         self.n = 2**len(species)
+        powerSpecies = list(powerset(species))
+
+        if self.goldStandard is not None:
+            for i, required in enumerate(powerSpecies):
+                prohibited = [s for s in species if not(s in required)]
+
+                if not(set(required).intersection(self.goldStandard) == set(required)):
+                    pass
+                elif not(set(prohibited).intersection(self.goldStandard) == set()):
+                    pass
+                else:
+                    self.currentGold = i
+                    found = True
+                    break
+
+            assert found
+
 
     def __getClassification__(self):
         assert(self.classification is not None)
@@ -33,18 +77,55 @@ class SubjectNode:
 
     def __updateClassification__(self):
         #what is the probability of this particular set of species occurring?
-        probabilities = [reduce(operator.mul, [u.__getProbability__(self.subjectName,i) for u in self.users], 1) for i in range(self.n)]
-        self.classification = probabilities.index(max(probabilities))
+        #
+        multProbabilities = [reduce(operator.mul, [u.__getProbability__(self.subjectName,i) for u in self.users], 1) for i in range(self.n)]
+        sumProbabilities = [sum([u.__getProbability__(self.subjectName,i) for u in self.users]) for i in range(self.n)]
+        probabilities = multProbabilities
+        if self.debug:
+            print [u.__getReported__(self.subjectName) for u in self.users]
+            print [u.__getProbability__(self.subjectName,0) for u in self.users]
+            print [u.__getProbability__(self.subjectName,1) for u in self.users]
+            print multProbabilities[0]
+            print sumProbabilities[0]
+            print "---"
+            print multProbabilities[1]
+            print sumProbabilities[1]
+            print self.currentGold
+            print "===="
+        assert(max(probabilities) > 0)
+
+        #if we have a tie, break it at random
+        if probabilities[0] == probabilities[1]:
+            self.classification = random.randint(0,1)
+        else:
+            self.classification = probabilities.index(max(probabilities))
+
+    def __updateGoldStandard__(self,attribute):
+        if self.goldStandard is None:
+            self.goldStandard = [attribute]
+        else:
+            self.goldStandard.append(attribute)
 
 
 class UserNode:
-    def __init__(self):
+    def __init__(self,debug=False):
         self.classifications = {}
         self.subjects = {}
         self.species = None
         self.confusionMatrix = None
 
         self.reported = {}
+        self.defaultConfusion = np.array([[0.75,0.25],[0.25,0.75]])
+        self.debug = debug
+
+    def __getNumSubjectsViewed__(self):
+        return len(self.subjects)
+
+    def __getClassifications__(self):
+        classifications = []
+        for subjectName in self.classifications:
+            classifications.append((subjectName,self.reported[subjectName]))
+        return classifications
 
     def __addSubject__(self,subjectName, sNode):
         if not(subjectName in self.subjects):
@@ -63,7 +144,7 @@ class UserNode:
 
     def __setSpecies__(self,species):
         if len(species) == 1:
-            self.confusionMatrix = np.array([[0.75,0.25],[0.25,0.75]])
+            self.confusionMatrix = deepcopy(self.defaultConfusion)
             self.n = 2**len(species)
         else:
             raise
@@ -95,9 +176,13 @@ class UserNode:
 
         return self.confusionMatrix[r][s]
 
+    def __getReported__(self,subjectName):
+        return self.reported[subjectName]
+
     def __updateConfusionMatrix__(self):
-        print "===---"
-        print self.confusionMatrix
+        if self.debug:
+            print "===---"
+            print self.confusionMatrix
         self.confusionMatrix = np.zeros((self.n,self.n))
         for subjectName in self.subjects:
             sNode = self.subjects[subjectName]
@@ -110,13 +195,14 @@ class UserNode:
             t = sum(self.confusionMatrix[i])
             if t == 0:
                 #revert to default
-                if i == 0:
-                    self.confusionMatrix[i] = [0.75,0.25]
-                else:
-                    self.confusionMatrix[i] = [0.25,0.75]
+                self.confusionMatrix[i] = self.defaultConfusion[i][:]
             else:
                 self.confusionMatrix[i] = self.confusionMatrix[i]/float(t)
-        print self.confusionMatrix
+
+        if self.debug:
+            print self.confusionMatrix
+
+        #print self.confusionMatrix
 
 class graphicalEM:
     def __init__(self):
@@ -124,17 +210,6 @@ class graphicalEM:
         self.userDict = {}
         self.subjectDict = {}
 
-        #the following will help map from the zooniverse id to the photos
-
-        #counts how many times each photo has been classified
-        #self.classification_count = []
-
-        #self.client = pymongo.MongoClient()
-        #self.db = self.client['serengeti_2014-06-01']
-
-        #self.cutoff = 5
-        #self.species = ["gazelleThomsons","gazelleGrants"]
-        #self.class_l = list(powerset(self.species))
 
         self.gold_standard = {}
 
@@ -179,33 +254,7 @@ class graphicalEM:
 
         print(correct/total)
 
-    def __classify__(self):
-        for iter in range(2):
-            print("running EM")
-            updateCount = 0
-            totalCount = 0.
 
-
-            for subject in self.subjectNodes:
-                subject.__calc_mostlikely_classification__()
-                totalCount += 1.
-                if subject.__was_updated__():
-                    updateCount += 1
-
-                #update the priors
-                subject.__get_mostlikely_classification__()
-
-            #print(counts)
-            #break
-            #for photo in self.photos:
-            #    photo.__update_priors__(counts)
-
-
-
-            print("update percentage: " + str(updateCount/totalCount))
-
-            for user in self.userNodes:
-                user.__update_confusion_matrix__()
 
     def __readIndividualClassifications__(self):
         reader = csv.reader(open(self.baseDir+"goldFiltered.csv","rU"), delimiter=",")
@@ -216,11 +265,20 @@ class graphicalEM:
             attribute = line[11]
 
             if not(subject_zooniverse_id in self.subjectDict):
-                self.subjectDict[subject_zooniverse_id] = SubjectNode(subject_zooniverse_id)
+                if len(self.subjectDict) < 10:
+                    self.subjectDict[subject_zooniverse_id] = SubjectNode(subject_zooniverse_id)
+                else:
+                    self.subjectDict[subject_zooniverse_id] = SubjectNode(subject_zooniverse_id)
             sNode = self.subjectDict[subject_zooniverse_id]
 
+            if sNode.__getNumUsers__() >= 10:
+                continue
+
             if not(user_name in self.userDict):
-                self.userDict[user_name] = UserNode()
+                if len(self.userDict) < 20:
+                    self.userDict[user_name] = UserNode()
+                else:
+                    self.userDict[user_name] = UserNode()
             uNode = self.userDict[user_name]
 
             #if this is not the first time this user has "tagged" this photo, nothing should happen
@@ -235,6 +293,20 @@ class graphicalEM:
         for user in self.userDict:
             self.userDict[user].__setSpecies__(speciesList)
 
+    def __averageSubjectsViewed__(self):
+        numUsers = 0.
+        totalViews = 0
+
+        for user_name in self.userDict:
+            uNode = self.userDict[user_name]
+            totalViews += uNode.__getNumSubjectsViewed__()
+            numUsers += 1
+
+        print "===---"
+        print len(self.subjectDict)
+        print numUsers
+        print totalViews/numUsers
+
     def __updateClassifications__(self):
         for subject in self.subjectDict:
             self.subjectDict[subject].__updateClassification__()
@@ -242,52 +314,50 @@ class graphicalEM:
         for user_name in self.userDict:
             self.userDict[user_name].__updateConfusionMatrix__()
 
+    def __readGoldStandard__(self):
+        reader = csv.reader(open(self.baseDir+"expert_classifications_raw.csv", "rU"), delimiter=",")
+        next(reader, None)
 
-    def __readin_user__(self):
-        collection = self.db['merged_classifications'+str(self.cutoff)]
-        print("Reading in mongodb collection")
+        for row in reader:
+            photoStr = row[2]
+            attribute = row[12]
 
-        for classification in collection.find():
-            user_name= classification["user_name"]
-            zooniverse_id = classification["zooniverse_id"]
-            species_list = classification["species"]
-            #for now - cheat :)
-            #species_count = [1 for i in len(species_list)]
+            sNode = self.subjectDict[photoStr]
+            sNode.__updateGoldStandard__(attribute)
 
-            if zooniverse_id in self.photo_id_list:
-                photo = self.photos[self.photo_id_list.index(zooniverse_id)]
+    def __analyze__(self):
+        total = 0.
+        correct = 0.
+        numPos = 0.
+        correctPos = 0
+        numNeg = 0.
+        correctNeg = 0
+
+        for subject_zooniverse_id in self.subjectDict:
+            sNode = self.subjectDict[subject_zooniverse_id]
+
+            if sNode.__correct__():
+                correct += 1
+
+            if sNode.__contains__():
+                numPos += 1
+                if sNode.__correct__():
+                    correctPos += 1
             else:
-                self.photo_id_list.append(zooniverse_id)
-                self.photos.append(PhotoNode(self.species))
-                photo = self.photos[-1]
+                numNeg += 1
+                if sNode.__correct__():
+                    correctNeg += 1
 
-            if photo.__get_num_users__() == self.cutoff:
-                #if we have reached our limit
-                continue
+            total += 1
 
-            #have we encountered this user before?
-            if user_name in self.user_id_list:
-                user = self.users[self.user_id_list.index(user_name)]
-            else:
-                self.users.append(UserNode(self.species))
-                self.user_id_list.append(user_name)
-                user = self.users[-1]
-
-            try:
-                user.__add_classification__(photo, species_list)
-                photo.__add_user__(user)
-            except PhotoAlreadyTagged:
-                print((user_name,zooniverse_id))
-                self.errorCount += 1
-
-        print("double instances: " + str(self.errorCount))
-
-
-
-
+        print correct/total
+        print correctPos/numPos
+        print correctNeg/numNeg
 
 if __name__ == "__main__":
     c = graphicalEM()
     c.__readIndividualClassifications__()
-    c.__setSpecies__(["buffalo"])
+    c.__readGoldStandard__()
+    c.__setSpecies__(["zebra"])
     c.__updateClassifications__()
+    c.__analyze__()
