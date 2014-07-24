@@ -2,8 +2,17 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="b947194c-c006-45c3-a9f6-30272d1b8f46" name="Default" comment="">
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/experimental/serenegti/individualIBCC.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/experimental/serenegti/attributeIBCC.py" afterPath="$PROJECT_DIR$/experimental/serenegti/attributeIBCC.py" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/experimental/milkway/__init__.py" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/zooLeverage/__init__.py" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/zooLeverage/geometric/__init__.py" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/zooLeverage/geometric/shapes/__init__.py" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/zooLeverage/geometric/singleMachine/__init__.py" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/experimental/milkway/collectGoldStandard.py" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/experimental/milkway/dbscan.py" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/zooLeverage/geometric/singleMachine/dbscan.py" />
+      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/experimental/milkway/geometry.py" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/misc.xml" afterPath="$PROJECT_DIR$/.idea/misc.xml" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/reduction.iml" afterPath="$PROJECT_DIR$/.idea/reduction.iml" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
     </list>
     <ignored path="reduction.iws" />
@@ -27,24 +36,12 @@
   </component>
   <component name="FileEditorManager">
     <leaf>
-      <file leaf-file-name="attributeIBCC.py" pinned="false" current="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/experimental/serenegti/attributeIBCC.py">
+      <file leaf-file-name="dbscan.py" pinned="false" current="true" current-in-tab="true">
+        <entry file="file://$PROJECT_DIR$/zooLeverage/geometric/singleMachine/dbscan.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state line="118" column="34" selection-start="0" selection-end="4332" vertical-scroll-proportion="0.0" vertical-offset="1093" max-vertical-offset="2010">
-              <folding>
-                <element signature="e#22#59#0" expanded="true" />
-              </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file leaf-file-name="individualIBCC.py" pinned="false" current="true" current-in-tab="true">
-        <entry file="file://$PROJECT_DIR$/experimental/serenegti/individualIBCC.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state line="125" column="62" selection-start="4638" selection-end="4638" vertical-scroll-proportion="0.5583424" vertical-offset="1363" max-vertical-offset="2295">
-              <folding>
-                <element signature="e#22#59#0" expanded="true" />
-              </folding>
+            <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="677">
+              <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+              <folding />
             </state>
           </provider>
         </entry>
@@ -68,8 +65,6 @@
   <component name="IdeDocumentHistory">
     <option name="changedFiles">
       <list>
-        <option value="$PROJECT_DIR$/experimental/preSerenegti.py" />
-        <option value="$PROJECT_DIR$/experimental/serenegtiGold.py" />
         <option value="$PROJECT_DIR$/experimental/serenegti.py" />
         <option value="$PROJECT_DIR$/experimental/serenegtiExpertConsensus.py" />
         <option value="$PROJECT_DIR$/experimental/serenegti/temp.py" />
@@ -83,23 +78,52 @@
         <option value="$PROJECT_DIR$/experimental/imageCompare/timeSeries.py" />
         <option value="$PROJECT_DIR$/experimental/imageCompare/timeSeries2.py" />
         <option value="$PROJECT_DIR$/experimental/mongo/IBCC.py" />
-        <option value="$PROJECT_DIR$/experimental/classifier/graphicalEM.py" />
         <option value="$PROJECT_DIR$/experimental/serenegti/ibcc.py" />
         <option value="$PROJECT_DIR$/experimental/serenegti/confusion.py" />
         <option value="$PROJECT_DIR$/experimental/serenegti/attributeIBCC2.py" />
         <option value="$PROJECT_DIR$/experimental/serenegti/filter.py" />
         <option value="$PROJECT_DIR$/experimental/serenegti/attributeMajorityVote.py" />
-        <option value="$PROJECT_DIR$/experimental/serenegti/attributeIBCC.py" />
         <option value="$USER_HOME$/Downloads/reducer.py" />
         <option value="$PROJECT_DIR$/experimental/serenegti/individualIBCC.py" />
+        <option value="$PROJECT_DIR$/experimental/serenegti/estimateConfusion.py" />
+        <option value="$PROJECT_DIR$/experimental/hive/majorityVote/mapper.py" />
+        <option value="$PROJECT_DIR$/experimental/hive/majorityVote/reducer.py" />
+        <option value="$PROJECT_DIR$/experimental/mapreduce/serengeti/mapper0.py" />
+        <option value="$PROJECT_DIR$/experimental/mapreduce/serengeti/mapper1.py" />
+        <option value="$PROJECT_DIR$/experimental/mapreduce/serengeti/reducer1.py" />
+        <option value="$PROJECT_DIR$/experimental/hive/majorityVote/f.py" />
+        <option value="$PROJECT_DIR$/experimental/hive/majorityVote/reducer1.py" />
+        <option value="$PROJECT_DIR$/experimental/hive/majorityVote/MVreducer.py" />
+        <option value="$PROJECT_DIR$/experimental/hive/majorityVote/fractionReducer.py" />
+        <option value="$PROJECT_DIR$/experimental/hive/weightedVote.py" />
+        <option value="$PROJECT_DIR$/experimental/hive/weightedVote/filter.py" />
+        <option value="$PROJECT_DIR$/experimental/hive/majorityVote/mapper1.py" />
+        <option value="$PROJECT_DIR$/experimental/hive/weightedVote/consistencyReducer.py" />
+        <option value="$PROJECT_DIR$/experimental/clustering/friendsOfFriends/mapper.py" />
+        <option value="$PROJECT_DIR$/experimental/hive/weightedVote/weightedClassification.py" />
+        <option value="$PROJECT_DIR$/experimental/clustering/friendsOfFriends/reducer.py" />
+        <option value="$PROJECT_DIR$/experimental/clustering/friendsOfFriends/reducer1.py" />
+        <option value="$PROJECT_DIR$/experimental/clustering/friendsOfFriends/mapper1.py" />
+        <option value="$PROJECT_DIR$/experimental/serenegti/attributeIBCC.py" />
+        <option value="$PROJECT_DIR$/experimental/classifier/graphicalIBCC.py" />
+        <option value="$PROJECT_DIR$/experimental/classifier/graphicalEM.py" />
+        <option value="$PROJECT_DIR$/experimental/clustering/dbscan/sample.py" />
+        <option value="$PROJECT_DIR$/experimental/clustering/dbscan/plot.py" />
+        <option value="$PROJECT_DIR$/experimental/clustering/dbscan/kmeans.py" />
+        <option value="$PROJECT_DIR$/experimental/clustering/dbscan/scikit.py" />
+        <option value="$PROJECT_DIR$/experimental/milkyway.py" />
+        <option value="$PROJECT_DIR$/experimental/milkway/collectGoldStandard.py" />
+        <option value="$PROJECT_DIR$/experimental/milkway/geometry.py" />
+        <option value="$PROJECT_DIR$/experimental/milkway/dbscan.py" />
+        <option value="$PROJECT_DIR$/zooLeverage/geometric/singleMachine/dbscan.py" />
       </list>
     </option>
   </component>
   <component name="ProjectFrameBounds">
-    <option name="x" value="-2" />
-    <option name="y" value="-3" />
-    <option name="width" value="1924" />
-    <option name="height" value="1052" />
+    <option name="x" value="1" />
+    <option name="y" value="22" />
+    <option name="width" value="1280" />
+    <option name="height" value="774" />
   </component>
   <component name="ProjectLevelVcsManager" settingsEditedManually="false">
     <OptionsSetting value="true" id="Add" />
@@ -115,7 +139,7 @@
     <option name="STATE" value="0" />
   </component>
   <component name="ProjectView">
-    <navigator currentView="ProjectPane" proportions="" version="1" splitterProportion="0.5">
+    <navigator currentView="ProjectPane" proportions="" version="1">
       <flattenPackages />
       <showMembers />
       <showModules />
@@ -155,6 +179,82 @@
               <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
             </PATH_ELEMENT>
             <PATH_ELEMENT>
+              <option name="myItemId" value="zooLeverage" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+          </PATH>
+          <PATH>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="reduction" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="reduction" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="zooLeverage" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="geometric" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+          </PATH>
+          <PATH>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="reduction" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="reduction" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="zooLeverage" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="geometric" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="singleMachine" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+          </PATH>
+          <PATH>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="reduction" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="reduction" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="zooLeverage" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="geometric" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="shapes" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+          </PATH>
+          <PATH>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="reduction" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
+              <option name="myItemId" value="reduction" />
+              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
+            </PATH_ELEMENT>
+            <PATH_ELEMENT>
               <option name="myItemId" value="experimental" />
               <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
             </PATH_ELEMENT>
@@ -173,79 +273,7 @@
               <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
             </PATH_ELEMENT>
             <PATH_ELEMENT>
-              <option name="myItemId" value="serenegti" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-          </PATH>
-          <PATH>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="reduction" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="reduction" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="experimental" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="old" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-          </PATH>
-          <PATH>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="reduction" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="reduction" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="experimental" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="mongo" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-          </PATH>
-          <PATH>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="reduction" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="reduction" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="experimental" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="classifier" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-          </PATH>
-          <PATH>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="reduction" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.ProjectViewProjectNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="reduction" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="experimental" />
-              <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
-            </PATH_ELEMENT>
-            <PATH_ELEMENT>
-              <option name="myItemId" value="classification" />
+              <option name="myItemId" value="milkway" />
               <option name="myItemType" value="com.intellij.ide.projectView.impl.nodes.PsiDirectoryNode" />
             </PATH_ELEMENT>
           </PATH>
@@ -267,6 +295,12 @@
     <option name="myPythonConsoleState">
       <console-settings />
     </option>
+  </component>
+  <component name="RecentsManager">
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$/experimental/hive/weightedVote" />
+      <recent name="$PROJECT_DIR$/experimental/hive/majorityVote" />
+    </key>
   </component>
   <component name="RunManager">
     <configuration default="true" type="tests" factoryName="py.test">
@@ -393,22 +427,8 @@
     <list size="0" />
   </component>
   <component name="ShelveChangesManager" show_recycled="false" />
-  <component name="SvnConfiguration" maxAnnotateRevisions="500" myUseAcceleration="nothing" myAutoUpdateAfterCommit="false" cleanupOnStartRun="false" SSL_PROTOCOLS="all">
-    <option name="USER" value="" />
-    <option name="PASSWORD" value="" />
-    <option name="mySSHConnectionTimeout" value="30000" />
-    <option name="mySSHReadTimeout" value="30000" />
-    <option name="LAST_MERGED_REVISION" />
-    <option name="MERGE_DRY_RUN" value="false" />
-    <option name="MERGE_DIFF_USE_ANCESTRY" value="true" />
-    <option name="UPDATE_LOCK_ON_DEMAND" value="false" />
-    <option name="IGNORE_SPACES_IN_MERGE" value="false" />
-    <option name="CHECK_NESTED_FOR_QUICK_MERGE" value="false" />
-    <option name="IGNORE_SPACES_IN_ANNOTATE" value="true" />
-    <option name="SHOW_MERGE_SOURCES_IN_ANNOTATE" value="true" />
-    <option name="FORCE_UPDATE" value="false" />
-    <option name="IGNORE_EXTERNALS" value="false" />
-    <myIsUseDefaultProxy>false</myIsUseDefaultProxy>
+  <component name="SvnConfiguration" myUseAcceleration="nothing" SSL_PROTOCOLS="all">
+    <configuration />
   </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
@@ -424,24 +444,24 @@
     <servers />
   </component>
   <component name="ToolWindowManager">
-    <frame x="-2" y="-3" width="1924" height="1052" extended-state="6" />
+    <frame x="1" y="22" width="1280" height="774" extended-state="6" />
     <editor active="true" />
     <layout>
       <window_info id="Changes" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
-      <window_info id="Terminal" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
+      <window_info id="Terminal" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="11" side_tool="false" content_ui="tabs" />
       <window_info id="TODO" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="6" side_tool="false" content_ui="tabs" />
       <window_info id="Structure" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" weight="0.25" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
       <window_info id="Debug" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.4" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Favorites" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="2" side_tool="true" content_ui="tabs" />
-      <window_info id="Event Log" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="true" content_ui="tabs" />
+      <window_info id="Event Log" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="8" side_tool="true" content_ui="tabs" />
       <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
-      <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
+      <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="9" side_tool="false" content_ui="tabs" />
       <window_info id="Cvs" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="4" side_tool="false" content_ui="tabs" />
       <window_info id="Message" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
       <window_info id="Ant Build" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Find" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.33" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
-      <window_info id="Messages" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.3299566" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
+      <window_info id="Messages" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.3299566" sideWeight="0.5" order="10" side_tool="false" content_ui="tabs" />
       <window_info id="Commander" active="false" anchor="right" auto_hide="false" internal_type="SLIDING" type="SLIDING" visible="false" weight="0.4" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
       <window_info id="Hierarchy" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.25" sideWeight="0.5" order="2" side_tool="false" content_ui="combo" />
       <window_info id="Inspection" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" weight="0.4" sideWeight="0.5" order="5" side_tool="false" content_ui="tabs" />
@@ -449,6 +469,9 @@
   </component>
   <component name="Vcs.Log.UiProperties">
     <option name="RECENTLY_FILTERED_USER_GROUPS">
+      <collection />
+    </option>
+    <option name="RECENTLY_FILTERED_BRANCH_GROUPS">
       <collection />
     </option>
   </component>
@@ -466,249 +489,373 @@
     <breakpoint-manager />
   </component>
   <component name="editorHistoryManager">
-    <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="37" column="63" selection-start="1692" selection-end="1692" vertical-scroll-proportion="0.0" vertical-offset="555" max-vertical-offset="4170">
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/classifier/graphicalEM.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="37" column="8" selection-start="982" selection-end="982" vertical-scroll-proportion="0.0" vertical-offset="555" max-vertical-offset="2550">
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="52" column="0" selection-start="2147" selection-end="2147" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="4170">
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/classifier/graphicalEM.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="37" column="8" selection-start="982" selection-end="982" vertical-scroll-proportion="0.0" vertical-offset="45" max-vertical-offset="2550">
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="44" column="0" selection-start="1886" selection-end="1886" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="3315">
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/classifier/graphicalEM.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="75" column="48" selection-start="2100" selection-end="2100" vertical-scroll-proportion="0.0" vertical-offset="1125" max-vertical-offset="1380">
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="26" column="8" selection-start="769" selection-end="769" vertical-scroll-proportion="0.0" vertical-offset="90" max-vertical-offset="4170">
-          <folding />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="16" column="63" selection-start="499" selection-end="512" vertical-scroll-proportion="0.0" vertical-offset="240" max-vertical-offset="735" />
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="735">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+        </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image2.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="12" column="44" selection-start="129" selection-end="436" vertical-scroll-proportion="0.0" vertical-offset="180" max-vertical-offset="480" />
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/timeSeries.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="54" column="0" selection-start="1144" selection-end="1144" vertical-scroll-proportion="0.0" vertical-offset="810" max-vertical-offset="1395" />
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/timeSeries2.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="154" column="24" selection-start="4405" selection-end="4405" vertical-scroll-proportion="0.0" vertical-offset="1800" max-vertical-offset="3510" />
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/analyze.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="14" column="0" selection-start="279" selection-end="333" vertical-scroll-proportion="0.0" vertical-offset="210" max-vertical-offset="1740" />
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="1" column="0" selection-start="22" selection-end="59" vertical-scroll-proportion="0.0" vertical-offset="913" max-vertical-offset="3315">
-          <folding />
+        <state vertical-scroll-proportion="0.0" vertical-offset="255" max-vertical-offset="480">
+          <caret line="17" column="55" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="0" column="0" selection-start="0" selection-end="21" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="735" />
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image2.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="17" column="55" selection-start="618" selection-end="618" vertical-scroll-proportion="0.0" vertical-offset="255" max-vertical-offset="480" />
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/experimental/imageCompare/timeSeries.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="105" />
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="105">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+        </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/imageCompare/analyze.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="34" column="75" selection-start="877" selection-end="916" vertical-scroll-proportion="0.0" vertical-offset="270" max-vertical-offset="1740" />
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/mongo.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="8" column="28" selection-start="0" selection-end="2093" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1065" />
+        <state vertical-scroll-proportion="0.0" vertical-offset="270" max-vertical-offset="1740">
+          <caret line="34" column="75" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+        </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/imageCompare/sun.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="122" column="0" selection-start="4204" selection-end="4204" vertical-scroll-proportion="1.967742" vertical-offset="0" max-vertical-offset="1935" />
+        <state vertical-scroll-proportion="1.967742" vertical-offset="0" max-vertical-offset="1935">
+          <caret line="122" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+        </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="16" column="63" selection-start="499" selection-end="512" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="735" />
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="735">
+          <caret line="16" column="63" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+        </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/imageCompare/timeSeries.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="54" column="0" selection-start="1144" selection-end="1144" vertical-scroll-proportion="0.0" vertical-offset="270" max-vertical-offset="1395" />
+        <state vertical-scroll-proportion="0.0" vertical-offset="270" max-vertical-offset="1395">
+          <caret line="54" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+        </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/imageCompare/image2.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="12" column="44" selection-start="129" selection-end="436" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="480" />
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="480">
+          <caret line="12" column="44" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+        </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/imageCompare/timeSeries2.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="154" column="24" selection-start="4405" selection-end="4405" vertical-scroll-proportion="0.0" vertical-offset="1800" max-vertical-offset="3510" />
+        <state vertical-scroll-proportion="0.0" vertical-offset="1800" max-vertical-offset="3510">
+          <caret line="154" column="24" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+        </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/imageCompare/analyze.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="14" column="0" selection-start="279" selection-end="333" vertical-scroll-proportion="-0.15837105" vertical-offset="210" max-vertical-offset="1635" />
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/classifier/graphicalEM.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="0" column="0" selection-start="0" selection-end="21" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="2490">
-          <folding />
+        <state vertical-scroll-proportion="-0.15837105" vertical-offset="210" max-vertical-offset="1635">
+          <caret line="14" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/classification/IBCCserengeti.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="930">
-          <folding />
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="930">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/classification/pyIBCC.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="930">
-          <folding />
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="930">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/old/IBCCmongo.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="2790">
-          <folding />
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="2790">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/classifier/majorityVote.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="0" column="0" selection-start="0" selection-end="0" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="930">
-          <folding />
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="930">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/serenegti/confusion.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="35" column="18" selection-start="884" selection-end="884" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1425">
-          <folding>
-            <element signature="e#22#59#0" expanded="true" />
-          </folding>
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1425">
+          <caret line="35" column="18" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/serenegti/attributeIBCC2.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="91" column="0" selection-start="3447" selection-end="3447" vertical-scroll-proportion="0.0" vertical-offset="495" max-vertical-offset="1860">
-          <folding>
-            <element signature="e#22#59#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/serenegti/filter.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="5" column="9" selection-start="91" selection-end="91" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1335">
-          <folding>
-            <element signature="e#22#59#0" expanded="true" />
-          </folding>
+        <state vertical-scroll-proportion="0.0" vertical-offset="495" max-vertical-offset="1860">
+          <caret line="91" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/mongo/IBCC.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="8" column="57" selection-start="163" selection-end="220" vertical-scroll-proportion="-1.1111112" vertical-offset="0" max-vertical-offset="4590">
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/serenegti/SnapshotSerengeti.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="167" column="53" selection-start="5508" selection-end="6046" vertical-scroll-proportion="0.0" vertical-offset="225" max-vertical-offset="2655">
-          <folding />
+        <state vertical-scroll-proportion="-1.1111112" vertical-offset="0" max-vertical-offset="4590">
+          <caret line="8" column="57" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/serenegti/attributeMajorityVote.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="19" column="27" selection-start="1042" selection-end="1042" vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="2055">
-          <folding>
-            <element signature="e#22#59#0" expanded="true" />
-          </folding>
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="2055">
+          <caret line="19" column="27" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
         </state>
       </provider>
     </entry>
     <entry file="file://$USER_HOME$/Downloads/reducer.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="29" column="12" selection-start="1405" selection-end="1405" vertical-scroll-proportion="0.47437295" vertical-offset="0" max-vertical-offset="917">
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/serenegti/attributeIBCC.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state line="118" column="34" selection-start="0" selection-end="4332" vertical-scroll-proportion="0.0" vertical-offset="1093" max-vertical-offset="2010">
-          <folding>
-            <element signature="e#22#59#0" expanded="true" />
-          </folding>
+        <state vertical-scroll-proportion="0.47437295" vertical-offset="0" max-vertical-offset="917">
+          <caret line="29" column="12" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/experimental/serenegti/individualIBCC.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state line="125" column="62" selection-start="4638" selection-end="4638" vertical-scroll-proportion="0.5583424" vertical-offset="1363" max-vertical-offset="2295">
+        <state vertical-scroll-proportion="0.7876923" vertical-offset="1363" max-vertical-offset="2295">
+          <caret line="125" column="62" selection-start-line="125" selection-start-column="62" selection-end-line="125" selection-end-column="62" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/serenegti/estimateConfusion.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.8371041" vertical-offset="0" max-vertical-offset="885">
+          <caret line="37" column="8" selection-start-line="37" selection-start-column="8" selection-end-line="37" selection-end-column="8" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/mapreduce/serengeti/mapper.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="465">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="23" selection-end-column="66" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/hive/majorityVote/mapper.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="315">
+          <caret line="9" column="24" selection-start-line="9" selection-start-column="24" selection-end-line="9" selection-end-column="24" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/hive/majorityVote/f.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="270">
+          <caret line="12" column="90" selection-start-line="12" selection-start-column="90" selection-end-line="12" selection-end-column="90" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/serenegti/filter.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1335">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="3" selection-end-column="10" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/hive/majorityVote/reducer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="675">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="12" selection-end-column="26" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/hive/majorityVote/MVreducer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="190" max-vertical-offset="840">
+          <caret line="39" column="17" selection-start-line="39" selection-start-column="17" selection-end-line="39" selection-end-column="17" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/hive/majorityVote/reducer1.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="95" max-vertical-offset="795">
+          <caret line="12" column="17" selection-start-line="12" selection-start-column="17" selection-end-line="12" selection-end-column="17" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/hive/weightedVote/filter.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="210">
+          <caret line="4" column="28" selection-start-line="4" selection-start-column="28" selection-end-line="4" selection-end-column="28" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/hive/majorityVote/mapper1.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="540">
+          <caret line="21" column="26" selection-start-line="21" selection-start-column="26" selection-end-line="21" selection-end-column="26" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/hive/weightedVote/consistencyReducer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="245" max-vertical-offset="945">
+          <caret line="57" column="71" selection-start-line="57" selection-start-column="71" selection-end-line="57" selection-end-column="71" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/clustering/friendsOfFriends/mapper.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="640">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/hive/weightedVote/classificationDistribution.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.578125" vertical-offset="125" max-vertical-offset="765">
+          <caret line="33" column="64" selection-start-line="33" selection-start-column="55" selection-end-line="33" selection-end-column="64" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/mapreduce/serengeti/reducer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="630">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="10" selection-end-column="35" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/hive/weightedVote/weightedClassification.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.515625" vertical-offset="0" max-vertical-offset="640">
+          <caret line="22" column="20" selection-start-line="22" selection-start-column="20" selection-end-line="22" selection-end-column="20" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/clustering/friendsOfFriends/mapper1.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.8642534" vertical-offset="192" max-vertical-offset="855">
+          <caret line="51" column="5" selection-start-line="51" selection-start-column="5" selection-end-line="51" selection-end-column="5" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/clustering/friendsOfFriends/reducer1.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.25339368" vertical-offset="72" max-vertical-offset="840">
+          <caret line="16" column="59" selection-start-line="16" selection-start-column="59" selection-end-line="16" selection-end-column="59" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/serenegti/SnapshotSerengeti.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.6334842" vertical-offset="1950" max-vertical-offset="2655">
+          <caret line="158" column="29" selection-start-line="158" selection-start-column="29" selection-end-line="158" selection-end-column="29" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/serenegti/attributeIBCC.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="925" max-vertical-offset="2145">
+          <caret line="101" column="0" selection-start-line="101" selection-start-column="0" selection-end-line="101" selection-end-column="0" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/classifier/graphicalEM.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="3775" max-vertical-offset="5520">
+          <caret line="273" column="44" selection-start-line="273" selection-start-column="44" selection-end-line="273" selection-end-column="44" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/classifier/graphicalIBCC.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.47511312" vertical-offset="135" max-vertical-offset="1110">
+          <caret line="30" column="21" selection-start-line="30" selection-start-column="21" selection-end-line="30" selection-end-column="21" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/clustering/friendsOfFriends/reducer.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1125">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="21" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/clustering/dbscan/sample.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="390">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="21" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/clustering/dbscan/plot.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="330">
+          <caret line="7" column="0" selection-start-line="7" selection-start-column="0" selection-end-line="11" selection-end-column="29" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/clustering/dbscan/scikit.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.42540622" vertical-offset="597" max-vertical-offset="1335">
+          <caret line="59" column="46" selection-start-line="59" selection-start-column="46" selection-end-line="59" selection-end-column="46" />
           <folding>
-            <element signature="e#22#59#0" expanded="true" />
+            <element signature="e#48#82#0" expanded="false" />
           </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/clustering/dbscan/kmeans.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.047267355" vertical-offset="28" max-vertical-offset="705">
+          <caret line="4" column="0" selection-start-line="4" selection-start-column="0" selection-end-line="4" selection-end-column="34" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/milkway/collectGoldStandard.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="192" max-vertical-offset="1065">
+          <caret line="48" column="69" selection-start-line="48" selection-start-column="69" selection-end-line="48" selection-end-column="69" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/mongo.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="1065">
+          <caret line="3" column="0" selection-start-line="3" selection-start-column="0" selection-end-line="3" selection-end-column="14" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/milkway/geometry.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="465">
+          <caret line="8" column="31" selection-start-line="8" selection-start-column="31" selection-end-line="8" selection-end-column="31" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/milkway/dbscan.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.50301206" vertical-offset="1061" max-vertical-offset="1800">
+          <caret line="93" column="20" selection-start-line="93" selection-start-column="20" selection-end-line="93" selection-end-column="20" />
+          <folding>
+            <element signature="e#22#36#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/zooLeverage/geometric/singleMachine/dbscan.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0" vertical-offset="0" max-vertical-offset="100">
+          <caret line="0" column="0" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+          <folding />
         </state>
       </provider>
     </entry>
