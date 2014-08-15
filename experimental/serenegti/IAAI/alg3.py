@@ -5,19 +5,20 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats.stats import pearsonr
 
-numUser = [5,10,15,20,25]
+tauRange = range(0,26,5)
 algPercent = []
 currPercent = []
 
-for i in numUser:
-    print i
+for tau in tauRange:
+    print tau
     algPercent.append([])
     currPercent.append([])
-    for j in range(10):
-        photos,users = setup()
+    for j in range(5):
+        print "--" + str(j)
+        photos,users = setup(tau=tau)
 
         for p in photos.values():
-            p.__sample__(i)
+            p.__sample__(25)
         for u in users.values():
             u.__prune__()
 
@@ -42,26 +43,11 @@ for i in numUser:
 
         algPercent[-1].append(correct/total)
 
-        for p in photos.values():
-            p.__currAlg__()
-
-        correct = 0
-        total = 0.
-        for p in photos.values():
-            if p.__goldStandardCompare__():
-                correct += 1
-            total += 1
-
-        currPercent[-1].append(correct/total)
 
 meanValues = [np.mean(p) for p in algPercent]
 std = [np.std(p) for p in algPercent]
-plt.errorbar(numUser, meanValues, yerr=std)
+plt.errorbar(tauRange, meanValues, yerr=std)
 
-meanValues = [np.mean(p) for p in currPercent]
-std = [np.std(p) for p in currPercent]
-plt.errorbar(numUser, meanValues, yerr=std)
-
-plt.xlim((4,26))
+plt.xlim((0,26))
 plt.show()
 
