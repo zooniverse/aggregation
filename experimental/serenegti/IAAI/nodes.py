@@ -47,7 +47,7 @@ class Photo:
         self.useGoldStandard = False
 
         if tau is None:
-            self.tau = 21
+            self.tau = 10#21
         else:
             self.tau = tau
 
@@ -249,6 +249,8 @@ class User:
                 correct += 1
             elif (species in c) or (species in p.goldStandard):
                 incorrect += 1
+            else:
+                correct += 0.0
 
         if (correct + incorrect) == 0:
             self.speciesCorrect[species] = -1
@@ -277,11 +279,11 @@ class User:
                 else:
                     hardTotal += 1
 
-        if (hardTotal+easyTotal) <= 0:
+        if (hardTotal+easyTotal) <= 3:
             #print "only one"
             return -1,-1
 
-        if hardTotal <= 0:
+        if hardTotal <= 4:
             #print "no hard"
             return easyCorrect/easyTotal, -1
         elif easyTotal == 0:
