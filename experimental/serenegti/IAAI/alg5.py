@@ -8,7 +8,7 @@ from scipy.stats.stats import pearsonr
 
 numUser = [5,10,15,20,25]
 algPercent = []
-tauRange = np.arange(1,41,4)
+tauRange = np.arange(1,33,4)
 
 for tau in tauRange:
     print tau
@@ -17,7 +17,7 @@ for tau in tauRange:
         photos,users = setup(tau=tau)
 
         for p in photos.values():
-            p.__sample__(5)
+            p.__sample__(15)
         for u in users.values():
             u.__prune__()
 
@@ -33,14 +33,9 @@ for tau in tauRange:
         for p in photos.values():
             p.__weightedMajorityVote__()
 
-        correct = 0
-        total = 0.
-        for p in photos.values():
-            if p.__goldStandardCompare__():
-                correct += 1
-            total += 1
-
-        algPercent[-1].append(correct/total)
+        goWithMostLikely = [p.__gowithMostLikely__() for p in photos.values()]
+        goWithMostLikely = [a for a in goWithMostLikely if not(a is None)]
+        algPercent[-1].append(np.mean(goWithMostLikely))
 
 meanValues = [np.mean(p) for p in algPercent]
 std = [np.std(p) for p in algPercent]

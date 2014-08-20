@@ -51,6 +51,61 @@ class Photo:
         else:
             self.tau = tau
 
+    def __gowithMostLikely2__(self):
+        if self.contains == []:
+            return None
+        t = 0
+        e = 0
+        for species in self.contains:
+            overWeight = 0
+            enoughVotes = [u for u in self.users if (len(u.classifications) >= 1) and (u.__nonempty__(self)) and (u.speciesCorrect[species] > 0)]
+            weights = {u:u.speciesCorrect[species]**self.tau for u in enoughVotes}
+
+            if weights == {}:
+                mostLikely = self.users
+            else:
+                #allow for more then one user having the maximum weight
+                mostLikely = [u for u,w in weights.items() if w == max(weights.values())]
+
+            speciesInPhoto = [species in u.__getClassification__(self) for u in mostLikely]
+
+            match = [(species in self.contains) == s for s in speciesInPhoto]
+
+            if not(False in match):
+                t += 1
+
+        return t/float(len(self.contains))
+
+    def __gowithMostLikely__(self):
+        t = 0.
+        c = 0
+        for species in speciesList:
+            overWeight = 0
+            enoughVotes = [u for u in self.users if (len(u.classifications) >= 1) and (u.__nonempty__(self)) and (u.speciesCorrect[species] > 0)]
+            weights = {u:u.speciesCorrect[species]**self.tau for u in enoughVotes}
+
+            if weights == {}:
+                mostLikely = self.users
+            else:
+                #allow for more then one user having the maximum weight
+                mostLikely = [u for u,w in weights.items() if w == max(weights.values())]
+
+            #contains = [species in u.classifications]
+
+            speciesInPhoto = [species in u.__getClassification__(self) for u in mostLikely]
+            if True in speciesInPhoto:
+                t += 1
+                if species in self.contains:
+                    c += 1
+
+
+        if t == 0:
+            return None
+        return c/t
+
+
+
+
     def __currAlg__(self):
         numSpecies = []
         votes = {s: 0 for s in speciesList}
@@ -214,6 +269,8 @@ class Photo:
         #     assert False
 
         return
+
+
 
 
 class User:
@@ -462,7 +519,7 @@ def setup(limit=None,tau=None):
             classification = l[1].split(",")
 
             if not(photoID in photos):
-                photos[photoID] = Photo()
+                photos[photoID] = Photo(tau=tau)
             #elif not(photos[photoID].__canAdd__()):
             #    continue
 

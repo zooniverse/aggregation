@@ -25,7 +25,7 @@ for r in collection.find():
         continue
 
     zooniverseId = r["subjects"][0]["zooniverse_id"]
-    if i == 300000:
+    if i == 1000000:
         break
     annotations = r["annotations"]
     empty = False
