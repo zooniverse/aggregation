@@ -17,7 +17,7 @@ for tau in tauRange:
         photos,users = setup(tau=tau)
 
         for p in photos.values():
-            p.__sample__(15)
+            p.__sample__(5)
         for u in users.values():
             u.__prune__()
 

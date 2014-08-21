@@ -79,6 +79,8 @@ class Photo:
     def __gowithMostLikely__(self):
         t = 0.
         c = 0
+        union = 0.
+        intersect = 0.
         for species in speciesList:
             overWeight = 0
             enoughVotes = [u for u in self.users if (len(u.classifications) >= 1) and (u.__nonempty__(self)) and (u.speciesCorrect[species] > 0)]
@@ -93,15 +95,16 @@ class Photo:
             #contains = [species in u.classifications]
 
             speciesInPhoto = [species in u.__getClassification__(self) for u in mostLikely]
-            if True in speciesInPhoto:
-                t += 1
-                if species in self.contains:
-                    c += 1
+            if (True in speciesInPhoto) and (species in self.contains):
+                intersect += 1
+
+            if (True in speciesInPhoto) or (species in self.contains):
+                union += 1
 
 
-        if t == 0:
+        if union == 0:
             return None
-        return c/t
+        return intersect/union
 
 
 
@@ -229,9 +232,12 @@ class Photo:
         #numClassifications = [len(u.classifications) for u in self.users]
         #print [w if n >= 30 else 0.5 for w,n in zip(weights,numClassifications)]
 
-    def __weightedMajorityVote__(self):
+    def __weightedMajorityVote__(self,tau=None):
         if self.useGoldStandard:
             self.contains = self.goldStandard[:]
+
+        if tau is None:
+            tau = 10
 
         #print self.contains
         #print self.goldStandard
@@ -239,7 +245,7 @@ class Photo:
         for species in speciesList:
             overWeight = 0
             enoughVotes = [u for u in self.users if (len(u.classifications) >= 1) and (u.__nonempty__(self)) and (u.speciesCorrect[species] > 0)]
-            weights = {u:u.speciesCorrect[species]**self.tau for u in enoughVotes}
+            weights = {u:u.speciesCorrect[species]**tau for u in enoughVotes}
 
             if enoughVotes == []:
                 enoughVotes = [u for u in self.users if (len(u.classifications) >= 1) and (u.__nonempty__(self))]
@@ -274,7 +280,7 @@ class Photo:
 
 
 class User:
-    def __init__(self):
+    def __init__(self,beta= None):
         self.classifications = {}
         self.classifications2 = {}
         self.mappedClassifications = {}
@@ -286,6 +292,11 @@ class User:
         self.count = {}
         self.pCorrect = None
         self.speciesCorrect = {}
+        if beta is None:
+            self.beta = 0
+        else:
+            self.beta = beta
+
 
     def __prune__(self):
         self.classifications = {}
@@ -293,7 +304,7 @@ class User:
             if self in photo.users:
                 self.classifications[photo] = self.classifications2[photo]
 
-    def __speciesCorrect__(self,species):
+    def __speciesCorrect__(self,species,beta=None):
         posTotal =  0.
         posCorrect = 0.
         negTotal = 0.
@@ -301,13 +312,16 @@ class User:
         correct = 0.
         incorrect = 0.
 
+        if beta is None:
+            beta = 0
+
         for p,c in self.classifications.items():
             if (species in c) and (species in p.goldStandard):
                 correct += 1
             elif (species in c) or (species in p.goldStandard):
                 incorrect += 1
             else:
-                correct += 0.0
+                correct += beta
 
         if (correct + incorrect) == 0:
             self.speciesCorrect[species] = -1
