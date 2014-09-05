@@ -43,5 +43,9 @@ with open(baseDir +"Databases/goldMergedSerengeti.csv","rb") as csvfile:
             total[count[photoID]] += 1
 
 percentage = [c/t for (c,t) in zip(correct[1:],total[1:])]
-plt.plot(range(1,11),percentage)
+plt.plot(range(1,11),percentage,color='black')
+plt.plot(range(1,11), [1-0.223**n for n in range(1,11)],'--',color='black')
+plt.xlabel("Number of Wildebeest in Picture")
+plt.ylabel("Percentage of User Classifying a Photo as Containing a Wildebeest")
+plt.legend(('Actual','Expected'))
 plt.show()

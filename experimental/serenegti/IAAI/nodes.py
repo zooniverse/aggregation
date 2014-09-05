@@ -112,12 +112,17 @@ class Photo:
     def __currAlg__(self):
         numSpecies = []
         votes = {s: 0 for s in speciesList}
+        classifications = {}
         for u in self.users:
             c = u.classifications[self]
             if c == ["none"]:
                 pass
                 #numSpecies.append(0)
             else:
+                if not(tuple(sorted(c)) in classifications):
+                    classifications[tuple(sorted(c))] = 1
+                else:
+                    classifications[tuple(sorted(c))] += 1
                 numSpecies.append(len(c))
                 for s in c:
                     votes[s] += 1
@@ -126,6 +131,16 @@ class Photo:
             self.contains = []
         else:
             self.contains = sorted(speciesList, key = lambda x:votes[x], reverse = True)[:int(np.median(numSpecies))]
+
+            #if max(classifications.values()) >= 10:
+            #    common = [c for c,v in classifications.items() if v >= 10]
+            #    if len(common) > 1:
+            #        print common
+                #assert(len(common) == 1)
+                #assert(common[0] == tuple(sorted(self.contains)))
+                #assert(tuple(self.contains) in common)
+                #print classifications
+                #assert(False)
 
     def __useGoldStandard__(self):
         self.useGoldStandard = True
@@ -532,6 +547,9 @@ def setup(limit=None,tau=None):
             photoID,userID = l[0].split(",")
             classification = l[1].split(",")
 
+            if userID in ["jessica@snapshotserengeti","Peter Williams","ReidCarron","lucycawte","wilderzone","davidbygott","kosmala"]:
+                continue
+
             if not(photoID in photos):
                 photos[photoID] = Photo(tau=tau)
             #elif not(photos[photoID].__canAdd__()):
@@ -545,8 +563,22 @@ def setup(limit=None,tau=None):
             users[userID].__addClassification__(photoID,photos[photoID],classification)
 
 
+    wildebeestCount = 0
+    with open(baseDir + "Downloads/Expert_Classifications_For_4149_S4_Captures.csv","rU") as csvfile:
+        goldreader = csv.reader(csvfile)
+        next(goldreader, None)
+        for line in goldreader:
+            photoID = line[0]
+            for s in line[3:6]:
+                if s != "":
+                #classification = [s for s in line[3:6] if s != ""]
+                    photos[photoID].__addGoldStandard__(s)
+                    if s == "wildebeest":
+                        wildebeestCount += 1
 
+    print "count " + str(wildebeestCount)
 
+    wildebeestCountPhotos = set([])
 
     with open(baseDir + "Downloads/expert_classifications_raw.csv","rU") as csvfile:
         goldreader = csv.reader(csvfile)
@@ -554,6 +586,9 @@ def setup(limit=None,tau=None):
         for line in goldreader:
             photoID = line[2]
             classification = line[12]
-            photos[photoID].__addGoldStandard__(classification)
+            if classification == "zebra":
+                wildebeestCountPhotos.add(photoID)
+    #         photos[photoID].__addGoldStandard__(classification)
 
+    print len(list(wildebeestCountPhotos))
     return photos,users

@@ -8,7 +8,7 @@ from scipy.stats.stats import pearsonr
 
 numUser = [5,10,15,20,25]
 algPercent = []
-tauRange = np.arange(1,41,10)
+tauRange = np.arange(1,103,25)
 
 for tau in tauRange:
     print tau
@@ -17,7 +17,7 @@ for tau in tauRange:
         photos,users = setup(tau=tau)
 
         for p in photos.values():
-            p.__sample__(5)
+            p.__sample__(20)
         for u in users.values():
             u.__prune__()
 
