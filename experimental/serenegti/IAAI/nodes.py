@@ -123,6 +123,9 @@ class Photo:
                     classifications[tuple(sorted(c))] = 1
                 else:
                     classifications[tuple(sorted(c))] += 1
+
+                    if classifications[tuple(sorted(c))] == 10:
+                        self.contains = c[:]
                 numSpecies.append(len(c))
                 for s in c:
                     votes[s] += 1
@@ -365,11 +368,11 @@ class User:
                 else:
                     hardTotal += 1
 
-        if (hardTotal+easyTotal) <= 3:
+        if (hardTotal+easyTotal) <= 0:
             #print "only one"
             return -1,-1
 
-        if hardTotal <= 4:
+        if hardTotal == 0:
             #print "no hard"
             return easyCorrect/easyTotal, -1
         elif easyTotal == 0:
@@ -576,7 +579,7 @@ def setup(limit=None,tau=None):
                     if s == "wildebeest":
                         wildebeestCount += 1
 
-    print "count " + str(wildebeestCount)
+    #print "count " + str(wildebeestCount)
 
     wildebeestCountPhotos = set([])
 
@@ -590,5 +593,5 @@ def setup(limit=None,tau=None):
                 wildebeestCountPhotos.add(photoID)
     #         photos[photoID].__addGoldStandard__(classification)
 
-    print len(list(wildebeestCountPhotos))
+    #print len(list(wildebeestCountPhotos))
     return photos,users

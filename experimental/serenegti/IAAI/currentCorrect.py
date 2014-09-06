@@ -12,6 +12,7 @@ speciesList = ['elephant','zebra','warthog','impala','buffalo','wildebeest','gaz
 
 
 correct = {"wildebeest":[],"zebra":[],"hartebeest":[],"gazelleThomsons":[],"buffalo":[],"impala":[],"warthog":[],"giraffe":[],"elephant":[],"human":[],"gazelleGrants":[],"guineaFowl":[],"hyenaSpotted":[],"otherBird":[],"hippopotamus":[],"reedbuck":[],"eland":[],"baboon":[],"lionFemale":[]}
+total = {s:0. for s in correct.keys()}
 
 for j in range(1):
     print j
@@ -38,10 +39,12 @@ for j in range(1):
     for s in correct.keys():
         correctCount = 0
         for p in photos.values():
+            if (s in p.goldStandard):
+                total[s] += 1
             if (s in p.goldStandard) and (s in p.contains):
                 correctCount += 1
 
         correct[s].append(correctCount)
 
 for s,c in correct.items():
-    print s,np.mean(c)
+    print s,np.mean(c)/total[s]

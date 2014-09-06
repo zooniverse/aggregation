@@ -21,6 +21,8 @@ for u in users.values():
 
 
 
-plt.plot(X,Y,'.')
+plt.plot(X,Y,'.',color="black")
+plt.xlabel("Percentage of MVcorrect correctly classified")
+plt.ylabel("Percentage of MVincorrect correctly classified")
 print pearsonr(X,Y)
 plt.show()

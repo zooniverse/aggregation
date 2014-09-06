@@ -5,7 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats.stats import pearsonr
 
-tauRange = range(0,26,5)
+tauRange = range(0,101,10)
 algPercent = []
 currPercent = []
 
@@ -18,7 +18,7 @@ for tau in tauRange:
         photos,users = setup(tau=tau)
 
         for p in photos.values():
-            p.__sample__(25)
+            p.__sample__(5)
         for u in users.values():
             u.__prune__()
 
@@ -29,7 +29,7 @@ for tau in tauRange:
         #estimate the user's "correctness"
         for u in users.values():
             for s in speciesList:
-                u.__speciesCorrect__(s)
+                u.__speciesCorrect__(s,beta=0.2)
 
         for p in photos.values():
             p.__weightedMajorityVote__()
@@ -48,6 +48,6 @@ meanValues = [np.mean(p) for p in algPercent]
 std = [np.std(p) for p in algPercent]
 plt.errorbar(tauRange, meanValues, yerr=std)
 
-plt.xlim((0,26))
+plt.xlim((0,tauRange[-1]+1))
 plt.show()
 

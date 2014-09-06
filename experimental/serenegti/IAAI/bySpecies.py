@@ -11,8 +11,9 @@ currPercent = []
 speciesList = ['elephant','zebra','warthog','impala','buffalo','wildebeest','gazelleThomsons','dikDik','giraffe','gazelleGrants','lionFemale','baboon','hippopotamus','ostrich','human','otherBird','hartebeest','secretaryBird','hyenaSpotted','mongoose','reedbuck','topi','guineaFowl','eland','aardvark','lionMale','porcupine','koriBustard','bushbuck','hyenaStriped','jackal','cheetah','waterbuck','leopard','reptiles','serval','aardwolf','vervetMonkey','rodents','honeyBadger','batEaredFox','rhinoceros','civet','genet','zorilla','hare','caracal','wildcat']
 
 
-correct = {"wildebeest":[],"zebra":[],"hartebeest":[],"gazelleThomsons":[],"buffalo":[],"impala":[],"warthog":[],"giraffe":[],"elephant":[],"human":[],"gazelleGrants":[],"guineaFowl":[],"hyenaSpotted":[],"otherBird":[],"hippopotamus":[],"reedbuck":[],"eland":[],"baboon":[],"lionFemale":[]}
-
+correct = {"wildebeest":[],"zebra":[],"hartebeest":[],"gazelleThomsons":[],"buffalo":[],"impala":[],"warthog":[],"giraffe":[],"elephant":[],"human":[],"gazelleGrants":[],"guineaFowl":[],"hyenaSpotted":[],"otherBird":[],"hippopotamus":[],"reedbuck":[],"eland":[],"baboon":[],"lionFemale":[],"topi":[]}
+total = {s:0. for s in correct.keys()}
+print len(correct)
 for j in range(1):
     print j
     photos,users = setup(tau=50)
@@ -38,10 +39,12 @@ for j in range(1):
     for s in correct.keys():
         correctCount = 0
         for p in photos.values():
+            if (s in p.goldStandard):
+                total[s] += 1
             if (s in p.goldStandard) and (s in p.contains):
                 correctCount += 1
 
         correct[s].append(correctCount)
 
 for s,c in correct.items():
-    print s,np.mean(c)
+    print s,np.mean(c)/total[s]

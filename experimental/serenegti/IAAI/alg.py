@@ -14,7 +14,7 @@ for i in numUser:
     algPercent.append([])
     currPercent.append([])
     for j in range(10):
-        photos,users = setup(tau=50)
+        photos,users = setup(tau=1)
 
         for p in photos.values():
             p.__sample__(i)
@@ -25,13 +25,14 @@ for i in numUser:
         for p in photos.values():
             p.__majorityVote__()
 
-        #estimate the user's "correctness"
-        for u in users.values():
-            for s in speciesList:
-                u.__speciesCorrect__(s,beta=0.03)
+        for k in range(2):
+            #estimate the user's "correctness"
+            for u in users.values():
+                for s in speciesList:
+                    u.__speciesCorrect__(s,beta=0.01)
 
-        for p in photos.values():
-            p.__weightedMajorityVote__()
+            for p in photos.values():
+                p.__weightedMajorityVote__()
 
         correct = 0
         total = 0.

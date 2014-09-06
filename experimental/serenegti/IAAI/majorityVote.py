@@ -49,14 +49,22 @@ for i in numUser:
 
         currPercent[-1].append(correct/total)
 
-meanValues = [np.mean(p) for p in MVpercent]
-std = [np.std(p) for p in MVpercent]
-plt.errorbar(numUser, meanValues, yerr=std)
-
 meanValues = [np.mean(p) for p in currPercent]
 std = [np.std(p) for p in currPercent]
-plt.errorbar(numUser, meanValues, yerr=std)
+plt.errorbar(numUser, meanValues,fmt= "--", yerr=std,color="grey")
 
+print meanValues
+
+meanValues = [np.mean(p) for p in MVpercent]
+std = [np.std(p) for p in MVpercent]
+plt.errorbar(numUser, meanValues, fmt="-",yerr=std,color="black")
+
+print meanValues
+
+
+plt.legend(("Current Algorithm","Majority Vote"), "lower right")
+plt.xlabel("Number of Users per Photo")
+plt.ylabel("Accuracy")
 plt.xlim((4,26))
 plt.show()
 

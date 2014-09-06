@@ -16,7 +16,7 @@ for nn in numUser:
         algPercent[b].append([])
 
     for j in range(10):
-        photos,users = setup(tau=10)
+        photos,users = setup(tau=1)
 
         for p in photos.values():
             p.__sample__(nn)
