@@ -16,13 +16,13 @@ for u in users.values():
     e,h = u.__getStats__()
 
     if (e != -1) and (h != -1):
-        X.append(e)
-        Y.append(h)
+        X.append(e*100)
+        Y.append(h*100)
 
 
 
 plt.plot(X,Y,'.',color="black")
-plt.xlabel("Percentage of MVcorrect correctly classified")
-plt.ylabel("Percentage of MVincorrect correctly classified")
+plt.xlabel("Percentage of easy pictures correctly classified")
+plt.ylabel("Percentage of hard pictures correctly classified")
 print pearsonr(X,Y)
 plt.show()

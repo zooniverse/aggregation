@@ -6,16 +6,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats.stats import pearsonr
 
-numUser = [5,10,15,20,25]
-betas = [0,0.01,0.2,1]
+numUser = [5]
+#numUser = [25]
+betas = [0.01,0.2,1,0]
+betas = [0.2]
 algPercent = {b:[] for b in betas}
 
+f = open("/home/greg/Databases/betaValues.csv","wb")
+
 for nn in numUser:
-    print nn
+    print "== " + str(nn)
     for b in betas:
         algPercent[b].append([])
 
-    for j in range(10):
+    for j in range(1):
+        print j
         photos,users = setup(tau=1)
 
         for p in photos.values():
@@ -34,27 +39,6 @@ for nn in numUser:
                 for s in speciesList:
                     u.__speciesCorrect__(s,b)
 
-            for p in photos.values():
-                p.__weightedMajorityVote__()
-
-            correct = 0
-            total = 0.
-            for p in photos.values():
-                if p.__goldStandardCompare__():
-                    correct += 1
-                total += 1
-
-            algPercent[b][-1].append(correct/total)
-
-p = []
-for b in betas:
-    meanValues = [np.mean(p) for p in algPercent[b]]
-    print meanValues[-1]
-    std = [np.std(p) for p in algPercent[b]]
-
-    p.append(plt.errorbar(numUser,meanValues,yerr=std)[0])
-
-plt.legend( ([str(b) for b in betas]), loc='lower right')
-plt.xlim((4,32))
-plt.show()
+                    f.write(str(u.userID) + ","+ str(s) +"," + str(u.speciesCorrect[s]) + "\n")
+f.close()
 

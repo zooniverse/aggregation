@@ -133,7 +133,10 @@ class Photo:
         if numSpecies == []:
             self.contains = []
         else:
-            self.contains = sorted(speciesList, key = lambda x:votes[x], reverse = True)[:int(np.median(numSpecies))]
+            if max(classifications.values()) >= 10:
+                self.contains = [c for c,count in classifications.items() if count >= 10][0]
+            else:
+                self.contains = sorted(speciesList, key = lambda x:votes[x], reverse = True)[:int(np.median(numSpecies))]
 
             #if max(classifications.values()) >= 10:
             #    common = [c for c,v in classifications.items() if v >= 10]
@@ -298,7 +301,7 @@ class Photo:
 
 
 class User:
-    def __init__(self,beta= None):
+    def __init__(self,userID,beta= None):
         self.classifications = {}
         self.classifications2 = {}
         self.mappedClassifications = {}
@@ -310,6 +313,7 @@ class User:
         self.count = {}
         self.pCorrect = None
         self.speciesCorrect = {}
+        self.userID = userID
         if beta is None:
             self.beta = 0
         else:
@@ -347,6 +351,10 @@ class User:
         else:
             self.speciesCorrect[species] = correct/(correct+incorrect)
             return correct/(correct+incorrect)
+
+    def __setWeight__(self,species,weight):
+        self.speciesCorrect[species] = weight
+
 
     def __getStats__(self):
         easyTotal = 0.
@@ -559,7 +567,7 @@ def setup(limit=None,tau=None):
             #    continue
 
             if not(userID in users):
-                users[userID] = User()
+                users[userID] = User(userID)
 
 
             photos[photoID].__adduser__(users[userID])

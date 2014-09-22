@@ -17,7 +17,7 @@ collection = db["serengeti_classifications"]
 
 i= 0
 emptyVotes = {}
-nonEmptyVotes = {}
+nonEmptyVotes = []
 cleanEmpty = []
 for r in collection.find():
     i +=1
@@ -25,9 +25,10 @@ for r in collection.find():
         continue
 
     zooniverseId = r["subjects"][0]["zooniverse_id"]
-    if i == 1000000:
-        break
+    #if i == 100000:
+    #    break
     annotations = r["annotations"]
+
     empty = False
 
     for d in annotations:
@@ -41,20 +42,20 @@ for r in collection.find():
         else:
             emptyVotes[zooniverseId] += 1
 
-        if (emptyVotes[zooniverseId] == 5) and not(zooniverseId in nonEmptyVotes):
+        if (emptyVotes[zooniverseId] == 4) and not(zooniverseId in nonEmptyVotes):
             cleanEmpty.append(zooniverseId)
     else:
         if not(zooniverseId in nonEmptyVotes):
-            nonEmptyVotes[zooniverseId] = 1
-        else:
-            nonEmptyVotes[zooniverseId] += 1
+            nonEmptyVotes.append(zooniverseId)
 
 
-
-j = 0
+collection = db["serengeti_subjects"]
+errorCount = 0
 for zooniverseId in cleanEmpty:
-    if zooniverseId in nonEmptyVotes:
-        print nonEmptyVotes[zooniverseId]
+    r = collection.find_one({"zooniverse_id":zooniverseId})
+    reason = r["metadata"]["retire_reason"]
 
+    if not(reason in ["blank","blank_consensus"]):
+        errorCount += 1
 
-
+print errorCount

@@ -89,7 +89,7 @@ print userPercentage
 #for userID in userPercentage:
 #    print userID,userPercentage[userID][1]
 
-percentage = [np.median(p) for p in userPercentage[1:]]
+percentage = [np.median(p)*100 for p in userPercentage[1:]]
 std = [np.std(p) for p in userPercentage[1:]]
 print 1-percentage[0]
 print userPercentage
@@ -97,7 +97,7 @@ print correct[userName]
 print total[userName]
 #percentage = [c/t for (c,t) in zip(correct[1:],total[1:])]
 plt.plot(range(1,11),percentage,'-o',color='black')
-plt.plot(range(1,11), [1-(1-percentage[0])**n for n in range(1,11)],'--',color='black')
+plt.plot(range(1,11), [(1-(1-percentage[0]/100.)**n)*100 for n in range(1,11)],'--',color='black')
 plt.xlabel("Number of Wildebeest in Picture")
 plt.ylabel("Percentage of Correct Classifications")
 plt.legend(('Actual','Expected'))

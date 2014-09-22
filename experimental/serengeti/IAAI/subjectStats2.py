@@ -32,7 +32,7 @@ numMixed = 0
 numConsensus = 0
 moreThan = 0
 errorProbabilities = []
-cutOff = 5
+cutOff = 3
 possibleError = 0
 
 for r in collection.find({"tutorial": {"$ne": True}}):
