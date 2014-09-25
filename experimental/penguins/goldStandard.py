@@ -2,13 +2,19 @@
 __author__ = 'greghines'
 import pymongo
 import re
+import os
 
 client = pymongo.MongoClient()
 db = client['penguin_2014-09-19']
 collection = db["penguin_subjects"]
 
-for site_name in ["GEORa2013b"]:
-    with open("/home/greg/Databases/CEBannotations/"+site_name+"_adult_RAW.csv","rb") as f:
+if os.path.exists("/home/ggdhines"):
+    base_directory = "/home/ggdhines"
+
+#has changed - MAIVb2013,
+for site_name in ["GEORa2013b","LOCKb2013b","MAIVc2013","PETEa2012a","PETEd2013a","PETEd2013b","PETEe2013b","SALIa2012a","YALOa2013a","YALOa2014a"]:
+    print site_name
+    with open(base_directory + "/Databases/CEBannotations/"+site_name+"_adult_RAW.csv","rb") as f:
     #with open("/home/greg/Downloads/MAIVb2013_adult_RAW.csv","rb") as f:
             l = f.readline()
             i0 = 0
@@ -32,7 +38,7 @@ for site_name in ["GEORa2013b"]:
                 if r is not None:
                     classification_count = r["classification_count"]
                     assert(isinstance(classification_count,int))
-                    if classification_count > 0:
+                    if classification_count >= 5:
                         line_out = r["zooniverse_id"] + "\t"
                         markings = l[JPG+5:i1-3].split(";")
                         #if at least one marking was made
