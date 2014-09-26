@@ -3,17 +3,22 @@ __author__ = 'greghines'
 import pymongo
 import re
 import os
+import sys
 
 client = pymongo.MongoClient()
-db = client['penguin_2014-09-19']
+db = client['penguin_2014-09-24']
 collection = db["penguin_subjects"]
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
+else:
+    base_directory = "/home/greg"
 
 #has changed - MAIVb2013,
+#issues with -
 for site_name in ["GEORa2013b","LOCKb2013b","MAIVc2013","PETEa2012a","PETEd2013a","PETEd2013b","PETEe2013b","SALIa2012a","YALOa2013a","YALOa2014a"]:
-    print site_name
+    #print site_name
+    sys.stderr.write(str(site_name)+"\n")
     with open(base_directory + "/Databases/CEBannotations/"+site_name+"_adult_RAW.csv","rb") as f:
     #with open("/home/greg/Downloads/MAIVb2013_adult_RAW.csv","rb") as f:
             l = f.readline()
@@ -22,6 +27,8 @@ for site_name in ["GEORa2013b","LOCKb2013b","MAIVc2013","PETEa2012a","PETEd2013a
             while True:
                 if i0 == -1:
                     break
+
+
 
                 http = l.find("http",i0)
                 JPG = l.find("JPG",i0)
@@ -48,10 +55,14 @@ for site_name in ["GEORa2013b","LOCKb2013b","MAIVc2013","PETEa2012a","PETEd2013a
                                 line_out += x+","+y+";"
 
                             print line_out
+                            counter += 1
+                            sys.stderr.write(str(counter)+"\n")
 
 
                 #continue
 
+                if counter == 2:
+                    break
 
                 # print url
                 # #for r in collection.find({"metadata.path": {"$regex": number}}):
@@ -83,4 +94,5 @@ for site_name in ["GEORa2013b","LOCKb2013b","MAIVc2013","PETEa2012a","PETEd2013a
                 #         pts += ";"
                 #
                 #     print pts
+
 
