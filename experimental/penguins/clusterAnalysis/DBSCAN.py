@@ -13,7 +13,7 @@ import math
 from PIL import Image
 
 client = pymongo.MongoClient()
-db = client['penguin_2014-09-19']
+db = client['penguin_2014-09-27']
 collection = db["penguin_classifications"]
 collection2 = db["penguin_subjects"]
 
@@ -208,16 +208,7 @@ with open(base_directory + "/Databases/penguin_expert_adult.csv") as f:
                     if marking["value"] == "adult":
                         x,y = (float(marking["x"]),float(marking["y"]))
                         userPts.append((x,y))
-                        n += 1
-                        xy_list.append((x,y))
 
-                if n > mostClicks:
-                    mostClicks = n
-                    xy_overall = xy_list
-                numClicks.append(n)
-
-        print numClicks
-        print np.mean(numClicks),np.median(numClicks)
 
         image_file = cbook.get_sample_data(base_directory + "/Databases/penguins/images/"+object_id+".JPG")
         image = plt.imread(image_file)
@@ -228,7 +219,6 @@ with open(base_directory + "/Databases/penguin_expert_adult.csv") as f:
         x,y = zip(*goldPts)
         plt.plot(x,y,'.',color='green')
         plt.show()
-        continue
 
         goodPts = dbscan_search(goldPts,userPts)
         continue
