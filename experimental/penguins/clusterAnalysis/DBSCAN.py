@@ -81,7 +81,7 @@ def createRanges(pts):
 
 
 def dbscan_search(pts_gold,pts_user):
-    #print len(pts_gold)
+    print len(pts_gold)
     #print "===="
     X_ = np.array(pts_user)
     matchings = {}
@@ -184,7 +184,9 @@ with open(base_directory + "/Databases/penguin_expert_adult.csv") as f:
         new_x,new_y =  im.size
         scale = original_x/float(new_x)
         print scale,original_y/float(new_y)
-        print r["metadata"]["path"]
+        path = r["metadata"]["path"]
+        if not("LOCKb" in path):
+            continue
         assert math.fabs(scale - original_y/float(new_y)) <= 0.02
         goldPts =  [(int(p.split(",")[0])/scale,int(p.split(",")[1])/scale) for p in gold_standard_pts.split(";")[:-1]]
 
@@ -210,25 +212,25 @@ with open(base_directory + "/Databases/penguin_expert_adult.csv") as f:
                         userPts.append((x,y))
 
 
-        image_file = cbook.get_sample_data(base_directory + "/Databases/penguins/images/"+object_id+".JPG")
-        image = plt.imread(image_file)
-        fig, ax = plt.subplots()
-        im = ax.imshow(image)
-        x,y = zip(*xy_overall)
-        plt.plot(x,y,'.',color='blue')
-        x,y = zip(*goldPts)
-        plt.plot(x,y,'.',color='green')
-        plt.show()
+        # image_file = cbook.get_sample_data(base_directory + "/Databases/penguins/images/"+object_id+".JPG")
+        # image = plt.imread(image_file)
+        # fig, ax = plt.subplots()
+        # im = ax.imshow(image)
+        # #x,y = zip(*xy_overall)
+        # #plt.plot(x,y,'.',color='blue')
+        # x,y = zip(*goldPts)
+        # plt.plot(x,y,'.',color='green')
+        # plt.show()
 
         goodPts = dbscan_search(goldPts,userPts)
-        continue
-        if overallGoodPts is None:
-            overallGoodPts = goodPts[:]
-        else:
-            #print goodPts
-            overallGoodPts = [p for p in goodPts if p in overallGoodPts]
-        print overallGoodPts
-        #break
+
+        # if overallGoodPts is None:
+        #     overallGoodPts = goodPts[:]
+        # else:
+        #     #print goodPts
+        #     overallGoodPts = [p for p in goodPts if p in overallGoodPts]
+        # print overallGoodPts
+        # #break
         # X = np.array(userPts)
         # db = DBSCAN(eps=15, min_samples=2).fit(X)
         #
@@ -243,9 +245,9 @@ with open(base_directory + "/Databases/penguin_expert_adult.csv") as f:
         #         x = np.mean(xSet)
         #         y = np.mean(ySet)
         #         plt.plot(x, y, '.', color="green")
-
-        #plt.plot(x,y,'.',color='green')
-        #plt.show()
+        #
+        # plt.plot(x,y,'.',color='green')
+        # plt.show()
         #break
         #t += 1
             # for p in pts.split(";")[:-1]:
