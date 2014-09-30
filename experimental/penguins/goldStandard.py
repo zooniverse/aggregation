@@ -6,7 +6,7 @@ import os
 import sys
 
 client = pymongo.MongoClient()
-db = client['penguin_2014-09-28']
+db = client['penguin_2014-09-27']
 collection = db["penguin_subjects"]
 
 if os.path.exists("/home/ggdhines"):
@@ -40,9 +40,12 @@ for site_name in ["GEORa2013b","LOCKb2013b","MAIVc2013","PETEa2012a","PETEd2013a
                 id_ = url[slashIndex+1:-4]
 
 
+
                 r = collection.find_one({"metadata.path": {"$regex": id_}})
+
                 i1 = l.find("http",JPG)
                 if r is not None:
+
                     classification_count = r["classification_count"]
                     assert(isinstance(classification_count,int))
                     if classification_count >= 10:

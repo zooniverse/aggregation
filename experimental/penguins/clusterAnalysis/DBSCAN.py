@@ -13,7 +13,7 @@ import math
 from PIL import Image
 
 client = pymongo.MongoClient()
-db = client['penguin_2014-09-28']
+db = client['penguin_2014-09-27']
 collection = db["penguin_classifications"]
 collection2 = db["penguin_subjects"]
 
@@ -57,8 +57,8 @@ def matchPoints(pts_gold,pts_user):
     return user_to_gold_mapping,gold_to_user_mapping
 
 step =0.25
-epsilon_range = np.arange(4,101,step)#range(4,51,1)
-points_range = [1,2,3,4,5,6,7,8]
+epsilon_range = np.arange(1,200.01,step)#range(4,51,1)
+points_range = [1,2,3,4,5,6,7,8,9]
 
 def createRanges(pts):
     X_ = np.array(pts)
@@ -80,7 +80,7 @@ def createRanges(pts):
     return ranges
 
 
-def dbscan_search(pts_gold,pts_user):
+def dbscan_search(pts_gold,pts_user,iteration):
     print len(pts_gold)
     #print "===="
     X_ = np.array(pts_user)
@@ -116,34 +116,48 @@ def dbscan_search(pts_gold,pts_user):
     good_points = []
     for epsilon in epsilon_range: #[5,10,15,20,25,30,35,40,45,50]:
         for min_num_points in points_range:
-            if abs(numClusters[(epsilon,min_num_points)] - len(pts_gold)) <= 0:
+            if abs(numClusters[(epsilon,min_num_points)] - len(pts_gold)) <= 1:
                 # print (epsilon,min_num_points)
                 # print matchings[(epsilon,min_num_points)][0]
                 # print matchings[(epsilon,min_num_points)][1]
                 #plt.plot(epsilon,min_num_points,'.',color='green')
                 good_points.append((epsilon,min_num_points))
 
+    if iteration == 1:
+        ranges = createRanges(good_points)
+
+        for p,epsilon_min,epsilon_max in ranges:
+            #print p,epsilon_min,epsilin_max
+            plt.plot((epsilon_min,epsilon_max),(p,p),color="blue")
+            plt.plot((epsilon_min),(p),'o',color="blue")
+            plt.plot((epsilon_max),(p),'o',color="blue")
+
+        plt.ylim([0,10])
+        plt.show()
     return good_points
-    ranges = createRanges(goodPts)
-
-    for p,epsilon_min,epsilon_max in ranges:
-        #print p,epsilon_min,epsilin_max
-        plt.plot((epsilon_min,epsilon_max),(p,p),color="blue")
-        plt.plot((epsilon_min),(p),'o',color="blue")
-        plt.plot((epsilon_max),(p),'o',color="blue")
-
-    plt.ylim([0,10])
-    plt.show()
 
 overall_good_points = []
 toSkip = ["APZ0002p7b","APZ0003261"]
 overall_ranges = {}
-with open(base_directory + "/Databases/penguin_expert_adult.csv") as f:
+with open(base_directory + "/Databases/penguin_expert.csv") as f:
     i = 0
     for l in f.readlines():
 
-        userPts = []
+        user_markings = []
+        user_ips = []
         zooniverse_id,gold_standard_pts = l[:-1].split("\t")
+        adult_goldstandard,chick_goldstandard = gold_standard_pts.split(":")
+
+        offset = 0
+        scale = 1
+        if adult_goldstandard == "":
+            goldPts = []
+        else:
+            goldPts =  [(int(p.split(",")[0])/scale-offset,int(p.split(",")[1])/scale-offset) for p in adult_goldstandard.split(";")]
+
+        if chick_goldstandard != "":
+            goldPts.extend([(int(p.split(",")[0])/scale-offset,int(p.split(",")[1])/scale-offset) for p in chick_goldstandard.split(";")])
+
 
         r = collection2.find_one({"zooniverse_id":zooniverse_id})
 
@@ -196,7 +210,7 @@ with open(base_directory + "/Databases/penguin_expert_adult.csv") as f:
             continue
         i += 1
         assert math.fabs(scale - original_y/float(new_y)) <= 0.02
-        goldPts =  [(int(p.split(",")[0])/scale,int(p.split(",")[1])/scale) for p in gold_standard_pts.split(";")[:-1]]
+        #goldPts =  [(int(p.split(",")[0])/scale,int(p.split(",")[1])/scale) for p in gold_standard_pts.split(";")[:-1]]
 
         #image_file = cbook.get_sample_data(base_directory + "/Databases/penguins/images/"+object_id+".JPG")
         #image = plt.imread(image_file)
@@ -219,7 +233,7 @@ with open(base_directory + "/Databases/penguin_expert_adult.csv") as f:
                     for marking in r["annotations"][1]["value"].values():
                         if marking["value"] == "adult":
                             x,y = (float(marking["x"]),float(marking["y"]))
-                            userPts.append((x,y))
+                            user_markings.append((x,y))
             except KeyError:
                 print r["annotations"]
 
@@ -236,10 +250,10 @@ with open(base_directory + "/Databases/penguin_expert_adult.csv") as f:
         # plt.plot(x,y,'.',color='green')
         # plt.show()
 
-        overall_good_points.extend(dbscan_search(goldPts,userPts))
+        overall_good_points.extend(dbscan_search(goldPts,user_markings,i))
         X_ = np.array(overall_good_points)
         db_ = DBSCAN(eps=0.01, min_samples=i).fit(X_)
-        print sorted(db_.labels_,reverse= True)
+        print "=== " + str(sorted(db_.labels_)[-1])
 
         if i == 5:
             break
