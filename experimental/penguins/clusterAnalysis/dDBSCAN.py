@@ -13,7 +13,7 @@ import warnings
 if os.path.exists("/home/ggdhines"):
     sys.path.append("/home/ggdhines/PycharmProjects/reduction/experimental/clusteringAlg")
 else:
-    sys.path.append("/Users/greghines/Code/pyIBCC/python")
+    sys.path.append("/home/greg/github/reduction/experimental/clusteringAlg")
 from divisiveDBSCAN import DivisiveDBSCAN
 #    divisiveDBSCAN.py
 
@@ -23,7 +23,7 @@ else:
     base_directory = "/home/greg"
 
 client = pymongo.MongoClient()
-db = client['penguin_2014-09-27']
+db = client['penguin_2014-09-30']
 collection = db["penguin_classifications"]
 collection2 = db["penguin_subjects"]
 
@@ -68,7 +68,8 @@ with open(base_directory + "/Databases/penguin_expert.csv") as f:
                 print r["annotations"]
 
 
-
+        if not(os.path.isfile(image_path)):
+            urllib.urlretrieve(url, image_path)
 
         user_identified_penguins = DivisiveDBSCAN(4).fit(user_markings,user_ips)#,base_directory + "/Databases/penguins/images/"+object_id+".JPG")
         print len(user_identified_penguins)
@@ -86,8 +87,7 @@ with open(base_directory + "/Databases/penguin_expert.csv") as f:
 
 
         #calculate the scale
-        if not(os.path.isfile(image_path)):
-            urllib.urlretrieve(url, image_path)
+
 
         im=Image.open(image_path)
         new_x,new_y =  im.size

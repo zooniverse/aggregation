@@ -6,7 +6,7 @@ import os
 import sys
 
 client = pymongo.MongoClient()
-db = client['penguin_2014-09-27']
+db = client['penguin_2014-09-30']
 collection = db["penguin_subjects"]
 
 if os.path.exists("/home/ggdhines"):
