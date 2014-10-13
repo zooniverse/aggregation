@@ -9,6 +9,7 @@ import matplotlib.cbook as cbook
 from PIL import Image
 import matplotlib.pyplot as plt
 import warnings
+import math
 
 if os.path.exists("/home/ggdhines"):
     sys.path.append("/home/ggdhines/PycharmProjects/reduction/experimental/clusteringAlg")
@@ -66,25 +67,32 @@ for classification in collection.find({"subjects" : {"$elemMatch": {"zooniverse_
 
 
 
-user_identified_penguins = DivisiveDBSCAN(3).fit(user_markings,user_ips)#,base_directory + "/Databases/penguins/images/"+object_id+".JPG")
-#penguins_at[s].append(len(user_identified_penguins))
-#print str(s) + "  -  " + str(len(user_identified_penguins))
+user_identified_penguins,clusters = DivisiveDBSCAN(3).fit(user_markings,user_ips,debug =True)#,base_directory + "/Databases/penguins/images/"+object_id+".JPG")
 
-X,Y = zip(*user_identified_penguins)
+#which users are in each cluster?
+users_in_clusters = []
+for c in clusters:
+    users_in_clusters.append([])
+    for p in c:
+        i = user_markings.index(p)
+        users_in_clusters[-1].append(user_ips[i])
 
-subject = collection2.find_one({"zooniverse_id": zooniverse_id})
-url = subject["location"]["standard"]
-fName = url.split("/")[-1]
-print "http://demo.zooniverse.org/penguins/subjects/standard/"+fName
-if not(os.path.isfile(base_directory + "/Databases/penguins/images/"+fName)):
-    #urllib.urlretrieve ("http://demo.zooniverse.org/penguins/subjects/standard/"+fName, "/home/greg/Databases/penguins/images/"+fName)
-    urllib.urlretrieve ("http://www.penguinwatch.org/subjects/standard/"+fName, base_directory+"/Databases/penguins/images/"+fName)
+X = []
+Y = []
+for i1 in range(len(user_identified_penguins)):
+    for i2 in range(len(user_identified_penguins)):
+        if i1 == i2:
+            continue
 
-print "/home/greg/Databases/penguins/images/"+fName
-image_file = cbook.get_sample_data(base_directory + "/Databases/penguins/images/"+fName)
-image = plt.imread(image_file)
+        m1 = user_identified_penguins[i1]
+        m2 = user_identified_penguins[i2]
+        dist = math.sqrt((m1[0]-m2[0])**2+(m1[1]-m2[1])**2)
+        X.append(dist)
 
-fig, ax = plt.subplots()
-im = ax.imshow(image)
+        users1 = users_in_clusters[i1]
+        users2 = users_in_clusters[i2]
+        overlap = len([u for u in users1 if u in users2])
+        Y.append(overlap)
+
 plt.plot(X,Y,'.')
 plt.show()

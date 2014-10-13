@@ -189,7 +189,7 @@ class DivisiveDBSCAN:
             plt.show()
         return noise_markings,final_clusters,to_split_further_clusters
 
-    def fit(self, markings,user_ids,jpeg_file=None):
+    def fit(self, markings,user_ids,jpeg_file=None,debug=False):
         #start by creating the initial "super" cluster
         end_clusters = []
         clusters_to_go = [(markings[:],user_ids[:],self.starting_epsilon),]
@@ -211,5 +211,8 @@ class DivisiveDBSCAN:
             x,y = zip(*cluster)
             cluster_centers.append((np.mean(x),np.mean(y)))
 
-        return cluster_centers
+        if debug:
+            return cluster_centers, end_clusters
+        else:
+            return cluster_centers
 
