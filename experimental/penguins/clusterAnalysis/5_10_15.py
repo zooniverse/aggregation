@@ -22,21 +22,27 @@ else:
     base_directory = "/home/greg"
 
 client = pymongo.MongoClient()
-db = client['penguin_2014-09-30']
+db = client['penguin_2014-10-12']
 collection = db["penguin_classifications"]
 collection2 = db["penguin_subjects"]
 
-steps = [5,10,15]
+steps = [5,10,15,20]
 penguins_at = {k:[] for k in steps}
 alreadyThere = False
 subject_index = 0
-for subject in collection2.find({"classification_count": {"$gte": 15}}):
+import cPickle as pickle
+to_sample = pickle.load(open(base_directory+"/Databases/sample.pickle","rb"))
+import random
+#for subject in collection2.find({"classification_count": 20}):
+for zooniverse_id in random.sample(to_sample,300):
+    subject = collection2.find_one({"zooniverse_id": zooniverse_id})
     subject_index += 1
-    zooniverse_id = subject["zooniverse_id"]
+    #if subject_index == 2:
+    #    break
+    #zooniverse_id = subject["zooniverse_id"]
     print "=== " + str(subject_index)
     print zooniverse_id
-    if (zooniverse_id != "APZ0003eq6") and not(alreadyThere):
-        continue
+
     alreadyThere = True
     user_markings = {k:[] for k in steps}
     user_ips = {k:[] for k in steps}
@@ -44,7 +50,7 @@ for subject in collection2.find({"classification_count": {"$gte": 15}}):
     user_index = 0
     for classification in collection.find({"subjects" : {"$elemMatch": {"zooniverse_id":zooniverse_id}}}):
         user_index += 1
-        if user_index == 16:
+        if user_index == 21:
             break
 
         per_user = []
@@ -62,6 +68,7 @@ for subject in collection2.find({"classification_count": {"$gte": 15}}):
                                 if user_index < s:
                                     user_markings[s].append((x,y))
                                     user_ips[s].append(ip)
+
         except (KeyError, ValueError):
                 #classification["annotations"]
                 user_index += -1
@@ -89,11 +96,32 @@ for subject in collection2.find({"classification_count": {"$gte": 15}}):
     # im = ax.imshow(image)
     # plt.show()
 
-    if subject_index == 500:
+    if subject_index == 300:
         break
 
+
+pickle.dump(penguins_at,open(base_directory+"/Databases/penguins_at.pickle","wb"))
+
+# max5_10 = {}
+# for x,y in zip(penguins_at[5],penguins_at[10]):
+#     if not(x in max5_10):
+#         max5_10[x] = y
+#     else:
+#         max5_10[x] = max(max5_10[x],y)
+#
+# print max5_10
+#
+# max10_15 = {}
+# for x,y in zip(penguins_at[10],penguins_at[15]):
+#     if not(x in max5_10):
+#         max5_10[x] = y
+#     else:
+#         max5_10[x] = max(max5_10[x],y)
+
+
+
 #fig, (ax0, ax1) = plt.subplots(nrows=2)
-plt.plot(penguins_at[5],penguins_at[10],'.')
-plt.plot(penguins_at[10],penguins_at[15],'.',color="green")
-plt.plot((0,100),(0,100))
-plt.show()
+#plt.plot(penguins_at[5],penguins_at[10],'.')
+#plt.plot(penguins_at[10],penguins_at[15],'.',color="green")
+#plt.plot((0,100),(0,100))
+#plt.show()

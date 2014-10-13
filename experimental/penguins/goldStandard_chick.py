@@ -6,7 +6,7 @@ import os
 import sys
 
 client = pymongo.MongoClient()
-db = client['penguin_2014-09-30']
+db = client['penguin_2014-10-12']
 collection = db["penguin_subjects"]
 
 if os.path.exists("/home/ggdhines"):
@@ -46,7 +46,7 @@ for site_name in ["GEORa2013b","LOCKb2013b","MAIVc2013","PETEa2012a","PETEd2013a
                     if r is not None:
                         classification_count = r["classification_count"]
                         assert(isinstance(classification_count,int))
-                        if classification_count >= 10:
+                        if classification_count == 20:
                             line_out = r["zooniverse_id"] + "\t"
                             markings = l[JPG+5:i1-3].split(";")
                             #if at least one marking was made
