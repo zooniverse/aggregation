@@ -41,7 +41,7 @@ import random
 alreadyThere = True
 user_markings = [] #{k:[] for k in steps}
 user_ips = [] #{k:[] for k in steps}
-zooniverse_id = "APZ0002zw3"
+zooniverse_id = "APZ0001vqf"
 user_index = 0
 for classification in collection.find({"subjects" : {"$elemMatch": {"zooniverse_id":zooniverse_id}}}):
     user_index += 1
@@ -79,10 +79,11 @@ for c in clusters:
 
 X = []
 Y = []
+data = []
 for i1 in range(len(user_identified_penguins)):
-    for i2 in range(len(user_identified_penguins)):
-        if i1 == i2:
-            continue
+    for i2 in range(i1+1,len(user_identified_penguins)):
+        #if i1 == i2:
+        #    continue
 
         m1 = user_identified_penguins[i1]
         m2 = user_identified_penguins[i2]
@@ -93,6 +94,13 @@ for i1 in range(len(user_identified_penguins)):
         users2 = users_in_clusters[i2]
         overlap = len([u for u in users1 if u in users2])
         Y.append(overlap)
+        data.append((dist,overlap))
 
-plt.plot(X,Y,'.')
-plt.show()
+#plt.plot(X,Y,'.')
+#plt.show()
+data.sort(key = lambda x:x[0])
+#data.sort(key = lambda x:x[1])
+
+data2 = [overlap for dist,overlap in data]
+#print data2.index(0)/float(len(data2))
+print data2.index(1)/float(len(data2))

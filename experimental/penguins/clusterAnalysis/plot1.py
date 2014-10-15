@@ -11,16 +11,17 @@ if os.path.exists("/home/ggdhines"):
 else:
     base_directory = "/home/greg"
 
-results = pickle.load(open(base_directory+"/Databases/penguins_at.pickle","rb"))
+penguins_at = pickle.load(open(base_directory+"/Databases/penguins_at.pickle","rb"))
 
-max_5_10 = {}
-for x,y in zip(results[5],results[20]):
-    if not(x in max_5_10):
-        max_5_10[x] = y
-    else:
-        max_5_10[x] = max(max_5_10[x],y)
 
-#plt.plot(max_5_10.keys(),max_5_10.values(),'.')
-plt.plot(results[10],results[20],'.',color="green")
-plt.plot((0,100),(0,100))
+
+
+plt.plot(penguins_at[5],penguins_at[20],'.')
+plt.plot(penguins_at[10],penguins_at[20],'.',color="green")
+plt.plot(penguins_at[15],penguins_at[20],'.',color="red")
+plt.plot((30,30),(0,250),'--',color="black")
+plt.plot((0,250),(0,250),color="black")
+plt.show()
+
+n, bins, patches = plt.hist(penguins_at[20], 10, normed=1,histtype='step', cumulative=True)
 plt.show()

@@ -26,7 +26,7 @@ db = client['penguin_2014-10-12']
 collection = db["penguin_classifications"]
 collection2 = db["penguin_subjects"]
 
-steps = [5,10,15,20]
+steps = [5,20]
 penguins_at = {k:[] for k in steps}
 alreadyThere = False
 subject_index = 0
@@ -34,9 +34,7 @@ import cPickle as pickle
 to_sample = pickle.load(open(base_directory+"/Databases/sample.pickle","rb"))
 import random
 #for subject in collection2.find({"classification_count": 20}):
-noise_list = {k:[] for k in steps}
-for zooniverse_id in random.sample(to_sample,150):
-    zooniverse_id = "APZ00039fp"
+for zooniverse_id in random.sample(to_sample,10):
     subject = collection2.find_one({"zooniverse_id": zooniverse_id})
     subject_index += 1
     #if subject_index == 2:
@@ -80,56 +78,32 @@ for zooniverse_id in random.sample(to_sample,150):
         subject_index += -1
         continue
 
-    for s in steps:
+    clusters = {}
 
-        user_identified_penguins,t,noise = DivisiveDBSCAN(3).fit(user_markings[s],user_ips[s],debug=True)#,base_directory + "/Databases/penguins/images/"+object_id+".JPG")
-        penguins_at[s].append(len(user_identified_penguins))
-        noise_list[s].append(noise)
-        print str(s) + "  -  " + str(len(user_identified_penguins))
+    user_identified_penguins,clusters[5] = DivisiveDBSCAN(3).fit(user_markings[5],user_ips[5],debug=True)#,base_directory + "/Databases/penguins/images/"+object_id+".JPG")
+    penguins_at[5].append(len(user_identified_penguins))
+    print str(5) + "  -  " + str(len(user_identified_penguins))
 
-    if len(user_identified_penguins) == 0:
-        continue
+    user_identified_penguins,clusters[20] = DivisiveDBSCAN(6).fit(user_markings[20],user_ips[20],debug=True)#,base_directory + "/Databases/penguins/images/"+object_id+".JPG")
+    penguins_at[20].append(len(user_identified_penguins))
+    print str(20) + "  -  " + str(len(user_identified_penguins))
 
-    url = subject["location"]["standard"]
-    object_id= str(subject["_id"])
-    image_path = base_directory+"/Databases/penguins/images/"+object_id+".JPG"
-    if not(os.path.isfile(image_path)):
-        urllib.urlretrieve(url, image_path)
+    notFound = 0
+    total = 0
+    for clusterIndex in range(len(clusters[5])):
+        newCluster = []
+        total += 1
+        for pt in clusters[5][clusterIndex]:
+            #find which cluster this pt wound up in after 20 classifications
+            found = False
 
-    image_file = cbook.get_sample_data(base_directory + "/Databases/penguins/images/"+object_id+".JPG")
-    image = plt.imread(image_file)
-    fig, ax = plt.subplots()
-    im = ax.imshow(image)
-    X,Y = zip(*user_identified_penguins)
-    plt.plot(X,Y,'.')
-    plt.show()
+            for clusterIndex2 in range(len(clusters[20])):
+                if pt in clusters[20][clusterIndex2]:
+                    newCluster.append(clusterIndex2)
+                    found = True
+                    break
+        if not(found):
+            notFound += 1
+        #print newCluster
 
-    if subject_index == 300:
-        break
-
-
-pickle.dump((penguins_at,noise_list),open(base_directory+"/Databases/penguins_at_3.pickle","wb"))
-
-# max5_10 = {}
-# for x,y in zip(penguins_at[5],penguins_at[10]):
-#     if not(x in max5_10):
-#         max5_10[x] = y
-#     else:
-#         max5_10[x] = max(max5_10[x],y)
-#
-# print max5_10
-#
-# max10_15 = {}
-# for x,y in zip(penguins_at[10],penguins_at[15]):
-#     if not(x in max5_10):
-#         max5_10[x] = y
-#     else:
-#         max5_10[x] = max(max5_10[x],y)
-
-
-
-#fig, (ax0, ax1) = plt.subplots(nrows=2)
-#plt.plot(penguins_at[5],penguins_at[10],'.')
-#plt.plot(penguins_at[10],penguins_at[15],'.',color="green")
-#plt.plot((0,100),(0,100))
-#plt.show()
+    print "missing : " + str(notFound) + "," + str(total)
