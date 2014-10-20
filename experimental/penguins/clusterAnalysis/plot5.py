@@ -12,7 +12,7 @@ if os.path.exists("/home/ggdhines"):
 else:
     base_directory = "/home/greg"
 
-penguins_at,temp = pickle.load(open(base_directory+"/Databases/penguins_at_3_2.pickle","rb"))
+penguins_at,temp = pickle.load(open(base_directory+"/Databases/penguins_at_3.pickle","rb"))
 
 from scipy.stats.stats import pearsonr
 steps = [10,20,30,40,50,60,70,80,90,100,110,120]
@@ -35,7 +35,12 @@ for st in stopping:
                 continue
 
             less_than[s] += 1
+            #r[s].append(1- (penguins_at[20][i]-penguins_at[st][i])/float(penguins_at[20][i]))
+            #r[s].append(penguins_at[20][i]-penguins_at[st][i])
             r[s].append(penguins_at[st][i]/float(penguins_at[20][i]))
+
+        #if penguins_at[20][i] <= 20:
+        #    print penguins_at[5][i],penguins_at[20][i]
 
     Y1 = []
     Y2 = []
@@ -49,10 +54,11 @@ for st in stopping:
         #print np.median(r[s])
         #print "===---"
 
+    #print err
     plt.errorbar(steps,Y2,err)
 
 plt.plot(steps,Y1)
 #plt.plot(steps,Y2)
-print Y1
-plt.ylim(0.2,1)
+#print Y1
+plt.ylim(0.2,1.02)
 plt.show()

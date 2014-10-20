@@ -41,7 +41,7 @@ import random
 alreadyThere = True
 user_markings = [] #{k:[] for k in steps}
 user_ips = [] #{k:[] for k in steps}
-zooniverse_id = "APZ0001vqf"
+zooniverse_id = "APZ0000mcw"
 user_index = 0
 for classification in collection.find({"subjects" : {"$elemMatch": {"zooniverse_id":zooniverse_id}}}):
     user_index += 1
@@ -67,7 +67,7 @@ for classification in collection.find({"subjects" : {"$elemMatch": {"zooniverse_
 
 
 
-user_identified_penguins,clusters = DivisiveDBSCAN(3).fit(user_markings,user_ips,debug =True)#,base_directory + "/Databases/penguins/images/"+object_id+".JPG")
+user_identified_penguins,clusters,temp = DivisiveDBSCAN(3).fit(user_markings,user_ips,debug =True)#,base_directory + "/Databases/penguins/images/"+object_id+".JPG")
 
 #which users are in each cluster?
 users_in_clusters = []
@@ -80,6 +80,9 @@ for c in clusters:
 X = []
 Y = []
 data = []
+min_one = 6000
+closest = None
+TT = 1
 for i1 in range(len(user_identified_penguins)):
     for i2 in range(i1+1,len(user_identified_penguins)):
         #if i1 == i2:
@@ -96,6 +99,12 @@ for i1 in range(len(user_identified_penguins)):
         Y.append(overlap)
         data.append((dist,overlap))
 
+        if (overlap == TT) and (dist < min_one):
+            min_one = dist
+            closest = (m1,m2)
+
+
+
 #plt.plot(X,Y,'.')
 #plt.show()
 data.sort(key = lambda x:x[0])
@@ -103,4 +112,22 @@ data.sort(key = lambda x:x[0])
 
 data2 = [overlap for dist,overlap in data]
 #print data2.index(0)/float(len(data2))
-print data2.index(1)/float(len(data2))
+print data2.index(TT)/float(len(data2))
+subject = collection2.find_one({"zooniverse_id": zooniverse_id})
+url = subject["location"]["standard"]
+fName = url.split("/")[-1]
+print "http://demo.zooniverse.org/penguins/subjects/standard/"+fName
+if not(os.path.isfile(base_directory + "/Databases/penguins/images/"+fName)):
+    #urllib.urlretrieve ("http://demo.zooniverse.org/penguins/subjects/standard/"+fName, "/home/greg/Databases/penguins/images/"+fName)
+    urllib.urlretrieve ("http://www.penguinwatch.org/subjects/standard/"+fName, base_directory+"/Databases/penguins/images/"+fName)
+
+print "/home/greg/Databases/penguins/images/"+fName
+image_file = cbook.get_sample_data(base_directory + "/Databases/penguins/images/"+fName)
+image = plt.imread(image_file)
+
+fig, ax = plt.subplots()
+im = ax.imshow(image)
+plt.plot((closest[0][0],closest[1][0]),(closest[0][1],closest[1][1]),color="green")
+#plt.plot(X,Y,'.')
+plt.show()
+#plt.plot()

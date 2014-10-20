@@ -28,7 +28,7 @@ db = client['penguin_2014-10-12']
 collection = db["penguin_classifications"]
 collection2 = db["penguin_subjects"]
 
-steps = [5,10,15,20]
+steps = [20]
 penguins_at = {k:[] for k in steps}
 alreadyThere = False
 subject_index = 0
@@ -37,7 +37,8 @@ to_sample = pickle.load(open(base_directory+"/Databases/sample.pickle","rb"))
 import random
 #for subject in collection2.find({"classification_count": 20}):
 noise_list = {k:[] for k in steps}
-for zooniverse_id in random.sample(to_sample,200):
+marking_count = {}
+for zooniverse_id in random.sample(to_sample,len(to_sample)):
     #zooniverse_id = "APZ0001mt9"
     subject = collection2.find_one({"zooniverse_id": zooniverse_id})
     subject_index += 1
@@ -52,6 +53,7 @@ for zooniverse_id in random.sample(to_sample,200):
     user_ips = {k:[] for k in steps}
 
     user_index = 0
+    total_marks = []
     for classification in collection.find({"subjects" : {"$elemMatch": {"zooniverse_id":zooniverse_id}}}):
         user_index += 1
         if user_index == 21:
@@ -63,8 +65,10 @@ for zooniverse_id in random.sample(to_sample,200):
         try:
             markings_list = classification["annotations"][1]["value"]
             if isinstance(markings_list,dict):
+                mm = 0
                 for marking in markings_list.values():
                     if marking["value"] in ["adult","chick"]:
+                        mm += 1
                         x,y = (float(marking["x"]),float(marking["y"]))
                         if not((x,y) in per_user):
                             per_user.append((x,y))
@@ -73,28 +77,23 @@ for zooniverse_id in random.sample(to_sample,200):
                                     user_markings[s].append((x,y))
                                     user_ips[s].append(ip)
 
+                total_marks.append(mm)
+
         except (KeyError, ValueError):
                 #classification["annotations"]
                 user_index += -1
 
-    if user_markings[5] == []:
-        print "skipping empty"
-        subject_index += -1
-        continue
 
-    url = subject["location"]["standard"]
-    object_id= str(subject["_id"])
-    image_path = base_directory+"/Databases/penguins/images/"+object_id+".JPG"
-    if not(os.path.isfile(image_path)):
-        urllib.urlretrieve(url, image_path)
+
+
 
     penguins = []
     penguins_center = {}
     noise_points = {}
     try:
         for s in steps:
-            if s == 20:
-                user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(6).fit(user_markings[s],user_ips[s],debug=True)#,jpeg_file=base_directory + "/Databases/penguins/images/"+object_id+".JPG")
+            if s == 25:
+                user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(3).fit(user_markings[s],user_ips[s],debug=True,jpeg_file=base_directory + "/Databases/penguins/images/"+object_id+".JPG")
             else:
                 user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(3).fit(user_markings[s],user_ips[s],debug=True)
 
@@ -109,6 +108,10 @@ for zooniverse_id in random.sample(to_sample,200):
             #print noise__
             noise_points[s] = [x for x,u in noise__]
             print str(s) + "  -  " + str(len(user_identified_penguins))
+            if not(len(user_identified_penguins) in marking_count):
+                marking_count[len(user_identified_penguins)] = total_marks
+            else:
+                marking_count[len(user_identified_penguins)].extend(total_marks)
             #if len(user_identified_penguins) > 20:
             #    break
     except AssertionError:
@@ -147,7 +150,7 @@ for zooniverse_id in random.sample(to_sample,200):
 
     if (subject_index % 5) == 0:
         print "WRITING"
-        pickle.dump((penguins_at,[]),open(base_directory+"/Databases/penguins_at_3.pickle","wb"))
+        pickle.dump(marking_count,open(base_directory+"/Databases/penguins_at_3__.pickle","wb"))
 
 # max5_10 = {}
 # for x,y in zip(penguins_at[5],penguins_at[10]):

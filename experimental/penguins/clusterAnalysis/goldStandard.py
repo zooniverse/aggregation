@@ -28,7 +28,7 @@ db = client['penguin_2014-10-12']
 collection = db["penguin_classifications"]
 collection2 = db["penguin_subjects"]
 
-steps = [5,10,15,20]
+steps = [20]
 penguins_at = {k:[] for k in steps}
 alreadyThere = False
 subject_index = 0
@@ -38,7 +38,7 @@ import random
 #for subject in collection2.find({"classification_count": 20}):
 noise_list = {k:[] for k in steps}
 for zooniverse_id in random.sample(to_sample,200):
-    #zooniverse_id = "APZ0001mt9"
+    zooniverse_id = "APZ0002hqd"
     subject = collection2.find_one({"zooniverse_id": zooniverse_id})
     subject_index += 1
     #if subject_index == 2:
@@ -77,7 +77,7 @@ for zooniverse_id in random.sample(to_sample,200):
                 #classification["annotations"]
                 user_index += -1
 
-    if user_markings[5] == []:
+    if user_markings[20] == []:
         print "skipping empty"
         subject_index += -1
         continue
@@ -94,9 +94,9 @@ for zooniverse_id in random.sample(to_sample,200):
     try:
         for s in steps:
             if s == 20:
-                user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(6).fit(user_markings[s],user_ips[s],debug=True)#,jpeg_file=base_directory + "/Databases/penguins/images/"+object_id+".JPG")
+                user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(2).fit(user_markings[s],user_ips[s],debug=True)#,jpeg_file=base_directory + "/Databases/penguins/images/"+object_id+".JPG")
             else:
-                user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(3).fit(user_markings[s],user_ips[s],debug=True)
+                user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(5).fit(user_markings[s],user_ips[s],debug=True)
 
 
 
@@ -117,58 +117,22 @@ for zooniverse_id in random.sample(to_sample,200):
     if len(user_identified_penguins) == 0:
         continue
 
-    # if len(user_identified_penguins) <= 20:
-    #     #print noise__
-    #     not_found = cluster_compare(penguins[0],penguins[-1])
-    #     if not_found == []:
-    #         continue
-    #
-    #
-    #
-    #     image_file = cbook.get_sample_data(base_directory + "/Databases/penguins/images/"+object_id+".JPG")
-    #     image = plt.imread(image_file)
-    #     fig, ax = plt.subplots()
-    #     im = ax.imshow(image)
-    #
-    #     try:
-    #         X,Y = zip(*penguins_center[5])
-    #         plt.plot(X,Y,'.',color="red")
-    #     except ValueError:
-    #         pass
-    #
-    #     X,Y = zip(*noise_points[5])
-    #     plt.plot(X,Y,'.',color="green")
-    #     print [(x,y) for i,(x,y) in enumerate(user_identified_penguins) if i in not_found]
-    #     X,Y = zip(*[(x,y) for i,(x,y) in enumerate(user_identified_penguins) if i in not_found])
-    #     #X,Y = zip(*noise)
-    #
-    #     plt.plot(X,Y,'.',color="blue")
-    #     plt.show()
-
-    if (subject_index % 5) == 0:
-        print "WRITING"
-        pickle.dump((penguins_at,[]),open(base_directory+"/Databases/penguins_at_3.pickle","wb"))
-
-# max5_10 = {}
-# for x,y in zip(penguins_at[5],penguins_at[10]):
-#     if not(x in max5_10):
-#         max5_10[x] = y
-#     else:
-#         max5_10[x] = max(max5_10[x],y)
-#
-# print max5_10
-#
-# max10_15 = {}
-# for x,y in zip(penguins_at[10],penguins_at[15]):
-#     if not(x in max5_10):
-#         max5_10[x] = y
-#     else:
-#         max5_10[x] = max(max5_10[x],y)
+    if True:# len(user_identified_penguins) <= 60:
 
 
 
-#fig, (ax0, ax1) = plt.subplots(nrows=2)
-#plt.plot(penguins_at[5],penguins_at[10],'.')
-#plt.plot(penguins_at[10],penguins_at[15],'.',color="green")
-#plt.plot((0,100),(0,100))
-#plt.show()
+        image_file = cbook.get_sample_data(base_directory + "/Databases/penguins/images/"+object_id+".JPG")
+        image = plt.imread(image_file)
+        fig, ax = plt.subplots()
+        im = ax.imshow(image)
+
+        try:
+            X,Y = zip(*penguins_center[20])
+            plt.plot(X,Y,'.',color="red")
+        except ValueError:
+            pass
+
+
+        plt.plot(X,Y,'.',color="blue")
+        plt.show()
+

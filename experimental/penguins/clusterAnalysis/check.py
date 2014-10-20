@@ -40,7 +40,7 @@ import random
 alreadyThere = True
 user_markings = [] #{k:[] for k in steps}
 user_ips = [] #{k:[] for k in steps}
-zooniverse_id = "APZ000277o"
+zooniverse_id = "APZ0000nw3"
 user_index = 0
 for classification in collection.find({"subjects" : {"$elemMatch": {"zooniverse_id":zooniverse_id}}}):
     user_index += 1

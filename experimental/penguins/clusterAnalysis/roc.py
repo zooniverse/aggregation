@@ -38,7 +38,7 @@ import random
 #for subject in collection2.find({"classification_count": 20}):
 noise_list = {k:[] for k in steps}
 for zooniverse_id in random.sample(to_sample,200):
-    #zooniverse_id = "APZ0001mt9"
+    #zooniverse_id = "APZ00026r1"
     subject = collection2.find_one({"zooniverse_id": zooniverse_id})
     subject_index += 1
     #if subject_index == 2:
@@ -77,7 +77,7 @@ for zooniverse_id in random.sample(to_sample,200):
                 #classification["annotations"]
                 user_index += -1
 
-    if user_markings[5] == []:
+    if user_markings[20] == []:
         print "skipping empty"
         subject_index += -1
         continue
@@ -91,84 +91,28 @@ for zooniverse_id in random.sample(to_sample,200):
     penguins = []
     penguins_center = {}
     noise_points = {}
-    try:
-        for s in steps:
-            if s == 20:
-                user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(6).fit(user_markings[s],user_ips[s],debug=True)#,jpeg_file=base_directory + "/Databases/penguins/images/"+object_id+".JPG")
-            else:
-                user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(3).fit(user_markings[s],user_ips[s],debug=True)
+    #gold standard
+    gold_centers,gold_clusters,noise__ = DivisiveDBSCAN(6).fit(user_markings[20],user_ips[20],debug=True)#,jpeg_file=base_directory + "/Databases/penguins/images/"+object_id+".JPG")
+    print "gold standard number " + str(len(gold_clusters))
 
+    for s in [5,10,15]:
+        print "== " + str(s)
+        not_list = []
+        fake_list = []
+        for nn in [1,2,3,4,5]:
+                user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(nn).fit(user_markings[s],user_ips[s],debug=True)
 
+                #missed penguins - in gold standard but not found
+                not_found = cluster_compare(penguin_clusters,gold_clusters)
 
-            penguins_at[s].append(len(user_identified_penguins))
-            penguins_center[s] = user_identified_penguins
-            #noise_list[s].append(noise)
+                #fake penguins - found but not actually real
+                fake_found = cluster_compare(gold_clusters,penguin_clusters)
 
-            #penguins.append(penguin_clusters)
-            #print penguin_clusters
-            #print noise__
-            noise_points[s] = [x for x,u in noise__]
-            print str(s) + "  -  " + str(len(user_identified_penguins))
-            #if len(user_identified_penguins) > 20:
-            #    break
-    except AssertionError:
-        continue
+                print len(not_found),len(fake_found)
+                not_list.append(len(gold_clusters) -len(not_found))
+                fake_list.append(len(fake_found))
 
-    if len(user_identified_penguins) == 0:
-        continue
+        print [nn/float(len(gold_clusters)) for nn in not_list]
+        print [ff/float(fake_list[0]) for ff in fake_list]
 
-    # if len(user_identified_penguins) <= 20:
-    #     #print noise__
-    #     not_found = cluster_compare(penguins[0],penguins[-1])
-    #     if not_found == []:
-    #         continue
-    #
-    #
-    #
-    #     image_file = cbook.get_sample_data(base_directory + "/Databases/penguins/images/"+object_id+".JPG")
-    #     image = plt.imread(image_file)
-    #     fig, ax = plt.subplots()
-    #     im = ax.imshow(image)
-    #
-    #     try:
-    #         X,Y = zip(*penguins_center[5])
-    #         plt.plot(X,Y,'.',color="red")
-    #     except ValueError:
-    #         pass
-    #
-    #     X,Y = zip(*noise_points[5])
-    #     plt.plot(X,Y,'.',color="green")
-    #     print [(x,y) for i,(x,y) in enumerate(user_identified_penguins) if i in not_found]
-    #     X,Y = zip(*[(x,y) for i,(x,y) in enumerate(user_identified_penguins) if i in not_found])
-    #     #X,Y = zip(*noise)
-    #
-    #     plt.plot(X,Y,'.',color="blue")
-    #     plt.show()
-
-    if (subject_index % 5) == 0:
-        print "WRITING"
-        pickle.dump((penguins_at,[]),open(base_directory+"/Databases/penguins_at_3.pickle","wb"))
-
-# max5_10 = {}
-# for x,y in zip(penguins_at[5],penguins_at[10]):
-#     if not(x in max5_10):
-#         max5_10[x] = y
-#     else:
-#         max5_10[x] = max(max5_10[x],y)
-#
-# print max5_10
-#
-# max10_15 = {}
-# for x,y in zip(penguins_at[10],penguins_at[15]):
-#     if not(x in max5_10):
-#         max5_10[x] = y
-#     else:
-#         max5_10[x] = max(max5_10[x],y)
-
-
-
-#fig, (ax0, ax1) = plt.subplots(nrows=2)
-#plt.plot(penguins_at[5],penguins_at[10],'.')
-#plt.plot(penguins_at[10],penguins_at[15],'.',color="green")
-#plt.plot((0,100),(0,100))
-#plt.show()
+    break
