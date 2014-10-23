@@ -70,8 +70,8 @@ class DivisiveDBSCAN:
             assert(len(c) >= self.min_samples)
 
         labels = []
-        if debug:
-            print clusters
+        #if debug:
+        #    print clusters
         for m in markings:
             found = False
             for cluster_index,c in enumerate(clusters):
@@ -89,21 +89,30 @@ class DivisiveDBSCAN:
 
 
 
-    def binary_search_DBSCAN(self,markings,user_ids,starting_epsilon,jpeg_file=None):
+    def binary_search_DBSCAN(self,markings,user_ids,starting_epsilon,return_users=False,jpeg_file=None):
         if jpeg_file is not None:
             image_file = cbook.get_sample_data(jpeg_file)
             image = plt.imread(image_file)
             fig, ax = plt.subplots()
             im = ax.imshow(image)
 
-            x,y = zip(*markings)
-            plt.plot(x,y,'.',color='blue')
+            #x,y = zip(*markings)
+            #plt.plot(x,y,'.',color='blue')
 
+        #double check if we actually need to be splitting this cluster - if not, just return it
+        if len(list(set(user_ids))) == len(user_ids):
+            if return_users:
+                return [],[(markings,user_ids)],[]
+            else:
+                return [],[markings,],[]
 
         #check to see if all of the points are from the same user - if so, they are noise
         #and we can skip the rest of the method
         if len(set(user_ids)) == 1:
-            return markings,[],[]
+            noise_markings = []
+            for x in markings:
+                noise_markings.append((x,user_ids[0]))
+            return noise_markings,[],[]
         #given starting_epsilon (and min_samples), all of the markings should be in the same cluster
         markings_nparray = np.array(markings)
         min_epsilon = 0.
@@ -112,13 +121,11 @@ class DivisiveDBSCAN:
         #print self.min_samples
         while (max_epsilon-min_epsilon) >= 0.01:
             mid_epsilon = (max_epsilon+min_epsilon)/2.
-            #print mid_epsilon
             db = DBSCAN(eps=mid_epsilon, min_samples=self.min_samples).fit(markings_nparray)
             labels = db.labels_
             unique_labels = set(labels)
             #labels = self.__own_DBSCAN__(mid_epsilon,markings)
             #unique_labels = set(labels)
-
             if len(unique_labels) > 1:
                 min_epsilon = mid_epsilon
             else:
@@ -136,6 +143,7 @@ class DivisiveDBSCAN:
                     all_split = False
                     break
 
+
             if all_split:
                 max_epsilon = mid_epsilon
             else:
@@ -144,7 +152,22 @@ class DivisiveDBSCAN:
         #this is the epsilon we are going to be using
         if min_epsilon == 0:
             assert unique_labels == set([-1])
-            return markings,[],[]
+            #print "there there"
+            #print markings
+            #print user_ids
+            x,y = zip(*markings)
+            #plt.plot(x,y,'.')
+            #plt.show()
+
+            noise_markings = []
+            for x in markings:
+                noise_markings.append((x,user_ids[0]))
+            #print "here here"
+            return noise_markings,[],[]
+
+            #return markings,[],[]
+
+
         assert min_epsilon > 0
         #new_epsilon = int((min_epsilon*10))/10.
         db = DBSCAN(eps=min_epsilon, min_samples=self.min_samples).fit(markings_nparray)
@@ -159,40 +182,70 @@ class DivisiveDBSCAN:
         final_clusters = []
         to_split_further_clusters = []
 
-        for k in unique_labels:
-            x_ = [ip for index,ip in enumerate(markings) if labels[index] == k]
+        colors = ["green","blue","tan","lightseagreen"]
 
+        for ii,k in enumerate(unique_labels):
+            x_ = [ip for index,ip in enumerate(markings) if labels[index] == k]
+            u_ = [ip for index,ip in enumerate(user_ids) if labels[index] == k]
             #find out which points are in this cluster
             #this usually will not happen - but CAN
             if k == -1:
-                noise_markings.extend(x_)
+                for x,u in zip(x_,u_):
+                    assert(type(x) == tuple)
+                    noise_markings.append((x,u))
+                if (jpeg_file is not None):
+                    x,y = zip(*x_)
+                    plt.plot(x,y,'.',color="red")
             else:
-                u_ = [ip for index,ip in enumerate(user_ids) if labels[index] == k]
+
                 #if a cluster does not need to be split any further - add it to the final clusters
                 if len(set(u_)) == len(u_):
                     if len(x_) < self.min_samples:
-                        noise_markings.extend(x_)
+                        for x,u in zip(x_,u_):
+                            assert(type(x) == tuple)
+                            noise_markings.append((x,u))
                     else:
-
-                        final_clusters.append(x_)
+                        if return_users:
+                            final_clusters.append((x_,u_))
+                        else:
+                            final_clusters.append(x_)
                 else:
                     if len(x_) < self.min_samples:
-                        noise_markings.extend(x_)
+                        for x,u in zip(x_,u_):
+                            assert(type(x) == tuple)
+                            noise_markings.append((x,u))
                     else:
                         to_split_further_clusters.append((x_,u_,min_epsilon))
 
-                if (k == 0) and (jpeg_file is not None):
+                if (jpeg_file is not None):
                     x,y = zip(*x_)
-                    plt.plot(x,y,'.',color='green')
+                    plt.plot(x,y,'o',color=colors[ii])
 
         if jpeg_file is not None:
+            plt.xlim(0,1000)
+            plt.ylim(748,0)
             plt.show()
+        #print "//" + str(noise_markings)
         return noise_markings,final_clusters,to_split_further_clusters
 
     def fit(self, markings,user_ids,jpeg_file=None,debug=False):
         #start by creating the initial "super" cluster
         end_clusters = []
         clusters_to_go = [(markings[:],user_ids[:],self.starting_epsilon),]
+        total_noise = {}
+        total_noise2 = []
+
+        if jpeg_file is not None:
+            image_file = cbook.get_sample_data(jpeg_file)
+            image = plt.imread(image_file)
+            fig, ax = plt.subplots()
+            im = ax.imshow(image)
+
+            x,y = zip(*markings)
+            plt.plot(x,y,'o',color="green")
+            plt.xlim(0,1000)
+            plt.ylim(748,0)
+            plt.show()
 
         while True:
             #if we have run out of clusters to process, break (hopefully done :) )
@@ -200,7 +253,22 @@ class DivisiveDBSCAN:
                 break
             m_,u_,e_ = clusters_to_go.pop(0)
 
-            noise,final,to_split = self.binary_search_DBSCAN(m_,u_,e_,jpeg_file)
+            noise_found,final,to_split = self.binary_search_DBSCAN(m_,u_,e_,jpeg_file)
+            #print to_split
+            #print e_
+            #print noise
+            #print "=== " + str(noise_found)
+            if noise_found != []:
+                #print "==="
+
+                for p,u in noise_found:
+                    total_noise2.append(p)
+                    assert(type(p) == tuple)
+                    if not(u in total_noise):
+                        total_noise[u] = [p]
+                    else:
+                        total_noise[u].append(p)
+            #total_noise.extend(noise)
             end_clusters.extend(final[:])
             clusters_to_go.extend(to_split[:])
 
@@ -210,9 +278,11 @@ class DivisiveDBSCAN:
         for cluster in end_clusters:
             x,y = zip(*cluster)
             cluster_centers.append((np.mean(x),np.mean(y)))
+        #print total_noise
+        #print "===="
 
         if debug:
-            return cluster_centers, end_clusters
+            return cluster_centers, end_clusters,total_noise2
         else:
             return cluster_centers
 

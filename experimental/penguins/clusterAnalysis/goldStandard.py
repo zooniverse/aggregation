@@ -24,9 +24,17 @@ else:
     base_directory = "/home/greg"
 
 client = pymongo.MongoClient()
-db = client['penguin_2014-10-12']
+db = client['penguin_2014-10-22']
 collection = db["penguin_classifications"]
 collection2 = db["penguin_subjects"]
+
+completed_subjects = []
+
+for subject in collection2.find({"classification_count":20}):
+    zooniverse_id = subject["zooniverse_id"]
+    if subject["metadata"]["counters"]["animals_present"] > 10:
+        completed_subjects.append(zooniverse_id)
+
 
 steps = [20]
 penguins_at = {k:[] for k in steps}
@@ -37,8 +45,8 @@ to_sample = pickle.load(open(base_directory+"/Databases/sample.pickle","rb"))
 import random
 #for subject in collection2.find({"classification_count": 20}):
 noise_list = {k:[] for k in steps}
-for zooniverse_id in random.sample(to_sample,200):
-    zooniverse_id = "APZ0002hqd"
+for zooniverse_id in random.sample(completed_subjects,200):
+    #zooniverse_id = "APZ0001wgg"
     subject = collection2.find_one({"zooniverse_id": zooniverse_id})
     subject_index += 1
     #if subject_index == 2:
@@ -94,7 +102,7 @@ for zooniverse_id in random.sample(to_sample,200):
     try:
         for s in steps:
             if s == 20:
-                user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(2).fit(user_markings[s],user_ips[s],debug=True)#,jpeg_file=base_directory + "/Databases/penguins/images/"+object_id+".JPG")
+                user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(3).fit(user_markings[s],user_ips[s],debug=True)#,jpeg_file=base_directory + "/Databases/penguins/images/"+object_id+".JPG")
             else:
                 user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(5).fit(user_markings[s],user_ips[s],debug=True)
 
@@ -117,7 +125,7 @@ for zooniverse_id in random.sample(to_sample,200):
     if len(user_identified_penguins) == 0:
         continue
 
-    if True:# len(user_identified_penguins) <= 60:
+    if True:#len(user_identified_penguins) <= 60:
 
 
 
@@ -136,3 +144,4 @@ for zooniverse_id in random.sample(to_sample,200):
         plt.plot(X,Y,'.',color="blue")
         plt.show()
 
+    #break

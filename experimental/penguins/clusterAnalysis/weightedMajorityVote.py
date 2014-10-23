@@ -9,6 +9,7 @@ import matplotlib.cbook as cbook
 from PIL import Image
 import matplotlib.pyplot as plt
 import warnings
+from copy import deepcopy
 
 if os.path.exists("/home/ggdhines"):
     sys.path.append("/home/ggdhines/PycharmProjects/reduction/experimental/clusteringAlg")
@@ -28,12 +29,12 @@ db = client['penguin_2014-10-12']
 collection = db["penguin_classifications"]
 collection2 = db["penguin_subjects"]
 
-steps = [5,10,15,20]
+steps = [20]
 penguins_at = {k:[] for k in steps}
 alreadyThere = False
 subject_index = 0
 import cPickle as pickle
-to_sample = pickle.load(open(base_directory+"/Databases/sample.pickle","rb"))
+#to_sample = pickle.load(open(base_directory+"/Databases/sample.pickle","rb"))
 import random
 #for subject in collection2.find({"classification_count": 20}):
 noise_list = {k:[] for k in steps}
@@ -45,16 +46,20 @@ gold_penguin_count = []
 #
 #    zooniverse_id, num_markings = line.split(" ")
 #    num_markings = int(num_markings[:-1])
-min_pts = sys.argv[1]
-print min_pts
-file_out = "/Databases/penguins"+str(min_pts)+".pickle"
-for zooniverse_id in random.sample(to_sample,500):
-    #zooniverse_id = "APZ0000w6q"
-    subject = collection2.find_one({"zooniverse_id": zooniverse_id})
-    subject_index += 1
-    #if subject_index == 2:
-    #    break
-    #zooniverse_id = subject["zooniverse_id"]
+file_out = "/Databases/penguins_vote_.pickle"
+f = open("/home/greg/Documents/new_gold","rb")
+
+completed_subjects = []
+
+for subject in collection2.find({"classification_count":20}):
+    zooniverse_id = subject["zooniverse_id"]
+    if subject["metadata"]["counters"]["animals_present"] > 10:
+        completed_subjects.append(zooniverse_id)
+
+for subject_index,zooniverse_id in enumerate(random.sample(completed_subjects,200)):
+    if subject_index == 5:
+        break
+
     print "=== " + str(subject_index)
     print zooniverse_id
 
@@ -71,10 +76,12 @@ for zooniverse_id in random.sample(to_sample,500):
         per_user = []
 
         ip = classification["user_ip"]
+        #print ip
         try:
             markings_list = classification["annotations"][1]["value"]
             if isinstance(markings_list,dict):
                 for marking in markings_list.values():
+                    #print marking
                     if marking["value"] in ["adult","chick"]:
                         x,y = (float(marking["x"]),float(marking["y"]))
                         if not((x,y) in per_user):
@@ -99,25 +106,25 @@ for zooniverse_id in random.sample(to_sample,500):
     # if not(os.path.isfile(image_path)):
     #     urllib.urlretrieve(url, image_path)
 
-    if user_markings[20] == []:
-        continue
-
     penguins = []
     penguins_center = {}
     noise_points = {}
-    gold_penguins,gold_clusters,noise__ = DivisiveDBSCAN(6).fit(user_markings[s],user_ips[s],debug=True)
+    #gold_penguins,gold_clusters,noise__ = DivisiveDBSCAN(6).fit(user_markings[s],user_ips[s],debug=True)
 
     #if len(gold_clusters) == 0:
     #    continue
-    gold_penguin_count.append(len(gold_clusters))
+    #gold_penguin_count.append(len(gold_clusters))
 
-    print "gold  -  " + str(len(gold_penguins))
-    for s in [5,10,15]:
-        user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(int(min_pts)).fit(user_markings[s],user_ips[s],debug=True)
+    #print "gold  -  " + str(len(gold_penguins))
+    for s in steps:
+        if s == 20:
+            user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(1).fit(user_markings[s],user_ips[s],debug=True)
+        else:
+            user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(1).fit(user_markings[s],user_ips[s],debug=True)
 
 
 
-        penguins_at[s].append(metric2(penguin_clusters,gold_clusters))
+        penguins_at[s].append(deepcopy(penguin_clusters))
         #penguins_center[s] = user_identified_penguins
         #noise_list[s].append(noise)
 
@@ -164,9 +171,9 @@ for zooniverse_id in random.sample(to_sample,500):
 
     if (subject_index % 5) == 0:
         print "WRITING"
-        pickle.dump((penguins_at,gold_penguin_count),open(base_directory+file_out,"wb"))
+        pickle.dump(penguins_at,open(base_directory+file_out,"wb"))
 
-pickle.dump((penguins_at,gold_penguin_count),open(base_directory+file_out,"wb"))
+pickle.dump(penguins_at,open(base_directory+file_out,"wb"))
 
 # max5_10 = {}
 # for x,y in zip(penguins_at[5],penguins_at[10]):
