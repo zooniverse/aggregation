@@ -20,7 +20,7 @@ if os.path.exists("/home/ggdhines"):
 else:
     base_directory = "/home/greg"
 
-penguins,temp = pickle.load(open(base_directory+"/Databases/penguins_vote_.pickle","rb"))
+penguins = pickle.load(open(base_directory+"/Databases/penguins_vote__.pickle","rb"))
 
 #does this cluster have a corresponding cluster in the gold standard data?
 #ie. does this cluster represent an actual penguin?
@@ -38,35 +38,23 @@ penguins,temp = pickle.load(open(base_directory+"/Databases/penguins_vote_.pickl
 # print penguins[5][0][0][0][0]
 
 #have as a list not a tuple since we need the index
-user_set = []
 gold_standard = []
 
 #create the gold standard data
 max_users = 20
 image_index = 0
 #first - create a list of ALL users - so we can figure out who has annotated a "penguin" or hasn't
-for penguin_index in range(len(penguins[max_users][image_index][0])):
-    users = penguins[max_users][image_index][0][penguin_index][1]
-    for u in users:
-        if not(u in user_set):
-            user_set.append(u)
-
-#now actually figure out how has annotated a penguin or hasn't
-for penguin_index,cluster in enumerate(penguins[max_users][image_index][0]):
-    users = penguins[max_users][image_index][0][penguin_index][1]
-    if len(users) >= 6:
-        gold_standard.append(cluster[0])
-    else:
-        penguin = 0
+for cluster in penguins[max_users][image_index][1]:
+    gold_standard.append(cluster[0])
 
 #print gold_standard
 #RESET
-max_users = 10
+max_users = 5
 #first - create a list of ALL users - so we can figure out who has annotated a "penguin" or hasn't
 user_set = []
 
-for penguin_index in range(len(penguins[max_users][image_index][0])):
-    users = penguins[max_users][image_index][0][penguin_index][1]
+for cluster in penguins[max_users][image_index][1]:
+    users = cluster[1]
     for u in users:
         if not(u in user_set):
             user_set.append(u)
@@ -75,15 +63,17 @@ for penguin_index in range(len(penguins[max_users][image_index][0])):
 f = open(base_directory+"/Databases/penguins_ibcc.in",'wb')
 f.write("a,b,c\n")
 
-for penguin_index in range(len(penguins[max_users][image_index][0])):
-    users = penguins[max_users][image_index][0][penguin_index][1]
+for cluster_index,cluster in enumerate(penguins[max_users][image_index][1]):
+    users = cluster[1]
     for user_index,u_ in enumerate(user_set):
         if u_ in users:
             #print (user_index,penguin_index,1)
-            f.write(str(user_index)+","+str(penguin_index) + ",1\n")
+            f.write(str(user_index)+","+str(cluster_index) + ",1\n")
         else:
             #iprint (user_index,penguin_index,0)
-            f.write(str(user_index)+","+str(penguin_index) + ",0\n")
+            f.write(str(user_index)+","+str(cluster_index) + ",0\n")
+
+    print cluster_index
 
 #now do the analysis
 # for image_index in range(len(penguins[5])):
@@ -120,21 +110,21 @@ else:
 import ibcc
 
 try:
-    os.remove("/home/greg/Databases/penguins_ibcc.out")
+    os.remove(base_directory+"/Databases/penguins_ibcc.out")
 except OSError:
     pass
 
 try:
-    os.remove("/home/greg/Databases/penguins_ibcc.mat")
+    os.remove(base_directory+"/Databases/penguins_ibcc.mat")
 except OSError:
     pass
 
 try:
-    os.remove("/home/greg/Databases/penguins_ibcc.in.dat")
+    os.remove(base_directory+"/Databases/penguins_ibcc.in.dat")
 except OSError:
     pass
 
-ibcc.runIbcc(base_directory+"/Databases/penguin_ibcc_config.py")
+ibcc.runIbcc(base_directory+"/Databases/penguins_ibcc_config.py")
 
 print "done that"
 
@@ -144,7 +134,8 @@ false_positives = []
 with open(base_directory+"/Databases/penguins_ibcc.out",'rb') as f:
     for l in f.readlines():
         penguin_index, neg_prob,pos_prob = l.split(" ")
-        penguin = penguins[max_users][image_index][0][int(float(penguin_index))][0]
+
+        penguin = penguins[max_users][image_index][1][int(float(penguin_index))][0]
 
         #is this penguin "real" ie. is in the gold standard?
         if cluster_compare(gold_standard,[penguin,]) == []:
@@ -156,13 +147,14 @@ with open(base_directory+"/Databases/penguins_ibcc.out",'rb') as f:
 
 print min(sorted(true_positives)[2:])
 print max(false_positives)
+print len(false_positives)
 
 X = []
 Y = []
-for p in np.arange(0,1.01,0.005):
+for p in np.arange(0,1.01,0.001):
     X.append(len([f for f in false_positives if f >= p])/float(len(false_positives)))
-    Y.append(len([t for t in true_positives if t >= p])/float(len(true_positives)))
+    Y.append(len([t for t in true_positives if t >= p])/float(37.))
 
 plt.plot(X,Y,'-o')
 plt.plot((0,1),(0,1),'-')
-#plt.show()
+plt.show()

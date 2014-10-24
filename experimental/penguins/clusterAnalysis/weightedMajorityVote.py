@@ -29,7 +29,7 @@ db = client['penguin_2014-10-12']
 collection = db["penguin_classifications"]
 collection2 = db["penguin_subjects"]
 
-steps = [20]
+steps = [5,10,20]
 penguins_at = {k:[] for k in steps}
 alreadyThere = False
 subject_index = 0
@@ -46,8 +46,8 @@ gold_penguin_count = []
 #
 #    zooniverse_id, num_markings = line.split(" ")
 #    num_markings = int(num_markings[:-1])
-file_out = "/Databases/penguins_vote_.pickle"
-f = open("/home/greg/Documents/new_gold","rb")
+file_out = "/Databases/penguins_vote__.pickle"
+#f = open("/home/greg/Documents/new_gold","rb")
 
 completed_subjects = []
 
@@ -56,10 +56,8 @@ for subject in collection2.find({"classification_count":20}):
     if subject["metadata"]["counters"]["animals_present"] > 10:
         completed_subjects.append(zooniverse_id)
 
-for subject_index,zooniverse_id in enumerate(random.sample(completed_subjects,200)):
-    if subject_index == 5:
-        break
-
+for subject_index,zooniverse_id in enumerate(random.sample(completed_subjects,50)):
+    zooniverse_id = "APZ0003kdv"
     print "=== " + str(subject_index)
     print zooniverse_id
 
@@ -118,13 +116,13 @@ for subject_index,zooniverse_id in enumerate(random.sample(completed_subjects,20
     #print "gold  -  " + str(len(gold_penguins))
     for s in steps:
         if s == 20:
-            user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(1).fit(user_markings[s],user_ips[s],debug=True)
+            user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(3).fit(user_markings[s],user_ips[s],debug=True)
         else:
             user_identified_penguins,penguin_clusters,noise__ = DivisiveDBSCAN(1).fit(user_markings[s],user_ips[s],debug=True)
 
 
 
-        penguins_at[s].append(deepcopy(penguin_clusters))
+        penguins_at[s].append((zooniverse_id,deepcopy(penguin_clusters)))
         #penguins_center[s] = user_identified_penguins
         #noise_list[s].append(noise)
 
@@ -172,6 +170,8 @@ for subject_index,zooniverse_id in enumerate(random.sample(completed_subjects,20
     if (subject_index % 5) == 0:
         print "WRITING"
         pickle.dump(penguins_at,open(base_directory+file_out,"wb"))
+
+    break
 
 pickle.dump(penguins_at,open(base_directory+file_out,"wb"))
 
