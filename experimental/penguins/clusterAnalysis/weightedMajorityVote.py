@@ -29,7 +29,7 @@ db = client['penguin_2014-10-12']
 collection = db["penguin_classifications"]
 collection2 = db["penguin_subjects"]
 
-steps = [5,10,20]
+steps = [20]
 penguins_at = {k:[] for k in steps}
 alreadyThere = False
 subject_index = 0
@@ -53,11 +53,15 @@ completed_subjects = []
 
 for subject in collection2.find({"classification_count":20}):
     zooniverse_id = subject["zooniverse_id"]
-    if subject["metadata"]["counters"]["animals_present"] > 10:
+    path = subject["metadata"]["path"]
+    slash_index = path.find("_")
+    location = path[:slash_index]
+
+    if (subject["metadata"]["counters"]["animals_present"] > 10) and (location == "NEKOa/NEKOa2013b"):
         completed_subjects.append(zooniverse_id)
 
-for subject_index,zooniverse_id in enumerate(random.sample(completed_subjects,50)):
-    zooniverse_id = "APZ0003kdv"
+for subject_index,zooniverse_id in enumerate(random.sample(completed_subjects,40)):
+    #zooniverse_id = "APZ0003kdv"
     print "=== " + str(subject_index)
     print zooniverse_id
 
@@ -171,7 +175,6 @@ for subject_index,zooniverse_id in enumerate(random.sample(completed_subjects,50
         print "WRITING"
         pickle.dump(penguins_at,open(base_directory+file_out,"wb"))
 
-    break
 
 pickle.dump(penguins_at,open(base_directory+file_out,"wb"))
 

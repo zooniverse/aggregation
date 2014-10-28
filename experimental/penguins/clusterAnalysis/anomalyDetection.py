@@ -42,8 +42,29 @@ penguins = pickle.load(open(base_directory+"/Databases/penguins_vote__.pickle","
 #have as a list not a tuple since we need the index
 
 client = pymongo.MongoClient()
-db = client['penguin_2014-10-12']
+db = client['penguin_2014-10-22']
 subject_collection = db["penguin_subjects"]
+
+location_count = {}
+
+for subject in subject_collection.find({"classification_count":20}):
+    zooniverse_id = subject["zooniverse_id"]
+    path = subject["metadata"]["path"]
+    slash_index = path.find("_")
+    location = path[:slash_index]
+
+    if subject["metadata"]["counters"]["animals_present"] > 10:
+        if not(location in location_count):
+            location_count[location] = 1
+            print location
+            print subject["location"]
+        else:
+            location_count[location] += 1
+
+
+for location in sorted(location_count.keys()):
+    print location + " -- " + str(location_count[location])
+assert False
 
 #print gold_standard
 #RESET
@@ -59,6 +80,8 @@ for image_index in range(len(penguins[20])):
     penguin_clusters =  penguins[max_users][image_index][1]
     zooniverse_id = penguins[max_users][image_index][0]
 
+    lowest_cluster = float("inf")
+    highest_cluster = -float('inf')
 
     for penguin_index in range(len(penguin_clusters)):
         users = penguin_clusters[penguin_index][1]
@@ -66,13 +89,36 @@ for image_index in range(len(penguins[20])):
         center_x = np.mean(zip(*cluster)[0])
         center_y = np.mean(zip(*cluster)[1])
 
+        lowest_cluster = min(lowest_cluster,center_y)
+        highest_cluster = max(highest_cluster,center_y)
+
         cluster_dict[(center_x,center_y)] = users
 
+    mid_point = (lowest_cluster+highest_cluser)/2.
+
+
+    subject = subject_collection.find_one({"zooniverse_id":zooniverse_id})
+    url = subject["location"]["standard"]
+    object_id= str(subject["_id"])
+    image_path = base_directory+"/Databases/penguins/images/"+object_id+".JPG"
+    if not(os.path.isfile(image_path)):
+        urllib.urlretrieve(url, image_path)
+
+    image_file = cbook.get_sample_data(base_directory + "/Databases/penguins/images/"+object_id+".JPG")
+    image = plt.imread(image_file)
+    fig, ax = plt.subplots()
+    im = ax.imshow(image)
+
+    error_found = False
+
+    #start with the bottom half
     cluster_list = cluster_dict.keys()
     relations = []
     for i in range(len(cluster_list)-1):
+        c_1 = cluster_list[i]
+
         for j in range(i+1,len(cluster_list)):
-            c_1 = cluster_list[i]
+
             c_2 = cluster_list[j]
 
             users_1 = cluster_dict[c_1]
@@ -95,17 +141,7 @@ for image_index in range(len(penguins[20])):
             continue
         print relations[0:10]
         #we have an error
-        subject = subject_collection.find_one({"zooniverse_id":zooniverse_id})
-        url = subject["location"]["standard"]
-        object_id= str(subject["_id"])
-        image_path = base_directory+"/Databases/penguins/images/"+object_id+".JPG"
-        if not(os.path.isfile(image_path)):
-            urllib.urlretrieve(url, image_path)
 
-        image_file = cbook.get_sample_data(base_directory + "/Databases/penguins/images/"+object_id+".JPG")
-        image = plt.imread(image_file)
-        fig, ax = plt.subplots()
-        im = ax.imshow(image)
 
         for ii in range(min(len(user_relations),1)):
             if user_relations[ii] == 1:
@@ -124,3 +160,4 @@ for image_index in range(len(penguins[20])):
 
     except ValueError:
         print "**"
+
