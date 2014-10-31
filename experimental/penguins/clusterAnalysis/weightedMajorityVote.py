@@ -57,7 +57,7 @@ for subject in collection2.find({"classification_count":20}):
     slash_index = path.find("_")
     location = path[:slash_index]
 
-    if (subject["metadata"]["counters"]["animals_present"] > 10) and (location == "NEKOa/NEKOa2013b"):
+    if (subject["metadata"]["counters"]["animals_present"] > 10) and (location == "LOCKb/LOCKb2013b"):
         completed_subjects.append(zooniverse_id)
 
 for subject_index,zooniverse_id in enumerate(random.sample(completed_subjects,40)):

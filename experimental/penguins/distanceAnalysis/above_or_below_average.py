@@ -55,51 +55,25 @@ for image in penguins[max_users]:
         X = np.mean(zip(*cluster[0])[0])
         Y = np.mean(zip(*cluster[0])[1])
 
-        lowest_cluster = min(lowest_cluster,Y)
-        highest_cluster = max(highest_cluster,Y)
 
         y_values.append(Y)
 
-mid_point = (lowest_cluster+highest_cluster)/2.
 mid_point = np.mean(y_values)
+plt.plot((0,10),(mid_point/100.,mid_point/100.))
 low_dist = []
 high_dist = []
 
 overall_dist = []
 
-client = pymongo.MongoClient()
-db = client['penguin_2014-10-22']
-subject_collection = db["penguin_subjects"]
-
 
 overall_values = []
 mid_cluster = []
-for image_id in range(10):#len(penguins[max_users])):
+for image_id in range(1):#len(penguins[max_users])):
     image = penguins[max_users][image_id]
-
-    low_clusters = []
-    high_clusters = []
-
-    # subject = subject_collection.find_one({"zooniverse_id":image[0]})
-    # url = subject["location"]["standard"]
-    # object_id= str(subject["_id"])
-    # image_path = base_directory+"/Databases/penguins/images/"+object_id+".JPG"
-    # if not(os.path.isfile(image_path)):
-    #     urllib.urlretrieve(url, image_path)
-    #
-    # image_file = cbook.get_sample_data(base_directory + "/Databases/penguins/images/"+object_id+".JPG")
-    # penguin_image = plt.imread(image_file)
-    # fig, ax = plt.subplots()
-    # im = ax.imshow(penguin_image)
-    #plt.plot((0,1000),(mid_point,mid_point))
-    #plt.show()
-
-
 
     above_below = []
 
     for i in range(len(image[1])):
-
         closest_neighbours = []
         c_1 = image[1][i][0]
         X_1 = np.mean(zip(*c_1)[0])
@@ -116,6 +90,9 @@ for image_id in range(10):#len(penguins[max_users])):
             X_2 = np.mean(zip(*c_2)[0])
             Y_2 = np.mean(zip(*c_2)[1])
 
+            if ((Y_1 < mid_point) and (Y_2 > mid_point)) or ((Y_1 > mid_point) and (Y_2 < mid_point)):
+                continue
+
             dist = math.sqrt((X_1-X_2)**2+(Y_1-Y_2)**2)
             closest_neighbours.append(dist)
 
@@ -125,19 +102,24 @@ for image_id in range(10):#len(penguins[max_users])):
             pass
         else:
             closest_neighbours.sort()
-            vv = np.mean(closest_neighbours[0:2])
+            vv = np.mean(closest_neighbours[0:1])
             overall_values.append(vv)
 
-
+high_values = []
+low_values = []
 overall_mean = np.mean(overall_values)
 for c_1,value in zip(mid_cluster,overall_values):
     if value >= overall_mean:
         plt.plot((c_1[1]),(c_1[2]),"o",color= "red")
         above_below.append(1)
+        high_values.append(value)
     else:
         plt.plot((c_1[1]),(c_1[2]),"o",color= "green")
         above_below.append(0)
+        low_values.append(value)
 
+print np.mean(high_values)
+print np.mean(low_values)
 # from sklearn import linear_model
 from sklearn.linear_model import SGDClassifier
 # #clf = linear_model.LinearRegression()
@@ -153,15 +135,15 @@ Z = np.empty(X1.shape)
 
 min_p = float("inf")
 max_p = -float("inf")
-print logisticRegression.cost_function((-20,-0.5,1),mid_cluster,above_below)
+#print logisticRegression.cost_function((-20,-0.5,1),mid_cluster,above_below)
 
-alpha = 0.5
+alpha = 0.2
 theta = [-20,-0.5,1]
 
 costs = []
 
-for i in range(750):
-    print i
+for i in range(2000):
+    #print i
     t1_temp = theta[0] - alpha*logisticRegression.partial_cost_function(theta,mid_cluster,above_below,0)
     t2_temp = theta[1] - alpha*logisticRegression.partial_cost_function(theta,mid_cluster,above_below,1)
     t3_temp = theta[2] - alpha*logisticRegression.partial_cost_function(theta,mid_cluster,above_below,2)
@@ -169,7 +151,7 @@ for i in range(750):
     theta = [t1_temp,t2_temp,t3_temp]
     costs.append(logisticRegression.cost_function(theta,mid_cluster,above_below))
 
-#plt.plot(range(650),costs)
+#plt.plot(range(len(costs)),costs)
 #plt.show()
 
 for (i, j), val in np.ndenumerate(X1):
