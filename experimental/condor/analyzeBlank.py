@@ -1,51 +1,43 @@
 #!/usr/bin/env python
 __author__ = 'greghines'
-import numpy as np
-import matplotlib.pyplot as plt
-import csv
-import sys
-import os
-import pymongo
-import matplotlib.cbook as cbook
-import cPickle as pickle
-__author__ = 'greg'
 
-subjects = pickle.load(open("/home/greg/Databases/condor_ibcc.pickle","rb"))
-blanks = []
-notRetired = []
+import pymongo
+import random
+import os
+import urllib
 
 client = pymongo.MongoClient()
-db = client['condor_2014-09-14']
-collection = db["condor_subjects"]
+db = client['condor_2014-10-30']
+condor_subjects = db["condor_subjects"]
 
-toRetire = []
-i = 0
-with open("/home/greg/Databases/condor_ibcc.out","rb") as f:
-    reader = csv.reader(f,delimiter=" ")
+initial_blanks = []
+consensus_blanks = []
 
-    for subject_index,p0,p1 in reader:
-        if float(p1) >= 0.99:
-            subject_index = int(float(subject_index))
-            subject_id = subjects[subject_index]
-            blanks.append(subject_id)
+for subject in condor_subjects.find({"state":"complete"}):
+    zooniverse_id = subject["zooniverse_id"]
+    try:
+        reason = subject["metadata"]["retire_reason"]
+        if reason == "blank":
+            initial_blanks.append(zooniverse_id)
+        elif reason == "blank_consensus":
+            consensus_blanks.append(zooniverse_id)
+    except KeyError:
+        pass
 
-            r = collection.find_one({"zooniverse_id":subject_id})
+to_sample = random.sample(initial_blanks,100)
+for zooniverse_id in to_sample:
+    subject = condor_subjects.find_one({"zooniverse_id":zooniverse_id})
+    location = subject["location"]["standard"]
+    slash_index = location.rfind("/")
+    f_name = location[slash_index+1:]
+    if not(os.path.isfile("/home/greg/Databases/condors/images/blank/initial/"+f_name)):
+            urllib.urlretrieve ("http://www.condorwatch.org/subjects/standard/"+f_name, "/home/greg/Databases/condors/images/blank/initial/"+f_name)
 
-            state = r["state"]
-            if state in ["complete"]:
-                pass
-            elif state in ["active"]:
-
-
-                if r["classification_count"] > 5:
-                    toRetire.append(subject_id)
-                    continue
-                    print r["metadata"]["counters"]
-
-                    i += 1
-                    if i == 10:
-                        break
-            else:
-                print state
-
-print len(toRetire)
+to_sample = random.sample(consensus_blanks,100)
+for zooniverse_id in to_sample:
+    subject = condor_subjects.find_one({"zooniverse_id":zooniverse_id})
+    location = subject["location"]["standard"]
+    slash_index = location.rfind("/")
+    f_name = location[slash_index+1:]
+    if not(os.path.isfile("/home/greg/Databases/condors/images/blank/consensus/"+f_name)):
+            urllib.urlretrieve ("http://www.condorwatch.org/subjects/standard/"+f_name, "/home/greg/Databases/condors/images/blank/consensus/"+f_name)

@@ -19,20 +19,21 @@ blank_probabilities = []
 blank_total = 0
 consensus_blank_total = 0
 
-for subject in condor_subjects.find({"state":"complete"}):
-    try:
-        reason = subject["metadata"]["retire_reason"]
-        if reason == "blank":
-            blank_total += 1
-        elif reason == "blank_consensus":
-            consensus_blank_total += 1
-    except KeyError:
-        pass
-
-print blank_total
-print consensus_blank_total
-
-assert(False)
+# for subject in condor_subjects.find({"state":"complete"}):
+#     try:
+#         reason = subject["metadata"]["retire_reason"]
+#         if reason == "blank":
+#             blank_total += 1
+#         elif reason == "blank_consensus":
+#             consensus_blank_total += 1
+#     except KeyError:
+#         pass
+#
+# print blank_total
+# print consensus_blank_total
+#
+# assert(False)
+contains_condors = []
 
 for subject in condor_subjects.find({"state":"complete"}):
     counter = 0
@@ -57,23 +58,38 @@ for subject in condor_subjects.find({"state":"complete"}):
 
         image_annotations.append(annotations[:])
         blank_probabilities.append(sum([1. for a in annotations if a == 0])/float(len(annotations)))
+
+        condor_count = 0
+        for annotation_type in subject["metadata"]["counters"]:
+            if "condor" in annotation_type:
+                condor_count += 1
+                annotations.append(1)
+            else:
+                annotations.append(0)
+
+        if condor_count >= 3:
+            contains_condors.append(True)
+        else:
+            contains_condors.append(False)
+
     except KeyError:
         pass
 
 print len(image_annotations)
 #print reasons
-first_N = 3
+first_N = 4
 blanks = []
-for i in range(200):
+for i in range(100):
     blank_count = 0
-    for annotation_distribution in image_annotations:
+    for annotation_distribution,cc in zip(image_annotations,contains_condors):
         users = np.random.choice(len(annotation_distribution),15)
         annotations = [annotation_distribution[u] for u in users]
 
         #would this have been classified as blank due to the first N initial users all saying blank
-        if annotations[:first_N] == [0 for i in range(first_N)]:
+        if (annotations[:first_N] == [0 for i in range(first_N)]) and cc:
             blank_count += 1
         else:
+            continue
             #find out which annotation, if any, was the first to achieve 5 "votes"
             first_to_5 = None
             lowest_index = float("inf")
