@@ -40,7 +40,9 @@ for subject in condor_subjects.find({"state":"complete"}):
     annotations = []
 
 
-
+    print subject
+    print subject[u'location']["standard"]
+    assert False
     try:
 
         reason = subject["metadata"]["retire_reason"]
