@@ -91,7 +91,7 @@ for i, session in enumerate(condor_annotations.find()):
     if not(zooniverse_id in overall_annotations):
         continue
 
-    if overall_annotations[zooniverse_id] == {(("blank",1),):3}:
+    if overall_annotations[zooniverse_id] == {(("blank",1),):2}:
         #is this a false blank?
         completed_set.add(zooniverse_id)
         how_it_ended[zooniverse_id] = "blank"
@@ -105,7 +105,7 @@ for i, session in enumerate(condor_annotations.find()):
 
         if state == "complete":
             actual_reason = subject["metadata"]["retire_reason"]
-            if not(actual_reason in ["blank","blank_consensus"]):
+            if not(actual_reason in ["blank","blank_consensus","no_condors_present"]):
                 false_blank += 1
                 #if actual_reason == "no_condors_present":
                 #    print subject
@@ -163,7 +163,7 @@ for i, session in enumerate(condor_annotations.find()):
                     actual_reason = subject["metadata"]["retire_reason"]
                     #print actual_reason
                     #we retired an image because we thought it WAS blank
-                    if not(actual_reason in ["blank","blank_consensus"]):
+                    if not(actual_reason in ["blank","blank_consensus","no_condors_present"]):
                         #error - false blank
                         false_completed_blank += 1
                     else:
