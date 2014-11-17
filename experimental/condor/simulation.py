@@ -13,7 +13,7 @@ import urllib
 
 
 client = pymongo.MongoClient()
-db = client['condor_2014-11-06']
+db = client['condor_2014-11-11']
 condor_annotations = db["condor_classifications"]
 condor_subjects = db["condor_subjects"]
 overall_annotations = {}
@@ -21,7 +21,8 @@ overall_annotations = {}
 false_blank = 0
 completed = 0
 completed_blank = 0
-completed_consensus_blank =0
+consensus_blank =0
+initial_blank = 0
 unknown =0
 completed_set = set()
 problem = 0
@@ -30,8 +31,9 @@ false_completed_blank = 0
 num_users_before_retirement = []
 #how_it_ended = pickle.load(open("/home/greg/condor_temp","r"))
 strange = 0
+how_it_ended = {}
 cblank_to_blank = 0
-
+changed = 0
 blank_images = []
 consensus_blank_images = []
 
@@ -40,7 +42,10 @@ if os.path.exists("/home/ggdhines"):
 else:
     base_directory = "/home/greg"
 
-#previously_completed = pickle.load(open("/home/greg/condor_temp","r"))
+previously_completed = pickle.load(open("/home/greg/condor_temp","r"))
+classification_count = 0
+other_reasons = {}
+still_not_solved = 0
 
 for i, classification in enumerate(condor_annotations.find()):
     if classification["subjects"] == []:
@@ -54,6 +59,8 @@ for i, classification in enumerate(condor_annotations.find()):
 
     if "tutorial" in condor_subjects.find_one({"zooniverse_id":zooniverse_id}).keys():
         continue
+
+    classification_count += 1
 
     if zooniverse_id in completed_set:
         continue
@@ -109,39 +116,53 @@ for i, classification in enumerate(condor_annotations.find()):
         continue
 
     if overall_annotations[zooniverse_id] == {(("blank",1),):2}:
+        #if (zooniverse_id in previously_completed) and (previously_completed[zooniverse_id] == "cblank"):
+        #    changed +=1
         #is this a false blank?
         completed_set.add(zooniverse_id)
         num_users_before_retirement.append(sum(overall_annotations[zooniverse_id].values()))
-        # how_it_ended[zooniverse_id] = "blank"
+        how_it_ended[zooniverse_id] = "blank"
+        if not (zooniverse_id in previously_completed):# and (previously_completed[zooniverse_id] in ["complete","consensus"]):
+            changed += 1
+            try:
+                subject = condor_subjects.find_one({"zooniverse_id":zooniverse_id})
+                reason = subject["metadata"]["retire_reason"]
+                if not(reason in other_reasons):
+                    other_reasons[reason] = 1
+                else:
+                    other_reasons[reason] += 1
+            except KeyError:
+                still_not_solved += 1
 
-        blank_images.append(zooniverse_id)
+        # blank_images.append(zooniverse_id)
+        #
+        #
+        # state = subject["state"]
+        #
+        # #record
+        # completed += 1
+        # initial_blank += 1
+        # completed_blank += 1
+        #
+        # if state == "complete":
+        #     actual_reason = subject["metadata"]["retire_reason"]
+        #     if not(actual_reason in ["blank","blank_consensus"]):
+        #         false_blank += 1
+        #         #if actual_reason == "no_condors_present":
+        #         #    print subject
+        #
+        #     #if how_it_ended[zooniverse_id] == "blank_consensus":
+        #     #    cblank_to_blank += 1
+        #
+        #
+        # else:
+        #     #if not(zooniverse_id in previously_completed):
+        #     #    print zooniverse_id
+        #     unknown += 1
+    elif max(overall_annotations[zooniverse_id].values()) >= 5:
 
-        subject = condor_subjects.find_one({"zooniverse_id":zooniverse_id})
-        state = subject["state"]
 
-        #record
-        completed += 1
-        completed_blank += 1
-
-        if state == "complete":
-            actual_reason = subject["metadata"]["retire_reason"]
-            if not(actual_reason in ["blank","blank_consensus"]):
-                false_blank += 1
-                #if actual_reason == "no_condors_present":
-                #    print subject
-
-            #if how_it_ended[zooniverse_id] == "blank_consensus":
-            #    cblank_to_blank += 1
-
-
-        else:
-            #if not(zooniverse_id in previously_completed):
-            #    print zooniverse_id
-            unknown += 1
-    elif max(overall_annotations[zooniverse_id].values()) >= 4:
-
-
-        non_blank_reason = [ann for ann,votes in overall_annotations[zooniverse_id].items() if (votes >= 4) and (ann != (("blank",1),))]
+        non_blank_reason = [ann for ann,votes in overall_annotations[zooniverse_id].items() if (votes >= 5) and (ann != (("blank",1),))]
         blank_reason = [ann for ann,votes in overall_annotations[zooniverse_id].items() if (votes >= 5) and (ann == (("blank",1),))]
 
         # print overall_annotations[zooniverse_id].items()
@@ -158,7 +179,7 @@ for i, classification in enumerate(condor_annotations.find()):
             if non_blank_reason != []:
                 #we retired it in the simulation because we thought it was non-blank
                 regular_retire += 1
-                #how_it_ended[zooniverse_id] = "consensus"
+                how_it_ended[zooniverse_id] = "consensus"
                 #what was the actual reason the image was retired - if it was retired at all
                 state = subject["state"]
                 if state == "complete":
@@ -176,8 +197,9 @@ for i, classification in enumerate(condor_annotations.find()):
                 else:
                     unknown += 1
             else:
-                completed_consensus_blank += 1
+                consensus_blank += 1
                 consensus_blank_images.append(zooniverse_id)
+                how_it_ended[zooniverse_id] = "cblank"
                 #what was the actual reason the image was retired - if it was retired at all
                 state = subject["state"]
                 #how_it_ended[zooniverse_id] = "consensus_blank"
@@ -197,12 +219,12 @@ for i, classification in enumerate(condor_annotations.find()):
                     #print "="
                     unknown += 1
 
-    elif sum(overall_annotations[zooniverse_id].values()) == 10:
+    elif sum(overall_annotations[zooniverse_id].values()) == 15:
         num_users_before_retirement.append(sum(overall_annotations[zooniverse_id].values()))
         completed_set.add(zooniverse_id)
         subject = condor_subjects.find_one({"zooniverse_id":zooniverse_id})
         state = subject["state"]
-        #how_it_ended[zooniverse_id] = "complete"
+        how_it_ended[zooniverse_id] = "complete"
         regular_retire += 1
         completed += 1
         reason = subject["metadata"]["retire_reason"]
@@ -229,17 +251,15 @@ for i, classification in enumerate(condor_annotations.find()):
             completed_set.add(zooniverse_id)
 
 
-
-print unknown
-print false_blank
-print false_completed_blank
+print classification_count
 print completed
-print completed_blank
-print completed_consensus_blank
-print regular_retire
+print initial_blank
+print consensus_blank
+print changed
 print np.mean(num_users_before_retirement)
 print np.median(num_users_before_retirement)
-print strange
+print still_not_solved
+print other_reasons
 #pickle.dump(how_it_ended,open("/home/greg/condor_temp","w"))
 
 # not_completed = [zooniverse_id for zooniverse_id in overall_annotations if not(zooniverse_id in completed_set)]

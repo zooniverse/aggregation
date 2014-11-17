@@ -24,7 +24,7 @@ else:
     base_directory = "/home/greg"
 
 client = pymongo.MongoClient()
-db = client['condor_2014-11-06']
+db = client['condor_2014-11-11']
 classification_collection = db["condor_classifications"]
 subject_collection = db["condor_subjects"]
 
@@ -54,14 +54,21 @@ for subject_count,subject in enumerate(random.sample(to_sample_from,10)):
                 scale = 1.875
                 x = scale*float(animal["x"])
                 y = scale*float(animal["y"])
-                animal_type = animal["animal"]
-                if animal_type != "carcassOrScale":
+                try:
+                    animal_type = animal["animal"]
+                    if not(animal_type in ["carcassOrScale","carcass"]):
+                        annotation_list.append((x,y))
+                        user_list.append(user_index)
+                        print animal_type
+                except KeyError:
                     annotation_list.append((x,y))
                     user_list.append(user_index)
 
         except ValueError:
             pass
 
+    if annotation_list == []:
+        continue
     user_identified_condors,condor_clusters,noise__ = DivisiveDBSCAN(3).fit(annotation_list,user_list,debug=True)
     if not(os.path.isfile(base_directory+"/Databases/condors/images/"+object_id)):
         urllib.urlretrieve (url, base_directory+"/Databases/condors/images/"+object_id)
