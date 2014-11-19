@@ -18,7 +18,7 @@ sys.path.append(base_directory+"/github/pyIBCC/python")
 import ibcc
 
 client = pymongo.MongoClient()
-db = client['condor_2014-11-06']
+db = client['condor_2014-11-10']
 classification_collection = db["condor_classifications"]
 subject_collection = db["condor_subjects"]
 

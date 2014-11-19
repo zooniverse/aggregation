@@ -72,7 +72,7 @@ for zooniverse_id in random.sample(completed_subjects,200):
             markings_list = classification["annotations"][1]["value"]
             if isinstance(markings_list,dict):
                 for marking in markings_list.values():
-                    if marking["value"] in ["adult","chick"]:
+                    if marking["value"] in ["adult"]: #,"chick"]:
                         x,y = (float(marking["x"]),float(marking["y"]))
                         if not((x,y) in per_user):
                             per_user.append((x,y))
@@ -96,6 +96,8 @@ for zooniverse_id in random.sample(completed_subjects,200):
     if not(os.path.isfile(image_path)):
         urllib.urlretrieve(url, image_path)
 
+    print url
+
     penguins = []
     penguins_center = {}
     noise_points = {}
@@ -116,7 +118,7 @@ for zooniverse_id in random.sample(completed_subjects,200):
             #print penguin_clusters
             #print noise__
             noise_points[s] = [x for x,u in noise__]
-            print str(s) + "  -  " + str(len(user_identified_penguins))
+            #print str(s) + "  -  " + str(len(user_identified_penguins))
             #if len(user_identified_penguins) > 20:
             #    break
     except AssertionError:
@@ -140,7 +142,8 @@ for zooniverse_id in random.sample(completed_subjects,200):
         except ValueError:
             pass
 
-
+        print X
+        print Y
         plt.plot(X,Y,'.',color="blue")
         plt.show()
 
