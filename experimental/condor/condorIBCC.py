@@ -33,7 +33,7 @@ f.write("a,b,c\n")
 sampled_ids = []
 
 
-for subject_count,subject in enumerate(random.sample(to_sample_from,200)):
+for subject_count,subject in enumerate(random.sample(to_sample_from,500)):
     zooniverse_id = subject["zooniverse_id"]
     sampled_ids.append(zooniverse_id)
 

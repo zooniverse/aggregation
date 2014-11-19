@@ -96,8 +96,8 @@ class DivisiveDBSCAN:
             fig, ax = plt.subplots()
             im = ax.imshow(image)
 
-            #x,y = zip(*markings)
-            #plt.plot(x,y,'.',color='blue')
+            x,y = zip(*markings)
+            plt.plot(x,y,'.',color='blue')
 
         #double check if we actually need to be splitting this cluster - if not, just return it
         if len(list(set(user_ids))) == len(user_ids):
