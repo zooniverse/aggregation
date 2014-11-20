@@ -4,12 +4,15 @@ import numpy as np
 import os
 import pymongo
 import sys
-import urllib
-import matplotlib.cbook as cbook
-from PIL import Image
-import matplotlib.pyplot as plt
-import warnings
-import random
+
+if os.path.exists("/home/ggdhines"):
+    base_directory = "/home/ggdhines"
+else:
+    base_directory = "/home/greg"
+
+
+sys.path.append(base_directory+"/github/pyIBCC/python")
+import ibcc
 
 if os.path.exists("/home/ggdhines"):
     sys.path.append("/home/ggdhines/PycharmProjects/reduction/experimental/clusteringAlg")
@@ -38,8 +41,14 @@ steps = [2,5,20]
 condor_count_2 =  {k:[] for k in steps}
 condor_count_3 =  {k:[] for k in steps}
 
+big_userList = []
+animal_count = 0
+
+f = open(base_directory+"/Databases/condor_ibcc.csv","wb")
+f.write("a,b,c\n")
+
 for subject_count,zooniverse_id in enumerate(to_sample_from):
-    if (zooniverse_id in to_ignore_1) or (zooniverse_id in to_ignore_2):
+    if zooniverse_id in to_ignore_2:
         continue
     print zooniverse_id
     subject = subject_collection.find_one({"zooniverse_id":zooniverse_id})
@@ -51,11 +60,21 @@ for subject_count,zooniverse_id in enumerate(to_sample_from):
 
     annotation_list = []
 
-    user_markings = {k:[] for k in steps}
-    user_list = {k:[] for k in steps}
-    type_list = {k:[] for k in steps}
+    user_markings = []
+    user_list = []
+    type_list = []
 
-    for user_index,classification in enumerate(classification_collection.find({"subjects.zooniverse_id":zooniverse_id})):
+    for classification in classification_collection.find({"subjects.zooniverse_id":zooniverse_id}):
+        if "user_name" in classification:
+            user = classification["user_name"]
+        else:
+            user = classification["user_ip"]
+
+        if not(user in big_userList):
+            big_userList.append(user)
+
+        if user in user_list:
+            continue
 
         try:
             mark_index = [ann.keys() for ann in classification["annotations"]].index(["marks",])
@@ -66,45 +85,67 @@ for subject_count,zooniverse_id in enumerate(to_sample_from):
                 x = scale*float(animal["x"])
                 y = scale*float(animal["y"])
 
-                for s in steps:
-                    if user_index < s:
-                        #only add the animal if it is not a
-                        try:
-                            animal_type = animal["animal"]
-                            if animal_type == "condor":
-                                user_markings[s].append((x,y))
-                                user_list[s].append(user_index)
-                                type_list[s].append(animal_type)
+                try:
+                    animal_type = animal["animal"]
+                    if animal_type in ["condor","turkeyVulture","goldenEagle"]:
+                        user_markings.append((x,y))
+                        user_list.append(user)
+                        type_list.append(animal_type)
 
-                        except KeyError:
-                            pass
+                except KeyError:
+                    pass
 
         except ValueError:
             pass
 
-    #do the divisive k means for each
 
-    for s in steps:
-        #print s
-        if user_markings[s] == []:
-            condor_count_3[s].append(0.)
-            condor_count_2[s].append(0.)
-        else:
-            identified_animals,clusters = DivisiveKmeans(3).fit2(user_markings[s],user_list[s],debug=True)
-            condor_count_3[s].append(float(len(identified_animals)))
+    identified_animals,clusters = DivisiveKmeans(1).fit2(user_markings,user_list,debug=True)
 
-            if s != 20:
-                identified_animals,clusters = DivisiveKmeans(2).fit2(user_markings[s],user_list[s],debug=True)
-                condor_count_2[s].append(float(len(identified_animals)))
-for threshold in [5,10]:
-    print len([c for c in condor_count_3[20] if c <= threshold])/float(len(condor_count_3[20]))
-    for s in steps[:-1]:
-        ratio_3 = [a/b for a,b in zip(condor_count_3[s],condor_count_3[20]) if b <= threshold]
-        ratio_2 = [a/b for a,b in zip(condor_count_2[s],condor_count_3[20]) if b <= threshold]
+    for animal_cluster in clusters:
+        #print "===="
+        animal_count += 1
+        for pt in animal_cluster:
+            #convert user id into global index
+            user_index = big_userList.index(user_list[user_markings.index(pt)])
+            user_identified = type_list[user_markings.index(pt)]
+            if user_identified == "condor":
+                f.write(str(user_index) + ","+str(animal_count) + ",1\n")
+                #print str(user_index) + ","+str(animal_count) + ",1"
+            else:
+                f.write(str(user_index) + ","+str(animal_count) + ",0\n")
+                #print str(user_index) + ","+str(animal_count) + ",0"
 
-        print np.mean(ratio_2),np.median(ratio_2)
-        print np.mean(ratio_3),np.median(ratio_3)
-        print "==="
 
+f.close()
+with open(base_directory+"/Databases/condor_ibcc.py","wb") as f:
+    f.write("import numpy as np\n")
+    f.write("scores = np.array([0,1])\n")
+    f.write("nScores = len(scores)\n")
+    f.write("nClasses = 2\n")
+    f.write("inputFile = \""+base_directory+"/Databases/condor_ibcc.csv\"\n")
+    f.write("outputFile = \""+base_directory+"/Databases/condor_ibcc.out\"\n")
+    f.write("confMatFile = \""+base_directory+"/Databases/condor_ibcc.mat\"\n")
+    #f.write("nu0 = np.array([30,70])\n")
+    #f.write("alpha0 = np.array([[3, 1], [1,3]])\n")
+
+
+
+#start by removing all temp files
+try:
+    os.remove(base_directory+"/Databases/condor_ibcc.out")
+except OSError:
+    pass
+
+try:
+    os.remove(base_directory+"/Databases/condor_ibcc.mat")
+except OSError:
+    pass
+
+try:
+    os.remove(base_directory+"/Databases/condor_ibcc.csv.dat")
+except OSError:
+    pass
+
+ibcc.runIbcc(base_directory+"/Databases/condor_ibcc.py")
 
 

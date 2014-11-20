@@ -11,25 +11,114 @@ class DivisiveKmeans:
     def __init__(self, min_samples):
         self.min_samples = min_samples
 
-    def __fix__(self,centers,clusters,pts,user_list):
+    def __fix__(self,centers,clusters,pts,user_list,threshold,f_name=None):
+        while True:
+            relations = self.calc_relations(centers,clusters,pts,user_list,threshold)
+            if relations == []:
+                break
 
+            overlap = relations[0][1]
+
+
+
+            c1_index = relations[0][2]
+            c2_index = relations[0][3]
+
+            #make sure to pop in the right order so else the indices will get messed up
+            if c2_index > c1_index:
+                cluster_1 = clusters.pop(c2_index)
+                cluster_2 = clusters.pop(c1_index)
+
+                cent_1 = centers.pop(c2_index)
+                cent_2 = centers.pop(c1_index)
+            else:
+                cluster_1 = clusters.pop(c1_index)
+                cluster_2 = clusters.pop(c2_index)
+
+                cent_1 = centers.pop(c1_index)
+                cent_2 = centers.pop(c2_index)
+
+            # image_file = cbook.get_sample_data(f_name)
+            # image = plt.imread(image_file)
+            # fig, ax = plt.subplots()
+            # im = ax.imshow(image)
+            #
+            # plt.plot((cent_1[0],cent_2[0]),(cent_1[1],cent_2[1]),'.',color='yellow')
+            #
+            # plt.show()
+
+            if overlap != []:
+                assert(len(overlap) == 1)
+                overlap_user = overlap[0]
+                p1 = [p for p in cluster_1 if user_list[pts.index(p)] == overlap_user][0]
+                p2 = [p for p in cluster_2 if user_list[pts.index(p)] == overlap_user][0]
+
+                #we need to merge these two points so first remove them from the list
+                #both the overall list and the two for the individual clusters
+                cluster_1.remove(p1)
+                cluster_2.remove(p2)
+                p1_index = pts.index(p1)
+                p2_index = pts.index(p2)
+                #since each user may have multiple points in the list we need to remove by index and not by value
+                if p2_index > p1_index:
+                    pts.pop(p2_index)
+                    user_list.pop(p2_index)
+                    pts.pop(p1_index)
+                    user_list.pop(p1_index)
+                else:
+                    pts.pop(p1_index)
+                    user_list.pop(p1_index)
+                    pts.pop(p2_index)
+                    user_list.pop(p2_index)
+
+                avg_pt = ((p1[0]+p2[0])/2.,(p1[1]+p2[1])/2.)
+                pts.append(avg_pt)
+                user_list.append(overlap_user)
+
+                new_cluster = cluster_1[:]
+                new_cluster.extend(cluster_2)
+                new_cluster.append(avg_pt)
+                clusters.append(new_cluster)
+
+                #and update the center
+                X,Y = zip(*new_cluster)
+                centers.append((np.mean(X),np.mean(Y)))
+
+            else:
+                new_cluster = cluster_1[:]
+                new_cluster.extend(cluster_2)
+                clusters.append(new_cluster)
+
+                #and update the center
+                X,Y = zip(*new_cluster)
+                centers.append((np.mean(X),np.mean(Y)))
+
+        return centers,clusters
+
+    def calc_relations(self,centers,clusters,pts,user_list,threshold):
         relations = []
         for c1_index in range(len(clusters)):
             for c2_index in range(c1_index+1,len(clusters)):
+                c1 = centers[c1_index]
+                c2 = centers[c2_index]
 
-
-                c1 = clusters[c1_index]
-                c2 = clusters[c2_index]
-
-
-                dist = math.sqrt((centers[c1][0]-centers[c2][0])**2+(centers[c1][1]-centers[c2][1])**2)
+                dist = math.sqrt((c1[0]-c2[0])**2+(c1[1]-c2[1])**2)
                 users_1 = [user_list[pts.index(pt)] for pt in clusters[c1_index]]
                 users_2 = [user_list[pts.index(pt)] for pt in clusters[c2_index]]
 
                 overlap = [u for u in users_1 if u in users_2]
-                relations.append((dist,len(overlap),c1_index,c2_index))
+                #print (len(overlap),dist)
+
+                #print (len(overlap),dist)
+                if (len(overlap) <= 1) and (dist <= threshold):
+                    relations.append((dist,overlap,c1_index,c2_index))
 
         relations.sort(key= lambda x:x[0])
+        relations.sort(key= lambda x:len(x[1]))
+
+        return relations
+
+
 
 
     def fit(self, markings,user_ids,jpeg_file=None,debug=False):
@@ -77,6 +166,16 @@ class DivisiveKmeans:
             return cluster_centers
 
     def fit2(self, markings,user_ids,jpeg_file=None,debug=False):
+        #check to see if we need to split at all, i.e. there might only be one animal in total
+        if len(user_ids) == len(list(set(user_ids))):
+            X,Y = zip(*markings)
+            cluster_centers = [(np.mean(X),np.mean(Y)), ]
+            end_clusters = [markings,]
+            if debug:
+                return cluster_centers, end_clusters
+            else:
+                return cluster_centers
+
         clusters_to_go = []
         clusters_to_go.append((markings,user_ids,1))
 
@@ -84,18 +183,6 @@ class DivisiveKmeans:
         cluster_centers = []
 
         colors_ = list(six.iteritems(colors.cnames))
-
-        if jpeg_file is not None:
-            image_file = cbook.get_sample_data(jpeg_file)
-            image = plt.imread(image_file)
-            fig, ax = plt.subplots()
-            im = ax.imshow(image)
-
-            X,Y = zip(*markings)
-            #X = [1.875 *x for x in X]
-            #Y = [1.875 *y for y in Y]
-            plt.plot(X,Y,'.',color="blue")
-            plt.show()
 
         while True:
             #if we have run out of clusters to process, break (hopefully done :) )

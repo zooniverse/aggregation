@@ -24,25 +24,30 @@ else:
     base_directory = "/home/greg"
 
 client = pymongo.MongoClient()
-db = client['condor_2014-11-06']
+db = client['condor_2014-11-11']
 classification_collection = db["condor_classifications"]
 subject_collection = db["condor_subjects"]
 
-with open(base_directory+"/Documents/condor_error","r") as f:
+with open(base_directory+"/Dropbox/condor_error","r") as f:
     while True:
         zooniverse_id = f.readline()
         condors = f.readline()
 
+        if not zooniverse_id:
+            break
+
         subject = subject_collection.find_one({"zooniverse_id":zooniverse_id[:-1]})
-        print subject
+        print subject["metadata"]["file"]
+
 
         url = subject["location"]["standard"]
 
         slash_index = url.rfind("/")
         object_id = url[slash_index+1:]
 
-        if not zooniverse_id:
-            break
+
+
+        continue
 
         annotation_list = []
         user_list = []

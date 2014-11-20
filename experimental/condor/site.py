@@ -24,29 +24,30 @@ else:
     base_directory = "/home/greg"
 
 client = pymongo.MongoClient()
-db = client['condor_2014-11-06']
+db = client['condor_2014-11-11']
 classification_collection = db["condor_classifications"]
 subject_collection = db["condor_subjects"]
 
 relations = []
+one = []
 
 #print subject_collection.count({"classification_count":{"$gt":1}})
 
 for subject in subject_collection.find({"classification_count":{"$gt":1}}):
+    #if not("USFWS photos/Remote Feeding Site Photos/Remote Feeding Photos_2008/Bitter Creek/NRFS/NRFS 4.16-4.17.2008=CORA, 17CACO/" in subject["metadata"]["file"]):
     if not("USFWS photos/Remote Feeding Site Photos/Remote Feeding Photos_2011/Bitter Creek/BC 34.929570, -119.363840 Dec 17-Jan 8, 2011-12" in subject["metadata"]["file"]):
         continue
 
 
     zooniverse_id = subject["zooniverse_id"]
-    print zooniverse_id
-    print subject["metadata"]["file"]
-    print subject["location"]["standard"]
+    #print zooniverse_id
+    # print subject["metadata"]["file"]
+    # print subject["location"]["standard"]
 
     annotation_list = []
     user_list = []
 
-    for user_index,classification in enumerate(classification_collection.find({"subjects.zooniverse_id":zooniverse_id[:-1]})):
-
+    for user_index,classification in enumerate(classification_collection.find({"subjects.zooniverse_id":zooniverse_id})):
         try:
             mark_index = [ann.keys() for ann in classification["annotations"]].index(["marks",])
             markings = classification["annotations"][mark_index].values()[0]
@@ -70,6 +71,8 @@ for subject in subject_collection.find({"classification_count":{"$gt":1}}):
             pass
 
     user_identified_condors,clusters = DivisiveKmeans(3).fit2(annotation_list,user_list,debug=True)
+    #print len(user_identified_condors)
+    tt = 0
     if len(user_identified_condors) > 1:
         for c1_index in range(len(clusters)):
             for c2_index in range(c1_index+1,len(clusters)):
@@ -83,11 +86,19 @@ for subject in subject_collection.find({"classification_count":{"$gt":1}}):
                 users_2 = [user_list[annotation_list.index(pt)] for pt in clusters[c2_index]]
 
                 overlap = [u for u in users_1 if u in users_2]
-                relations.append((dist,len(overlap),c1_index,c2_index))
+                if len(overlap) <= 1:
+                    relations.append((dist,len(overlap),c1_index,c2_index))
+                    tt += 1
 
         #relations.sort(key= lambda x:x[0])
+
+    if tt > 0:
+        one.append(zooniverse_id)
+    print tt
 
 print len(relations)
 x = zip(*relations)[0]
 n, bins, patches = plt.hist(x, 20)
+print bins
+print one
 plt.show()
