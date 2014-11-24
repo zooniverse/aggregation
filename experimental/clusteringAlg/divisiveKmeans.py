@@ -167,14 +167,22 @@ class DivisiveKmeans:
 
     def fit2(self, markings,user_ids,jpeg_file=None,debug=False):
         #check to see if we need to split at all, i.e. there might only be one animal in total
+
         if len(user_ids) == len(list(set(user_ids))):
-            X,Y = zip(*markings)
-            cluster_centers = [(np.mean(X),np.mean(Y)), ]
-            end_clusters = [markings,]
-            if debug:
-                return cluster_centers, end_clusters
+            #do these points meet the minimum threshold value?
+            if len(markings) >= self.min_samples:
+                X,Y = zip(*markings)
+                cluster_centers = [(np.mean(X),np.mean(Y)), ]
+                end_clusters = [markings,]
+                if debug:
+                    return cluster_centers, end_clusters
+                else:
+                    return cluster_centers
             else:
-                return cluster_centers
+                if debug:
+                    return [], []
+                else:
+                    return []
 
         clusters_to_go = []
         clusters_to_go.append((markings,user_ids,1))
@@ -246,6 +254,8 @@ class DivisiveKmeans:
 
                     break
 
+        for c in end_clusters:
+            assert(len(c) >= self.min_samples)
 
         if debug:
             return cluster_centers, end_clusters
