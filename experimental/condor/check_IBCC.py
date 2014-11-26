@@ -18,7 +18,7 @@ else:
 (big_subjectList,big_userList) = pickle.load(open(base_directory+"/Databases/tempOut.pickle","rb"))
 
 client = pymongo.MongoClient()
-db = client['condor_2014-11-20']
+db = client['condor_2014-11-23']
 classification_collection = db["condor_classifications"]
 subject_collection = db["condor_subjects"]
 
@@ -44,23 +44,24 @@ with open(base_directory+"/Databases/condor_ibcc.out","rb") as f:
                 total = float(sum(subject["metadata"]["counters"].values()))
                 n = 0
 
-                    for tag in subject["metadata"]["counters"]:
-                        if "condor" in tag:
-                            n += subject["metadata"]["counters"][tag]
+                for tag in subject["metadata"]["counters"]:
+                    if "condor" in tag:
+                        n += subject["metadata"]["counters"][tag]
 
+                ourProb =  n/total
                 if prob > 0.95:
-                    ourProb =  n/total
-                    if ourProb < 0.5:
+
+                    if (ourProb < 0.5):
                         print ourProb
                         print subject["location"]["standard"]
                         errors += 1
                     else:
                         low += 1
-                # X.append(prob)
-                # Y.append(ourProb)
+                X.append(prob)
+                Y.append(ourProb)
 
             except KeyError:
                 pass
 print errors,low
-#plt.plot(X,Y,'.')
-#plt.show()
+plt.plot(X,Y,'.')
+plt.show()

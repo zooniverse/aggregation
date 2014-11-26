@@ -36,7 +36,7 @@ else:
     base_directory = "/home/greg"
 
 client = pymongo.MongoClient()
-db = client['condor_2014-11-20']
+db = client['condor_2014-11-23']
 classification_collection = db["condor_classifications"]
 subject_collection = db["condor_subjects"]
 
@@ -51,8 +51,13 @@ f = open(base_directory+"/Databases/condor_ibcc.csv","wb")
 f.write("a,b,c\n")
 alreadyDone = []
 
+subjectVote = {}
+
 for ii,classification in enumerate(classification_collection.find()):
     print ii
+    if ii == 100000:
+        break
+
     if classification["subjects"] == []:
         continue
     zooniverse_id = classification["subjects"][0]["zooniverse_id"]
@@ -99,13 +104,46 @@ for ii,classification in enumerate(classification_collection.find()):
 
         if found:
             f.write(str(user_index) + ","+str(subject_index) + ",1\n")
+            if not(zooniverse_id in subjectVote):
+                subjectVote[zooniverse_id] = [1]
+            else:
+                subjectVote[zooniverse_id].append(1)
         else:
             f.write(str(user_index) + ","+str(subject_index) + ",0\n")
+            if not(zooniverse_id in subjectVote):
+                subjectVote[zooniverse_id] = [0]
+            else:
+                subjectVote[zooniverse_id].append(0)
 
     except ValueError:
-        pass
+        f.write(str(user_index) + ","+str(subject_index) + ",0\n")
+        if not(zooniverse_id in subjectVote):
+            subjectVote[zooniverse_id] = [0]
+        else:
+            subjectVote[zooniverse_id].append(0)
 
+condor_count = 0.
+total_count = 0.
+false_positives = []
+true_positives = []
+false_negatives = []
+true_negatives = []
 
+for votes in subjectVote.values():
+    if np.mean(votes) >= 0.5:
+        condor_count += 1
+        true_positives.append(np.mean(votes))
+        #false_negatives.append(1-np.mean(votes))
+    else:
+        #false_positives.append(np.mean(votes))
+        true_negatives.append(1-np.mean(votes))
+
+    total_count += 1
+
+pp = condor_count / total_count
+
+print np.mean(true_positives)
+print np.mean(true_negatives)
 
 f.close()
 with open(base_directory+"/Databases/condor_ibcc.py","wb") as f:
@@ -116,8 +154,8 @@ with open(base_directory+"/Databases/condor_ibcc.py","wb") as f:
     f.write("inputFile = \""+base_directory+"/Databases/condor_ibcc.csv\"\n")
     f.write("outputFile = \""+base_directory+"/Databases/condor_ibcc.out\"\n")
     f.write("confMatFile = \""+base_directory+"/Databases/condor_ibcc.mat\"\n")
-    #f.write("nu0 = np.array([30,70])\n")
-    #f.write("alpha0 = np.array([[3, 1], [1,3]])\n")
+    f.write("nu0 = np.array(["+str(int((1-pp)*100))+","+str(int(pp*100))+"])\n")
+    f.write("alpha0 = np.array([[4,1], [1,4]])\n")
 
 
 
