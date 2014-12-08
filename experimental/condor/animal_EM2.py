@@ -38,7 +38,7 @@ else:
     base_directory = "/home/greg"
 
 client = pymongo.MongoClient()
-db = client['condor_2014-11-23']
+db = client['condor_2014-11-20']
 classification_collection = db["condor_classifications"]
 subject_collection = db["condor_subjects"]
 
@@ -96,7 +96,7 @@ to_sample_from = list(subject_collection.find({"state":"complete"}))
 
 votes = []
 
-sample = random.sample(to_sample_from,50)
+sample = random.sample(to_sample_from,500)
 #sample.extend(random.sample(to_sample_from2,1000))
 # for subject_index,subject in enumerate(sample):
 #     print "== " + str(subject_index)
@@ -213,6 +213,13 @@ confusion = [[0. for i in range(len(animals))] for j in range(len(animals))]
 for animal,most_likely in zip(animal_votes,plurality_vote):
     for reported in animal:
         confusion[reported][most_likely] += 1
+
+confusion = [[1. for i in range(len(animals))] for j in range(len(animals))]
+confusion[0][0] = 3
+confusion[1][1] = 3
+confusion[2][2] = 3
+confusion[3][3] = 3
+confusion[4][4] = 3
 
 confusion = [[c/sum(row) for c in row] for row in confusion]
 #

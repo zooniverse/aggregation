@@ -71,7 +71,9 @@ class Subject():
             self.old_most_likely = self.most_likely_class
 
             #print self.prob_estimate
-            self.prob_estimate = [p/sum(self.prob_estimate) for p in self.prob_estimate]
+            #self.prob_estimate = [p/sum(self.prob_estimate) for p in self.prob_estimate]
+            self.prob_estimate = [0. for p in self.prob_estimate]
+            self.prob_estimate[self.most_likely_class] = 1.
             #print self.prob_estimate
             assert max(self.prob_estimate) > 0
             #print self.prob_estimate
@@ -114,7 +116,7 @@ class User():
         assert(max(self.confusion[reported_c]) > 0)
         #if sum(self.count) < 25:
         #    return 1.
-        return max(self.confusion[reported_c][c],0.01)
+        return max(self.confusion[reported_c][c],0.001)
 
     def __updateConfusion__(self):
         if len(self.classifications) == 0:

@@ -18,7 +18,7 @@ else:
 (big_subjectList,big_userList) = pickle.load(open(base_directory+"/Databases/tempOut.pickle","rb"))
 
 client = pymongo.MongoClient()
-db = client['condor_2014-11-23']
+db = client['condor_2014-11-20']
 classification_collection = db["condor_classifications"]
 subject_collection = db["condor_subjects"]
 
@@ -64,4 +64,8 @@ with open(base_directory+"/Databases/condor_ibcc.out","rb") as f:
                 pass
 print errors,low
 plt.plot(X,Y,'.')
+plt.xlim((-0.05,1.05))
+plt.ylim((-0.05,1.05))
+plt.xlabel("IBCC")
+plt.ylabel("Percentage")
 plt.show()
