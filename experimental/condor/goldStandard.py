@@ -14,7 +14,7 @@ else:
     base_directory = "/home/greg"
 
 client = pymongo.MongoClient()
-db = client['condor_2014-11-20']
+db = client['condor_2014-11-23']
 classification_collection = db["condor_classifications"]
 subject_collection = db["condor_subjects"]
 

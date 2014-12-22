@@ -22,8 +22,10 @@ def index(a, x):
         return i
     raise ValueError
 
+sys.path.append(base_directory+"/github/reduction/experimental/classifier")
 sys.path.append(base_directory+"/github/pyIBCC/python")
 import ibcc
+from iterativeEM import IterativeEM
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -31,14 +33,14 @@ else:
     base_directory = "/home/greg"
 
 client = pymongo.MongoClient()
-db = client['condor_2014-11-20']
+db = client['condor_2014-11-23']
 classification_collection = db["condor_classifications"]
 subject_collection = db["condor_subjects"]
 
 gold = pickle.load(open(base_directory+"/condor_gold.pickle","rb"))
 gold.sort(key = lambda x:x[1])
 to_sample_from = (zip(*gold)[0])[1301:]
-sample = random.sample(to_sample_from,500)
+sample = random.sample(to_sample_from,100)
 
 big_userList = []
 big_subjectList = []
@@ -52,8 +54,15 @@ subjectVote = {}
 
 gold_condor = []
 
-for subject_index,zooniverse_id in enumerate(sample):
-    print subject_index
+only_one = []
+vote_list = []
+for count,zooniverse_id in enumerate(sample):
+    subject = subject_collection.find_one({"zooniverse_id":zooniverse_id})
+    if subject["classification_count"] < 3:
+        print "**"
+        only_one.append(zooniverse_id)
+        continue
+    print count
 
     #gold standard
     gold_classification = classification_collection.find_one({"user_name":"wreness", "subjects.zooniverse_id":zooniverse_id})
@@ -83,8 +92,7 @@ for subject_index,zooniverse_id in enumerate(sample):
     alreadyDone = []
     classification_count = 0
     for classification in classification_collection.find({"subjects.zooniverse_id":zooniverse_id}):
-        if ("user_name" in classification) and (classification["user_name"] == "wreness"):
-            continue
+
 
 
         if "user_name" in classification:
@@ -92,8 +100,18 @@ for subject_index,zooniverse_id in enumerate(sample):
         else:
             user = classification["user_ip"]
 
+        #print user
+
+        if ("user_name" in classification) and (classification["user_name"] == "wreness"):
+            continue
+
         if user in alreadyDone:
             continue
+
+        classification_count += 1
+
+        if classification_count == 3:
+            break
 
         alreadyDone.append(user)
 
@@ -105,9 +123,7 @@ for subject_index,zooniverse_id in enumerate(sample):
         user_index = big_userList.index(user)
         subject_index = big_subjectList.index(zooniverse_id)
 
-        classification_count += 1
-        if classification_collection == 50:
-            break
+
 
 
         try:
@@ -126,12 +142,14 @@ for subject_index,zooniverse_id in enumerate(sample):
 
 
             if found:
+                vote_list.append((user_index,subject_index,1))
                 f.write(str(user_index) + ","+str(subject_index) + ",1\n")
                 if not(zooniverse_id in subjectVote):
                     subjectVote[zooniverse_id] = [1]
                 else:
                     subjectVote[zooniverse_id].append(1)
             else:
+                vote_list.append((user_index,subject_index,0))
                 f.write(str(user_index) + ","+str(subject_index) + ",0\n")
                 if not(zooniverse_id in subjectVote):
                     subjectVote[zooniverse_id] = [0]
@@ -144,6 +162,9 @@ for subject_index,zooniverse_id in enumerate(sample):
                 subjectVote[zooniverse_id] = [0]
             else:
                 subjectVote[zooniverse_id].append(0)
+    if classification_count == 0:
+        print subject
+    assert classification_count > 0
 
 
 
@@ -154,21 +175,30 @@ true_positives = []
 false_negatives = []
 true_negatives = []
 
+confusion = [[0.,0.],[0.,0.]]
+
 for votes in subjectVote.values():
     if np.mean(votes) >= 0.5:
         condor_count += 1
+        confusion[1][1] += np.mean(votes)
+        confusion[1][0] += 1 - np.mean(votes)
         true_positives.append(np.mean(votes))
         #false_negatives.append(1-np.mean(votes))
     else:
         #false_positives.append(np.mean(votes))
         true_negatives.append(1-np.mean(votes))
+        confusion[0][0] += 1 - np.mean(votes)
+        confusion[0][1] += np.mean(votes)
 
     total_count += 1
 
 pp = condor_count / total_count
+print confusion
+confusion = [[max(int(confusion[0][0]),1),max(int(confusion[0][1]),1)],[max(int(confusion[1][0]),1),max(int(confusion[1][1]),1)]]
 
-print np.mean(true_positives)
-print np.mean(true_negatives)
+print confusion
+print pp
+
 
 f.close()
 with open(base_directory+"/Databases/condor_ibcc.py","wb") as f:
@@ -180,7 +210,9 @@ with open(base_directory+"/Databases/condor_ibcc.py","wb") as f:
     f.write("outputFile = \""+base_directory+"/Databases/condor_ibcc.out\"\n")
     f.write("confMatFile = \""+base_directory+"/Databases/condor_ibcc.mat\"\n")
     f.write("nu0 = np.array(["+str(int((1-pp)*100))+","+str(int(pp*100))+"])\n")
-    #f.write("alpha0 = np.array([[20,1], [1,20]])\n")
+    f.write("alpha0 = np.array("+str(confusion)+")\n")
+    #f.write("alpha0 = np.array([[185,1],[6,52]])\n")
+    #f.write("alpha0 = np.array([[3,1],[1,3]])\n")
 
 
 
@@ -246,12 +278,86 @@ for alpha in alpha_list:
     roc_X.append(negative_rate)
     roc_Y.append(positive_rate)
 
+
+
 #print roc_X
 
-plt.plot(roc_X,roc_Y)
+plt.plot(roc_X,roc_Y,color="red")
+X_positive = []
+X_negative = []
+#repeat with MV
+
+for subject_index,zooniverse_id in enumerate(big_subjectList):
+    votes = subjectVote[zooniverse_id]
+    wreness_condor = gold_condor[subject_index]
+
+    if wreness_condor == 0:
+        X_negative.append(np.mean(votes))
+    else:
+        X_positive.append(np.mean(votes))
+
+alpha_list = X_negative[:]
+alpha_list.extend(X_positive)
+alpha_list.sort()
+
+roc_X = []
+roc_Y = []
+for alpha in alpha_list:
+    positive_count = sum([1 for x in X_positive if x >= alpha])
+    positive_rate = positive_count/float(len(X_positive))
+
+    negative_count = sum([1 for x in X_negative if x >= alpha])
+    negative_rate = negative_count/float(len(X_negative))
+
+    roc_X.append(negative_rate)
+    roc_Y.append(positive_rate)
+
+
+
+#print roc_X
+
+plt.plot(roc_X,roc_Y,color="green")
+
+
+classify = IterativeEM()
+classify.__classify__(vote_list,2)
+estimates = classify.__getEstimates__()
+X_positive = []
+X_negative = []
+for subject_index,zooniverse_id in enumerate(big_subjectList):
+    probability = estimates[subject_index]
+    wreness_condor = gold_condor[subject_index]
+
+    if wreness_condor == 0:
+        X_negative.append(probability)
+    else:
+        X_positive.append(probability)
+
+alpha_list = X_negative[:]
+alpha_list.extend(X_positive)
+alpha_list.sort()
+
+roc_X = []
+roc_Y = []
+for alpha in alpha_list:
+    positive_count = sum([1 for x in X_positive if x >= alpha])
+    positive_rate = positive_count/float(len(X_positive))
+
+    negative_count = sum([1 for x in X_negative if x >= alpha])
+    negative_rate = negative_count/float(len(X_negative))
+
+    roc_X.append(negative_rate)
+    roc_Y.append(positive_rate)
+
+
+
+#print roc_X
+
+plt.plot(roc_X,roc_Y,color="blue")
+
 #plt.xlim((0,1.05))
 plt.plot((0,1),(0,1),'--')
 plt.xlabel("False Positive Rate")
 plt.ylabel("True Positive Rate")
-plt.plot([0.058],[0.875],'o')
+#plt.plot([0.058],[0.875],'o')
 plt.show()

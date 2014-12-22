@@ -34,12 +34,9 @@ if not(os.path.isfile("/home/greg/Databases/galaxy_zoo_ibcc.csv")):
             try:
                 subject_index = subjects.index(subject_id)
             except ValueError:
-                if len(subjects) == 100000:
-                    continue
-
                 subjects.append(subject_id)
                 subject_index = len(subjects)-1
-            i += 1
+
             try:
                 user_index = users.index(user_id)
             except ValueError:
@@ -51,6 +48,8 @@ if not(os.path.isfile("/home/greg/Databases/galaxy_zoo_ibcc.csv")):
             else:
                 errorCount += 1
                 continue
+
+
 
             ibccOut.write(str(user_index) + "," + str(subject_index) + "," + candels_index + "\n")
 
@@ -92,3 +91,4 @@ import datetime
 print datetime.datetime.time(datetime.datetime.now())
 ibcc.runIbcc("/home/greg/Databases/galaxy_zoo_ibcc.py")
 print datetime.datetime.time(datetime.datetime.now())
+
