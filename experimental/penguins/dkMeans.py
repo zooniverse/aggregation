@@ -77,10 +77,12 @@ for subject_index,subject in enumerate(collection2.find({"metadata.path":{"$rege
 
     zooniverse_id = subject["zooniverse_id"]
     print zooniverse_id
+    subject_count = 0
     for r in collection.find({"subjects" : {"$elemMatch": {"zooniverse_id":zooniverse_id}}}):
         ip = r["user_ip"]
         n = 0
         xy_list = []
+        subject_count += 1
         try:
             if isinstance(r["annotations"][1]["value"],dict):
                 for marking in r["annotations"][1]["value"].values():
@@ -88,8 +90,11 @@ for subject_index,subject in enumerate(collection2.find({"metadata.path":{"$rege
                         x,y = (float(marking["x"]),float(marking["y"]))
                         user_markings.append((x,y))
                         user_ips.append(ip)
+
         except KeyError:
             print r["annotations"]
+
+    print subject_count
 
     user_identified_condors,clusters,users = DivisiveKmeans(1).fit2(user_markings,user_ips,debug=True)
 
@@ -128,9 +133,13 @@ XY = sorted(zip(X,Y),key=lambda x:x[0])
 lol = lambda lst, sz: [lst[i:i+sz] for i in range(0, len(lst), sz)]
 
 
-#print pearsonr(X,Y)
-#plt.plot(Y,X,'.')
-#plt.show()
+print pearsonr(X,Y)
+plt.plot(Y,X,'.')
+
+plt.xlabel("Distance to Closest Neighbour")
+plt.ylabel("Y Coordinate")
+plt.show()
+assert False
 
 less_05 = 0
 less_1 = 0

@@ -11,26 +11,34 @@ class DivisiveKmeans:
     def __init__(self, min_samples):
         self.min_samples = min_samples
 
-    def __fix__(self,centers,clusters,pts,user_list,threshold,f_name=None):
+    def __fix__(self,centers,clusters,users_per_cluster,threshold,f_name=None):
+        #look for abnormally close clusters with only one or zero users in common
+        #zero is possible as a result of how k-means splits points
+        #users per cluster must in the same order as the points per cluster
         while True:
-            relations = self.calc_relations(centers,clusters,pts,user_list,threshold)
+            #compare every pair of clusters - returns only those clusters with 0 or 1 users in common
+            #within the threshold
+            relations = self.calc_relations(centers,users_per_cluster,threshold)
             if relations == []:
                 break
 
+            #look at the closest pair
             overlap = relations[0][1]
-
-
-
+            distance = relations[0][0]
             c1_index = relations[0][2]
             c2_index = relations[0][3]
 
             #make sure to pop in the right order so else the indices will get messed up
             if c2_index > c1_index:
-                cluster_1 = clusters.pop(c2_index)
-                cluster_2 = clusters.pop(c1_index)
+                cluster_2 = clusters.pop(c2_index)
+                cluster_1 = clusters.pop(c1_index)
 
-                cent_1 = centers.pop(c2_index)
-                cent_2 = centers.pop(c1_index)
+                cent_2 = centers.pop(c2_index)
+                cent_1 = centers.pop(c1_index)
+
+                users_2 = users_per_cluster.pop(c2_index)
+                users_1 = users_per_cluster.pop(c1_index)
+
             else:
                 cluster_1 = clusters.pop(c1_index)
                 cluster_2 = clusters.pop(c2_index)
@@ -38,75 +46,84 @@ class DivisiveKmeans:
                 cent_1 = centers.pop(c1_index)
                 cent_2 = centers.pop(c2_index)
 
-            # image_file = cbook.get_sample_data(f_name)
-            # image = plt.imread(image_file)
-            # fig, ax = plt.subplots()
-            # im = ax.imshow(image)
-            #
-            # plt.plot((cent_1[0],cent_2[0]),(cent_1[1],cent_2[1]),'.',color='yellow')
-            #
-            # plt.show()
+                users_1 = users_per_cluster.pop(c1_index)
+                users_2 = users_per_cluster.pop(c2_index)
 
-            if overlap != []:
+            #the distance < threshold check may be redundant - since calc_relations can also check
+            #but doesn't hurt
+            if (overlap != []) and (distance < threshold):
                 assert(len(overlap) == 1)
                 overlap_user = overlap[0]
-                p1 = [p for p in cluster_1 if user_list[pts.index(p)] == overlap_user][0]
-                p2 = [p for p in cluster_2 if user_list[pts.index(p)] == overlap_user][0]
+                #the point in each cluster which corresponds to the overlapping user
+                p1 = cluster_1.pop(users_1.index(overlap_user))
+                #double check that there no other equaivalent points in the array
+                #shouldn't happen - unless by really bad luck
+                assert sum([1 for p in cluster_1 if (p == p1)]) == 0
 
-                #we need to merge these two points so first remove them from the list
-                #both the overall list and the two for the individual clusters
-                cluster_1.remove(p1)
-                cluster_2.remove(p2)
-                p1_index = pts.index(p1)
-                p2_index = pts.index(p2)
-                #since each user may have multiple points in the list we need to remove by index and not by value
-                if p2_index > p1_index:
-                    pts.pop(p2_index)
-                    user_list.pop(p2_index)
-                    pts.pop(p1_index)
-                    user_list.pop(p1_index)
-                else:
-                    pts.pop(p1_index)
-                    user_list.pop(p1_index)
-                    pts.pop(p2_index)
-                    user_list.pop(p2_index)
+                p2 = cluster_2.pop(users_2.index(overlap_user))
+                #double check that there no other equaivalent points in the array
+                #shouldn't happen - unless by really bad luck
+                assert sum([1 for p in cluster_1 if (p == p2)]) == 0
 
-                avg_pt = ((p1[0]+p2[0])/2.,(p1[1]+p2[1])/2.)
-                pts.append(avg_pt)
-                user_list.append(overlap_user)
+                #since we have removed the points, we now remove the users themselves
+                users_1.remove(overlap_user)
+                users_2.remove(overlap_user)
 
-                new_cluster = cluster_1[:]
-                new_cluster.extend(cluster_2)
-                new_cluster.append(avg_pt)
-                clusters.append(new_cluster)
+                #now merge
+                #for now, only deal with 2D points - which should always be the case
+                assert len(p1) == 2
+                avg_pt = ((p1[0]+p2[0])/2., (p1[1]+p2[1])/2.)
+                joint_cluster = cluster_1[:]
+                joint_cluster.extend(cluster_2)
+                joint_cluster.append(avg_pt)
 
-                #and update the center
-                X,Y = zip(*new_cluster)
-                centers.append((np.mean(X),np.mean(Y)))
+                joint_users = users_1[:]
+                joint_users.extend(users_2)
+                joint_users.append(overlap_user)
+
+                #recalculate the center
+                X,Y = zip(*joint_cluster)
+                center = (np.mean(X),np.mean(Y))
+
+                #add this new merged cluster back
+                centers.append(center)
+                clusters.append(joint_cluster)
+                users_per_cluster.append(joint_users)
 
             else:
-                new_cluster = cluster_1[:]
-                new_cluster.extend(cluster_2)
-                clusters.append(new_cluster)
+                assert overlap == []
+                #we have no nearby clusters with no common users - should be easy to merge
 
-                #and update the center
-                X,Y = zip(*new_cluster)
-                centers.append((np.mean(X),np.mean(Y)))
+                joint_cluster = cluster_1[:]
+                joint_cluster.extend(cluster_2)
 
-        return centers,clusters
+                joint_users = users_1[:]
+                joint_users.extend(users_2)
 
-    def calc_relations(self,centers,clusters,pts,user_list,threshold):
+                #recalculate the center
+                X,Y = zip(*joint_cluster)
+                center = (np.mean(X),np.mean(Y))
+
+                #add this new merged cluster back
+                centers.append(center)
+                clusters.append(joint_cluster)
+                users_per_cluster.append(joint_users)
+
+        return centers,clusters,users_per_cluster
+
+    def calc_relations(self,centers,users_per_cluster,threshold):
         relations = []
-        for c1_index in range(len(clusters)):
-            for c2_index in range(c1_index+1,len(clusters)):
+        for c1_index in range(len(centers)):
+            for c2_index in range(c1_index+1,len(centers)):
                 c1 = centers[c1_index]
                 c2 = centers[c2_index]
 
-                dist = math.sqrt((c1[0]-c2[0])**2+(c1[1]-c2[1])**2)
-                users_1 = [user_list[pts.index(pt)] for pt in clusters[c1_index]]
-                users_2 = [user_list[pts.index(pt)] for pt in clusters[c2_index]]
+                u1 = users_per_cluster[c1_index]
+                u2 = users_per_cluster[c2_index]
 
-                overlap = [u for u in users_1 if u in users_2]
+                dist = math.sqrt((c1[0]-c2[0])**2+(c1[1]-c2[1])**2)
+
+                overlap = [u for u in u1 if u in u2]
                 #print (len(overlap),dist)
 
                 #print (len(overlap),dist)
@@ -118,54 +135,51 @@ class DivisiveKmeans:
 
         return relations
 
-
-
+    # def fit(self, markings,user_ids,jpeg_file=None,debug=False):
+    #     clusters_to_go = []
+    #     clusters_to_go.append((markings,user_ids,1))
+    #
+    #     print user_ids
+    #
+    #     end_clusters = []
+    #     cluster_centers = []
+    #
+    #     while True:
+    #         #if we have run out of clusters to process, break (hopefully done :) )
+    #         if clusters_to_go == []:
+    #             break
+    #         m_,u_,num_clusters = clusters_to_go.pop(0)
+    #
+    #         #increment by 1
+    #         kmeans = KMeans(init='k-means++', n_clusters=num_clusters+1, n_init=10).fit(markings)
+    #
+    #         labels = kmeans.labels_
+    #         unique_labels = set(labels)
+    #         for k in unique_labels:
+    #             users = [ip for index,ip in enumerate(u_) if labels[index] == k]
+    #             points = [pt for index,pt in enumerate(m_) if labels[index] == k]
+    #
+    #             #if the cluster does not have the minimum number of points, just skip it
+    #             if len(points) < self.min_samples:
+    #                 continue
+    #
+    #             #we have found a "clean" - final - cluster
+    #             if len(set(users)) == len(users):
+    #                 end_clusters.append(points)
+    #                 X,Y = zip(*points)
+    #                 cluster_centers.append((np.mean(X),np.mean(Y)))
+    #             else:
+    #                 clusters_to_go.append((points,users,num_clusters+1))
+    #
+    #
+    #
+    #
+    #     if debug:
+    #         return cluster_centers, end_clusters,total_noise2
+    #     else:
+    #         return cluster_centers
 
     def fit(self, markings,user_ids,jpeg_file=None,debug=False):
-        clusters_to_go = []
-        clusters_to_go.append((markings,user_ids,1))
-
-        print user_ids
-
-        end_clusters = []
-        cluster_centers = []
-
-        while True:
-            #if we have run out of clusters to process, break (hopefully done :) )
-            if clusters_to_go == []:
-                break
-            m_,u_,num_clusters = clusters_to_go.pop(0)
-
-            #increment by 1
-            kmeans = KMeans(init='k-means++', n_clusters=num_clusters+1, n_init=10).fit(markings)
-
-            labels = kmeans.labels_
-            unique_labels = set(labels)
-            for k in unique_labels:
-                users = [ip for index,ip in enumerate(u_) if labels[index] == k]
-                points = [pt for index,pt in enumerate(m_) if labels[index] == k]
-
-                #if the cluster does not have the minimum number of points, just skip it
-                if len(points) < self.min_samples:
-                    continue
-
-                #we have found a "clean" - final - cluster
-                if len(set(users)) == len(users):
-                    end_clusters.append(points)
-                    X,Y = zip(*points)
-                    cluster_centers.append((np.mean(X),np.mean(Y)))
-                else:
-                    clusters_to_go.append((points,users,num_clusters+1))
-
-
-
-
-        if debug:
-            return cluster_centers, end_clusters,total_noise2
-        else:
-            return cluster_centers
-
-    def fit2(self, markings,user_ids,jpeg_file=None,debug=False):
         #check to see if we need to split at all, i.e. there might only be one animal in total
 
         total = 0
@@ -260,12 +274,12 @@ class DivisiveKmeans:
                     end_users.extend(temp_users)
                     break
 
-        print total
+        #print total
 
         for c in end_clusters:
             assert(len(c) >= self.min_samples)
 
-        if debug:
+        if True:
             return cluster_centers, end_clusters,end_users
         else:
             return cluster_centers

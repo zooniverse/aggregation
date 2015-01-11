@@ -52,7 +52,7 @@ class CannotSplit(Exception):
         self.value = value
     def __str__(self):
         return ""
-samples_needed = 3
+samples_needed = 1
 
 def flatten(l):
     if isinstance(l,list):
@@ -66,7 +66,8 @@ def flatten(l):
 
 def getClusters(hierarchy):
     if isinstance(hierarchy,tuple):
-        return []
+        #print "here - grrrrr"
+        return [(hierarchy[0],hierarchy[1])]
     assert(len(hierarchy) == 2)
 
     clusters = []
@@ -75,7 +76,7 @@ def getClusters(hierarchy):
         clusters.extend(getClusters(hierarchy[1]))
     else:
         newCluster = flatten(hierarchy)
-        if len(newCluster) >= 2:
+        if len(newCluster) >= 1:
             x,y,u = zip(*newCluster)
             clusters = [(np.mean(x),np.mean(y))]
         else:
@@ -122,17 +123,17 @@ def agglomerativeClustering(pts):
     X = np.array(XYpts)
     #use DBSCAN to create connectivity constraints
     #keep expanding until there is no more noise
-    for first_epsilon in [25,50,100,200,300,400]:
-        db = DBSCAN(eps=first_epsilon, min_samples=samples_needed).fit(X)
+    for first_epsilon in [25,50,100,200,300,400,600,800]:
+        db = DBSCAN(eps=first_epsilon, min_samples=min(3,len(XYpts))).fit(X)
 
         if not(-1 in db.labels_):
             break
 
 
-
+    assert(not(-1 in db.labels_))
     labels = db.labels_
     end_clusters = []
-    print max(labels)
+    #print max(labels)
     #do agglomerative clustering on each individual "sub" cluser
     for k in sorted(set(labels)):
         clusters = [(x,y,user) for (x,y), user, l in zip(XYpts,user_ids,labels) if l == k]
@@ -156,6 +157,8 @@ def agglomerativeClustering(pts):
             clusters.append([c1,c2])
 
         end_clusters.append(deepcopy(clusters[0]))
+
+    print "+ " + str(len(end_clusters))
 
     #now merge each of these "intermediate" clusters together
     #stop if the minAverage is infinity - at this point we are just merging pts from the same users
@@ -192,4 +195,9 @@ def agglomerativeClustering(pts):
     # ts.show_branch_support = True
     # t.render("/home/greg/mytree.pdf", w=400, units="mm",tree_style=ts)
     # #t.show(tree_style=ts)
-    return getClusters(end_clusters[0])
+    centers = getClusters(end_clusters[0])
+    if centers == []:
+        print end_clusters
+        print len(end_clusters)
+        assert False
+    return centers
