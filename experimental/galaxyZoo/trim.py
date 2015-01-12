@@ -5,7 +5,12 @@ import os
 import sys
 import random
 
-sys.path.append("/home/greg/github/pyIBCC/python")
+if os.path.exists("/home/ggdhines"):
+    base_directory = "/home/ggdhines"
+else:
+    base_directory = "/home/greg"
+
+sys.path.append(base_directory+"/github/pyIBCC/python")
 import ibcc
 
 def index(a, x):
@@ -19,8 +24,8 @@ def index(a, x):
 subjects = []
 users = []
 i = 0
-with open("/home/greg/Databases/galaxyZoo.csv","wb") as fOut:
-    with open("/home/greg/Databases/2014-08-31_galaxy_zoo_classifications.csv","rb") as f:
+with open(base_directory+"/Databases/galaxyZoo.csv","wb") as fOut:
+    with open(base_directory+"/Databases/2014-08-31_galaxy_zoo_classifications.csv","rb") as f:
         reader = csv.reader(f)
         next(reader, None)
 
@@ -57,10 +62,10 @@ print len(users)
 s = random.sample(subjects,400)
 sampled = {}
 
-with open("/home/greg/Databases/galaxy_zoo_ibcc.csv","wb") as ibccOut:
+with open(base_directory+"/Databases/galaxy_zoo_ibcc.csv","wb") as ibccOut:
     ibccOut.write("a,b,c\n")
 
-    with open("/home/greg/Databases/galaxyZoo.csv","rb") as f:
+    with open(base_directory+"/Databases/galaxyZoo.csv","rb") as f:
         reader = csv.reader(f)
 
         for line in reader:
@@ -101,48 +106,50 @@ print overallVotes
 #print confusion
 confusion = [[int(c/(min(con)/1.)) for c in con] for con in confusion]
 
-with open("/home/greg/Databases/galaxy_zoo_ibcc.py","wb") as f:
+with open(base_directory+"/Databases/galaxy_zoo_ibcc.py","wb") as f:
     f.write("import numpy as np\n")
     f.write("scores = np.array([0,1,2])\n")
     f.write("nScores = len(scores)\n")
     f.write("nClasses = 3\n")
-    f.write("inputFile = \"/home/greg/Databases/galaxy_zoo_ibcc.csv\"\n")
-    f.write("outputFile = \"/home/greg/Databases/galaxy_zoo_ibcc.out\"\n")
-    f.write("confMatFile = \"/home/greg/Databases/galaxy_zoo_ibcc.mat\"\n")
+    f.write("inputFile = \""+base_directory+"/Databases/galaxy_zoo_ibcc.csv\"\n")
+    f.write("outputFile = \""+base_directory+"/Databases/galaxy_zoo_ibcc.out\"\n")
+    f.write("confMatFile = \""+base_directory+"/Databases/galaxy_zoo_ibcc.mat\"\n")
+    #f.write("goldFile = \""+base_directory+"/Databases/gold.csv\"\n")
     f.write("nu0 = np.array("+str(overallVotes)+")\n")
     f.write("alpha0 = np.array("+str(confusion)+")\n")
 
 try:
-    os.remove("/home/greg/Databases/galaxy_zoo_ibcc.out")
+    os.remove(base_directory+"/Databases/galaxy_zoo_ibcc.out")
 except OSError:
     pass
 
 try:
-    os.remove("/home/greg/Databases/galaxy_zoo_ibcc.mat")
+    os.remove(base_directory+"/Databases/galaxy_zoo_ibcc.mat")
 except OSError:
     pass
 
 try:
-    os.remove("/home/greg/Databases/galaxy_zoo_ibcc.csv.dat")
+    os.remove(base_directory+"/Databases/galaxy_zoo_ibcc.csv.dat")
 except OSError:
     pass
 
 import datetime
 print datetime.datetime.time(datetime.datetime.now())
-ibcc.runIbcc("/home/greg/Databases/galaxy_zoo_ibcc.py")
+print base_directory+"/Databases/galaxy_zoo_ibcc.py"
+ibcc.runIbcc(base_directory+"/Databases/galaxy_zoo_ibcc.py")
 print datetime.datetime.time(datetime.datetime.now())
 
 #read in gold standard data
 pos0 = []
 pos1 = []
 pos2 = []
-with open("/home/greg/Downloads/candels_t01_a00_positive.dat","rb") as f:
+with open(base_directory+"/Downloads/candels_t01_a00_positive.dat","rb") as f:
     for l in f.readlines():
         pos0.append(l[:-1])
-with open("/home/greg/Downloads/candels_t01_a01_positive.dat","rb") as f:
+with open(base_directory+"/Downloads/candels_t01_a01_positive.dat","rb") as f:
     for l in f.readlines():
         pos1.append(l[:-1])
-with open("/home/greg/Downloads/candels_t01_a02_positive.dat","rb") as f:
+with open(base_directory+"/Downloads/candels_t01_a02_positive.dat","rb") as f:
     for l in f.readlines():
         pos2.append(l[:-1])
 
@@ -161,7 +168,7 @@ X_false_positive = []
 
 results = []
 
-with open("/home/greg/Databases/galaxy_zoo_ibcc.out","rb") as f:
+with open(base_directory+"/Databases/galaxy_zoo_ibcc.out","rb") as f:
     reader = csv.reader(f,delimiter=" ")
 
     for line in reader:
@@ -172,35 +179,35 @@ with open("/home/greg/Databases/galaxy_zoo_ibcc.out","rb") as f:
         if (subject_id in pos0) or (subject_id in pos1) or (subject_id in pos2):
             results.append((probabilities,(subject_id in pos0),(subject_id in pos1),(subject_id in pos2)))
 
-        # if subject_id in pos0:
-        #     found0 += 1
-        #     if probabilities[0] == max(probabilities):
-        #         correct0 += 1
-        #     else:
-        #         incorrect[probabilities.index(max(probabilities))] += 1
-        #
-        #     confusion[0][probabilities.index(max(probabilities))] += 1
-        #
-        #     X_false_positive.append(probabilities[2])
-        #
-        # elif subject_id in pos1:
-        #     found1 += 1
-        #     if probabilities[1] == max(probabilities):
-        #         correct1 += 1
-        #     else:
-        #         incorrect[probabilities.index(max(probabilities))] += 1
-        #
-        #     confusion[1][probabilities.index(max(probabilities))] += 1
-        #     X_false_positive.append(probabilities[2])
-        # elif subject_id in pos2:
-        #     found2 += 1
-        #     if probabilities[2] == max(probabilities):
-        #         correct2 += 1
-        #     else:
-        #         incorrect[probabilities.index(max(probabilities))] += 1
-        #
-        #     confusion[2][probabilities.index(max(probabilities))] += 1
-        #     Y_true_positive.append(probabilities[2])
+        if subject_id in pos0:
+            found0 += 1
+            if probabilities[0] == max(probabilities):
+                correct0 += 1
+            else:
+                incorrect[probabilities.index(max(probabilities))] += 1
+
+            confusion[0][probabilities.index(max(probabilities))] += 1
+
+            X_false_positive.append(probabilities[2])
+
+        elif subject_id in pos1:
+            found1 += 1
+            if probabilities[1] == max(probabilities):
+                correct1 += 1
+            else:
+                incorrect[probabilities.index(max(probabilities))] += 1
+
+            confusion[1][probabilities.index(max(probabilities))] += 1
+            X_false_positive.append(probabilities[2])
+        elif subject_id in pos2:
+            found2 += 1
+            if probabilities[2] == max(probabilities):
+                correct2 += 1
+            else:
+                incorrect[probabilities.index(max(probabilities))] += 1
+
+            confusion[2][probabilities.index(max(probabilities))] += 1
+            Y_true_positive.append(probabilities[2])
 
 print correct0,found0
 print correct1,found1
@@ -243,4 +250,4 @@ for alpha in alpha_list:
 
 
 import cPickle as pickle
-pickle.dump(results,open("/home/greg/Databases/milkyway.pickle","wb"))
+pickle.dump(results,open(base_directory+"/Databases/milkyway.pickle","wb"))

@@ -8,7 +8,7 @@ from matplotlib import colors
 import math
 
 class DivisiveKmeans:
-    def __init__(self, min_samples):
+    def __init__(self, min_samples=1):
         self.min_samples = min_samples
 
     def __fix__(self,centers,clusters,users_per_cluster,threshold,f_name=None):
@@ -179,7 +179,7 @@ class DivisiveKmeans:
     #     else:
     #         return cluster_centers
 
-    def fit(self, markings,user_ids,jpeg_file=None,debug=False):
+    def __fit__(self, markings,user_ids,jpeg_file=None,debug=False):
         #check to see if we need to split at all, i.e. there might only be one animal in total
 
         total = 0
