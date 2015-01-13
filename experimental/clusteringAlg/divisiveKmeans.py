@@ -190,7 +190,7 @@ class DivisiveKmeans:
                 X,Y = zip(*markings)
                 cluster_centers = [(np.mean(X),np.mean(Y)), ]
                 end_clusters = [markings,]
-                if debug:
+                if True:
                     return cluster_centers, end_clusters,user_ids
                 else:
                     return cluster_centers
