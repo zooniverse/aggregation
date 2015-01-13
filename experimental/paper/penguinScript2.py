@@ -16,7 +16,7 @@ from divisiveKmeans import DivisiveKmeans
 clusterAlg = DivisiveKmeans().__fit__
 
 penguin = PenguinAggregation()
-zooniverse_id_list = penguin.__get_subjects_per_site__("APZ0001x3p")[0:40]
+zooniverse_id_list = random.sample(penguin.__get_subjects_per_site__("APZ0001x3p"),40)
 
 for i,zooniverse_id in enumerate(zooniverse_id_list):
     print i
@@ -27,5 +27,6 @@ for i,zooniverse_id in enumerate(zooniverse_id_list):
         print "+--"
         penguin.__find_closest_neighbour__(zooniverse_id)
 
-penguin.__barnes_interpolation__(zooniverse_id_list)
+#penguin.__plot_cluster_size__(zooniverse_id_list)
+penguin.__find_one__(zooniverse_id_list)
 

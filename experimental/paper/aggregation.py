@@ -14,6 +14,7 @@ from scipy.stats.stats import pearsonr
 from pylab import meshgrid,cm,imshow,contour,clabel,colorbar,axis,title,show
 
 import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
 
 # for Greg - which computer am I on?
 if os.path.exists("/home/ggdhines"):
@@ -138,18 +139,32 @@ class Aggregation:
 
         return id_list
 
+    def __cluster_overlap__(self, c1, c2):
+        return [c for c in c1 if c in c2]
+
     def __find_closest_neighbour__(self,zooniverse_id):
         assert zooniverse_id in self.clusterResults
         self.closet_neighbours[zooniverse_id] = []
 
-        for i1, center1 in enumerate(self.clusterResults[zooniverse_id][0]):
-            minDist = float("inf")
-            for i2,center2 in enumerate(self.clusterResults[zooniverse_id][0]):
-                if i1 != i2:
-                    dist = math.sqrt((center1[0]-center2[0])**2+(center1[1]-center2[1])**2)
-                    minDist = min(minDist,dist)
+        cluster_results = self.clusterResults[zooniverse_id]
 
-            self.closet_neighbours[zooniverse_id].append((center1,minDist))
+        for i1 in range(len(cluster_results)):
+            center1,pts1,users1 = cluster_results[0][i1],cluster_results[1][i1],cluster_results[2][i1]
+
+            minDist = float("inf")
+            overlap = None
+            closest_neighbour = None
+            for i2 in range(len(cluster_results)):
+                if i1 != i2:
+                    center2,pts2,users2 = cluster_results[0][i2],cluster_results[1][i2],cluster_results[2][i2]
+
+                    dist = math.sqrt((center1[0]-center2[0])**2+(center1[1]-center2[1])**2)
+                    if dist < minDist:
+                        minDist = dist
+                        overlap = self.__cluster_overlap__(users1,users2)
+                        closest_neighbour = center2[:]
+
+            self.closet_neighbours[zooniverse_id].append((center1,closest_neighbour,minDist,len(overlap)))
 
     def __plot_closest_neighbours__(self,zooniverse_id_list):
         totalY = []
@@ -171,12 +186,12 @@ class Aggregation:
         print pearsonr(dist_l,Y_pts)
         plt.show()
 
-    def __barnes_interpolation__(self,zooniverse_id_list):
-        # sort of barnes interpolation
+    def __find_one__(self,zooniverse_id_list):
+    #  sort of barnes interpolation
         totalY = []
         totalDist = []
 
-        scale = 2
+        scale = 1
 
         Ypixel_range = np.arange(0,1,0.005)
         dist_range = np.arange(0,scale,0.01)
@@ -187,7 +202,8 @@ class Aggregation:
         #convert into one big list
         for zooniverse_id in zooniverse_id_list:
             if zooniverse_id in self.closet_neighbours:
-                pt_l,dist_l = zip(*self.closet_neighbours[zooniverse_id])
+                closest_neighbours = self.closet_neighbours[zooniverse_id]
+                pt_l,pt_2,dist_l,overlap_size_l = zip(*closest_neighbours)
                 X_pts,Y_pts = zip(*pt_l)
 
                 totalDist.extend(dist_l)
@@ -200,28 +216,121 @@ class Aggregation:
         totalY = [scale*(y-minY)/(maxY-minY) for y in totalY]
         totalDist = [scale*(d-minD)/(maxD-minD) for d in totalDist]
 
-        for y_pixel in Ypixel_range:
-            print y_pixel
-            Z_temp = []
-            for dist in dist_range:
-                Z_temp.append(sum([math.exp(-(Y-y_pixel)**2) for Y,d in zip(totalY,totalDist) if d <= dist]))
+        #now search for all of the clusters whose neighebour has one or zero users in common
+        #convert into one big list
+        to_show = []
+        for zooniverse_id in zooniverse_id_list:
+            if zooniverse_id in self.closet_neighbours:
 
-            Z_temp = [z/max(Z_temp) for z in Z_temp]
-            Z.extend(Z_temp[:])
+                for pt1,pt2,dist,overlap_size in self.closet_neighbours[zooniverse_id]:
+                    if overlap_size == 1:
+                        y_pixel = pt1[1]
+                        #normalize the y pixel height
+                        y_pixel = scale*(y_pixel-minY)/(maxY-minY)
+                        #normalize the distance
+                        dist = scale*(dist-minD)/(maxD-minD)
+                        z = sum([math.exp(-(Y-y_pixel)**2) for Y,d in zip(totalY,totalDist) if d <= dist])
+
+                        z_max = sum([math.exp(-(Y-y_pixel)**2) for Y,d in zip(totalY,totalDist) if d <= scale])
+                        to_show.append((z/z_max,zooniverse_id,pt1,pt2))
+
+        to_show.sort(key = lambda x:x[0])
+        for p,zooniverse_id,pt1,pt2 in to_show:
+            self.__display_image__(zooniverse_id)
+            plt.plot([pt1[0],pt2[0]],[pt1[1],pt2[1]],color="blue")
+            for center in self.clusterResults[zooniverse_id][0]:
+                print center
+                plt.plot([center[0],], [center[1], ], 'o',color = "red")
+            plt.show()
+
+    def __display_image__(self,zooniverse_id):
+        subject = self.subject_collection.find_one({"zooniverse_id": zooniverse_id})
+        url = subject["location"]["standard"]
+
+        slash_index = url.rfind("/")
+        object_id = url[slash_index+1:]
+
+        if not(os.path.isfile(base_directory+"/Databases/"+self.project+"/images/"+object_id)):
+            urllib.urlretrieve(url, base_directory+"/Databases/"+self.project+"/images/"+object_id)
+
+        image_file = cbook.get_sample_data(base_directory+"/Databases/"+self.project+"/images/"+object_id)
+        image = plt.imread(image_file)
+
+        fig, ax = plt.subplots()
+        im = ax.imshow(image)
+
+    def __barnes_interpolation__(self,zooniverse_id_list):
+        # sort of barnes interpolation
+        totalY = []
+        totalDist = []
+
+        scale = 1
+
+        Ypixel_range = np.arange(0,1,0.005)
+        dist_range = np.arange(0,scale,0.01)
+        X,Y = np.meshgrid(Ypixel_range,dist_range)
+
+        Z = []
+
+        #convert into one big list
+        for zooniverse_id in zooniverse_id_list:
+            if zooniverse_id in self.closet_neighbours:
+                closest_neighbours = self.closet_neighbours[zooniverse_id]
+                pt_l,pt_2,dist_l,overlap_size_l = zip(*closest_neighbours)
+                X_pts,Y_pts = zip(*pt_l)
+
+                totalDist.extend(dist_l)
+                totalY.extend(Y_pts)
+
+        #scale
+        minY,maxY = min(totalY),max(totalY)
+        minD,maxD = min(totalDist),max(totalDist)
+
+        totalY = [scale*(y-minY)/(maxY-minY) for y in totalY]
+        totalDist = [scale*(d-minD)/(maxD-minD) for d in totalDist]
 
 
-        methods = [None, 'none', 'nearest', 'bilinear', 'bicubic', 'spline16','spline36', 'hanning', 'hamming', 'hermite', 'kaiser', 'quadric','catrom', 'gaussian', 'bessel', 'mitchell', 'sinc', 'lanczos']
-        Z = np.array(Z).reshape(X.shape)
-        #fig, axes = plt.subplots(1, 1, figsize=(12, 6),subplot_kw={'xticks': [], 'yticks': []})
+        #now search for all of the clusters whose neighebour has one or zero users in common
+        #convert into one big list
+        P = []
+        for zooniverse_id in zooniverse_id_list:
+            if zooniverse_id in self.closet_neighbours:
+                closest_neighbours = self.closet_neighbours[zooniverse_id]
+                pt_l,pt_2,dist_l,overlap_size_l = zip(*closest_neighbours)
+                for pts,dist,overlap_size in zip(pt_l,dist_l,overlap_size_l):
+                    if overlap_size == 1:
+                        y_pixel = scale*(pts[1]-minY)/(maxY-minY)
+                        dist = scale*(dist-minD)/(maxD-minD)
+                        z = sum([math.exp(-(Y-y_pixel)**2) for Y,d in zip(totalY,totalDist) if d <= dist])
 
-        #fig.subplots_adjust(hspace=0.3, wspace=0.05)
-        #axes.imshow(Z, interpolation=None)
-        im = imshow(Z)
-        print Z[1]
-        print Z[-2]
-
+                        z_max = sum([math.exp(-(Y-y_pixel)**2) for Y,d in zip(totalY,totalDist) if d <= 1])
+                        P.append(z/z_max)
+        print len(P)
+        plt.hist(P,bins=20,normed=1,cumulative=True)
+        plt.xlabel("Percentile for Clusters with |NN|=1")
         plt.show()
 
+
+
+        # y_pixel = 0.1
+        # Z = []
+        # for dist in dist_range:
+        #     Z.append(sum([math.exp(-(Y-y_pixel)**2) for Y,d in zip(totalY,totalDist) if d <= dist]))
+        #
+        # Z = [z/max(Z) for z in Z]
+        # plt.plot(dist_range,Z)
+        #
+        # y_pixel = 0.9
+        # Z = []
+        # for dist in dist_range:
+        #     Z.append(sum([math.exp(-(Y-y_pixel)**2) for Y,d in zip(totalY,totalDist) if d <= dist]))
+        #
+        # Z = [z/max(Z) for z in Z]
+        # plt.plot(dist_range,Z)
+        # plt.xlim((0,0.2))
+        # plt.title("CDF of Nearest Neighbour Distance")
+        # plt.legend(("Upper row", "Lower row"), "lower right")
+        # plt.show()
 
 
     def __plot_cluster_size__(self,zooniverse_id_list):
@@ -231,7 +340,7 @@ class Aggregation:
             if self.clusterResults[zooniverse_id] is not None:
                 centers,pts,users = self.clusterResults[zooniverse_id]
 
-                Y = [-c[1] for c in centers]
+                Y = [700-c[1] for c in centers]
                 X = [len(p) for p in pts]
 
                 plt.plot(X,Y,'.',color="blue")
@@ -247,6 +356,8 @@ class Aggregation:
         X = sorted(data.keys())
         Y = [np.mean(data[x]) for x in X]
         plt.plot(X,Y,'o-')
+        plt.xlabel("Cluster Size")
+        plt.ylabel("Height in Y-Pixels")
         plt.show()
 
     def __cluster_subject__(self,zooniverse_id,clustering_alg,correction_alg=None):
@@ -259,13 +370,14 @@ class Aggregation:
 
             # make sure we got a 3 tuple and since there was a least one marking, we should have at least one cluster
             # pruning will come later
+            if not(len(self.clusterResults[zooniverse_id]) == 3):
+                print self.clusterResults[zooniverse_id]
             assert len(self.clusterResults[zooniverse_id]) == 3
             assert self.clusterResults[zooniverse_id][0] != []
 
             # fix the cluster if desired
             if correction_alg is not None:
                 self.clusterResults[zooniverse_id] = correction_alg(self.clusterResults[zooniverse_id])
-
         else:
             self.clusterResults[zooniverse_id] = None
 
