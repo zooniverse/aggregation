@@ -143,28 +143,48 @@ class Aggregation:
         return [c for c in c1 if c in c2]
 
     def __find_closest_neighbour__(self,zooniverse_id):
+        cluster_results = self.clusterResults[zooniverse_id]
+        # if there is only one cluster NN doesn't make sense
+        if len(cluster_results[0]) == 1:
+            return
+
         assert zooniverse_id in self.clusterResults
         self.closet_neighbours[zooniverse_id] = []
 
-        cluster_results = self.clusterResults[zooniverse_id]
 
-        for i1 in range(len(cluster_results)):
+
+        assert len(cluster_results[0]) == len(cluster_results[1])
+        assert len(cluster_results[1]) == len(cluster_results[2])
+
+
+
+        for i1 in range(len(cluster_results[0])):
             center1,pts1,users1 = cluster_results[0][i1],cluster_results[1][i1],cluster_results[2][i1]
 
-            minDist = float("inf")
+            minimum_distance = float("inf")
             overlap = None
             closest_neighbour = None
-            for i2 in range(len(cluster_results)):
+            for i2 in range(len(cluster_results[0])):
                 if i1 != i2:
-                    center2,pts2,users2 = cluster_results[0][i2],cluster_results[1][i2],cluster_results[2][i2]
+                    try:
+                        center2,pts2,users2 = cluster_results[0][i2],cluster_results[1][i2],cluster_results[2][i2]
+                    except IndexError:
+                        print i2
+                        print len(cluster_results[0])
+                        print len(cluster_results[1])
+                        print len(cluster_results[2])
+                        raise
 
                     dist = math.sqrt((center1[0]-center2[0])**2+(center1[1]-center2[1])**2)
-                    if dist < minDist:
-                        minDist = dist
-                        overlap = self.__cluster_overlap__(users1,users2)
+                    if dist < minimum_distance:
+                        minimum_distance = dist
+                        overlap = self.__cluster_overlap__(users1, users2)
                         closest_neighbour = center2[:]
 
-            self.closet_neighbours[zooniverse_id].append((center1,closest_neighbour,minDist,len(overlap)))
+            assert overlap is not None
+            assert closest_neighbour is not None
+
+            self.closet_neighbours[zooniverse_id].append((closest_neighbour, minimum_distance, len(overlap)))
 
     def __plot_closest_neighbours__(self,zooniverse_id_list):
         totalY = []
@@ -175,7 +195,7 @@ class Aggregation:
                 pt_l,dist_l = zip(*self.closet_neighbours[zooniverse_id])
                 X_pts,Y_pts = zip(*pt_l)
 
-                #find to flip the image
+                # find to flip the image
                 Y_pts = [-p for p in Y_pts]
 
                 plt.plot(dist_l,Y_pts,'.',color="red")
@@ -187,7 +207,23 @@ class Aggregation:
         plt.show()
 
     def __find_one__(self,zooniverse_id_list):
-    #  sort of barnes interpolation
+        # for zooniverse_id in zooniverse_id_list:
+        #     if zooniverse_id in self.closet_neighbours:
+        #         self.__display_image__(zooniverse_id)
+        #         for cluster_index in range(len(self.clusterResults[zooniverse_id][0])):
+        #             center = self.clusterResults[zooniverse_id][0][cluster_index]
+        #             nearest_neigbhour = self.closet_neighbours[zooniverse_id][cluster_index][0]
+        #             overlap = self.closet_neighbours[zooniverse_id][cluster_index][2]
+        #
+        #             plt.plot([center[0],], [center[1],],'o',color="blue")
+        #             if overlap == 1:
+        #                 plt.plot([center[0],nearest_neigbhour[0]],[center[1],nearest_neigbhour[1]],color="red")
+        #
+        #         plt.show()
+        # return
+
+
+        #  sort of barnes interpolation
         totalY = []
         totalDist = []
 
@@ -202,11 +238,12 @@ class Aggregation:
         #convert into one big list
         for zooniverse_id in zooniverse_id_list:
             if zooniverse_id in self.closet_neighbours:
-                closest_neighbours = self.closet_neighbours[zooniverse_id]
-                pt_l,pt_2,dist_l,overlap_size_l = zip(*closest_neighbours)
-                X_pts,Y_pts = zip(*pt_l)
+                cluster_centers = self.clusterResults[zooniverse_id][0]
+                X_pts,Y_pts = zip(*cluster_centers)
 
-                totalDist.extend(dist_l)
+                distance_to_nn = zip(*self.closet_neighbours[zooniverse_id])[1]
+
+                totalDist.extend(distance_to_nn)
                 totalY.extend(Y_pts)
 
         #scale
@@ -216,15 +253,18 @@ class Aggregation:
         totalY = [scale*(y-minY)/(maxY-minY) for y in totalY]
         totalDist = [scale*(d-minD)/(maxD-minD) for d in totalDist]
 
-        #now search for all of the clusters whose neighebour has one or zero users in common
-        #convert into one big list
+        # now search for all of the clusters whose neighbour has one or zero users in common
+        # convert into one big list
         to_show = []
         for zooniverse_id in zooniverse_id_list:
             if zooniverse_id in self.closet_neighbours:
+                for cluster_index,center in enumerate(self.clusterResults[zooniverse_id][0]):
+                    y_pixel = center[1]
 
-                for pt1,pt2,dist,overlap_size in self.closet_neighbours[zooniverse_id]:
+                    # find out about the nearest neighbour
+                    neighbour,dist,overlap_size = self.closet_neighbours[zooniverse_id][cluster_index]
+
                     if overlap_size == 1:
-                        y_pixel = pt1[1]
                         #normalize the y pixel height
                         y_pixel = scale*(y_pixel-minY)/(maxY-minY)
                         #normalize the distance
@@ -232,15 +272,13 @@ class Aggregation:
                         z = sum([math.exp(-(Y-y_pixel)**2) for Y,d in zip(totalY,totalDist) if d <= dist])
 
                         z_max = sum([math.exp(-(Y-y_pixel)**2) for Y,d in zip(totalY,totalDist) if d <= scale])
-                        to_show.append((z/z_max,zooniverse_id,pt1,pt2))
+                        to_show.append((z/z_max,zooniverse_id,center[:],neighbour[:]))
 
         to_show.sort(key = lambda x:x[0])
         for p,zooniverse_id,pt1,pt2 in to_show:
             self.__display_image__(zooniverse_id)
-            plt.plot([pt1[0],pt2[0]],[pt1[1],pt2[1]],color="blue")
-            for center in self.clusterResults[zooniverse_id][0]:
-                print center
-                plt.plot([center[0],], [center[1], ], 'o',color = "red")
+            plt.plot([pt1[0],pt2[0]],[pt1[1],pt2[1]],"o-",color="blue")
+            plt.plot([pt1[0],],[pt1[1],],"o",color="red")
             plt.show()
 
     def __display_image__(self,zooniverse_id):
