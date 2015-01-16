@@ -184,7 +184,7 @@ class Aggregation:
             assert overlap is not None
             assert closest_neighbour is not None
 
-            self.closet_neighbours[zooniverse_id].append((closest_neighbour, minimum_distance, len(overlap)))
+            self.closet_neighbours[zooniverse_id].append((closest_neighbour, minimum_distance, overlap))
 
     def __plot_closest_neighbours__(self,zooniverse_id_list):
         totalY = []
@@ -259,12 +259,14 @@ class Aggregation:
         for zooniverse_id in zooniverse_id_list:
             if zooniverse_id in self.closet_neighbours:
                 for cluster_index,center in enumerate(self.clusterResults[zooniverse_id][0]):
+
+
                     y_pixel = center[1]
 
                     # find out about the nearest neighbour
-                    neighbour,dist,overlap_size = self.closet_neighbours[zooniverse_id][cluster_index]
+                    neighbour,dist,overlap_l = self.closet_neighbours[zooniverse_id][cluster_index]
 
-                    if overlap_size == 1:
+                    if len(overlap_l) == 1:
                         #normalize the y pixel height
                         y_pixel = scale*(y_pixel-minY)/(maxY-minY)
                         #normalize the distance
@@ -272,13 +274,23 @@ class Aggregation:
                         z = sum([math.exp(-(Y-y_pixel)**2) for Y,d in zip(totalY,totalDist) if d <= dist])
 
                         z_max = sum([math.exp(-(Y-y_pixel)**2) for Y,d in zip(totalY,totalDist) if d <= scale])
-                        to_show.append((z/z_max,zooniverse_id,center[:],neighbour[:]))
+                        to_show.append((z/z_max,zooniverse_id,center[:],neighbour[:],overlap_l[:]))
 
         to_show.sort(key = lambda x:x[0])
-        for p,zooniverse_id,pt1,pt2 in to_show:
+        shownPts = []
+        for p,zooniverse_id,pt1,pt2,overlap in to_show:
+            if (pt1 in shownPts) or (pt2 in shownPts):
+                continue
+
+            print overlap
+
+            shownPts.append(pt1)
+            shownPts.append(pt2)
             self.__display_image__(zooniverse_id)
-            plt.plot([pt1[0],pt2[0]],[pt1[1],pt2[1]],"o-",color="blue")
-            plt.plot([pt1[0],],[pt1[1],],"o",color="red")
+            #plt.plot([pt1[0],pt2[0]],[pt1[1],pt2[1]],"o-",color="blue")
+            #plt.plot([pt1[0],],[pt1[1],],"o",color="red")
+            plt.plot([0,pt1[0]],[0,pt1[1]])
+            plt.plot([1000,pt2[0]],[0,pt2[1]])
             plt.show()
 
     def __display_image__(self,zooniverse_id):

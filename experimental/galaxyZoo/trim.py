@@ -24,6 +24,8 @@ def index(a, x):
 subjects = []
 users = []
 i = 0
+
+
 with open(base_directory+"/Databases/galaxyZoo.csv","wb") as fOut:
     with open(base_directory+"/Databases/2014-08-31_galaxy_zoo_classifications.csv","rb") as f:
         reader = csv.reader(f)
@@ -31,8 +33,7 @@ with open(base_directory+"/Databases/galaxyZoo.csv","wb") as fOut:
 
         for line in reader:
             i += 1
-            if i == 1400000:
-                break
+
             subject_id = line[1]
             user_id = line[2]
             candels_0 = line[5]
@@ -43,7 +44,7 @@ with open(base_directory+"/Databases/galaxyZoo.csv","wb") as fOut:
             if len(candels_0) != 3:
                 continue
 
-            fOut.write("\""+subject_id+"\",\""+user_id+"\",\""+candels_0+"\"\n")
+            fOut.write("\""+user_id+"\",\""+subject_id+"\",\""+candels_0+"\"\n")
 
             try:
                 tt = index(subjects,subject_id)
@@ -54,6 +55,9 @@ with open(base_directory+"/Databases/galaxyZoo.csv","wb") as fOut:
                 tt = index(users,user_id)
             except ValueError:
                 bisect.insort(users,user_id)
+
+                #if len(users) == 70000:
+                #    break
 
 
 print len(subjects)
@@ -69,8 +73,8 @@ with open(base_directory+"/Databases/galaxy_zoo_ibcc.csv","wb") as ibccOut:
         reader = csv.reader(f)
 
         for line in reader:
-            subject_id = line[0]
-            user_id = line[1]
+            user_id = line[0]
+            subject_id = line[1]
             candels_0 = line[2]
 
             #print line
@@ -85,7 +89,7 @@ with open(base_directory+"/Databases/galaxy_zoo_ibcc.csv","wb") as ibccOut:
                     sampled[subject_id] = [0,0,0]
 
                 sampled[subject_id][int(candels_index)] += 1
-
+            assert user_index <= len(users)
             ibccOut.write(str(user_index) + "," + str(subject_index) + "," + candels_index + "\n")
 
 overallVotes = [0,0,0]
@@ -114,7 +118,7 @@ with open(base_directory+"/Databases/galaxy_zoo_ibcc.py","wb") as f:
     f.write("inputFile = \""+base_directory+"/Databases/galaxy_zoo_ibcc.csv\"\n")
     f.write("outputFile = \""+base_directory+"/Databases/galaxy_zoo_ibcc.out\"\n")
     f.write("confMatFile = \""+base_directory+"/Databases/galaxy_zoo_ibcc.mat\"\n")
-    #f.write("goldFile = \""+base_directory+"/Databases/gold.csv\"\n")
+    f.write("goldFile = \""+base_directory+"/Databases/gold.csv\"\n")
     f.write("nu0 = np.array("+str(overallVotes)+")\n")
     f.write("alpha0 = np.array("+str(confusion)+")\n")
 
@@ -234,20 +238,20 @@ for alpha in alpha_list:
     roc_X.append(negative_rate)
     roc_Y.append(positive_rate)
 
-#print roc_X
-#true_positive = len(Y_true_positive)/float(len(Y_true_positive)+len(X_false_positive))
-#false_postive = len(X_false_positive)/float(len(Y_true_positive)+len(X_false_positive))
-# true_positive = confusion[2][2]/sum(confusion[2])
-# false_positive = (confusion[2][0]+confusion[2][1])/sum(confusion[2])
-# import matplotlib.pyplot as plt
-# plt.plot(roc_X,roc_Y)
-# #plt.xlim((0,1.05))
-# plt.plot((0,1),(0,1),'--')
-# plt.xlabel("False Positive Rate")
-# plt.ylabel("True Positive Rate")
-# plt.plot([false_positive],[true_positive],'o')
-# plt.show()
+print roc_X
+true_positive = len(Y_true_positive)/float(len(Y_true_positive)+len(X_false_positive))
+false_postive = len(X_false_positive)/float(len(Y_true_positive)+len(X_false_positive))
+true_positive = confusion[2][2]/sum(confusion[2])
+false_positive = (confusion[2][0]+confusion[2][1])/sum(confusion[2])
+import matplotlib.pyplot as plt
+plt.plot(roc_X,roc_Y)
+#plt.xlim((0,1.05))
+plt.plot((0,1),(0,1),'--')
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.plot([false_positive],[true_positive],'o')
+plt.show()
 
 
 import cPickle as pickle
-pickle.dump(results,open(base_directory+"/Databases/milkyway.pickle","wb"))
+pickle.dump(subjects,open(base_directory+"/Databases/subjects.pickle","wb"))
