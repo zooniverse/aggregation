@@ -10,6 +10,7 @@ import matplotlib.cbook as cbook
 from collections import Iterator
 import math
 from scipy.stats.stats import pearsonr
+import cPickle as pickle
 
 from pylab import meshgrid,cm,imshow,contour,clabel,colorbar,axis,title,show
 
@@ -19,9 +20,15 @@ from mpl_toolkits.mplot3d import Axes3D
 # for Greg - which computer am I on?
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
+    code_directory = base_directory + "/github"
+elif os.path.exists("/Users/greg"):
+    base_directory = "/Users/greg"
+    code_directory = base_directory + "/Code"
 else:
     base_directory = "/home/greg"
-sys.path.append(base_directory+"/github/pyIBCC/python")
+    code_directory = base_directory + "/github"
+
+sys.path.append(code_directory+"/pyIBCC/python")
 import ibcc
 
 
@@ -34,17 +41,17 @@ def index(a, x):
 
 
 class AnnotationIteration(Iterator):
-    def __init__(self, x_max, y_max, scale=1):
+    def __init__(self, roi):
+        # roi is the region of interest - if a point lies outside of this region, we will ignore it
+        # such cases should probably all be errors - a marking lies outside of the image
+        # or, somehow, just outside of the ROI - see penguin watch for an example
+        # because Penguin Watch started it, and the images for penguin watch are flipped (grrrr)
+        # the roi is the region ABOVE the line segments
         self.markings = None
         self.markingIndex = 0
         self.numMarkings = 0
 
-        self.scale = scale
-
-        self.x_min = 0
-        self.y_min = 0
-        self.x_max = x_max
-        self.y_max = y_max
+        self.roi = roi
 
     def next(self):
         if self.markings is None:
@@ -57,19 +64,32 @@ class AnnotationIteration(Iterator):
             self.markingIndex += 1
 
 
-            x = self.scale*float(mark["x"])
-            y = self.scale*float(mark["y"])
+            x = float(mark["x"])
+            y = float(mark["y"])
 
-            if (x >= self.x_min) and (x <= self.x_max) and (y >= self.y_min) and (x <= self.y_max) :
-                # we have found a valid marking
-                # create a special type of animal None that is used when the animal type is missing
-                # thus, the marking will count towards not being noise but will not be used when determining the type
-                if not("animal" in mark):
-                    animal_type = None
-                else:
-                    animal_type = mark["animal"]
+            #find which line segment on the roi the point lies on (x-axis wise)
+            for segment_index in range(len(self.roi)-1):
+                if (self.roi[segment_index][0] <= x) and (self.roi[segment_index+1][0] >= x):
+                    inImage = True
+                    rX1,rY1 = self.roi[segment_index]
+                    rX2,rY2 = self.roi[segment_index+1]
 
-                return (x,y),animal_type
+                    m = (rY2-rY1)/float(rX2-rX1)
+                    rY = m*(x-rX1)+rY1
+
+                    if y >= rY:
+                        # we have found a valid marking
+                        # create a special type of animal None that is used when the animal type is missing
+                        # thus, the marking will count towards not being noise but will not be used when determining the type
+                        if not("animal" in mark):
+                            animal_type = None
+                        else:
+                            animal_type = mark["animal"]
+
+                        return (x,y),animal_type
+                    else:
+                        #not a valid point, so just break
+                        break
 
         raise StopIteration
 
@@ -589,6 +609,68 @@ class Aggregation:
         plt.show()
         plt.close()
 
+    def __display_image__(self,zooniverse_id):
+        assert zooniverse_id in self.clusterResults
+        subject = self.subject_collection.find_one({"zooniverse_id": zooniverse_id})
+        zooniverse_id = subject["zooniverse_id"]
+        print zooniverse_id
+        url = subject["location"]["standard"]
+
+        slash_index = url.rfind("/")
+        object_id = url[slash_index+1:]
+
+        if not(os.path.isfile(base_directory+"/Databases/"+self.project+"/images/"+object_id)):
+            urllib.urlretrieve(url, base_directory+"/Databases/"+self.project+"/images/"+object_id)
+
+        image_file = cbook.get_sample_data(base_directory+"/Databases/"+self.project+"/images/"+object_id)
+        image = plt.imread(image_file)
+
+        fig, ax = plt.subplots()
+        im = ax.imshow(image)
+
+    def __soy_it__(self,zooniverse_id,gold_markings):
+        self.__display_image__(zooniverse_id)
+        # start by matching each of the user output images to the gold standard
+        userToGold = [[] for i in range(len(gold_markings))]
+        goldToUser = [[] for i in range(len(zip(*self.clusterResults[zooniverse_id])))]
+        print len(goldToUser)
+        print len(userToGold)
+        for marking_index,((x, y), pts, users) in enumerate(zip(*self.clusterResults[zooniverse_id])):
+            dist = [math.sqrt((Gx-x)**2+(Gy-y)**2) for (Gx,Gy) in gold_markings]
+            userToGold[dist.index(min(dist))].append(marking_index)
+
+        for gold_index, (Gx,Gy) in enumerate(gold_markings):
+            dist = [math.sqrt((Gx-x)**2+(Gy-y)**2) for (x,y),pts,users in zip(*self.clusterResults[zooniverse_id])]
+            goldToUser[dist.index(min(dist))].append(gold_index)
+
+        for marking_index, (x,y) in enumerate(gold_markings):
+            if len(userToGold[marking_index]) == 0:
+                plt.plot([x, ], [y, ], 'o', color="red")
+            elif len(userToGold[marking_index]) > 1:
+                plt.plot([x, ], [y, ], 'o', color="blue")
+
+
+        for marking_index,((x, y), pts, users) in enumerate(zip(*self.clusterResults[zooniverse_id])):
+            if len(goldToUser[marking_index]) == 1:
+                plt.plot([x, ], [y, ], 'o', color="yellow")
+            elif len(goldToUser[marking_index]) == 0:
+                plt.plot([x, ], [y, ], 'o', color="grey")
+            else:
+                plt.plot([x, ], [y, ], 'o', color="green")
+
+        #for (x, y) in gold_markings:
+        #    plt.plot([x, ], [y, ], 'o', color="red")
+
+        ROI = [(0, 1050),(0, 370),(1920, 370),(1920, 1050)]
+        print zip(*ROI)
+        X = [x/1.92 for x,y in ROI]
+        Y = [y/1.92 for x,y in ROI]
+        print X,Y
+        plt.plot(X,Y,"o-",color="red")
+
+        plt.show()
+
+
     def __display_signal_noise(self):
         for ii,zooniverse_id in enumerate(self.clusterResults):
             print zooniverse_id
@@ -619,7 +701,40 @@ class Aggregation:
             plt.show()
             plt.close()
 
+    def __load_dimensions__(self,zooniverse_id,subject=None):
+        pass
+
+    def __get_status__(self,zooniverse_id):
+        return self.subject_collection.find_one({"zooniverse_id":zooniverse_id})["state"]
+
+    def __load_roi__(self,zooniverse_id):
+        pass
+
+    def __accuracy__(self,zooniverse_id,gold_markings):
+        userToGold = [[] for i in range(len(gold_markings))]
+        goldToUser = [[] for i in range(len(zip(*self.clusterResults[zooniverse_id])))]
+        #print len(goldToUser)
+        #print len(userToGold)
+        for marking_index,((x, y), pts, users) in enumerate(zip(*self.clusterResults[zooniverse_id])):
+            dist = [math.sqrt((Gx-x)**2+(Gy-y)**2) for (Gx,Gy) in gold_markings]
+            userToGold[dist.index(min(dist))].append(marking_index)
+
+        for gold_index, (Gx,Gy) in enumerate(gold_markings):
+            dist = [math.sqrt((Gx-x)**2+(Gy-y)**2) for (x,y),pts,users in zip(*self.clusterResults[zooniverse_id])]
+            goldToUser[dist.index(min(dist))].append(gold_index)
+
+        num_match = len([x for x in userToGold if len(x) > 0])
+        lower_bound = num_match/float(len(userToGold))
+        additional = len([x for x in goldToUser if len(x) == 0])
+        print (additional,len(userToGold))
+        print "\t"+str((lower_bound,(num_match+additional)/float(len(userToGold)+additional)))
+
+        return lower_bound
+
+
     def __readin_subject__(self, zooniverse_id):
+        subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})
+        #print subject["location"]["standard"]
         # records relating to the individual annotations
         # first - the actual XY markings, then what species are associated with the annotations,
         # then who made each marking
@@ -633,12 +748,15 @@ class Aggregation:
         self.ips_per_subject[zooniverse_id] = []
         self.users_per_subject[zooniverse_id] = []
 
+        roi = self.__load_roi__(zooniverse_id)
 
-        x_max = self.dimensions[zooniverse_id]["width"]
-        y_max = self.dimensions[zooniverse_id]["height"]
+        if os.path.isfile(base_directory+"/Databases/penguin/"+zooniverse_id+".pickle"):
+            mongo_results = pickle.load(open(base_directory+"/Databases/penguin/"+zooniverse_id+".pickle","rb"))
+        else:
+            mongo_results = list(self.classification_collection.find({"subjects.zooniverse_id":zooniverse_id}))
+            pickle.dump(mongo_results,open(base_directory+"/Databases/penguin/"+zooniverse_id+".pickle","wb"))
 
-
-        for user_index, classification in enumerate(self.classification_collection.find({"subjects.zooniverse_id":zooniverse_id})):
+        for user_index, classification in enumerate(mongo_results):
             # get the name of this user
             if "user_name" in classification:
                 user = classification["user_name"]
@@ -654,7 +772,7 @@ class Aggregation:
 
 
             # read in all of the markings this user made - which might be none
-            for pt, animal_type in self.ann_iterate(classification,x_max,y_max):
+            for pt, animal_type in self.ann_iterate(classification,roi):
                 if not(animal_type in self.to_skip):
                     self.markings_list[zooniverse_id].append(pt)
                     # print annotation_list
