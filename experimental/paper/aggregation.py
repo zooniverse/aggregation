@@ -354,6 +354,8 @@ class Aggregation:
         slash_index = url.rfind("/")
         object_id = url[slash_index+1:]
 
+        #print object_id
+
         if not(os.path.isfile(base_directory+"/Databases/"+self.project+"/images/"+object_id)):
             urllib.urlretrieve(url, base_directory+"/Databases/"+self.project+"/images/"+object_id)
 
@@ -699,13 +701,13 @@ class Aggregation:
 
     def __roc__(self):
         correct_pts = []
-        print self.global_index_list
+        #print self.global_index_list
 
         # use the gold standard data to determine which of our points is correct
         for zooniverse_id, global_indices in self.global_index_list.items():
 
             gold_pts = self.gold_data[zooniverse_id]
-            print gold_pts
+            #print gold_pts
             # if either of these sets are empty, then by def'n we can't have any correct WRT this image
             if (global_indices == []) or (gold_pts == []):
                 continue
@@ -837,26 +839,27 @@ class Aggregation:
     #     plt.xlim((0,1000))
     #     plt.ylim((563,0))
 
-    def __soy_it__(self,zooniverse_id,gold_markings):
+    def __soy_it__(self,zooniverse_id):
         self.__display_image__(zooniverse_id)
+        gold_markings = self.gold_data[zooniverse_id]
         # start by matching each of the user output images to the gold standard
         userToGold = [[] for i in range(len(gold_markings))]
         goldToUser = [[] for i in range(len(zip(*self.clusterResults[zooniverse_id])))]
-        print len(gold_markings)
-        print len(zip(*self.clusterResults[zooniverse_id]))
+        #print len(gold_markings)
+        #print len(zip(*self.clusterResults[zooniverse_id]))
         for marking_index,((x, y), pts, users) in enumerate(zip(*self.clusterResults[zooniverse_id])):
-            dist = [math.sqrt((Gx-x)**2+(Gy-y)**2) for (Gx,Gy) in gold_markings]
+            dist = [math.sqrt((pt["x"]-x)**2+(pt["y"]-y)**2) for pt in gold_markings]
             userToGold[dist.index(min(dist))].append(marking_index)
 
-        for gold_index, (Gx,Gy) in enumerate(gold_markings):
-            dist = [math.sqrt((Gx-x)**2+(Gy-y)**2) for (x,y),pts,users in zip(*self.clusterResults[zooniverse_id])]
+        for gold_index, pt in enumerate(gold_markings):
+            dist = [math.sqrt((pt["x"]-x)**2+(pt["y"]-y)**2) for (x,y),pts,users in zip(*self.clusterResults[zooniverse_id])]
             goldToUser[dist.index(min(dist))].append(gold_index)
 
-        for marking_index, (x,y) in enumerate(gold_markings):
+        for marking_index, pt in enumerate(gold_markings):
             if len(userToGold[marking_index]) == 0:
-                plt.plot([x, ], [y, ], 'o', color="red")
+                plt.plot(pt["x"], pt["y"], 'o', color="red")
             elif len(userToGold[marking_index]) > 1:
-                plt.plot([x, ], [y, ], 'o', color="blue")
+                plt.plot(pt["x"], pt["y"], 'o', color="blue")
 
 
         for marking_index,((x, y), pts, users) in enumerate(zip(*self.clusterResults[zooniverse_id])):
@@ -866,20 +869,20 @@ class Aggregation:
                 plt.plot([x, ], [y, ], 'o', color="grey")
             else:
                 plt.plot([x, ], [y, ], 'o', color="green")
-                print "===---"
-                for index in goldToUser[marking_index]:
-                    print gold_markings[index]
+                # print "===---"
+                # for index in goldToUser[marking_index]:
+                #     print gold_markings[index]
 
 
-        for marking_index,((x, y), pts, users) in enumerate(zip(*self.clusterResults[zooniverse_id])):
-            #find the match
-            for gold_index, (x2,y2) in enumerate(gold_markings):
-                if (marking_index in userToGold[gold_index]) and (gold_index in goldToUser[marking_index]):
-                    plt.plot((x,x2),(y,y2),"-",color="blue")
-                elif marking_index in userToGold[gold_index]:
-                    plt.plot((x,x2),(y,y2),"-",color="green")
-                elif gold_index in goldToUser[marking_index]:
-                    plt.plot((x,x2),(y,y2),"-",color="red")
+        # for marking_index,((x, y), pts, users) in enumerate(zip(*self.clusterResults[zooniverse_id])):
+        #     #find the match
+        #     for gold_index, (x2,y2) in enumerate(gold_markings):
+        #         if (marking_index in userToGold[gold_index]) and (gold_index in goldToUser[marking_index]):
+        #             plt.plot((x,x2),(y,y2),"-",color="blue")
+        #         elif marking_index in userToGold[gold_index]:
+        #             plt.plot((x,x2),(y,y2),"-",color="green")
+        #         elif gold_index in goldToUser[marking_index]:
+        #             plt.plot((x,x2),(y,y2),"-",color="red")
 
         #for (x, y) in gold_markings:
         #    plt.plot([x, ], [y, ], 'o', color="red")
@@ -1235,7 +1238,10 @@ class Aggregation:
 
         plt.show()
 
-    def __readin_subject__(self, zooniverse_id,users_to_skip=[]):
+    def __load_gold_standard__(self,zooniverse_id):
+        assert False
+
+    def __readin_subject__(self, zooniverse_id,users_to_skip=[],read_in_gold=False):
         subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})
         #print subject["location"]["standard"]
         # records relating to the individual annotations
@@ -1250,6 +1256,9 @@ class Aggregation:
         # we need to deal with non-logged in users slightly differently
         self.ips_per_subject[zooniverse_id] = []
         self.users_per_subject[zooniverse_id] = []
+
+        if read_in_gold and not(zooniverse_id in self.gold_data):
+            self.__load_gold_standard__(zooniverse_id)
 
         #roi = self.__load_roi__(zooniverse_id)
 

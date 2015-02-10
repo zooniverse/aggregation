@@ -89,7 +89,7 @@ class DivisiveKmeans:
         colors_ = list(six.iteritems(colors.cnames))
 
         while True:
-            #if we have run out of clusters to process, break (hopefully done :) )
+            # if we have run out of clusters to process, break (hopefully done :) )
             if clusters_to_go == []:
                 break
             m_,u_,num_clusters = clusters_to_go.pop(-1)

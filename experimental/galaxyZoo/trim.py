@@ -6,11 +6,15 @@ import sys
 import random
 
 if os.path.exists("/home/ggdhines"):
-    base_directory = "/home/ggdhines"
+    base_directory = "/home/ggdhines/"
+elif os.path.exists("/Users/greg"):
+    base_directory = "/Users/greg"
 else:
-    base_directory = "/home/greg"
+    base_directory = "/home/greg/"
 
-sys.path.append(base_directory+"/github/pyIBCC/python")
+data_directory = base_directory + "/Databases"
+
+sys.path.append(base_directory+"/code/pyIBCC/python")
 import ibcc
 
 def index(a, x):
@@ -26,8 +30,8 @@ users = []
 i = 0
 
 
-with open(base_directory+"/Databases/galaxyZoo.csv","wb") as fOut:
-    with open(base_directory+"/Databases/2014-08-31_galaxy_zoo_classifications.csv","rb") as f:
+with open(data_directory+"/galaxyZoo.csv","wb") as fOut:
+    with open(data_directory+"/2015-01-18_galaxy_zoo_classifications.csv","rb") as f:
         reader = csv.reader(f)
         next(reader, None)
 
@@ -110,50 +114,50 @@ print overallVotes
 #print confusion
 confusion = [[int(c/(min(con)/1.)) for c in con] for con in confusion]
 
-with open(base_directory+"/Databases/galaxy_zoo_ibcc.py","wb") as f:
+with open(data_directory+"/galaxy_zoo_ibcc.py","wb") as f:
     f.write("import numpy as np\n")
     f.write("scores = np.array([0,1,2])\n")
     f.write("nScores = len(scores)\n")
     f.write("nClasses = 3\n")
-    f.write("inputFile = \""+base_directory+"/Databases/galaxy_zoo_ibcc.csv\"\n")
-    f.write("outputFile = \""+base_directory+"/Databases/galaxy_zoo_ibcc.out\"\n")
-    f.write("confMatFile = \""+base_directory+"/Databases/galaxy_zoo_ibcc.mat\"\n")
-    f.write("goldFile = \""+base_directory+"/Databases/gold.csv\"\n")
+    f.write("inputFile = \""+data_directory+"/galaxy_zoo_ibcc.csv\"\n")
+    f.write("outputFile = \""+data_directory+"/galaxy_zoo_ibcc.out\"\n")
+    f.write("confMatFile = \""+data_directory+"/galaxy_zoo_ibcc.mat\"\n")
+    f.write("goldFile = \""+data_directory+"/gold.csv\"\n")
     f.write("nu0 = np.array("+str(overallVotes)+")\n")
     f.write("alpha0 = np.array("+str(confusion)+")\n")
 
 try:
-    os.remove(base_directory+"/Databases/galaxy_zoo_ibcc.out")
+    os.remove(data_directory+"/galaxy_zoo_ibcc.out")
 except OSError:
     pass
 
 try:
-    os.remove(base_directory+"/Databases/galaxy_zoo_ibcc.mat")
+    os.remove(data_directory+"/galaxy_zoo_ibcc.mat")
 except OSError:
     pass
 
 try:
-    os.remove(base_directory+"/Databases/galaxy_zoo_ibcc.csv.dat")
+    os.remove(data_directory+"/galaxy_zoo_ibcc.csv.dat")
 except OSError:
     pass
 
 import datetime
 print datetime.datetime.time(datetime.datetime.now())
 print base_directory+"/Databases/galaxy_zoo_ibcc.py"
-ibcc.runIbcc(base_directory+"/Databases/galaxy_zoo_ibcc.py")
+ibcc.runIbcc(data_directory+"/galaxy_zoo_ibcc.py")
 print datetime.datetime.time(datetime.datetime.now())
 
 #read in gold standard data
 pos0 = []
 pos1 = []
 pos2 = []
-with open(base_directory+"/Downloads/candels_t01_a00_positive.dat","rb") as f:
+with open(data_directory+"/candels_t01_a00_positive.dat","rb") as f:
     for l in f.readlines():
         pos0.append(l[:-1])
-with open(base_directory+"/Downloads/candels_t01_a01_positive.dat","rb") as f:
+with open(data_directory+"/candels_t01_a01_positive.dat","rb") as f:
     for l in f.readlines():
         pos1.append(l[:-1])
-with open(base_directory+"/Downloads/candels_t01_a02_positive.dat","rb") as f:
+with open(data_directory+"/candels_t01_a02_positive.dat","rb") as f:
     for l in f.readlines():
         pos2.append(l[:-1])
 
@@ -172,7 +176,7 @@ X_false_positive = []
 
 results = []
 
-with open(base_directory+"/Databases/galaxy_zoo_ibcc.out","rb") as f:
+with open(data_directory+"/galaxy_zoo_ibcc.out","rb") as f:
     reader = csv.reader(f,delimiter=" ")
 
     for line in reader:
@@ -228,30 +232,35 @@ alpha_list = X_false_positive[:]
 alpha_list.extend(Y_true_positive)
 alpha_list.sort()
 
-for alpha in alpha_list:
-    positive_count = sum([1 for x in Y_true_positive if x >= alpha])
-    positive_rate = positive_count/float(len(Y_true_positive))
+# for alpha in alpha_list:
+#     positive_count = sum([1 for x in Y_true_positive if x >= alpha])
+#     positive_rate = positive_count/float(len(Y_true_positive))
+#
+#     negative_count = sum([1 for x in X_false_positive if x >= alpha])
+#     negative_rate = negative_count/float(len(X_false_positive))
+#
+#     roc_X.append(negative_rate)
+#     roc_Y.append(positive_rate)
+#
+# print roc_X
+# true_positive = len(Y_true_positive)/float(len(Y_true_positive)+len(X_false_positive))
+# false_postive = len(X_false_positive)/float(len(Y_true_positive)+len(X_false_positive))
+# true_positive = confusion[2][2]/sum(confusion[2])
+# false_positive = (confusion[2][0]+confusion[2][1])/sum(confusion[2])
+# import matplotlib.pyplot as plt
+# plt.plot(roc_X,roc_Y)
+# #plt.xlim((0,1.05))
+# plt.plot((0,1),(0,1),'--')
+# plt.xlabel("False Positive Rate")
+# plt.ylabel("True Positive Rate")
+# plt.plot([false_positive],[true_positive],'o')
+# plt.show()
+#
 
-    negative_count = sum([1 for x in X_false_positive if x >= alpha])
-    negative_rate = negative_count/float(len(X_false_positive))
-
-    roc_X.append(negative_rate)
-    roc_Y.append(positive_rate)
-
-print roc_X
-true_positive = len(Y_true_positive)/float(len(Y_true_positive)+len(X_false_positive))
-false_postive = len(X_false_positive)/float(len(Y_true_positive)+len(X_false_positive))
-true_positive = confusion[2][2]/sum(confusion[2])
-false_positive = (confusion[2][0]+confusion[2][1])/sum(confusion[2])
-import matplotlib.pyplot as plt
-plt.plot(roc_X,roc_Y)
-#plt.xlim((0,1.05))
-plt.plot((0,1),(0,1),'--')
-plt.xlabel("False Positive Rate")
-plt.ylabel("True Positive Rate")
-plt.plot([false_positive],[true_positive],'o')
-plt.show()
+# import cPickle as pickle
+# pickle.dump(subjects,open(data_directory+"/subjects.pickle","wb"))
+with open(data_directory+"/subjects.txt","wb") as f:
+    for s in subjects:
+        f.write(s+"\n")
 
 
-import cPickle as pickle
-pickle.dump(subjects,open(base_directory+"/Databases/subjects.pickle","wb"))

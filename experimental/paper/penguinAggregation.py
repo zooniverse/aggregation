@@ -1,6 +1,9 @@
 __author__ = 'greg'
 import aggregation
 import csv
+import os
+import urllib
+
 
 class PenguinTools(aggregation.ROIClassificationTools):
     def __init__(self,subject_collection):
@@ -22,7 +25,6 @@ class PenguinTools(aggregation.ROIClassificationTools):
         values_list = [ann.values() for ann in annotations]
         for v in values_list:
             if "marking" in v:
-                print "====---"
                 try:
                     return v[1].values()
                 except AttributeError:
@@ -48,6 +50,51 @@ class PenguinAggregation(aggregation.Aggregation):
     def __init__(self, to_skip=[]):
         aggregation.Aggregation.__init__(self, "penguin", "2015-01-18", to_skip=to_skip)
         self.tools = PenguinTools(self.subject_collection)
+
+        # load all of the gold standard data for all images at once
+        subjects = self.subject_collection.find({"metadata.path":{"$regex":"MAIVb2012a"}})
+        with open("/Users/greg/Databases/MAIVb2013_adult_RAW.csv","rb") as f:
+            # these will match up - I've checked
+
+            for lcount,(l,s) in enumerate(zip(f.readlines(),list(subjects))):
+                zooniverse_id = s["zooniverse_id"]
+
+                if s["state"] != "complete":
+                    continue
+
+                width = s["metadata"]["original_size"]["width"]
+                height = s["metadata"]["original_size"]["height"]
+
+                #print l
+                try:
+                    gold_string = l.split("\"")[1]
+                except IndexError:
+                    #should be empty
+                    self.gold_data[zooniverse_id] = []
+                    continue
+
+                gold_markings = gold_string[:-2].split(";")
+                pts = [tuple(m.split(",")[:2]) for m in gold_markings]
+                if len(pts) != len(list(set(pts))):
+                    print "Grrrrr"
+                pts = list(set(pts))
+                pts = [(float(x),float(y)) for (x,y) in pts]
+                pts = [{"x":int(x)/(width/1000.),"y":int(y)/(height/563.)} for (x,y) in pts]
+                self.gold_data[zooniverse_id] = pts[:]
+
+    def __check_gold_images__(self,lcount,url1,url2):
+        # used to check that the file names from the gold standard match up to the file names in mongodb
+
+        fname1 = aggregation.base_directory+"/Databases/"+self.project+"/gold/"+str(lcount)+"_1.JPG"
+        fname2 = aggregation.base_directory+"/Databases/"+self.project+"/gold/"+str(lcount)+"_2.JPG"
+        if not(os.path.isfile(fname1)):
+            urllib.urlretrieve(url1, fname1)
+
+        if not(os.path.isfile(fname2)):
+            urllib.urlretrieve(url2, fname2)
+
+    def __get_gold_subjects__(self):
+        return sorted(self.gold_data.keys())
 
     def __get_subjects_per_site__(self,zooniverse_id):
         subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})
@@ -75,6 +122,12 @@ class PenguinAggregation(aggregation.Aggregation):
 
         self.dimensions[zooniverse_id] = subject["metadata"]["original_size"]
         return self.dimensions[zooniverse_id]
+
+    def __get_gold_standard_subjects__(self):
+        return self.gold_data.keys()
+
+
+
 
 
 
