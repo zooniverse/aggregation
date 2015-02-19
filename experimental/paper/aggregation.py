@@ -21,7 +21,8 @@ from mpl_toolkits.mplot3d import Axes3D
 # for Greg - which computer am I on?
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
-    code_directory = base_directory + "/github"
+    github_directory = base_directory + "/github"
+    code_directory = base_directory + "/PycharmProjects"
 elif os.path.exists("/Users/greg"):
     base_directory = "/Users/greg"
     code_directory = base_directory + "/Code"
@@ -30,7 +31,7 @@ else:
     base_directory = "/home/greg"
     code_directory = base_directory + "/github"
 
-sys.path.append(code_directory+"/pyIBCC/python")
+sys.path.append(github_directory+"/pyIBCC/python")
 sys.path.append(code_directory+"/reduction/experimental/clusteringAlg")
 import ibcc
 import multiClickCorrect
@@ -53,18 +54,25 @@ class ClassificationTools():
         assert False
 
     def __list_markings__(self, classification):
-        marks_list = self.__classification_to_markings__(classification)
-
-        for mark in marks_list:
-            x = float(mark["x"])*self.scale
-            y = float(mark["y"])*self.scale
-
-            if not("animal" in mark):
-                animal_type = None
-            else:
-                animal_type = mark["animal"]
-
-            yield (x,y),animal_type
+        print "hello"
+        return False
+        # yield 1
+        # return
+        # print classification
+        # marks_list = self.__classification_to_markings__(classification)
+        # print marks_list
+        # assert False
+        #
+        # for mark in marks_list:
+        #     x = float(mark["x"])*self.scale
+        #     y = float(mark["y"])*self.scale
+        #
+        #     if not("animal" in mark):
+        #         animal_type = None
+        #     else:
+        #         animal_type = mark["animal"]
+        #
+        #     yield (x,y),animal_type
 
 class ROIClassificationTools(ClassificationTools):
     def __init__(self,scale=1):
@@ -378,7 +386,7 @@ class Aggregation:
 
         Z = []
 
-        #convert into one big list
+        # convert into one big list
         for zooniverse_id in zooniverse_id_list:
             if zooniverse_id in self.closet_neighbours:
                 closest_neighbours = self.closet_neighbours[zooniverse_id]
@@ -396,8 +404,8 @@ class Aggregation:
         totalDist = [scale*(d-minD)/(maxD-minD) for d in totalDist]
 
 
-        #now search for all of the clusters whose neighebour has one or zero users in common
-        #convert into one big list
+        # now search for all of the clusters whose neighebour has one or zero users in common
+        # convert into one big list
         P = []
         for zooniverse_id in zooniverse_id_list:
             if zooniverse_id in self.closet_neighbours:
@@ -480,6 +488,8 @@ class Aggregation:
             # make sure we got a 3 tuple and since there was a least one marking, we should have at least one cluster
             # pruning will come later
             if not(len(self.clusterResults[zooniverse_id]) == 3):
+                print "here"
+                print "here"
                 print self.clusterResults[zooniverse_id]
             assert len(self.clusterResults[zooniverse_id]) == 3
             assert self.clusterResults[zooniverse_id][0] != []
@@ -506,6 +516,7 @@ class Aggregation:
             self.clusterResults[zooniverse_id] = None
             self.num_clusters = 0
 
+        #print self.clusterResults
         return self.clusterResults[zooniverse_id] is None
 
     def __signal_ibcc__(self):
@@ -810,12 +821,27 @@ class Aggregation:
         plt.close()
 
     def __display_raw_markings__(self,zooniverse_id):
-        #self.__display_image__(zooniverse_id)
+        self.__display_image__(zooniverse_id)
+        print len(self.users_per_subject[zooniverse_id])
         X,Y = zip(*self.markings_list[zooniverse_id])
         plt.plot(X,Y,'.')
         plt.xlim((0,1000))
         plt.ylim((563,0))
+
+
         plt.show()
+        plt.close()
+
+    def __save_raw_markings__(self,zooniverse_id):
+        self.__display_image__(zooniverse_id)
+        print len(self.users_per_subject[zooniverse_id])
+        X,Y = zip(*self.markings_list[zooniverse_id])
+        plt.plot(X,Y,'.')
+        plt.xlim((0,1000))
+        plt.ylim((563,0))
+        plt.xticks([])
+        plt.yticks([])
+        plt.savefig(base_directory+"/Databases/"+self.project+"/examples/"+zooniverse_id+".pdf",bbox_inches='tight')
         plt.close()
 
     # def __display_image__(self,zooniverse_id):
@@ -1285,6 +1311,7 @@ class Aggregation:
             # due to some double classification errors
             if user in self.users_per_subject[zooniverse_id]:
                 continue
+
             self.users_per_subject[zooniverse_id].append(user)
 
             if not(user in self.subjects_per_user):
@@ -1294,10 +1321,13 @@ class Aggregation:
 
             # read in all of the markings this user made - which might be none
 
+
             for pt, animal_type in self.tools.__list_markings__(classification):
+
                 if not(animal_type in self.to_skip):
                     self.markings_list[zooniverse_id].append(pt)
                     # print annotation_list
                     self.markings_to_user[zooniverse_id].append(user)
                     self.what_list[zooniverse_id].append(animal_type)
+
 

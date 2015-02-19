@@ -12,7 +12,7 @@ class PenguinTools(aggregation.ROIClassificationTools):
         self.subject_collection = subject_collection
 
         # load the roi for the different sites
-        with open(aggregation.code_directory+"/Penguins/public/roi.tsv","rb") as roiFile:
+        with open(aggregation.github_directory+"/Penguins/public/roi.tsv","rb") as roiFile:
             roiFile.readline()
             reader = csv.reader(roiFile,delimiter="\t")
             for l in reader:
@@ -22,8 +22,20 @@ class PenguinTools(aggregation.ROIClassificationTools):
 
     def __classification_to_markings__(self,classification):
         annotations = classification["annotations"]
-        values_list = [ann.values() for ann in annotations]
+
+        for ann in annotations:
+            if ("key" in ann) and (ann["key"] == "marking"):
+                try:
+                    return ann["value"].values()
+                except (AttributeError,KeyError) as e:
+                    print classification
+                    return []
+
+        return []
+
+
         for v in values_list:
+            print v
             if "marking" in v:
                 try:
                     return v[1].values()
@@ -32,6 +44,20 @@ class PenguinTools(aggregation.ROIClassificationTools):
                     return []
 
         return []
+
+    def __list_markings__(self, classification):
+        marks_list = self.__classification_to_markings__(classification)
+
+        for mark in marks_list:
+            x = float(mark["x"])*self.scale
+            y = float(mark["y"])*self.scale
+
+            if not("animal" in mark):
+                animal_type = None
+            else:
+                animal_type = mark["animal"]
+
+            yield (x,y),animal_type
 
     def __load_roi__(self,classification):
         zooniverse_id = classification["subjects"][0]["zooniverse_id"]
@@ -48,12 +74,12 @@ class PenguinTools(aggregation.ROIClassificationTools):
 
 class PenguinAggregation(aggregation.Aggregation):
     def __init__(self, to_skip=[]):
-        aggregation.Aggregation.__init__(self, "penguin", "2015-01-18", to_skip=to_skip)
+        aggregation.Aggregation.__init__(self, "penguin", "2015-02-18", to_skip=to_skip)
         self.tools = PenguinTools(self.subject_collection)
 
         # load all of the gold standard data for all images at once
         subjects = self.subject_collection.find({"metadata.path":{"$regex":"MAIVb2012a"}})
-        with open("/Users/greg/Databases/MAIVb2013_adult_RAW.csv","rb") as f:
+        with open(aggregation.base_directory+"/Databases/MAIVb2013_adult_RAW.csv","rb") as f:
             # these will match up - I've checked
 
             for lcount,(l,s) in enumerate(zip(f.readlines(),list(subjects))):
@@ -96,7 +122,7 @@ class PenguinAggregation(aggregation.Aggregation):
     def __get_gold_subjects__(self):
         return sorted(self.gold_data.keys())
 
-    def __get_subjects_per_site__(self,zooniverse_id):
+    def __get_subjects_per_site__(self,zooniverse_id,complete=False,remove_blanks=False):
         subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})
 
         # the path name will contain a unique ID for the site location
@@ -109,7 +135,12 @@ class PenguinAggregation(aggregation.Aggregation):
 
         id_list = []
 
-        for subject in self.subject_collection.find({"metadata.path":{"$regex":site}}):
+        queryParam = {"metadata.path":{"$regex":site}}
+        if complete:
+            queryParam["state"] = "complete"
+        if remove_blanks:
+            queryParam["metadata.retire_reason"] = "complete"
+        for subject in self.subject_collection.find(queryParam):
             zooniverse_id = subject["zooniverse_id"]
             id_list.append(zooniverse_id)
             self.dimensions[zooniverse_id] = subject["metadata"]["original_size"]

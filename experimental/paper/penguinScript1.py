@@ -16,7 +16,7 @@ from divisiveKmeans import DivisiveKmeans
 clusterAlg = DivisiveKmeans().__fit__
 
 penguin = PenguinAggregation()
-subject_ids = penguin.__get_subjects_per_site__("APZ0001x3p")
+subject_ids = penguin.__get_subjects_per_site__("APZ00035mv",complete=True,remove_blanks=True)
 
 for i,subject in enumerate(random.sample(subject_ids,50)):
     print i
@@ -24,5 +24,5 @@ for i,subject in enumerate(random.sample(subject_ids,50)):
     blankImage = penguin.__cluster_subject__(subject, clusterAlg)
 
     if not blankImage:
-        penguin.__display__markings__(subject)
+        penguin.__save_raw_markings__(subject)
         break

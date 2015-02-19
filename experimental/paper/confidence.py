@@ -8,9 +8,10 @@ from time import mktime
 from datetime import datetime,timedelta
 import numpy as np
 from scipy.stats import ks_2samp
+import cPickle as pickle
 
 project = "serengeti"
-date = "2014-07-28"
+date = "2015-02-09"
 
 # for Greg - which computer am I on?
 if os.path.exists("/home/ggdhines"):
@@ -40,8 +41,8 @@ for classification in classification_collection.find({"tutorial":{"$ne":True}}).
     except KeyError:
         continue
 
-sample_users = random.sample(list(users),min(100,len(list(users))))
-#print sample_users
+sample_users = random.sample(list(users),min(500,len(list(users))))
+print len(users)
 # for user in sample_users:
 #     times = []
 #     correct_blanks = []
@@ -92,19 +93,20 @@ sample_users = random.sample(list(users),min(100,len(list(users))))
 species = ['elephant','zebra','warthog','impala','buffalo','wildebeest','gazelleThomsons','dikDik','giraffe','gazelleGrants','lionFemale','baboon','hippopotamus','ostrich','human','otherBird','hartebeest','secretaryBird','hyenaSpotted','mongoose','reedbuck','topi','guineaFowl','eland','aardvark','lionMale','porcupine','koriBustard','bushbuck','hyenaStriped','jackal','cheetah','waterbuck','leopard','reptiles','serval','aardwolf','vervetMonkey','rodents','honeyBadger','batEaredFox','rhinoceros','civet','genet','zorilla','hare','caracal','wildcat']
 
 
-for user in sample_users:
-
+for jj,user in enumerate(sample_users):
+    print jj,
     times = []
     correct_blanks = []
     false_blanks = []
     u = user_collection.find_one({"name":user})
-    if u["classification_count"] < 150:
+    if u["classification_count"] < 250:
+        print " -"
         continue
 
-    print user,u["classification_count"]
+    #print user,u["classification_count"]
 
     for ii,classification in enumerate(classification_collection.find({"tutorial":{"$ne":True},"user_name":user}).limit(300)):
-        print ii
+        #print ii
         annotations = classification["annotations"]
         keys = [ann.keys() for ann in annotations]
         user_nothing = ["nothing"] in keys
@@ -120,6 +122,7 @@ for user in sample_users:
         species_count = []
         votes = {s: 0 for s in species}
         for classification2 in classification_collection.find({"subjects.zooniverse_id":zooniverse_id}).limit(min(25,classification_count)):
+            #print "aa"
             annotations2 = classification2["annotations"]
             species_found2 = [ann["species"] for ann in annotations2 if "species" in ann]
             for s in species_found2:
@@ -156,11 +159,13 @@ for user in sample_users:
                 false_blanks.append(timeDiff.total_seconds())
 
     if (false_blanks == []) or (correct_blanks == []):
+        print " -"
         continue
-
+    print " +"
     #print correct_blanks
     #print false_blanks
     #print np.mean(correct_blanks),np.mean(false_blanks)
-    print len(correct_blanks),len(false_blanks)
-    print user
+    #print len(correct_blanks),len(false_blanks)
+    #print user
+    pickle.dump((correct_blanks,false_blanks),open(base_directory+"/Databases/serengeti/users/"+str(jj)+".pickle","wb"))
     print ks_2samp(correct_blanks,false_blanks)
