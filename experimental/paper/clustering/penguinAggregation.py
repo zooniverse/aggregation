@@ -3,7 +3,7 @@ import aggregation
 import csv
 import os
 import urllib
-
+import cPickle as pickle
 
 class PenguinTools(aggregation.ROIClassificationTools):
     def __init__(self,subject_collection):
@@ -28,7 +28,7 @@ class PenguinTools(aggregation.ROIClassificationTools):
                 try:
                     return ann["value"].values()
                 except (AttributeError,KeyError) as e:
-                    print classification
+                    #print classification
                     return []
 
         return []
@@ -74,7 +74,7 @@ class PenguinTools(aggregation.ROIClassificationTools):
 
 class PenguinAggregation(aggregation.Aggregation):
     def __init__(self, to_skip=[]):
-        aggregation.Aggregation.__init__(self, "penguin", "2015-02-18", to_skip=to_skip)
+        aggregation.Aggregation.__init__(self, "penguin", "2015-02-22", to_skip=to_skip)
         self.tools = PenguinTools(self.subject_collection)
 
         # load all of the gold standard data for all images at once
@@ -156,6 +156,15 @@ class PenguinAggregation(aggregation.Aggregation):
 
     def __get_gold_standard_subjects__(self):
         return self.gold_data.keys()
+
+    def __load_gold_standard__(self,zooniverse_id):
+        # have we already encountered this subject?
+        if os.path.isfile("/Users/greg/Databases/condor/"+zooniverse_id+"_gold.pickle"):
+            self.gold_data[zooniverse_id] = pickle.load(open("/Users/greg/Databases/condor/"+zooniverse_id+"_gold.pickle","rb"))
+        else:
+            annotations = self.classification_collection.find_one({"subjects.zooniverse_id":zooniverse_id,"user_name":"wreness"})["annotations"]
+
+            self.gold_data[zooniverse_id] = []
 
 
 

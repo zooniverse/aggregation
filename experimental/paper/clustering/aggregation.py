@@ -17,7 +17,6 @@ from pylab import meshgrid,cm,imshow,contour,clabel,colorbar,axis,title,show
 
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
-
 # for Greg - which computer am I on?
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -26,10 +25,12 @@ if os.path.exists("/home/ggdhines"):
 elif os.path.exists("/Users/greg"):
     base_directory = "/Users/greg"
     code_directory = base_directory + "/Code"
-
+    github_directory = base_directory +"/github"
+    print github_directory
 else:
     base_directory = "/home/greg"
     code_directory = base_directory + "/github"
+    github_directory = base_directory + "/github"
 
 sys.path.append(github_directory+"/pyIBCC/python")
 sys.path.append(code_directory+"/reduction/experimental/clusteringAlg")
@@ -476,7 +477,6 @@ class Aggregation:
 
     def __cluster_subject__(self,zooniverse_id,clustering_alg,correction_alg=None,fix_distinct_clusters = False):
         assert zooniverse_id in self.markings_list
-
         if self.markings_list[zooniverse_id] != []:
             # cluster results will be a 3-tuple containing a list of the cluster centers, a list of the points in each
             # cluster and a list of the users who marked each point
@@ -488,8 +488,7 @@ class Aggregation:
             # make sure we got a 3 tuple and since there was a least one marking, we should have at least one cluster
             # pruning will come later
             if not(len(self.clusterResults[zooniverse_id]) == 3):
-                print "here"
-                print "here"
+
                 print self.clusterResults[zooniverse_id]
             assert len(self.clusterResults[zooniverse_id]) == 3
             assert self.clusterResults[zooniverse_id][0] != []
@@ -1321,9 +1320,7 @@ class Aggregation:
 
             # read in all of the markings this user made - which might be none
 
-
             for pt, animal_type in self.tools.__list_markings__(classification):
-
                 if not(animal_type in self.to_skip):
                     self.markings_list[zooniverse_id].append(pt)
                     # print annotation_list

@@ -158,7 +158,4 @@ class DivisiveKmeans:
         for c in end_clusters:
             assert(len(c) >= self.min_samples)
 
-        if True:
-            return cluster_centers, end_clusters,end_users
-        else:
-            return cluster_centers
+        return cluster_centers, end_clusters,end_users

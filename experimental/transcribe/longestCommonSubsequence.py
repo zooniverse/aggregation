@@ -262,36 +262,36 @@ Y = []
 Xstd = []
 Ystd = []
 
-# for imageIndex in range(3):
-#     for lineIndex in range(5):
-#
-#         a = []
-#         c = []
-#
-#         for l in transcriptions[(imageIndex,lineIndex)]:
-#             lcs_string= lcs([gold_transcriptions[(imageIndex,lineIndex)],l])
-#             accuracy = len(lcs_string)/float(len(l))
-#             completeness = len(lcs_string)/float(len(gold_transcriptions[(imageIndex,lineIndex)]))
-#             a.append(accuracy)
-#             c.append(completeness)
-#
-#         X.append(np.mean(a))
-#         Y.append(np.mean(c))
-#
-#         Xstd.append(np.std(a,ddof=1))
-#         Ystd.append(np.std(c,ddof=1))
-#
-# print X
-# print np.mean(X)
-# print np.mean(Y)
+for imageIndex in range(3):
+    for lineIndex in range(5):
 
-# plt.errorbar(X,Y,xerr=Xstd,yerr=Ystd,fmt=".")
-# plt.xlabel("Accuracy (w/ standard dev.)")
-# plt.ylabel("Completeness (w/ standard dev.)")
-# plt.xlim((0,1.1))
-# plt.ylim((0,1.1))
-# plt.show()
+        a = []
+        c = []
 
+        for l in transcriptions[(imageIndex,lineIndex)]:
+            lcs_string,segments= lcs([gold_transcriptions[(imageIndex,lineIndex)],l])
+            accuracy = len(lcs_string)/float(len(l))
+            completeness = len(lcs_string)/float(len(gold_transcriptions[(imageIndex,lineIndex)]))
+            a.append(accuracy)
+            c.append(completeness)
+
+        X.append(np.mean(a))
+        Y.append(np.mean(c))
+
+        Xstd.append(np.std(a,ddof=1))
+        Ystd.append(np.std(c,ddof=1))
+
+print X
+print np.mean(X)
+print np.mean(Y)
+
+plt.errorbar(X,Y,xerr=Xstd,yerr=Ystd,fmt=".")
+plt.xlabel("Accuracy (w/ standard dev.)")
+plt.ylabel("Completeness (w/ standard dev.)")
+plt.xlim((0,1.1))
+plt.ylim((0,1.1))
+plt.show()
+assert False
 def majority_vote(segments,num_users=3):
     new_lcs = ""
     for segmentIndex in sorted(list(segments)):
@@ -313,7 +313,6 @@ def majority_vote(segments,num_users=3):
             new_lcs += segments[segmentIndex]
         # otherwise - merge
         # grab all of those segments with the the correct segment index
-
     return new_lcs
 
 
@@ -327,15 +326,19 @@ for imageIndex in range(3):
         a = []
         c = []
 
-
+        #print gold_transcriptions[(imageIndex,lineIndex)]
         for i,s in enumerate(findsubsets(transcriptions[(imageIndex,lineIndex)],3)):
             lcs_string,segments = lcs(s)
             new_lcs_string = majority_vote(segments)
-            lcs_string2 = lcs([gold_transcriptions[(imageIndex,lineIndex)],new_lcs_string])
+            lcs_string2,segments = lcs([gold_transcriptions[(imageIndex,lineIndex)],lcs_string])
             accuracy = len(lcs_string2)/float(len(lcs_string))
             completeness = len(lcs_string2)/float(len(gold_transcriptions[(imageIndex,lineIndex)]))
             a.append(accuracy)
             c.append(completeness)
+
+            #print new_lcs_string
+
+        #print np.mean(a)
         X.append(np.mean(a))
         Y.append(np.mean(c))
 
