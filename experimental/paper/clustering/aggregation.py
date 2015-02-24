@@ -12,6 +12,7 @@ import math
 from scipy.stats.stats import pearsonr
 import cPickle as pickle
 from scipy.stats.mstats import normaltest
+import warnings
 
 from pylab import meshgrid,cm,imshow,contour,clabel,colorbar,axis,title,show
 
@@ -356,7 +357,12 @@ class Aggregation:
             plt.plot([1000,pt2[0]],[0,pt2[1]])
             plt.show()
 
-    def __display_image__(self,zooniverse_id):
+    def __get_image_fname__(self,zooniverse_id):
+        """
+        get the path to JPG for this image - also download the image if necessary
+        :param zooniverse_id:
+        :return:
+        """
         subject = self.subject_collection.find_one({"zooniverse_id": zooniverse_id})
         url = subject["location"]["standard"]
 
@@ -368,11 +374,23 @@ class Aggregation:
         if not(os.path.isfile(base_directory+"/Databases/"+self.project+"/images/"+object_id)):
             urllib.urlretrieve(url, base_directory+"/Databases/"+self.project+"/images/"+object_id)
 
-        image_file = cbook.get_sample_data(base_directory+"/Databases/"+self.project+"/images/"+object_id)
-        image = plt.imread(image_file)
+        fname = base_directory+"/Databases/"+self.project+"/images/"+object_id
 
-        fig, ax = plt.subplots()
-        im = ax.imshow(image)
+        return fname
+
+
+
+
+    def __display_image__(self,zooniverse_id):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            fname = self.__get_image_fname__(zooniverse_id)
+
+            image_file = cbook.get_sample_data(fname)
+            image = plt.imread(image_file)
+
+            fig, ax = plt.subplots()
+            im = ax.imshow(image)
 
     def __barnes_interpolation__(self,zooniverse_id_list):
         # sort of barnes interpolation
@@ -480,6 +498,8 @@ class Aggregation:
         if self.markings_list[zooniverse_id] != []:
             # cluster results will be a 3-tuple containing a list of the cluster centers, a list of the points in each
             # cluster and a list of the users who marked each point
+
+            fname = self.__get_image_fname__(zooniverse_id)
 
             self.clusterResults[zooniverse_id] = clustering_alg(self.markings_list[zooniverse_id],self.markings_to_user[zooniverse_id])
             self.num_clusters = len(zip(*self.clusterResults[zooniverse_id]))
@@ -821,7 +841,7 @@ class Aggregation:
 
     def __display_raw_markings__(self,zooniverse_id):
         self.__display_image__(zooniverse_id)
-        print len(self.users_per_subject[zooniverse_id])
+        print "Num users: " + str(len(self.users_per_subject[zooniverse_id]))
         X,Y = zip(*self.markings_list[zooniverse_id])
         plt.plot(X,Y,'.')
         plt.xlim((0,1000))
@@ -833,7 +853,7 @@ class Aggregation:
 
     def __save_raw_markings__(self,zooniverse_id):
         self.__display_image__(zooniverse_id)
-        print len(self.users_per_subject[zooniverse_id])
+        print "Num users: " + str(len(self.users_per_subject[zooniverse_id]))
         X,Y = zip(*self.markings_list[zooniverse_id])
         plt.plot(X,Y,'.')
         plt.xlim((0,1000))

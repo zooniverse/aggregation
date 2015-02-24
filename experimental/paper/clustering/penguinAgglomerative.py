@@ -13,15 +13,17 @@ if os.path.exists("/home/ggdhines"):
 else:
     sys.path.append("/home/greg/github/reduction/experimental/clusteringAlg")
 
-from agglomerativeClustering import Agglomerative,TooBig
+from agglomerativeClustering import Ward,TooBig
 
-clusterAlg = Agglomerative().__fit__
+clusterAlg = Ward().__fit__
 
 penguin = PenguinAggregation()
 subject_ids = pickle.load(open(aggregation.base_directory+"/Databases/penguin_gold.pickle","rb"))
 
 for i,subject in enumerate(random.sample(subject_ids,50)):
+    #subject = "APZ000173v"
     print i,subject
+
     penguin.__readin_subject__(subject,users_to_skip=["caitlin.black"])
     try:
         blankImage = penguin.__cluster_subject__(subject, clusterAlg)
@@ -32,4 +34,3 @@ for i,subject in enumerate(random.sample(subject_ids,50)):
     if not blankImage:
         penguin.__display_raw_markings__(subject)
         penguin.__display__markings__(subject)
-        break

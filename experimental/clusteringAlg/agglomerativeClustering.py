@@ -3,8 +3,12 @@ __author__ = 'greg'
 from sklearn.cluster import DBSCAN
 import numpy as np
 import math
+import matplotlib.pyplot as plt
+import urllib
+import matplotlib.cbook as cbook
 from copy import deepcopy
-from ete2 import Tree, TreeStyle
+import warnings
+import time
 
 
 class TooBig(Exception):
@@ -58,8 +62,6 @@ class Agglomerative:
                     if c1.key < c2.key:
                         dist = math.sqrt((c1.x-c2.x)**2+(c1.y-c2.y)**2)
                         self.distances[c1.key][c2.key] = dist
-
-
 
     def dist(self, c1,c2):
         return math.sqrt((c1[0]-c2[0])**2 + (c1[1]-c2[1])**2)
@@ -131,33 +133,55 @@ class Agglomerative:
 
         return np.mean(d)
 
-    def mergeClusters(self,c1,c2):
-        retval = c1[:]
-        retval.extend(c2)
+    # def mergeClusters(self,c1,c2):
+    #     retval = c1[:]
+    #     retval.extend(c2)
+    #
+    #     return retval
+    #
+    # def findClusterCenter(self,cluster):
+    #     x,y,u = zip(*self.flatten(cluster))
+    #     return np.mean(x),np.mean(y)
 
-        return retval
-
-    def findClusterCenter(self,cluster):
-        x,y,u = zip(*self.flatten(cluster))
-        return np.mean(x),np.mean(y)
-
-    def __agglomerate_clusters__(self,clusters):
+    def __agglomerate_clusters__(self,clusters,fname = None):
         while len(clusters) > 1:
-            minAvg = float("inf")
+
+            objective_func = float("inf")
             bestChoice = None
+
+            if not(fname is None):
+                print [c.users for c in clusters]
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    image_file = cbook.get_sample_data(fname)
+                    image = plt.imread(image_file)
+
+                    fig, ax = plt.subplots()
+                    im = ax.imshow(image)
+                    for c in clusters:
+                        X,Y = zip(*c.markings)
+                        cent_x = np.mean(X)
+                        cent_y = np.mean(Y)
+                        plt.plot(cent_x,cent_y,".",color="blue")
+
+                    plt.show()
 
             for i,c1 in enumerate(clusters):
                 for j,c2 in enumerate(clusters[i+1:]):
                     try:
-                        clusterDist = self.distances[c1.key][c2.key]
+                        if c1.key < c2.key:
+                            clusterDist = self.distances[c1.key][c2.key]
+                        else:
+                            clusterDist = self.distances[c2.key][c1.key]
                     except KeyError:
                         # not stored - so there should be an overlap between the users
                         continue
 
-                    if clusterDist <= minAvg:
-                            minAvg = clusterDist
+                    if clusterDist < objective_func:
+                            objective_func = clusterDist
                             bestChoice = (i,i+1+j)
-
+            if not(fname is None):
+                print objective_func
             # if there is no merging to be done
             if bestChoice is None:
                 break
@@ -166,38 +190,38 @@ class Agglomerative:
             c2 = clusters.pop(bestChoice[1])
             c1 = clusters.pop(bestChoice[0])
 
-            print "^^"
-            print c1.key,c2.key
 
             #print c1.users,c2.users
 
             if c1.key < c2.key:
-                t = AgglomerativeNode(c1,c2)
-                self.__update_distances__(clusters,c1,c2,t)
-                clusters.append(t)
+                self.__update_distances__(clusters,c1,c2)
+                clusters.append(AgglomerativeNode(c1,c2))
             else:
-                t = AgglomerativeNode(c2,c1)
-                self.__update_distances__(clusters,c2,c1,t)
-                clusters.append(t)
+                self.__update_distances__(clusters,c2,c1)
+                clusters.append(AgglomerativeNode(c2,c1))
+
 
             for c in clusters:
                 if c1.key < c2.key:
                     if c.key == c1.key:
                         continue
 
-                    print self.__average_distance__(c1,c)
                     try:
-                        print self.__get_dist__(c.key,c1.key)
+                        self.__get_dist__(c.key,c1.key)
                     except KeyError:
-                        raise
+                        overlap = [u for u in c.users if u in c1.users]
+                        if overlap == []:
+                            raise
                 else:
                     if c.key == c2.key:
                         continue
 
-                    print self.__average_distance__(c2,c)
-                    print self.__get_dist__(c.key,c2.key)
-                print
-            assert False
+                    try:
+                        self.__get_dist__(c.key,c2.key)
+                    except KeyError:
+                        overlap = [u for u in c.users if u in c2.users]
+                        if overlap == []:
+                            raise
 
         return clusters
 
@@ -206,23 +230,23 @@ class Agglomerative:
             try:
                 return self.distances[key1][key2]
             except KeyError:
-                print
-                print
-                print sorted(self.distances.keys(), key = lambda x:x[0])
-                print key1,key2
-                print self.distances[key1].keys()
-                print self.distances[key2].keys()
+                # print
+                # print
+                # print sorted(self.distances.keys(), key = lambda x:x[0])
+                # print key1,key2
+                # print self.distances[key1].keys()
+                # print self.distances[key2].keys()
                 raise
         else:
             try:
                 return self.distances[key2][key1]
             except KeyError:
-                print
-                print
-                print sorted(self.distances.keys(), key = lambda x:x[0])
-                print key1, key2
-                print self.distances[key1].keys()
-                print self.distances[key2].keys()
+                # print
+                # print
+                # print sorted(self.distances.keys(), key = lambda x:x[0])
+                # print key1, key2
+                # print sorted(self.distances[key1].keys())
+                # print sorted(self.distances[key2].keys())
                 raise
 
     def __delete_dist__(self,key1,key2):
@@ -230,15 +254,15 @@ class Agglomerative:
             try:
                 del self.distances[key1][key2]
             except KeyError:
-                print self.distances.keys()
-                print self.distances[key1].keys()
+                # print self.distances.keys()
+                # print self.distances[key1].keys()
                 raise
         else:
             try:
                 del self.distances[key2][key1]
             except KeyError:
-                print self.distances.keys()
-                print self.distances[key2].keys()
+                # print self.distances.keys()
+                # print self.distances[key2].keys()
                 raise
 
     def __set_distance__(self,key1,key2,dist):
@@ -247,7 +271,7 @@ class Agglomerative:
         else:
             self.distances[key2][key1] = dist
 
-    def __update_distances__(self,clusters,c_i,c_j,combined_cluster):
+    def __update_distances__(self,clusters,c_i,c_j):
         # c_j is the cluster that we going to  delete (or at least it will  become part of c_i)
         #print (c_i.key,c_j.key)
         # make sure we have the right order
@@ -267,42 +291,57 @@ class Agglomerative:
             overlap_ki = [u for u in c_k.users if u in c_i.users]
             overlap_kj = [u for u in c_k.users if u in c_j.users]
 
+
             # if we have both overlaps - there shouldn't be anything we need to do
             if (overlap_ki != []) and (overlap_kj != []):
-                print "1"
+                # print "1"
                 pass
             elif overlap_kj != []:
-                print "2"
+                # print "2"
                 # overlap with c_j, which means that distance[c_k][c_j] shouldn't exist in the first place
                 # and as a result of the merge, we shouldn't have distance[c_k][c_i] either
                 self.__delete_dist__(c_k.key,c_i.key)
 
             elif overlap_ki != []:
-                print "3"
+                # print "3"
                 # overlap with c_i so distance[c_k][c_i] shouldn't exist. Get rid of distance[c_k][c_j] since it will
                 # be going away anyways
                 self.__delete_dist__(c_k.key,c_j.key)
             else:
-                print "4"
+                # print "4"
                 # no overlaps
-                total_size = float(c_i.size + c_j.size + c_k.size)
 
                 # since we are only storing the distances values when c < c', we need to be slightly cute about this
                 t = 0
-                t += (c_i.size+c_k.size)/total_size*self.__get_dist__(c_i.key,c_k.key)
-                t += (c_j.size+c_k.size)/total_size*self.__get_dist__(c_j.key,c_k.key)
-                t += -c_k.size/total_size*self.distances[c_i.key][c_j.key]
+                #t += self.alpha(c_i.size, c_j.size, c_k.size)(c_i.size+c_k.size)/total_size*self.__get_dist__(c_i.key,c_k.key)
+                t += self.alpha(c_i.size, c_j.size, c_k.size)*self.__get_dist__(c_i.key,c_k.key)
+                #t += (c_j.size+c_k.size)/total_size*self.__get_dist__(c_j.key,c_k.key)
+                t += self.alpha(c_j.size, c_i.size, c_k.size)*self.__get_dist__(c_j.key,c_k.key)
+                #t += self.beta(c_i.size + c_j.size + c_k.size)-c_k.size/total_size*self.distances[c_i.key][c_j.key]
+                t += self.beta(c_i.size, c_j.size, c_k.size)*self.distances[c_i.key][c_j.key]
+                try:
+                    t += self.gamma()* math.fabs(self.__get_dist__(c_i.key,c_k.key) - self.__get_dist__(c_j.key,c_k.key))
+                except KeyError:
+                    print self.__get_dist__(c_i.key,c_k.key)
+                    print self.__get_dist__(c_j.key,c_k.key)
+                    raise
 
                 # update the distances
                 self.__set_distance__(c_i.key,c_k.key,t)
 
-                print t
-                print self.__total_distance__(combined_cluster,c_k)
-                assert False
                 # delete the value if we are storing it
                 self.__delete_dist__(c_k.key,c_j.key)
 
         del self.distances[c_j.key]
+
+    def alpha(self,i,j,k):
+        assert False
+
+    def beta(self,i,j,k):
+        assert False
+
+    def gamma(self):
+        assert False
 
     def __total_distance__(self,c1,c2):
         dist = []
@@ -346,9 +385,10 @@ class Agglomerative:
     #
     #     return clusters
 
-    def __fit__(self,markings,user_ids,dbscan_preprocess=False):
-        if len(markings) > 200:
-            raise TooBig()
+    def __fit__(self,markings,user_ids,dbscan_preprocess=False,fname=None):
+        #if len(markings) > 500:
+        #    raise TooBig()
+        print "Number of markings: " + str(len(markings))
 
         # X = np.array(XYpts)
         # #use DBSCAN to create connectivity constraints
@@ -359,6 +399,7 @@ class Agglomerative:
         #     if not(-1 in db.labels_):
         #         break
         end_clusters =[]
+        start = time.time()
         if dbscan_preprocess:
             pass
 
@@ -368,7 +409,7 @@ class Agglomerative:
             #starting_clusters = [((x,y),(x,y,user)) for (x,y), user in zip(markings,user_ids)]
             starting_clusters = [AgglomerativeLeaf(pt,user) for pt,user in zip(markings,user_ids)]
             self.__set_distances__(starting_clusters)
-            end_clusters = self.__agglomerate_clusters__(starting_clusters)
+            end_clusters = self.__agglomerate_clusters__(starting_clusters,fname)
         # end_clusters = []
         # #print max(labels)
         # #do agglomerative clustering on each individual "sub" cluser
@@ -438,5 +479,20 @@ class Agglomerative:
         for cluster in markings:
             X,Y = zip(*cluster)
             centers.append((np.mean(X),np.mean(Y)))
-
+        end = time.time()
+        print "Seconds to cluster: " + str(end-start)
+        print "Number of clusters: " + str(len(centers))
         return centers, markings,users
+
+class Ward(Agglomerative):
+    def __init__(self):
+        Agglomerative.__init__(self)
+
+    def alpha(self,i,j,k):
+        return (i+k)/float(i+j+k)
+
+    def beta(self,i,j,k):
+        return -k/float(i+j+k)
+
+    def gamma(self):
+        return 0
