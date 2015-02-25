@@ -501,7 +501,7 @@ class Aggregation:
 
             fname = self.__get_image_fname__(zooniverse_id)
 
-            self.clusterResults[zooniverse_id] = clustering_alg(self.markings_list[zooniverse_id],self.markings_to_user[zooniverse_id])
+            self.clusterResults[zooniverse_id],time_to_cluster = clustering_alg(self.markings_list[zooniverse_id],self.markings_to_user[zooniverse_id])
             self.num_clusters = len(zip(*self.clusterResults[zooniverse_id]))
             assert type(self.num_clusters) == int
 
@@ -532,11 +532,12 @@ class Aggregation:
                 self.num_clusters = len(self.clusterResults[zooniverse_id][0])
                 assert type(self.num_clusters) == int
         else:
-            self.clusterResults[zooniverse_id] = None
+            self.clusterResults[zooniverse_id] = [],[],[]
             self.num_clusters = 0
+            time_to_cluster = 0
 
         #print self.clusterResults
-        return self.clusterResults[zooniverse_id] is None
+        return len(self.clusterResults[zooniverse_id][0]),time_to_cluster
 
     def __signal_ibcc__(self):
         # run ibcc on each cluster to determine if it is a signal (an actual animal) or just noise

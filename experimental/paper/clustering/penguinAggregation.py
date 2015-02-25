@@ -48,16 +48,20 @@ class PenguinTools(aggregation.ROIClassificationTools):
     def __list_markings__(self, classification):
         marks_list = self.__classification_to_markings__(classification)
 
-        for mark in marks_list:
-            x = float(mark["x"])*self.scale
-            y = float(mark["y"])*self.scale
+        try:
+            for mark in marks_list:
+                x = float(mark["x"])*self.scale
+                y = float(mark["y"])*self.scale
 
-            if not("animal" in mark):
-                animal_type = None
-            else:
-                animal_type = mark["animal"]
+                if not("animal" in mark):
+                    animal_type = None
+                else:
+                    animal_type = mark["animal"]
 
-            yield (x,y),animal_type
+                yield (x,y),animal_type
+        except ValueError:
+            print classification
+            raise
 
     def __load_roi__(self,classification):
         zooniverse_id = classification["subjects"][0]["zooniverse_id"]

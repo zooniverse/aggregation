@@ -26,7 +26,7 @@ for i,subject in enumerate(random.sample(subject_ids,50)):
 
     penguin.__readin_subject__(subject,users_to_skip=["caitlin.black"])
     try:
-        blankImage = penguin.__cluster_subject__(subject, clusterAlg)
+        numClusters,time = penguin.__cluster_subject__(subject, clusterAlg)
     except TooBig:
         print "too big"
         continue
