@@ -177,6 +177,8 @@ class Aggregation:
         self.correction = multiClickCorrect.MultiClickCorrect(overlap_threshold=0)
 
 
+        self.expert = None
+
     def __get_users__(self,zooniverse_id):
         return self.users_per_subject[zooniverse_id]
 
@@ -852,6 +854,8 @@ class Aggregation:
         plt.show()
         plt.close()
 
+
+
     def __save_raw_markings__(self,zooniverse_id):
         self.__display_image__(zooniverse_id)
         print "Num users: " + str(len(self.users_per_subject[zooniverse_id]))
@@ -981,6 +985,20 @@ class Aggregation:
 
     def __load_roi__(self,zooniverse_id):
         assert False
+
+    def __load_gold_standard__(self,zooniverse_id):
+        # have we already encountered this subject?
+        if os.path.isfile(base_directory+"/Databases/"+self.project+"/"+zooniverse_id+"_gold.pickle"):
+            self.gold_data[zooniverse_id] = pickle.load(open(base_directory+"/Databases/"+self.project+"/"+zooniverse_id+"_gold.pickle","rb"))
+        else:
+            self.gold_data[zooniverse_id] = []
+            classification = self.classification_collection.find_one({"subjects.zooniverse_id":zooniverse_id,"user_name":self.expert})
+
+            for pt, animal_type in self.tools.__list_markings__(classification):
+                marking = {"x":pt["x"],"y":pt["y"]}
+                self.gold_data[zooniverse_id].append(marking)
+
+            pickle.dump(self.gold_data[zooniverse_id],open(base_directory+"/Databases/"+self.project+"/"+zooniverse_id+"_gold.pickle","wb"))
 
     def __accuracy__(self,zooniverse_id,gold_markings):
         print zooniverse_id
@@ -1284,10 +1302,7 @@ class Aggregation:
 
         plt.show()
 
-    def __load_gold_standard__(self,zooniverse_id):
-        assert False
-
-    def __readin_subject__(self, zooniverse_id,users_to_skip=[],read_in_gold=False):
+    def __readin_subject__(self, zooniverse_id,read_in_gold=False):
         subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})
         #print subject["location"]["standard"]
         # records relating to the individual annotations
@@ -1321,10 +1336,10 @@ class Aggregation:
             else:
                 user = classification["user_ip"]
 
-                if not(user in users_to_skip):
+                if not(user == self.expert):
                     self.ips_per_subject[zooniverse_id].append(user)
 
-            if user in users_to_skip:
+            if user == self.expert:
                 continue
 
             # check to see if we have already encountered this subject/user pairing

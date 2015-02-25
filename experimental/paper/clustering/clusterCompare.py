@@ -57,13 +57,13 @@ while True:
 
     print numMarkings,numMarkings2
 
-plt.plot(X1,Y1,"+",color="black",label="Agglomerative")
-plt.plot(X2,Y2,"o",color="black",label = "Divisive k-means")
-plt.xlabel("Number of Clusters")
-plt.ylabel("Runtime of Clustering Algorithm")
-plt.legend(loc="upper left")
-print len(X1),len(X2)
-print np.mean(Y1)
-print np.mean(Y2)
-
-plt.show()
+# plt.plot(X1,Y1,"+",color="black",label="Agglomerative")
+# plt.plot(X2,Y2,"o",color="black",label = "Divisive k-means")
+# plt.xlabel("Number of Clusters")
+# plt.ylabel("Runtime of Clustering Algorithm")
+# plt.legend(loc="upper left")
+# print len(X1),len(X2)
+# print np.mean(Y1)
+# print np.mean(Y2)
+#
+# plt.show()
