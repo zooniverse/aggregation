@@ -9,7 +9,7 @@ import matplotlib.cbook as cbook
 from copy import deepcopy
 import warnings
 import time
-
+import random
 
 class TooBig(Exception):
     def __init__(self):
@@ -389,6 +389,7 @@ class Agglomerative:
         #if len(markings) > 500:
         #    raise TooBig()
         print "Number of markings: " + str(len(markings))
+        markings = [(x,y+random.uniform(0,0.0001)) for (x,y) in markings]
 
         # X = np.array(XYpts)
         # #use DBSCAN to create connectivity constraints
@@ -482,7 +483,7 @@ class Agglomerative:
         end = time.time()
         print "Seconds to cluster: " + str(end-start)
         print "Number of clusters: " + str(len(centers))
-        return centers, markings,users
+        return (centers, markings,users), end-start
 
 class Ward(Agglomerative):
     def __init__(self):

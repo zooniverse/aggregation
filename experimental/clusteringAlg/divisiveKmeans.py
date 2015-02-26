@@ -6,6 +6,7 @@ import matplotlib.cbook as cbook
 import six
 from matplotlib import colors
 import math
+import time
 
 class DivisiveKmeans:
     def __init__(self, min_samples=1):
@@ -59,6 +60,7 @@ class DivisiveKmeans:
     #         return cluster_centers
 
     def __fit__(self, markings,user_ids,jpeg_file=None,debug=False):
+        start = time.time()
         #check to see if we need to split at all, i.e. there might only be one animal in total
 
         total = 0
@@ -69,8 +71,9 @@ class DivisiveKmeans:
                 X,Y = zip(*markings)
                 cluster_centers = [(np.mean(X),np.mean(Y)), ]
                 end_clusters = [markings,]
+                end = time.time()
                 if True:
-                    return cluster_centers, end_clusters,user_ids
+                    return (cluster_centers, end_clusters,user_ids), end -start
                 else:
                     return cluster_centers
             else:
@@ -157,5 +160,5 @@ class DivisiveKmeans:
 
         for c in end_clusters:
             assert(len(c) >= self.min_samples)
-
-        return cluster_centers, end_clusters,end_users
+        end = time.time()
+        return (cluster_centers, end_clusters,end_users),end-start
