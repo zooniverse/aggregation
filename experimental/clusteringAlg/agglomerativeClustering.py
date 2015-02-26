@@ -144,6 +144,7 @@ class Agglomerative:
     #     return np.mean(x),np.mean(y)
 
     def __agglomerate_clusters__(self,clusters,fname = None):
+        old_objective = None
         while len(clusters) > 1:
 
             objective_func = float("inf")
@@ -186,11 +187,20 @@ class Agglomerative:
             if bestChoice is None:
                 break
 
+            #if (old_objective is not None) and (objective_func > (3*old_objective)):
+            #    break
+
+            # old_objective = objective_func
+            if (objective_func/float(len(c1.markings)+len(c2.markings))) > (5*objective_func):
+                break
+            old_objective = objective_func/float(len(c1.markings)+len(c2.markings))
+
+
             # the second one comes later, so pop it first so we don't mess up  indices
             c2 = clusters.pop(bestChoice[1])
             c1 = clusters.pop(bestChoice[0])
 
-
+            #print str(objective_func) + "\t" + str(objective_func/float(len(c1.markings)+len(c2.markings)))
             #print c1.users,c2.users
 
             if c1.key < c2.key:

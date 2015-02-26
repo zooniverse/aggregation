@@ -13,6 +13,7 @@ from scipy.stats.stats import pearsonr
 import cPickle as pickle
 from scipy.stats.mstats import normaltest
 import warnings
+import time
 
 from pylab import meshgrid,cm,imshow,contour,clabel,colorbar,axis,title,show
 
@@ -126,7 +127,7 @@ class ROIClassificationTools(ClassificationTools):
 
 
 class Aggregation:
-    def __init__(self, project, date, tools=None, to_skip=[]):
+    def __init__(self, project, date, tools=None, to_skip=[],clustering_alg=None):
         self.project = project
 
         client = pymongo.MongoClient()
@@ -178,6 +179,7 @@ class Aggregation:
 
 
         self.expert = None
+        self.clustering_alg = clustering_alg
 
     def __get_users__(self,zooniverse_id):
         return self.users_per_subject[zooniverse_id]
@@ -495,8 +497,12 @@ class Aggregation:
         plt.ylabel("Height in Y-Pixels")
         plt.show()
 
-    def __cluster_subject__(self,zooniverse_id,clustering_alg,correction_alg=None,fix_distinct_clusters = False):
+    def __cluster_subject__(self,zooniverse_id,clustering_alg=None,correction_alg=None,fix_distinct_clusters = False):
+        if clustering_alg is None:
+            clustering_alg = self.clustering_alg
+        assert clustering_alg is not None
         assert zooniverse_id in self.markings_list
+
         if self.markings_list[zooniverse_id] != []:
             # cluster results will be a 3-tuple containing a list of the cluster centers, a list of the points in each
             # cluster and a list of the users who marked each point
@@ -542,6 +548,8 @@ class Aggregation:
         return len(self.clusterResults[zooniverse_id][0]),time_to_cluster
 
     def __signal_ibcc__(self):
+        self.__readin_users__()
+
         # run ibcc on each cluster to determine if it is a signal (an actual animal) or just noise
         # run ibcc on all of the subjects that have been processed (read in and clustered) so far
         # each cluster needs to have a universal index
@@ -732,7 +740,7 @@ class Aggregation:
 
 
 
-    def __roc__(self):
+    def __roc__(self,plot=False):
         correct_pts = []
         #print self.global_index_list
 
@@ -781,7 +789,7 @@ class Aggregation:
 
         truePos = []
         falsePos = []
-        with open("/Users/greg/Databases/"+self.project+"_signal.out","rb") as f:
+        with open(base_directory+"/Databases/"+self.project+"_signal.out","rb") as f:
             for ii,l in enumerate(f.readlines()):
                 a,b,prob = l[:-1].split(" ")
 
@@ -799,10 +807,36 @@ class Aggregation:
             X.append(len([x for x in falsePos if x >= a]))
             Y.append(len([y for y in truePos if y >= a]))
 
-        plt.plot(X,Y)
-        plt.xlabel("False Positive Count")
-        plt.ylabel("True Positive Count")
-        plt.show()
+        if plot:
+            plt.plot(X,Y)
+            plt.xlabel("False Positive Count")
+            plt.ylabel("True Positive Count")
+            plt.show()
+
+        return X,Y
+
+    def __outliers__(self,zooniverse_id):
+        for (Cx,Cy), markings in zip(self.clusterResults[zooniverse_id][0],self.clusterResults[zooniverse_id][1]):
+            distances = []
+            if len(markings) == 1:
+                continue
+            for (x,y) in markings:
+                dist = math.sqrt((x-Cx)**2+(y-Cy)**2)
+                distances.append(dist)
+
+            ratio =  max(distances)/np.mean(distances)
+
+
+
+            if ratio > 4:
+                print ratio
+                self.__display_image__(zooniverse_id)
+                X,Y = zip(*markings)
+
+                plt.plot(X,Y,'.')
+
+                plt.show()
+
 
     def __process_signal__(self):
         self.signal_probability = []
@@ -995,28 +1029,43 @@ class Aggregation:
             classification = self.classification_collection.find_one({"subjects.zooniverse_id":zooniverse_id,"user_name":self.expert})
 
             for pt, animal_type in self.tools.__list_markings__(classification):
-                marking = {"x":pt["x"],"y":pt["y"]}
+                marking = {"x":pt[0],"y":pt[1]}
                 self.gold_data[zooniverse_id].append(marking)
 
             pickle.dump(self.gold_data[zooniverse_id],open(base_directory+"/Databases/"+self.project+"/"+zooniverse_id+"_gold.pickle","wb"))
 
-    def __accuracy__(self,zooniverse_id,gold_markings):
-        print zooniverse_id
+    def __accuracy__(self,zooniverse_id):
+        """
+        Calculate the accuracy for the given zooniverse_id, clustering needs to have already been done
+        and gold standard data needs to have already been read in
+        :param zooniverse_id:
+        :return:
+        """
+        gold_markings = self.gold_data[zooniverse_id]
         userToGold = [[] for i in range(len(gold_markings))]
         goldToUser = [[] for i in range(len(zip(*self.clusterResults[zooniverse_id])))]
-        #print len(goldToUser)
-        #print len(userToGold)
-        #print self.clusterResults[zooniverse_id][0]
-        #print gold_markings
-        for marking_index,((x, y), pts, users) in enumerate(zip(*self.clusterResults[zooniverse_id])):
-            dist = [math.sqrt((Gx-x)**2+(Gy-y)**2) for (Gx,Gy) in gold_markings]
-            userToGold[dist.index(min(dist))].append(marking_index)
 
-        for gold_index, (Gx,Gy) in enumerate(gold_markings):
-            dist = [math.sqrt((Gx-x)**2+(Gy-y)**2) for (x,y),pts,users in zip(*self.clusterResults[zooniverse_id])]
-            goldToUser[dist.index(min(dist))].append(gold_index)
+        for marking_index,((x, y), pts, users) in enumerate(zip(*self.clusterResults[zooniverse_id])):
+            try:
+                dist = [math.sqrt((gold["x"]-x)**2+(gold["y"]-y)**2) for gold in gold_markings]
+                userToGold[dist.index(min(dist))].append(marking_index)
+            except ValueError:
+                #print zooniverse_id
+                #print gold_markings
+                #print self.clusterResults[zooniverse_id]
+                print "Empty gold standard: " + zooniverse_id
+                return 0
+
+        for gold_index, gold in enumerate(gold_markings):
+            try:
+                dist = [math.sqrt((gold["x"]-x)**2+(gold["y"]-y)**2) for (x,y),pts,users in zip(*self.clusterResults[zooniverse_id])]
+                goldToUser[dist.index(min(dist))].append(gold_index)
+            except ValueError:
+                print "Empty user clusters: " + zooniverse_id
+                return 0
 
         num_match = len([x for x in userToGold if len(x) > 0])
+        return num_match
         #print userToGold
         lower_bound = num_match/float(len(userToGold))
         additional = len([x for x in goldToUser if len(x) == 0])
@@ -1301,6 +1350,9 @@ class Aggregation:
                 plt.plot([x1,x2],[y1,y2],"o-",color="blue")
 
         plt.show()
+
+    def __num_gold_clusters__(self,zooniverse_id):
+        return len(self.gold_data[zooniverse_id])
 
     def __readin_subject__(self, zooniverse_id,read_in_gold=False):
         subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})

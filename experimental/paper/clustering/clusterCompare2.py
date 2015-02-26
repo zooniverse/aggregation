@@ -19,9 +19,9 @@ from agglomerativeClustering import Ward
 from divisiveKmeans import DivisiveKmeans
 
 clusterAlg2 = DivisiveKmeans().__fit__
-clusterAlg = Ward().__fit__
 
-penguin = PenguinAggregation()
+dkmeans = PenguinAggregation(clustering_alg= DivisiveKmeans().__fit__)
+agglomerative = PenguinAggregation(clustering_alg = Ward().__fit__)
 subject_ids = pickle.load(open(aggregation.base_directory+"/Databases/penguin_gold.pickle","rb"))
 
 
@@ -41,8 +41,9 @@ while True:
     subject = subject_ids[index]
     #print nonEmpty,index
 
-    penguin.__readin_subject__(subject,read_in_gold=True)#,users_to_skip=["caitlin.black"])
-    numClusters,time_to_cluster = penguin.__cluster_subject__(subject, clusterAlg)
+    agglomerative.__readin_subject__(subject,read_in_gold=True)#,users_to_skip=["caitlin.black"])
+    dkmeans.__readin_subject__(subject,read_in_gold=True)
+    numClusters,time_to_cluster = agglomerative.__cluster_subject__(subject)
 
 
     if numClusters == 0:
@@ -51,22 +52,25 @@ while True:
     print nonEmpty
 
     nonEmpty += 1
-    if nonEmpty == 50:
+    if nonEmpty == 30:
         break
-    accuracy1 = penguin.__accuracy__(subject)
+    accuracy1 = agglomerative.__accuracy__(subject)
 
     X1.append(numClusters)
     Y1.append(time_to_cluster)
     Z1.append(accuracy1)
 
-    numClusters2,time_to_cluster = penguin.__cluster_subject__(subject, clusterAlg2,fix_distinct_clusters=True)
-    accuracy2 = penguin.__accuracy__(subject)
+    numClusters2,time_to_cluster = dkmeans.__cluster_subject__(subject, clusterAlg2,fix_distinct_clusters=True)
+    accuracy2 = dkmeans.__accuracy__(subject)
     X2.append(numClusters2)
     Y2.append(time_to_cluster)
     Z2.append(accuracy2)
 
-    print accuracy1,accuracy2,penguin.__num_gold_clusters__(subject)
+    #dkmeans.__outliers__(subject)
+
+    print accuracy1,accuracy2,dkmeans.__num_gold_clusters__(subject)
     #print numMarkings,numMarkings2
+
 
 print len([z1 for (z1,z2) in zip(Z1,Z2) if z1 > z2])/float(len(Z1))
 print len([z1 for (z1,z2) in zip(Z1,Z2) if z1 < z2])/float(len(Z1))
@@ -79,6 +83,17 @@ plt.plot([0,max(max(Z1),max(Z2))+10],[0,max(max(Z1),max(Z2))+10],"--",color="bla
 plt.xlim((0,max(max(Z1),max(Z2))+10))
 plt.ylim((0,max(max(Z1),max(Z2))+10))
 plt.show()
+
+agglomerative.__signal_ibcc__()
+X,Y = agglomerative.__roc__()
+plt.plot(X,Y,color="red")
+
+dkmeans.__signal_ibcc__()
+X,Y = dkmeans.__roc__()
+plt.plot(X,Y,color="green")
+
+plt.show()
+
 #
 # plt.plot(X1,Y1,"+",color="black",label="Agglomerative")
 # plt.plot(X2,Y2,"o",color="black",label = "Divisive k-means")

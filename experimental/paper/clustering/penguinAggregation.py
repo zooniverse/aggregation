@@ -77,8 +77,8 @@ class PenguinTools(aggregation.ROIClassificationTools):
         return self.roi_dict[site]
 
 class PenguinAggregation(aggregation.Aggregation):
-    def __init__(self, to_skip=[]):
-        aggregation.Aggregation.__init__(self, "penguin", "2015-02-22", to_skip=to_skip)
+    def __init__(self, to_skip=[],clustering_alg=None):
+        aggregation.Aggregation.__init__(self, "penguin", "2015-02-22", to_skip=to_skip,clustering_alg=clustering_alg)
         self.tools = PenguinTools(self.subject_collection)
         self.expert = "caitlin.black"
 
@@ -162,14 +162,14 @@ class PenguinAggregation(aggregation.Aggregation):
     def __get_gold_standard_subjects__(self):
         return self.gold_data.keys()
 
-    def __load_gold_standard__(self,zooniverse_id):
-        # have we already encountered this subject?
-        if os.path.isfile("/Users/greg/Databases/condor/"+zooniverse_id+"_gold.pickle"):
-            self.gold_data[zooniverse_id] = pickle.load(open("/Users/greg/Databases/condor/"+zooniverse_id+"_gold.pickle","rb"))
-        else:
-            annotations = self.classification_collection.find_one({"subjects.zooniverse_id":zooniverse_id,"user_name":"wreness"})["annotations"]
-
-            self.gold_data[zooniverse_id] = []
+    # def __load_gold_standard__(self,zooniverse_id):
+    #     # have we already encountered this subject?
+    #     if os.path.isfile("/Users/greg/Databases/condor/"+zooniverse_id+"_gold.pickle"):
+    #         self.gold_data[zooniverse_id] = pickle.load(open("/Users/greg/Databases/condor/"+zooniverse_id+"_gold.pickle","rb"))
+    #     else:
+    #         annotations = self.classification_collection.find_one({"subjects.zooniverse_id":zooniverse_id,"user_name":"wreness"})["annotations"]
+    #
+    #         self.gold_data[zooniverse_id] = []
 
 
 
