@@ -5,6 +5,23 @@ from shapely.geos import TopologicalError
 import matplotlib.pyplot as plt
 from shapely.validation import explain_validity
 import math
+import os
+import cPickle as pickle
+
+if os.path.exists("/home/ggdhines"):
+    base_directory = "/home/ggdhines"
+    github_directory = base_directory + "/github"
+    code_directory = base_directory + "/PycharmProjects"
+elif os.path.exists("/Users/greg"):
+    base_directory = "/Users/greg"
+    code_directory = base_directory + "/Code"
+    github_directory = base_directory +"/github"
+    print github_directory
+else:
+    base_directory = "/home/greg"
+    code_directory = base_directory + "/github"
+    github_directory = base_directory + "/github"
+
 
 project = "kelp"
 date = "2015-02-22"
@@ -19,173 +36,145 @@ polydict = {}
 count = {}
 
 def fix_poly(plist):
-    correct = []
-    to_process = plist
-
-    while to_process != []:
-        for j in range(len(to_process),3,-1):
-            shape1 = Polygon(to_process[:j])
-            validity = explain_validity(shape1)
-            if validity == "Valid Geometry":
-                correct.append(to_process[:j])
-                to_process = to_process[j:]
-                break
-
-
-            # if validity == "Valid Geometry":
-            #     valid = True
-            # else:
-            #     if valid:
-            #         valid = False
-            #         breaks.append(j)
-
-        print breaks
-
-        print
-
+    print "  " + str(len(plist))
+    try:
+        shape = Polygon(plist)
+    except ValueError:
         return []
 
+    validity = explain_validity(shape)
+    if validity == "Valid Geometry":
+        return [shape]
 
+    shape_list = []
+    while plist != []:
+        #print "  " + str(len(plist))
+        longest_valid = 0
+        best_choice = None
+        for i in range(len(plist)):
+            # it might be that no matter how long the longest valid polygon is from this point, it can't
+            # beat the current max, if so, just break
+            if (len(plist)-i) < longest_valid:
+                break
 
-        if "[" in validity:
-            print validity
-            print p
-            # there is a self loop - so break the list up
-            s,t = validity.split(" ")
-            q,r = s.split("[")
-            r,t =  float(r), float(t[:-1])
+            longest_valid_i = 0
+            best_choice_i = None
+            for j in range(i+1,len(plist)):
+                try:
+                    temp_shape = Polygon(plist[i:j])
+                    validity = explain_validity(temp_shape)
 
-            splits = [i for i in range(len(p)) if math.sqrt((p[i][0]-r)**2 + (p[i][1]-t)**2) < 0.01]
-            print splits
-            X,Y = zip(*p)
-            plt.plot(X,Y)
-            plt.show()
-            assert False
-            for jj in range(len(splits)-1):
-                temp = p[splits[jj]:splits[jj+1]]
-                if len(temp) > 1:
-                    plist.append(temp[:])
+                    if (validity == "Valid Geometry") and ((j-i) > longest_valid_i):
+                        longest_valid_i = j-i
+                        best_choice_i = i,j
+                except ValueError:
+                    continue
+            if longest_valid_i > longest_valid:
+                longest_valid = longest_valid_i
+                best_choice = best_choice_i
+        if best_choice is None:
+            break
 
-            temp = p[splits[-1]:]
-            temp.extend(p[:splits[0]])
-            if len(temp) > 1:
-                plist.append(temp[:])
-        else:
-            correct.append(p[:])
+        i,j = best_choice
+        shape = Polygon(plist[i:j])
+        shape_list.append(shape)
+        test_validity = explain_validity(shape)
+        assert test_validity == "Valid Geometry"
 
-    return correct
+        plist_temp = plist[:i]
+        plist_temp.extend(plist[j:])
+        plist = plist_temp
+    return shape_list
+counter = -1
+for classification in classification_collection.find():
+    counter += 1
+    if counter == 10000:
+        break
 
-for counter,classification in enumerate(classification_collection.find().limit(10000)):
-    #print counter
     annotations = classification["annotations"]
     zooniverse_id = classification["subjects"][0]["zooniverse_id"]
     if "user_name" in classification:
-        user = classification["user_name"]
+        user_id = classification["user_name"]
+        user = user_collection.find_one({"name":user_id})
     else:
-        user = classification["user_ip"]
+        user_id = classification["user_ip"]
+        user = user_collection.find_one({"ip":user_id})
 
+    if user is None:
+        continue
+    zooniverse_user_id = user["zooniverse_id"]
     index = [("value" in d) for d in annotations].index(True)
 
     polygons = annotations[index]["value"]
     if polygons == "":
         continue
 
-    if not(zooniverse_id in count):
-        count[zooniverse_id] = 1
+    print counter
+
+    # have we read in this user and subject before? If so, read in the pickle file
+    fname = base_directory+"/Databases/kelp/"+str(zooniverse_id)+"_"+str(zooniverse_user_id)+".pickle"
+    plines = []
+    if os.path.isfile(fname):
+        plines = pickle.load(open(fname,"rb"))
     else:
-        count[zooniverse_id] += 1
 
-    for poly_key in polygons:
-        # convert from relative coordinates to absolute
-        poly = polygons[poly_key]
-        x,y = poly["startingPoint"]
-        x = float(x)
-        y = float(y)
-
-        segmentIndices = sorted([int(i) for i in poly["relPath"]])
-        plines = [(x,y)]
-        for i in segmentIndices:
-            delta = poly["relPath"][str(i)]
-            dX,dY = delta
-            dX = float(dX)
-            dY = float(dY)
-
-            x += dX
-            y += dY
-
-            plines.append((x,y))
-
-        if not(zooniverse_id in polydict):
-            polydict[zooniverse_id]= {}
-            polydict[zooniverse_id][user] = fix_poly(plines)
+        if not(zooniverse_id in count):
+            count[zooniverse_id] = 1
         else:
-            if not(user in polydict[zooniverse_id]):
-                polydict[zooniverse_id][user] = fix_poly(plines)
-            else:
-                polydict[zooniverse_id][user].extend(fix_poly(plines))
+            count[zooniverse_id] += 1
+
+        for poly_key in polygons:
+            # convert from relative coordinates to absolute
+            poly = polygons[poly_key]
+            x,y = poly["startingPoint"]
+            x = float(x)
+            y = float(y)
+
+            segmentIndices = sorted([int(i) for i in poly["relPath"]])
+            plines = [(x,y)]
+            for i in segmentIndices:
+                delta = poly["relPath"][str(i)]
+                dX,dY = delta
+                dX = float(dX)
+                dY = float(dY)
+
+                if (dX == 0) and (dY == 0):
+                    continue
+
+                x += dX
+                y += dY
+
+                plines.append((x,y))
+
+        plines = fix_poly(plines)
+        pickle.dump(plines,open(fname,"wb"))
+
+    if not(zooniverse_id in polydict):
+        polydict[zooniverse_id]= {}
+        polydict[zooniverse_id][user_id] = plines
+    else:
+        if not(user_id in polydict[zooniverse_id]):
+            polydict[zooniverse_id][user_id] = plines
+        else:
+            print "weird"
+            #polydict[zooniverse_id][user_id].extend(plines)
 
 
 
-def merge(plist1,plist2):
+def intersect(plist1,plist2):
     for p1 in plist1:
-        # while p1[-1] in p1[:-1]:
-        #     p1.pop(-1)
-        #p1 = [p1[j] for j in range(len(p1)) if not(p1[j] in p1[:j])]
-        # print len(list(set(p1))), len(p1)
-
-        shape1 = Polygon(p1)
-        validity = explain_validity(shape1)
-        if "[" in validity:
-            s,t = validity.split(" ")
-            q,r = s.split("[")
-            r,t =  float(r), float(t[:-1])
-
-            print len(p1)
-            print p1
-            print r,t
-            print
-            print
-            splits = [i for i in range(len(p1)) if math.sqrt((p1[i][0]-r)**2 + (p1[i][1]-t)**2) < 0.01]
-
-            for jj in range(len(splits)-1):
-
-                print p1[splits[jj]:splits[jj+1]]
-
-            print p1[:splits[0]]
-            print p1[splits[-1]:]
-            print
-            assert False
-
         for p2 in plist2:
-            #print len(list(set(p2))), len(p2)
-            #p2 = [p2[j] for j in range(len(p2)) if not(p2[j] in p2[:j])]
-            # while p2[-1] in p2[:-1]:
-            #     p2.pop(-1)
+            shape = p1.intersection(p2)
 
-            shape2 = Polygon(p2)
-            try:
-                if shape1.intersects(shape2):
-                    shape3 = shape1.intersection(shape2)
-                    print shape3.area
 
-                    X,Y = zip(*p2)
-                    plt.plot(X,Y,color="black")
-
-                    X,Y = zip(*p1)
-                    plt.plot(X,Y,color="black")
-
-                    plt.show()
-            except TopologicalError:
-                X,Y = zip(*p2)
-                plt.plot(X,Y,color="green")
-
-                X,Y = zip(*p1)
-                plt.plot(X,Y,color="red")
-                plt.show()
+print "here"
 
 for zooniverse_id in count:
     if count[zooniverse_id] == 1:
         continue
+
+    print zooniverse_id
+    continue
 
     #shapes = {}
     #for users in polydict[zooniverse_id]:
@@ -195,4 +184,4 @@ for zooniverse_id in count:
     u0 = u[0]
     u1 = u[1]
 
-    merge(polydict[zooniverse_id][u0],polydict[zooniverse_id][u1])
+    intersect(polydict[zooniverse_id][u0],polydict[zooniverse_id][u1])
