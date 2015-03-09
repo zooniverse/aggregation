@@ -10,6 +10,7 @@ everything else can work just fine.
 import abc
 import csv
 
+
 class MarkingAnnotations():
     """
     For projects where the user marks regions or points of interest - the most common kind of marking is a 2
@@ -28,9 +29,8 @@ class MarkingAnnotations():
         """
         self.scale = scale
 
-        # if we have subject dependent rois
+        # if we have subject dependent ROIs
         self.roi_dict = {}
-
 
     def __load_roi__(self,classification):
         """
@@ -42,31 +42,35 @@ class MarkingAnnotations():
 
         :return a list of piecewise lines giving the ROI
         """
-        return [(-float("inf"),-float("inf")),(float("inf"),-float("inf"))]
+        return [(0,0),(float("inf"),0)]
 
     @abc.abstractmethod
-    def __classification_to_markings__(self,classification):
+    def __list_all_markings__(self,classification):
         """
         This is the main function projects will have to override - given a classification, we need to return the list
         of all markings in that classification
         """
-        return []
+        yield {}
+        return
 
-    def __list_markings__(self, classification):
+    def __list_filtered_markings__(self, classification):
         """
         :param classification is the classification we are parsing
         :return yield the list of all markings for this classification, scaled as necessary and having removed
         any and all points outside the ROI. Only works for two dimensions named "x" and "y".
         each marking will contain the x and y coordinates and what animal_type it is. For more detailed information
         such as tag number (e.g. condor watch) - you will have to override this function
+
+        this is a separate function from __classification_to_markings__ - that function will be entirely dependent
+        on the specific project and how its classification records are stored in MongoDB
         """
         marks_list = self.__classification_to_markings__(classification)
         roi = self.__load_roi__(classification)
 
-        for mark in marks_list:
-            assert isinstance(mark,dict)
-            assert "x" in mark
-            assert "y" in mark
+        for marking in self.__list_all_markings__(classification):
+            assert isinstance(marking,dict)
+            assert "x" in marking
+            assert "y" in marking
 
             x = float(mark["x"])*self.scale
             y = float(mark["y"])*self.scale
@@ -78,8 +82,9 @@ class MarkingAnnotations():
             if "animal" in mark:
                 animal_type = mark["animal"]
 
-            #find which line segment on the roi the point lies on (x-axis wise)
+            # find which line segment on the roi the point lies on (x-axis wise)
             for segment_index in range(len(roi)-1):
+                # determine if the point is above the roi line segment (if so, the point is valid)
                 if (roi[segment_index][0] <= x) and (roi[segment_index+1][0] >= x):
                     rX1,rY1 = roi[segment_index]
                     rX2,rY2 = roi[segment_index+1]
@@ -94,12 +99,11 @@ class MarkingAnnotations():
                         # but will not be used when determining the type
 
                         yield (x,y),animal_type
-                        break
-                    else:
-                        break
+                    break
 
-class PenguinAnntations(MarkingAnnotations):
-    def __init__(self,subject_collection, roi_file):
+
+class PenguinAnnotations(MarkingAnnotations):
+    def __init__(self,subject_collection, roi_filename):
         """
         :param subject_collection: need to read in all of the subjects first because we need to load the ROIs in advance
          not ideal but having tried a bunch of different approaches, this seems the best of some not great options
@@ -115,7 +119,7 @@ class PenguinAnntations(MarkingAnnotations):
         self.subject_collection = subject_collection
 
         # load the roi for the different sites
-        with open(aggregation.github_directory+"/Penguins/public/roi.tsv","rb") as roiFile:
+        with open(roi_filename,"rb") as roiFile:
             roiFile.readline()
             reader = csv.reader(roiFile,delimiter="\t")
             for l in reader:
@@ -124,6 +128,11 @@ class PenguinAnntations(MarkingAnnotations):
                 self.roi_dict[path] = [(int(x)/1.92,int(y)/1.92) for (x,y) in t]
 
     def __classification_to_markings__(self,classification):
+        """
+        for the given classification, return the list of markings, an empty list if there is no marking
+        :param classification:
+        :return:
+        """
         annotations = classification["annotations"]
 
         for ann in annotations:
@@ -136,48 +145,23 @@ class PenguinAnntations(MarkingAnnotations):
 
         return []
 
-
-        for v in values_list:
-            print v
-            if "marking" in v:
-                try:
-                    return v[1].values()
-                except AttributeError:
-                    # something about this set of markings is wrong
-                    return []
-
-        return []
-
-    def __list_markings__(self, classification):
-        marks_list = self.__classification_to_markings__(classification)
-
-        try:
-            for mark in marks_list:
-                x = float(mark["x"])*self.scale
-                y = float(mark["y"])*self.scale
-
-                if not("animal" in mark):
-                    animal_type = None
-                else:
-                    animal_type = mark["animal"]
-
-                yield (x,y),animal_type
-        except ValueError:
-            print classification
-            raise
-
-    def __load_roi__(self,classification):
-        zooniverse_id = classification["subjects"][0]["zooniverse_id"]
-        # takes the zooniverse id and converts it into a the site code
-        subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})
-        path = subject["metadata"]["path"]
-        slashIndex = path.find("/")
-        underscoreIndex = path.find("_")
-        site = path[slashIndex+1:underscoreIndex]
-
-
-        assert (site in self.roi_dict) and (self.roi_dict[site] != [])
-        return self.roi_dict[site]
+    # def __list_markings__(self, classification):
+    #     marks_list = self.__classification_to_markings__(classification)
+    #
+    #     try:
+    #         for mark in marks_list:
+    #             x = float(mark["x"])*self.scale
+    #             y = float(mark["y"])*self.scale
+    #
+    #             if not("animal" in mark):
+    #                 animal_type = None
+    #             else:
+    #                 animal_type = mark["animal"]
+    #
+    #             yield (x,y),animal_type
+    #     except ValueError:
+    #         print classification
+    #         raise
 
 
 
