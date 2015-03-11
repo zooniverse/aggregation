@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 __author__ = 'greg'
 import math
-
 import panoptesPythonAPI
-
+import time
+import yaml
 
 # calculate the score associated with a given classification according to the algorithm
 # in the paper Galaxy Zoo Supernovae
@@ -35,8 +35,9 @@ try:
     panoptes_file = open("config/panoptes_login","rb")
 except IOError:
     panoptes_file = open("/home/greg/Databases/panoptes_login","rb")
-userid = panoptes_file.readline()[:-1]
-password = panoptes_file.readline()[:-1]
+login_details = yaml.load(panoptes_file)
+userid = login_details["name"]
+password = login_details["password"]
 
 # get the token necessary to connect with panoptes
 token = panoptesPythonAPI.get_bearer_token(userid,password)
@@ -45,38 +46,53 @@ token = panoptesPythonAPI.get_bearer_token(userid,password)
 project_id = panoptesPythonAPI.get_project_id("Supernovae",token)
 workflow_version = panoptesPythonAPI.get_workflow_id(project_id,token)
 
-# dictionary to store the raw count for each score
-scores = {}
+def calc_scores(scores = {}):
+    """
+    :param scores: default scores - only override for testing (specifically load testing)
+    :return:
+    """
 
-# go through all of the classifications/annotations (terminology isn't completely consistent but not sure of what
-# would be better)
-for classification in panoptesPythonAPI.classifications_iterator(project_id,token):
-    # we need the workflow, subject ids
-    workflow_id = classification["links"]["workflow"]
-    subject_id = classification["links"]["subjects"][0]
+    # go through all of the classifications/annotations (terminology isn't completely consistent but not sure of what
+    # would be better)
+    for index,classification in enumerate(panoptesPythonAPI.classifications_iterator(project_id,token)):
+        # we need the workflow, subject ids
+        workflow_id = classification["links"]["workflow"]
+        subject_id = classification["links"]["subjects"][0]
 
-    # if this is the first time we have encountered this subject, add it to the dictionary
-    if not((workflow_id,subject_id) in scores):
-        scores[(workflow_id,subject_id)] = [0,0,0]
+        # if this is the first time we have encountered this subject, add it to the dictionary
+        if not((workflow_id,subject_id) in scores):
+            scores[(workflow_id,subject_id)] = [0,0,0]
 
-    # get the score index and increment that "box"
-    annotations = classification["annotations"]
-    scores[(workflow_id,subject_id)][score_index(annotations)] += 1
+        # get the score index and increment that "box"
+        annotations = classification["annotations"]
+        scores[(workflow_id,subject_id)][score_index(annotations)] += 1
 
-# now do the aggregation
-for (workflow_id,subject_id),values in scores.items():
-    # calculate the average score, std and set up the JSON results
-    avg_score = (values[0]*-1+ + values[1]*1 + values[2]*3)/float(sum(values))
-    std = math.sqrt((-1-avg_score)**2*(values[0]/float(sum(values))) + (1-avg_score)**2*(values[1]/float(sum(values))) + (3-avg_score)**2*(values[1]/float(sum(values))))
-    aggregation = {"mean":avg_score,"std":std,"count":values}
+    return scores
 
-    # try creating the aggregation
-    status,explanation = panoptesPythonAPI.create_aggregation(workflow_id,subject_id,token,aggregation)
+def aggregate(scores):
+    # now do the aggregation
+    for (workflow_id,subject_id),values in scores.items():
+        # calculate the average score, std and set up the JSON results
+        avg_score = (values[0]*-1+ + values[1]*1 + values[2]*3)/float(sum(values))
+        std = math.sqrt((-1-avg_score)**2*(values[0]/float(sum(values))) + (1-avg_score)**2*(values[1]/float(sum(values))) + (3-avg_score)**2*(values[1]/float(sum(values))))
+        aggregation = {"mean":avg_score,"std":std,"count":values}
 
-    # if we had a problem, try updating the aggregation
-    if status == 400:
-        aggregation_id,etag = panoptesPythonAPI.find_aggregation_etag(workflow_id,subject_id,token)
-        panoptesPythonAPI.update_aggregation(workflow_id,workflow_version,subject_id,aggregation_id,token,aggregation,etag)
+        # try creating the aggregation
+        status,explanation = panoptesPythonAPI.create_aggregation(workflow_id,subject_id,token,aggregation)
 
+        # if we had a problem, try updating the aggregation
+        if status == 400:
+            aggregation_id,etag = panoptesPythonAPI.find_aggregation_etag(workflow_id,subject_id,token)
+            panoptesPythonAPI.update_aggregation(workflow_id,workflow_version,subject_id,aggregation_id,token,aggregation,etag)
 
+if __name__ == "__main__":
+    scores = {}
+    for i in range(10000):
+        print i
+        start = time.time()
+        scores = calc_scores(scores)
+        end = time.time()
+
+        print end - start
+    aggregate(scores)
 
