@@ -1,20 +1,7 @@
 #!/usr/bin/env python
 __author__ = 'greg'
-import json
-import numpy as np
-import os
-import sys
 import math
 
-# I (Greg) has slightly different directory structures depending on whether I am not the office or at home
-# find out which computer I am on, and set the base directory
-if os.path.exists("/home/ggdhines"):
-    base_directory = "/home/ggdhines"
-else:
-    base_directory = "/home/greg"
-
-# import the Panoptes scripts which we use to download the raw data and upload the aggregated data
-sys.path.append(base_directory+"/github/PanoptesScripts")
 import panoptesPythonAPI
 
 
@@ -43,28 +30,32 @@ def score_index(annotations):
         return 1  #1
 
 # get my userID and password
-panoptes_file = open(base_directory+"/Databases/panoptes_login","rb")
+# purely for testing, if this file does not exist, try opening on Greg's computer
+try:
+    panoptes_file = open("config/panoptes_login","rb")
+except IOError:
+    panoptes_file = open("/home/greg/Databases/panoptes_login","rb")
 userid = panoptes_file.readline()[:-1]
 password = panoptes_file.readline()[:-1]
 
 # get the token necessary to connect with panoptes
 token = panoptesPythonAPI.get_bearer_token(userid,password)
+
+# get the project id for Supernovae and the workflow version
 project_id = panoptesPythonAPI.get_project_id("Supernovae",token)
 workflow_version = panoptesPythonAPI.get_workflow_id(project_id,token)
-#assert False
-#panoptesPythonAPI.find_aggregation(1,1,token)
-#print panoptesPythonAPI.get_login_user_info(token)
-#assert False
+
 # dictionary to store the raw count for each score
 scores = {}
 
 # go through all of the classifications/annotations (terminology isn't completely consistent but not sure of what
 # would be better)
-for classification in panoptesPythonAPI.get_all_classifications(project_id,token):
+for classification in panoptesPythonAPI.classifications_iterator(project_id,token):
+    # we need the workflow, subject ids
     workflow_id = classification["links"]["workflow"]
-    #print classification
-    # if this is the first time we have encountered this subject, add it to the dictionary
     subject_id = classification["links"]["subjects"][0]
+
+    # if this is the first time we have encountered this subject, add it to the dictionary
     if not((workflow_id,subject_id) in scores):
         scores[(workflow_id,subject_id)] = [0,0,0]
 
@@ -72,23 +63,20 @@ for classification in panoptesPythonAPI.get_all_classifications(project_id,token
     annotations = classification["annotations"]
     scores[(workflow_id,subject_id)][score_index(annotations)] += 1
 
-
+# now do the aggregation
 for (workflow_id,subject_id),values in scores.items():
+    # calculate the average score, std and set up the JSON results
     avg_score = (values[0]*-1+ + values[1]*1 + values[2]*3)/float(sum(values))
     std = math.sqrt((-1-avg_score)**2*(values[0]/float(sum(values))) + (1-avg_score)**2*(values[1]/float(sum(values))) + (3-avg_score)**2*(values[1]/float(sum(values))))
     aggregation = {"mean":avg_score,"std":std,"count":values}
 
+    # try creating the aggregation
     status,explanation = panoptesPythonAPI.create_aggregation(workflow_id,subject_id,token,aggregation)
-    #print explanation
+
+    # if we had a problem, try updating the aggregation
     if status == 400:
-        print "updating"
         aggregation_id,etag = panoptesPythonAPI.find_aggregation_etag(workflow_id,subject_id,token)
-        print etag
         panoptesPythonAPI.update_aggregation(workflow_id,workflow_version,subject_id,aggregation_id,token,aggregation,etag)
 
-
-
-
-#print scores
 
 
