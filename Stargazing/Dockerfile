@@ -1,0 +1,15 @@
+FROM ubuntu:14.04
+
+ENV DEBIAN_FRONTEND noninteractive
+
+WORKDIR /app/
+
+RUN apt-get update && apt-get -y upgrade && \
+    apt-get install -y python python-yaml git python-requests python-psycopg2 && \
+    git clone https://github.com/ggdhines/PanoptesScripts.git && \
+    mv PanoptesScripts/panoptesPythonAPI.py ./ && \
+    rm -rf PanoptesScripts
+
+ADD . /app/
+
+ENTRYPOINT [ "/app/postgres_aggregation.py" ]
