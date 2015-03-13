@@ -294,11 +294,12 @@ class PanoptesAPI:
 
 if __name__ == "__main__":
     update = "complete"
+    http_update = True
 
     try:
         opts, args = getopt.getopt(sys.argv[1:],"u:m:",["update=",])
     except getopt.GetoptError:
-        print "postgres_aggregation -u <COMPLETE or PARTIAL update> -m <update method HTTP>"
+        print "postgres_aggregation -u <COMPLETE or PARTIAL update> -m <http update method TRUE or FALSE>"
         sys.exit(2)
 
     for opt,arg in opts:
@@ -306,27 +307,13 @@ if __name__ == "__main__":
         if opt in ["-u", "-update"]:
             update = arg.lower()
             assert update in ["complete", "partial"]
+        elif opt in ["-m", "-method"]:
+            http_update = arg.lower()
+            assert update in ["true", "false"]
+            # convert from string into boolean
+            http_update = (http_update == True)
 
-    stargazing = PanoptesAPI("Supernovae",update_type=update)
+    stargazing = PanoptesAPI("Supernovae",update_type=update,http_update=http_update)
     stargazing.__update__()
-    # stargazing.__update__()
-    # stargazing.__heuristic_update__()
-    # stargazing.__http_score__update__()
 
-    #stargazing.__subjects_to_update__()
-    #stargazing.__find_classification_count__()
-    #find_subjects()
-    #scores = calc_scores()
-    #aggregate(scores)
-    # for subject_id in subjects:
-    # calc_scores_(5)
-    # for i in range(1):
-    #     print i
-    #     start = time.time()
-    #     scores = calc_scores(scores)
-    #     end = time.time()
-    #
-    #     print end - start
-    #
-    # aggregate(scores)
 
