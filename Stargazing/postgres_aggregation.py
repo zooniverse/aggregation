@@ -8,6 +8,9 @@ import os
 import sys
 import cPickle as pickle
 import getopt
+import boto
+from boto.s3.key import Key
+import datetime
 
 class Aggregation:
     def __init__(self,update_type):
@@ -24,6 +27,8 @@ class Aggregation:
             except IOError:
                 self.classification_count = {}
                 self.scores = {}
+
+        self.aggregations = {}
 
     def __score_index__(self,annotations):
         """calculate the score associated with a given classification according to the algorithm
@@ -66,9 +71,16 @@ class Aggregation:
         self.scores[subject_id][self.__score_index__(annotation)] += 1
         self.classification_count[subject_id] += 1
 
-    def __list_aggregations__(self,subjects_ids=None):
+    def __update_aggregations__(self,subjects_ids=None):
         """
-        generate a list of subject ids and their corresponding aggregations in JSON form
+        a separate function to update the aggregations - if you provide a list of subjects, we only update those
+        aggregations - so use that along with a heuristic to determine which subjects to update
+        we could convert this function into part of the update_score function so that each time we update a score
+        we also update the corresponding aggregation. Would be one less function and avoid the possibility of
+        updating the scores but not the aggregations. The problem is that we need to save the classification_counts
+        and scores and might not be overly efficient to that every time we update a single score
+        we could refactor this a bit so that we pass in an iterator that iterators over all of the classifications
+        we want to read in and after that we automatically update everything
         :param subjects_ids:
         :return:
         """
@@ -83,9 +95,20 @@ class Aggregation:
             scores = self.scores[subject_id]
             avg_score = (scores[0]*-1+ + scores[1]*1 + scores[2]*3)/float(sum(scores))
             std = math.sqrt((-1-avg_score)**2*(scores[0]/float(sum(scores))) + (1-avg_score)**2*(scores[1]/float(sum(scores))) + (3-avg_score)**2*(scores[1]/float(sum(scores))))
-            aggregation = {"mean":avg_score,"std":std,"count":scores}
+            self.aggregations[subject_id] = {"mean":avg_score,"std":std,"count":scores}
 
-            yield subject_id,aggregation
+    def __list_aggregations__(self,subjects_ids=None):
+        """
+        generate a list of subject ids and their corresponding aggregations in JSON form
+        :param subjects_ids:
+        :return:
+        """
+        # now seems a good a time as any to save the classification_count and scores
+        if subjects_ids is None:
+            subjects_ids = self.scores.keys()
+
+        for subject_id in subjects_ids:
+            yield subject_id,self.aggregations[subject_id]
 
     def __subjects_to_update__(self,new_classification_count):
         """
@@ -108,6 +131,13 @@ class Aggregation:
                 subjects_to_update.append(subject_id)
 
         return subjects_to_update
+
+    def __aggregations_to_string__(self):
+        results = ""
+        for subject_id,agg in self.aggregations.items():
+            results += str(subject_id) + "," + str(agg["mean"]) + "," + str(agg["std"]) + "," + str(agg["count"][0]) + "," + str(agg["count"][1]) + ","+ str(agg["count"][2]) + "\n"
+
+        return results
 
 class PanoptesAPI:
     def __init__(self,project,update_type="complete",http_update=True): #Supernovae
@@ -162,17 +192,33 @@ class PanoptesAPI:
         assert http_update in [True,False]
         self.http_update = http_update
 
+        # for dumping results to s3
+        AWS_ACCESS_KEY_ID  = os.getenv('AWS_ACCESS_KEY_ID', None)
+        AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', None)
+
+        # if both are None, we should already be in aws
+        self.S3_conn = boto.connect_s3(AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY)
+        #self.mybucket = self.S3_conn.get_bucket("zooniverse-data")
+
     def __update__(self):
         if self.update_type == "complete":
-            self.__update_scores__()
-            subjects_to_update = None
+            subjects_to_update = self.__update_scores__()
         else:
-            assert self.update_type == "partial"
             subjects_to_update = self.__heuristic_update__()
+
+        self.aggregator.__update_aggregations__(subjects_to_update)
+
+        result_bucket = self.S3_conn.get_bucket("zooniverse-aggregation")
+        k = Key(result_bucket)
+        t = datetime.datetime.now()
+        fname = str(t.day) + "_"  + str(t.hour) + "_" + str(t.minute)
+        k.key = "Stargazing/"+fname+".csv"
+        csv_contents = "subject_id,mean,std,count0,count1,count2\n"
+        csv_contents += self.aggregator.__aggregations_to_string__()
+        k.set_contents_from_string(csv_contents)
 
         if self.http_update is True:
             self.__http_score__update__(subjects_to_update)
-
 
     def __update_scores__(self,additional_conditions = ""):
         select = "SELECT subject_ids,annotations from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + additional_conditions
@@ -184,6 +230,9 @@ class PanoptesAPI:
         for subject_ids,annotations in rows:
             subject_id = subject_ids[0]
             self.aggregator.__update_score__(subject_id,annotations)
+
+        # makes other functions easier if we just return None
+        return None
 
     def __http_score__update__(self,subjects_to_update=None):
         """
@@ -241,6 +290,8 @@ class PanoptesAPI:
 
         return subjects_to_update
 
+
+
 if __name__ == "__main__":
     update = "complete"
 
@@ -258,6 +309,7 @@ if __name__ == "__main__":
 
     stargazing = PanoptesAPI("Supernovae",update_type=update)
     stargazing.__update__()
+    # stargazing.__update__()
     # stargazing.__heuristic_update__()
     # stargazing.__http_score__update__()
 
