@@ -10,6 +10,8 @@ RUN apt-get update && apt-get -y upgrade && \
     mv PanoptesScripts/panoptesPythonAPI.py ./ && \
     rm -rf PanoptesScripts
 
+ADD crontab /etc/cron.d/aggregation
+
 ADD . /app/
 
-ENTRYPOINT [ "/app/postgres_aggregation.py" ]
+ENTRYPOINT [ "/usr/sbin/cron", "-f", "-L 15" ]
