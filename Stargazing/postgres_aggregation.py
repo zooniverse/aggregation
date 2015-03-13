@@ -33,9 +33,9 @@ def score_index(annotations):
 # get my userID and password
 # purely for testing, if this file does not exist, try opening on Greg's computer
 try:
-    panoptes_file = open("config/panoptes_login","rb")
+    panoptes_file = open("config/aggregation.yml","rb")
 except IOError:
-    panoptes_file = open("/home/greg/Databases/panoptes_login","rb")
+    panoptes_file = open("/home/greg/Databases/aggregation.yml","rb")
 login_details = yaml.load(panoptes_file)
 userid = login_details["name"]
 password = login_details["password"]
@@ -47,6 +47,9 @@ token = panoptesPythonAPI.get_bearer_token(userid,password)
 project_id = panoptesPythonAPI.get_project_id("Supernovae",token)
 workflow_version = panoptesPythonAPI.get_workflow_version(project_id,token)
 workflow_id = panoptesPythonAPI.get_workflow_id(project_id,token)
+
+print "project id  is " + str(project_id)
+print "workflow id is " + str(workflow_id)
 
 # now load in the details for accessing the database
 try:
@@ -64,17 +67,51 @@ host = database_details[environment]["host"]
 # try connecting to the db
 try:
     details = "dbname='"+database+"' user='"+ username+ "' host='"+ host + "' password='"+password+"'"
-    print details
     conn = psycopg2.connect(details)
 except:
     print "I am unable to connect to the database"
 
-def calc_scores(scores = {}):
-    print project_id
+def find_subjects():
     cur = conn.cursor()
-    print project_id,workflow_id
-    cur.execute("SELECT subject_ids,annotations from classifications where project_id="+str(project_id)+" and workflow_id=" + str(workflow_id))
+    #cur.execute("Select * from subject_sets where ")
+
+    # cur.execute("SELECT subject_id from set_member_subjects where subject_set_id=4 OR subject_set_id=3")
+    # cur.execute("SELECT expert_set from subject_sets where subject_sets.project_id="+str(project_id)+" and subject_sets.workflow_id=" + str(workflow_id))
+    # rows = cur.fetchall()
+    #
+    # for r in rows:
+    #     print r
+
+
+    cur.execute("SELECT subject_id from set_member_subjects inner join subject_sets on set_member_subjects.subject_set_id=subject_sets.id where (subject_sets.expert_set = FALSE or subject_sets.expert_set IS NULL) and subject_sets.project_id="+str(project_id)+" and subject_sets.workflow_id=" + str(workflow_id))
     rows = cur.fetchall()
+
+    return [r[0] for r in rows]
+
+def calc_scores_(subject_id):
+    scores = {}
+    cur = conn.cursor()
+    cur.execute("SELECT annotations from classifications where project_id="+str(project_id)+" and workflow_id=" + str(workflow_id) + " and subject_ids = ARRAY["+str(subject_id)+"]")
+    rows = cur.fetchall()
+
+    for subject_count,annotations in enumerate(rows):
+        #print annotations
+        if not((workflow_id,subject_id) in scores):
+            scores[(workflow_id,subject_id)] = [0,0,0]
+        scores[(workflow_id,subject_id)][score_index(annotations[0])] += 1
+    print "read in " + str(subject_count) + " classifications"
+    return scores
+
+def calc_scores(scores = {}):
+    cur = conn.cursor()
+    cur.execute("SELECT subject_ids,annotations from classifications where project_id="+str(project_id)+" and workflow_id=" + str(workflow_id))
+    #cur.execute("SELECT * from classifications where project_id="+str(project_id)+" and workflow_id=" + str(workflow_id))
+    rows = cur.fetchall()
+
+    # for r in rows:
+    #     print r
+    #
+    # return
 
     for subject_count,(subjects,annotations) in enumerate(rows):
         #print annotations
@@ -82,8 +119,7 @@ def calc_scores(scores = {}):
         if not((workflow_id,subject_id) in scores):
             scores[(workflow_id,subject_id)] = [0,0,0]
         scores[(workflow_id,subject_id)][score_index(annotations)] += 1
-
-    print subject_count
+    #print "read in " + str(subject_count) + " classifications"
     return scores
 
 def aggregate(scores):
@@ -103,14 +139,17 @@ def aggregate(scores):
             panoptesPythonAPI.update_aggregation(workflow_id,workflow_version,subject_id,aggregation_id,token,aggregation,etag)
 
 if __name__ == "__main__":
-    scores = {}
-    for i in range(1):
-        print i
-        start = time.time()
-        scores = calc_scores(scores)
-        end = time.time()
-
-        print end - start
-    assert False
+    scores = calc_scores()
     aggregate(scores)
+    # for subject_id in subjects:
+    # calc_scores_(5)
+    # for i in range(1):
+    #     print i
+    #     start = time.time()
+    #     scores = calc_scores(scores)
+    #     end = time.time()
+    #
+    #     print end - start
+    #
+    # aggregate(scores)
 
