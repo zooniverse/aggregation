@@ -5,6 +5,7 @@ import panoptesPythonAPI
 import time
 import yaml
 import psycopg2
+import os
 
 # calculate the score associated with a given classification according to the algorithm
 # in the paper Galaxy Zoo Supernovae
@@ -58,7 +59,8 @@ except IOError:
     database_file = open("/home/greg/Databases/database.yml")
 database_details = yaml.load(database_file)
 
-environment = "staging"
+#environment = "staging"
+environment = os.getenv('ENVIRONMENT', "staging")
 database = database_details[environment]["database"]
 username = database_details[environment]["username"]
 password = database_details[environment]["password"]
