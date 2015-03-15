@@ -12,6 +12,14 @@ import boto
 from boto.s3.key import Key
 import datetime
 
+
+class AnnotationException(Exception):
+    def __init__(self, value):
+        self.annotation, self.index, self.task = value
+
+    def __str__(self):
+        return "With annotation: " + str(self.annotation) + " at index " + str(self.index) + " did not find task: " + str(self.task)
+
 class Aggregation:
     def __init__(self,update_type):
         # if we are doing a complete update, start from scratch
@@ -36,20 +44,23 @@ class Aggregation:
         an example of the json format used is
         [{u'task': u'centered_in_crosshairs', u'value': 1}, {u'task': u'subtracted', u'value': 1}, {u'task': u'circular', u'value': 1}, {u'task': u'centered_in_host', u'value': 0}]
         """
-        assert annotations[0]["task"] == "centered_in_crosshairs"
+        if annotations[0]["task"] != "centered_in_crosshairs":
+            raise AnnotationException((annotations,0,"centered_in_crosshairs"))
         if annotations[0]["value"] == 0:
             return 0  #-1
 
-        # they should have answered yes
-        assert annotations[1]["task"] == "subtracted"
+        if annotations[1]["task"] != "subtracted":
+            raise AnnotationException((annotations,1,"subtracted"))
         if annotations[1]["value"] == 0:
             return 0  #-1
 
-        assert annotations[2]["task"] == "circular"
+        if annotations[2]["task"] != "circular":
+            raise AnnotationException((annotations,2,"circular"))
         if annotations[2]["value"] == 0:
             return 0  #-1
 
-        assert annotations[3]["task"] == "centered_in_host"
+        if annotations[3]["task"] != "centered_in_host":
+            raise AnnotationException((annotations,3,"centered_in_host"))
         if annotations[3]["value"] == 0:
             return 2  #3
         else:
