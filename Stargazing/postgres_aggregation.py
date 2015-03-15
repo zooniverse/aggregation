@@ -11,7 +11,16 @@ import getopt
 import boto
 from boto.s3.key import Key
 import datetime
+import numpy as np
+import operator
+import json
 
+
+# for Greg running on either office/home - which computer am I on?
+if os.path.exists("/home/ggdhines"):
+    base_directory = "/home/ggdhines"
+else:
+    base_directory = "/home/greg"
 
 class AnnotationException(Exception):
     def __init__(self, value):
@@ -20,23 +29,31 @@ class AnnotationException(Exception):
     def __str__(self):
         return "With annotation: " + str(self.annotation) + " at index " + str(self.index) + " did not find task: " + str(self.task)
 
+
 class Aggregation:
     def __init__(self,update_type):
+        # right now, each time we read in the classifications/annotations for a given subject, we are reading in all
+        # of them that have ever been created, even if they were run during a previous running of this program
+        # so we shouldn't try to merge with previous results - would result in definite double counting
+        # so do a hard reset with the aggregations
+        self.aggregations = {}
+
+        # technically we could reuse the aggregation results to find the classification count but we want to store
+        # the counts from one running of this program to an other - so best is to use two different variables
+        # to store these values
         # if we are doing a complete update, start from scratch
         if update_type == "complete":
             self.classification_count = {}
-            self.scores = {}
         else:
-            # try loading both of these sets of values from memory - if they don't exist, default to empty dicts
+            # loading the classification - if they don't exist, default to empty dicts
             # classification_count is useful for helping to determine which subjects we actually want to update
             try:
                 self.classification_count = pickle.load(open("/tmp/classification_count.pickle","rb"))
-                self.scores = pickle.load(open("/tmp/scores.pickle","rb"))
             except IOError:
                 self.classification_count = {}
-                self.scores = {}
 
-        self.aggregations = {}
+    def __cleanup__(self):
+        pickle.dump(self.classification_count,open("/tmp/classification_count.pickle","wb"))
 
     def __score_index__(self,annotations):
         """calculate the score associated with a given classification according to the algorithm
@@ -66,47 +83,33 @@ class Aggregation:
         else:
             return 1  #1
 
-    def __update_score__(self,subject_id,annotation):
+    def __update_subject__(self,subject_id,accumulated_scores):
         """
-        read in a single annotation and update the score for the corresponding subject_id
+        set the aggregation result for the given subject_id using the accumulated scores
+        for now, assume that the accumulated scores are based on ALL classifications, including ones
+        we have read in before hand, so we completely overwrite all pre-existing results. In the future we
+        could merge the results - this means we only have to read in new classifications, but at the same time
+        we have to sure that we don't read in any old classifications
         :param subject_id:
-        :param annotation:
+        :param accumulated_scores:
         :return:
         """
-        assert isinstance(subject_id,int)
+        # the following four lines of code are taken (and slightly adapted from):
+        # http://astro-wise.org/awesoft/awehome/AWBASE/common/math/statistics.py
+        # calculate the weighted average - same as the average if we hadn't compressed all of the scores into
+        # one accumulated value
+        score_sum = reduce(operator.add, accumulated_scores)
+        mean = reduce(operator.add, [weight*x for x, weight in zip([-1,1,3], accumulated_scores)])/score_sum
 
-        if not(subject_id in self.scores):
-            self.scores[subject_id]  = [0,0,0]
-            self.classification_count[subject_id] = 0
+        stdv  = reduce(operator.add, [weight*(x-mean)**2 for x, weight in zip([-1,1,3], accumulated_scores)])
+        stdev = math.sqrt(stdv/score_sum)
 
-        self.scores[subject_id][self.__score_index__(annotation)] += 1
-        self.classification_count[subject_id] += 1
+        # save the resulting aggregation - this is the first and only time these values are actually associated
+        # with the particular subject id
+        self.aggregations[subject_id] = {"mean":mean,"std":stdev,"count":accumulated_scores}
 
-    def __update_aggregations__(self,subjects_ids=None):
-        """
-        a separate function to update the aggregations - if you provide a list of subjects, we only update those
-        aggregations - so use that along with a heuristic to determine which subjects to update
-        we could convert this function into part of the update_score function so that each time we update a score
-        we also update the corresponding aggregation. Would be one less function and avoid the possibility of
-        updating the scores but not the aggregations. The problem is that we need to save the classification_counts
-        and scores and might not be overly efficient to that every time we update a single score
-        we could refactor this a bit so that we pass in an iterator that iterators over all of the classifications
-        we want to read in and after that we automatically update everything
-        :param subjects_ids:
-        :return:
-        """
-        # now seems a good a time as any to save the classification_count and scores
-        pickle.dump(self.classification_count,open("/tmp/classification_count.pickle","wb"))
-        pickle.dump(self.scores,open("/tmp/scores.pickle","wb"))
-
-        if subjects_ids is None:
-            subjects_ids = self.scores.keys()
-
-        for subject_id in subjects_ids:
-            scores = self.scores[subject_id]
-            avg_score = (scores[0]*-1+ + scores[1]*1 + scores[2]*3)/float(sum(scores))
-            std = math.sqrt((-1-avg_score)**2*(scores[0]/float(sum(scores))) + (1-avg_score)**2*(scores[1]/float(sum(scores))) + (3-avg_score)**2*(scores[1]/float(sum(scores))))
-            self.aggregations[subject_id] = {"mean":avg_score,"std":std,"count":scores}
+        # and update the classification count
+        self.classification_count[subject_id] = sum(accumulated_scores)
 
     def __list_aggregations__(self,subjects_ids=None):
         """
@@ -120,6 +123,27 @@ class Aggregation:
 
         for subject_id in subjects_ids:
             yield subject_id,self.aggregations[subject_id]
+
+    def __init__accumulator__(self):
+        return [0,0,0]
+
+    def __accumulate__(self,annotation,accumulator):
+        """
+        :param annotation - the next annotation to "merge into" the set of existing annotations
+         for future work - the merge into could be just appending to a list but here we should be able to keep
+         the memory usage low
+        :param accumulator - the merged results from the previous annotations
+        :return:
+        """
+        # if the accumulator was read in directly from the sql file - we will need to convert it into json format
+        if isinstance(annotation,str):
+            annotation = json.loads(annotation)
+        assert isinstance(annotation,list)
+        assert len(annotation) > 0
+        assert isinstance(annotation[0],dict)
+        accumulator[self.__score_index__(annotation)] += 1
+
+        return accumulator
 
     def __subjects_to_update__(self,new_classification_count):
         """
@@ -144,11 +168,16 @@ class Aggregation:
         return subjects_to_update
 
     def __aggregations_to_string__(self):
+        """
+        convert the aggregation into string format - useful for when you want to print the aggregations out to
+        a csv file
+        """
         results = ""
         for subject_id,agg in self.aggregations.items():
             results += str(subject_id) + "," + str(agg["mean"]) + "," + str(agg["std"]) + "," + str(agg["count"][0]) + "," + str(agg["count"][1]) + ","+ str(agg["count"][2]) + "\n"
 
         return results
+
 
 class PanoptesAPI:
     def __init__(self,project,update_type="complete",http_update=True): #Supernovae
@@ -157,7 +186,7 @@ class PanoptesAPI:
         try:
             panoptes_file = open("config/aggregation.yml","rb")
         except IOError:
-            panoptes_file = open("/home/greg/Databases/aggregation.yml","rb")
+            panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
         login_details = yaml.load(panoptes_file)
         userid = login_details["name"]
         password = login_details["password"]
@@ -177,7 +206,7 @@ class PanoptesAPI:
         try:
             database_file = open("config/database.yml")
         except IOError:
-            database_file = open("/home/greg/Databases/database.yml")
+            database_file = open(base_directory+"/Databases/database.yml")
         database_details = yaml.load(database_file)
 
         #environment = "staging"
@@ -203,47 +232,92 @@ class PanoptesAPI:
         assert http_update in [True,False]
         self.http_update = http_update
 
-        # for dumping results to s3
-        AWS_ACCESS_KEY_ID  = os.getenv('AWS_ACCESS_KEY_ID', None)
-        AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', None)
+        self.S3_conn = None
+        try:
+            # for dumping results to s3
+            AWS_ACCESS_KEY_ID  = os.getenv('AWS_ACCESS_KEY_ID', None)
+            AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY', None)
 
-        # if both are None, we should already be in aws
-        self.S3_conn = boto.connect_s3(AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY)
-        #self.mybucket = self.S3_conn.get_bucket("zooniverse-data")
+            # if both are None, we should already be in aws
+            self.S3_conn = boto.connect_s3(AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY)
+        except boto.exception.NoAuthHandlerFound:
+            print "not able to connect to S3 - will try to keep going but this will probably give you errors later"
+
+    def __cleanup__(self):
+        self.aggregator.__cleanup__()
 
     def __update__(self):
+
+        # if a complete update is wanted, just read through all of the classifications/annotations
         if self.update_type == "complete":
-            subjects_to_update = self.__update_scores__()
+            self.__update_aggregations()
+
+            # setting subjects_to_update to none is shorthand for wanting to update all of them
+            subjects_to_update = None
+        # if we want a partial update, use the heuristic to determine which subjects to update
         else:
-            subjects_to_update = self.__heuristic_update__()
+            subjects_to_update = self.__heuristic_update()
 
-        self.aggregator.__update_aggregations__(subjects_to_update)
+        # write out the results to an s3 bucket - file is a csv file labelled with day, hour and minute
+        if self.S3_conn is not None:
+            result_bucket = self.S3_conn.get_bucket("zooniverse-aggregation")
+            k = Key(result_bucket)
+            t = datetime.datetime.now()
+            fname = str(t.day) + "_"  + str(t.hour) + "_" + str(t.minute)
+            k.key = "Stargazing/"+fname+".csv"
+            csv_contents = "subject_id,mean,std,count0,count1,count2\n"
+            csv_contents += self.aggregator.__aggregations_to_string__()
+            k.set_contents_from_string(csv_contents)
+        else:
+            print "not able to connect to S3"
 
-        result_bucket = self.S3_conn.get_bucket("zooniverse-aggregation")
-        k = Key(result_bucket)
-        t = datetime.datetime.now()
-        fname = str(t.day) + "_"  + str(t.hour) + "_" + str(t.minute)
-        k.key = "Stargazing/"+fname+".csv"
-        csv_contents = "subject_id,mean,std,count0,count1,count2\n"
-        csv_contents += self.aggregator.__aggregations_to_string__()
-        k.set_contents_from_string(csv_contents)
-
+        # if we also want to use the http interface to put the results back onto Panoptes - seems to be running
+        # rather slowly right now, so use with caution
         if self.http_update is True:
             self.__http_score__update__(subjects_to_update)
 
-    def __update_scores__(self,additional_conditions = ""):
-        select = "SELECT subject_ids,annotations from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + additional_conditions
+    def __update_aggregations(self, additional_conditions = ""):
+        """
+        update
+        :param additional_conditions: if you want to restrict the updates to certain subjects
+        :return:
+        """
+        select = "SELECT subject_ids,annotations from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + additional_conditions + " ORDER BY subject_ids"
         cur = self.conn.cursor()
         cur.execute(select)
-        # cur.execute("SELECT annotations from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + " and subject_ids = ARRAY["+str(subject_id)+"]")
-        rows = cur.fetchall()
 
-        for subject_ids,annotations in rows:
-            subject_id = subject_ids[0]
-            self.aggregator.__update_score__(subject_id,annotations)
+        current_subject_ids = None
+        annotation_accumulator = self.aggregator.__init__accumulator__()
 
-        # makes other functions easier if we just return None
-        return None
+        for subject_ids,annotations in cur.fetchall():
+            if (current_subject_ids is not None) and (subject_ids != current_subject_ids):
+                # save the results of old/previous subject
+                self.aggregator.__update_subject__(subject_ids[0],annotation_accumulator)
+
+                # reset and move on to the next subject
+                current_subject_ids = subject_ids[0]
+                annotation_accumulator = self.aggregator.__init__accumulator__()
+
+            annotation_accumulator = self.aggregator.__accumulate__(annotations,annotation_accumulator)
+
+        # make sure we update the aggregation for the final subject we read in
+        # on the very off chance that we haven't read in any classifications, double check
+        if current_subject_ids is not None:
+            self.aggregator.__update_subject__(current_subject_ids,annotation_accumulator)
+
+    # def __update_scores__(self,additional_conditions = ""):
+    #     select = "SELECT subject_ids,annotations from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + additional_conditions
+    #     cur = self.conn.cursor()
+    #     cur.execute(select)
+    #     # cur.execute("SELECT annotations from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + " and subject_ids = ARRAY["+str(subject_id)+"]")
+    #     rows = cur.fetchall()
+    #
+    #     for subject_ids,annotations in rows:
+    #         subject_id = subject_ids[0]
+    #         self.aggregator.__update_score__(subject_id,annotations)
+    #
+    #     # makes other functions easier if we just return None
+    #     return None
 
     def __http_score__update__(self,subjects_to_update=None):
         """
@@ -291,7 +365,7 @@ class PanoptesAPI:
 
         return new_classification_count
 
-    def __heuristic_update__(self):
+    def __heuristic_update(self):
         new_classification_count = self.__find_classification_count__()
         subjects_to_update = self.aggregator.__subjects_to_update__(new_classification_count)
 
@@ -305,7 +379,7 @@ class PanoptesAPI:
 
 if __name__ == "__main__":
     update = "complete"
-    http_update = True
+    http_update = False
 
     try:
         opts, args = getopt.getopt(sys.argv[1:],"u:m:",["update=",])
@@ -327,4 +401,6 @@ if __name__ == "__main__":
     stargazing = PanoptesAPI("Supernovae",update_type=update,http_update=http_update)
     stargazing.__update__()
 
+    # cleanup makes sure that we are dumping the aggregation results back to disk
+    stargazing.__cleanup__()
 
