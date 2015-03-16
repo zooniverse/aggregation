@@ -194,7 +194,7 @@ class Aggregation:
 
 
 class PanoptesAPI:
-    def __init__(self,project,update_type="complete",http_update=True): #Supernovae
+    def __init__(self,project_name,update_type="complete",http_update=True): #Supernovae
         # get my userID and password
         # purely for testing, if this file does not exist, try opening on Greg's computer
         try:
@@ -209,7 +209,7 @@ class PanoptesAPI:
         self.token = panoptesPythonAPI.get_bearer_token(userid,password)
 
         # get the project id for Supernovae and the workflow version
-        self.project_id = panoptesPythonAPI.get_project_id(project,self.token)
+        self.project_id = panoptesPythonAPI.get_project_id(project_name,self.token)
         self.workflow_version = panoptesPythonAPI.get_workflow_version(self.project_id,self.token)
         self.workflow_id = panoptesPythonAPI.get_workflow_id(self.project_id,self.token)
 
@@ -416,7 +416,7 @@ if __name__ == "__main__":
             # convert from string into boolean
             http_update = (http_update[0] == "t")
 
-    stargazing = PanoptesAPI("Supernovae",update_type=update,http_update=http_update)
+    stargazing = PanoptesAPI("Supernova",update_type=update,http_update=http_update)
     stargazing.__update__()
 
     # cleanup makes sure that we are dumping the aggregation results back to disk
