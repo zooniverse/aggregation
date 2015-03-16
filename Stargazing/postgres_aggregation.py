@@ -33,24 +33,24 @@ class AnnotationException(Exception):
 class Aggregation:
     def __init__(self,update_type):
         # right now, each time we read in the classifications/annotations for a given subject, we are reading in all
-        # of them that have ever been created, even if they were run during a previous running of this program
+        # of them that have ever been created, even if they were processed during a previous running of this program
         # so we shouldn't try to merge with previous results - would result in definite double counting
         # so do a hard reset with the aggregations
-        self.aggregations = {}
+        self.aggregations = []
 
         # technically we could reuse the aggregation results to find the classification count but we want to store
         # the counts from one running of this program to an other - so best is to use two different variables
         # to store these values
         # if we are doing a complete update, start from scratch
         if update_type == "complete":
-            self.classification_count = {}
+            self.classification_count = []
         else:
             # loading the classification - if they don't exist, default to empty dicts
             # classification_count is useful for helping to determine which subjects we actually want to update
             try:
                 self.classification_count = pickle.load(open("/tmp/classification_count.pickle","rb"))
             except IOError:
-                self.classification_count = {}
+                self.classification_count = []
 
     def __cleanup__(self):
         pickle.dump(self.classification_count,open("/tmp/classification_count.pickle","wb"))
@@ -106,6 +106,13 @@ class Aggregation:
 
         # save the resulting aggregation - this is the first and only time these values are actually associated
         # with the particular subject id
+        # extend the list if we need to
+        while len(self.aggregations) <= subject_id:
+            self.aggregations.append(None)
+            self.classification_count.append(0)
+
+        assert len(self.aggregations) == len(self.classification_count)
+
         self.aggregations[subject_id] = {"mean":mean,"std":stdev,"count":accumulated_scores}
 
         # and update the classification count
@@ -138,31 +145,38 @@ class Aggregation:
         # if the accumulator was read in directly from the sql file - we will need to convert it into json format
         if isinstance(annotation,str):
             annotation = json.loads(annotation)
-        assert isinstance(annotation,list)
-        assert len(annotation) > 0
-        assert isinstance(annotation[0],dict)
+        else:
+            assert isinstance(annotation,dict)
         accumulator[self.__score_index__(annotation)] += 1
 
         return accumulator
 
-    def __subjects_to_update__(self,new_classification_count):
+    def __subjects_to_update__(self,subject_list,new_classification_count):
         """
         heuristic for selecting which subjects to update when doing a partial update
         the heuristic is only update if at least there are 5 new classifications and if (before these new
         classifications) there were under 15 classifications. Subjects are supposed to be retired once they
         reach 15 classifications but just in case we need to unretire some, this is a bit of a sanity check
+        :param subject_list: which subjects we are looking at
         :param new_classification_count:
         :return:
         """
         subjects_to_update = []
 
-        for subject_id in new_classification_count:
-            if subject_id in self.classification_count:
-                count_diff = new_classification_count[subject_id] - self.classification_count[subject_id]
+        for subject_id,count in zip(subject_list,new_classification_count):
+            # have we encountered this subject before?
+            if len(self.classification_count) >= subject_id:
+                # if we have already read in 15 classifications, don't even bother, regardless of many new
+                # classifications there are
+                if self.classification_count[subject_id] < 15:
+                    # how many new classifications can we read in?
+                    count_diff = count - self.classification_count[subject_id]
+
+                    # if we can get a least five new classifications - do it
+                    if count_diff >= 5:
+                        subjects_to_update.append(subject_id)
             else:
-                count_diff = new_classification_count[subject_id]
-            subjects_to_update.append(subject_id)
-            if (count_diff < 5) or (self.classification_count[subject_id] > 15):
+                # we haven't encountered this one before, just add it to the list
                 subjects_to_update.append(subject_id)
 
         return subjects_to_update
@@ -241,7 +255,7 @@ class PanoptesAPI:
             # if both are None, we should already be in aws
             self.S3_conn = boto.connect_s3(AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY)
         except boto.exception.NoAuthHandlerFound:
-            print "not able to connect to S3 - will try to keep going but this will probably give you errors later"
+            print >> sys.stderr, "not able to connect to S3 - will try to keep going but this will probably give you errors later"
 
     def __cleanup__(self):
         self.aggregator.__cleanup__()
@@ -269,7 +283,7 @@ class PanoptesAPI:
             csv_contents += self.aggregator.__aggregations_to_string__()
             k.set_contents_from_string(csv_contents)
         else:
-            print "not able to connect to S3"
+            print >> sys.stderr, "not able to connect to S3 - did not write any results to S3"
 
         # if we also want to use the http interface to put the results back onto Panoptes - seems to be running
         # rather slowly right now, so use with caution
@@ -290,9 +304,12 @@ class PanoptesAPI:
         annotation_accumulator = self.aggregator.__init__accumulator__()
 
         for subject_ids,annotations in cur.fetchall():
-            if (current_subject_ids is not None) and (subject_ids != current_subject_ids):
-                # save the results of old/previous subject
-                self.aggregator.__update_subject__(subject_ids[0],annotation_accumulator)
+            # have we moved on to a new subject?
+            if subject_ids != current_subject_ids:
+                # if this is not the first subject, aggregate the previous one
+                if current_subject_ids is not None:
+                    # save the results of old/previous subject
+                    self.aggregator.__update_subject__(subject_ids[0],annotation_accumulator)
 
                 # reset and move on to the next subject
                 current_subject_ids = subject_ids[0]
@@ -348,7 +365,9 @@ class PanoptesAPI:
         those subjects should have their classification count updated - otherwise, don't change the count
         :return:
         """
-        new_classification_count = {}
+        new_classification_count = []
+        ids = []
+
         cur = self.conn.cursor()
         #cur.execute("Select * from subject_sets where ")
 
@@ -357,21 +376,21 @@ class PanoptesAPI:
         # cur.execute("SELECT expert_set from subject_sets where subject_sets.project_id="+str(project_id)+" and subject_sets.workflow_id=" + str(workflow_id))
 
 
-        cur.execute("SELECT subject_id,classification_count from set_member_subjects inner join subject_sets on set_member_subjects.subject_set_id=subject_sets.id where (subject_sets.expert_set = FALSE or subject_sets.expert_set IS NULL) and subject_sets.project_id="+str(self.project_id)+" and subject_sets.workflow_id=" + str(self.workflow_id))
+        cur.execute("SELECT subject_id,classification_count from set_member_subjects inner join subject_sets on set_member_subjects.subject_set_id=subject_sets.id where (subject_sets.expert_set = FALSE or subject_sets.expert_set IS NULL) and subject_sets.project_id="+str(self.project_id)+" and subject_sets.workflow_id=" + str(self.workflow_id) +" ORDER BY subject_id")
         rows = cur.fetchall()
         for subject_id,count in rows:
             if count > 0:
-                new_classification_count[subject_id] = count
+                new_classification_count.append(count)
+                ids.append(subject_id)
 
-        return new_classification_count
+        return ids,new_classification_count
 
     def __heuristic_update(self):
-        new_classification_count = self.__find_classification_count__()
-        subjects_to_update = self.aggregator.__subjects_to_update__(new_classification_count)
+        ids,new_classification_count = self.__find_classification_count__()
+        subjects_to_update = self.aggregator.__subjects_to_update__(ids,new_classification_count)
 
         for subject_id in subjects_to_update:
-            print "updating"
-            self.__update_scores__(additional_conditions=" and subject_ids = ARRAY["+str(subject_id)+"]")
+            self.__update_aggregations(additional_conditions=" and subject_ids = ARRAY["+str(subject_id)+"]")
 
         return subjects_to_update
 
@@ -394,9 +413,8 @@ if __name__ == "__main__":
             assert update in ["complete", "partial"]
         elif opt in ["-m", "-method"]:
             http_update = arg.lower()
-            assert update in ["true", "false"]
             # convert from string into boolean
-            http_update = (http_update == True)
+            http_update = (http_update[0] == "t")
 
     stargazing = PanoptesAPI("Supernovae",update_type=update,http_update=http_update)
     stargazing.__update__()
