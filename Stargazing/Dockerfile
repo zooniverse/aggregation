@@ -6,7 +6,7 @@ WORKDIR /app/
 
 RUN apt-get update && apt-get -y upgrade && \
     apt-get install -y python python-yaml git python-requests python-psycopg2 \
-        python-boto && \
+        python-boto python-numpy && \
     git clone https://github.com/ggdhines/PanoptesScripts.git && \
     mv PanoptesScripts/panoptesPythonAPI.py ./ && \
     rm -rf PanoptesScripts
