@@ -224,11 +224,11 @@ class PanoptesAPI:
         database_details = yaml.load(database_file)
 
         #environment = "staging"
-        environment = os.getenv('ENVIRONMENT', "staging")
-        database = database_details[environment]["database"]
-        username = database_details[environment]["username"]
-        password = database_details[environment]["password"]
-        host = database_details[environment]["host"]
+        self.environment = os.getenv('ENVIRONMENT', "staging")
+        database = database_details[self.environment]["database"]
+        username = database_details[self.environment]["username"]
+        password = database_details[self.environment]["password"]
+        host = database_details[self.environment]["host"]
 
         # try connecting to the db
         try:
@@ -278,7 +278,7 @@ class PanoptesAPI:
             k = Key(result_bucket)
             t = datetime.datetime.now()
             fname = str(t.day) + "_"  + str(t.hour) + "_" + str(t.minute)
-            k.key = "Stargazing/"+fname+".csv"
+            k.key = "Stargazing/"+self.environment+"/"+fname+".csv"
             csv_contents = "subject_id,mean,std,count0,count1,count2\n"
             csv_contents += self.aggregator.__aggregations_to_string__()
             k.set_contents_from_string(csv_contents)
