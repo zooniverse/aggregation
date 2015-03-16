@@ -145,8 +145,7 @@ class Aggregation:
         # if the accumulator was read in directly from the sql file - we will need to convert it into json format
         if isinstance(annotation,str):
             annotation = json.loads(annotation)
-        else:
-            assert isinstance(annotation,dict)
+
         accumulator[self.__score_index__(annotation)] += 1
 
         return accumulator
@@ -187,8 +186,9 @@ class Aggregation:
         a csv file
         """
         results = ""
-        for subject_id,agg in self.aggregations.items():
-            results += str(subject_id) + "," + str(agg["mean"]) + "," + str(agg["std"]) + "," + str(agg["count"][0]) + "," + str(agg["count"][1]) + ","+ str(agg["count"][2]) + "\n"
+        for subject_id,agg in enumerate(self.aggregations):
+            if agg is not None:
+                results += str(subject_id) + "," + str(agg["mean"]) + "," + str(agg["std"]) + "," + str(agg["count"][0]) + "," + str(agg["count"][1]) + ","+ str(agg["count"][2]) + "\n"
 
         return results
 
