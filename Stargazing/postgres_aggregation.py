@@ -232,11 +232,15 @@ class Aggregation:
             # add the metadata first
             metadata = self.metadata[subject_id]
 
-            if metadata is None:
-                # should never happen but just in case
-                results += str(subject_id) + ",NA,NA,NA,NA"
-            else:
-                results += str(metadata["candidateID"]) + "," + str(metadata["RA"]) + "," + str(metadata["DEC"]) + "," + str(metadata["mag"]) + "," + str(metadata["mjd"])
+            try:
+                if metadata is None:
+                    # should never happen but just in case
+                    results += str(subject_id) + ",NA,NA,NA,NA"
+                else:
+                    results += str(metadata["candidateID"]) + "," + str(metadata["RA"]) + "," + str(metadata["DEC"]) + "," + str(metadata["mag"]) + "," + str(metadata["mjd"])
+            except TypeError:
+                print metadata
+                raise
             results += "," + str(agg["mean"]) + "," + str(agg["std"]) + "," + str(agg["count"][0]) + "," + str(agg["count"][1]) + ","+ str(agg["count"][2]) + "\n"
 
         return results
@@ -391,7 +395,7 @@ class PanoptesAPI:
                         else:
                             # none means there will be no update
                             metadata = None
-                        print "aggregating " + str(count)
+                        #print "aggregating " + str(count)
 
                         self.aggregator.__update_subject__(current_subject_id,annotation_accumulator,metadata)
 
