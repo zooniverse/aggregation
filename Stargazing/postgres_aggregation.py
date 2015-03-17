@@ -221,20 +221,23 @@ class Aggregation:
         convert the aggregation into string format - useful for when you want to print the aggregations out to
         a csv file
         """
+        # start by getting all aggregations that have at least 5 classifications
+        subjects_to_print = [subject_id for subject_id,agg in enumerate(self.aggregations) if (agg is not None) and (sum(agg["count"]) >= 5)]
+        # now sort these aggregations
+        subjects_to_print.sort(key = lambda x: self.aggregations[x]["mean"],reverse = True)
+
         results = ""
-        for subject_id,agg in enumerate(self.aggregations):
+        for subject_id in subjects_to_print:
+            agg = self.aggregations[subject_id]
+            # add the metadata first
+            metadata = self.metadata[subject_id]
 
-            if agg is not None:
-                print subject_id
-                # add the metadata first
-                metadata = self.metadata[subject_id]
-
-                if metadata is None:
-                    # should never happen but just in case
-                    results += str(subject_id) + ",NA,NA,NA,NA"
-                else:
-                    results += str(metadata["candidateID"]) + "," + str(metadata["RA"]) + "," + str(metadata["DEC"]) + "," + str(metadata["mag"]) + "," + str(metadata["mjd"])
-                results += "," + str(agg["mean"]) + "," + str(agg["std"]) + "," + str(agg["count"][0]) + "," + str(agg["count"][1]) + ","+ str(agg["count"][2]) + "\n"
+            if metadata is None:
+                # should never happen but just in case
+                results += str(subject_id) + ",NA,NA,NA,NA"
+            else:
+                results += str(metadata["candidateID"]) + "," + str(metadata["RA"]) + "," + str(metadata["DEC"]) + "," + str(metadata["mag"]) + "," + str(metadata["mjd"])
+            results += "," + str(agg["mean"]) + "," + str(agg["std"]) + "," + str(agg["count"][0]) + "," + str(agg["count"][1]) + ","+ str(agg["count"][2]) + "\n"
 
         return results
 
