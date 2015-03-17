@@ -41,9 +41,16 @@ class Aggregation:
         # do we have a lock from a previous - failed - run of this program (base or iterative)
         # doesn't really affect the base run but the iterative will need to start from scratch
         if os.path.isfile("/tmp/panoptes.lock"):
-            self.fail = True
+            # we need to reset things
+            f = open("/tmp/aggregations.pickle","w")
+            f.close()
+
+            # f = open("/tmp/metadata.pickle","w")
+            # f.close()
+
+            f = open("/tmp/timestamp.pickle","w")
+            f.close()
         else:
-            self.fail = False
             f = open("/tmp/panoptes.lock","w")
             f.close()
 
@@ -53,7 +60,7 @@ class Aggregation:
         # not the end of the world
         try:
             self.metadata = pickle.load(open("/tmp/metadata.pickle","rb"))
-        except IOError:
+        except (IOError, EOFError) as e:
             self.metadata = []
 
         # # technically we could reuse the aggregation results to find the classification count but we want to store
@@ -73,6 +80,8 @@ class Aggregation:
         self.current_timestamp = self.threshold_date
 
     def __cleanup__(self):
+        #print "cleaning"
+        #print self.current_timestamp
         #pickle.dump(self.classification_count,open("/tmp/classification_count.pickle","wb"))
         pickle.dump(self.metadata,open("/tmp/metadata.pickle","wb"))
         pickle.dump(self.aggregations,open("/tmp/aggregations.pickle","wb"))
@@ -85,8 +94,7 @@ class Aggregation:
     def __get_timestamp__(self):
         return self.current_timestamp
 
-    def __set_timestamp__(self,timestamp):
-        self.current_timestamp = timestamp
+
 
     def __score_index__(self,annotations):
         """calculate the score associated with a given classification according to the algorithm
@@ -236,7 +244,7 @@ class Aggregation:
             agg = self.aggregations[subject_id]
             # add the metadata first
             metadata = self.metadata[subject_id]
-            print subject_id,agg
+            #print subject_id,agg
             try:
                 if metadata is None:
                     # should never happen but just in case
@@ -260,7 +268,7 @@ class Aggregation:
 
 
 class PanoptesAPI:
-    def __init__(self,http_update=False): #Supernovae
+    def __init__(self,http_update=False,aggregator=Aggregation): #Supernovae
         # first find out which environment we are working with
         self.environment = os.getenv('ENVIRONMENT', "staging")
 
@@ -315,7 +323,7 @@ class PanoptesAPI:
             print "I am unable to connect to the database"
             raise
 
-        self.aggregator = Aggregation()
+        self.aggregator = aggregator()
 
         # assert update_type in ["partial","complete"]
         # self.update_type = update_type
@@ -341,8 +349,10 @@ class PanoptesAPI:
 
     def __update__(self):
 
-        num_updated = self.__update_aggregations__()
+        num_updated, new_time = self.__update_aggregations__()
 
+        csv_contents = "candidateID,RA,DEC,mag,mjd,mean,stdev,count0,count1,count2\n"
+        csv_contents += self.aggregator.__aggregations_to_string__()
         # write out the results to an s3 bucket - file is a csv file labelled with day, hour and minute
         if self.S3_conn is not None:
             result_bucket = self.S3_conn.get_bucket("zooniverse-aggregation")
@@ -350,8 +360,7 @@ class PanoptesAPI:
             t = datetime.datetime.now()
             fname = str(t.day) + "_"  + str(t.hour) + "_" + str(t.minute)
             k.key = "Stargazing/"+self.environment+"/"+fname+".csv"
-            csv_contents = "candidateID,RA,DEC,mag,mjd,mean,stdev,count0,count1,count2\n"
-            csv_contents += self.aggregator.__aggregations_to_string__()
+
             k.set_contents_from_string(csv_contents)
         else:
             print >> sys.stderr, "not able to connect to S3 - did not write any results to S3"
@@ -388,7 +397,7 @@ class PanoptesAPI:
 
         return metadata
 
-    def __update_aggregations__(self):
+    def __update_aggregations__(self,time_constraints=""):
         """
         update
         :param additional_conditions: if you want to restrict the updates to certain subjects
@@ -396,15 +405,17 @@ class PanoptesAPI:
         """
 
 
-        select = "SELECT subject_ids,annotations,created_at from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + " ORDER BY subject_ids"
+        select = "SELECT subject_ids,annotations,created_at from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + time_constraints +" ORDER BY subject_ids"
         cur = self.conn.cursor()
         cur.execute(select)
 
         current_subject_id = None
         annotation_accumulator = self.aggregator.__init__accumulator__()
 
+        current_time = self.aggregator.__get_timestamp__()
+        count = 0
         for count,(subject_ids,annotations,time_stamp) in enumerate(cur.fetchall()):
-
+            current_time = max(current_time,time_stamp)
             #print count, subject_ids
             # have we moved on to a new subject?
             if subject_ids[0] != current_subject_id:
@@ -422,7 +433,6 @@ class PanoptesAPI:
                 current_subject_id = subject_ids[0]
                 annotation_accumulator = self.aggregator.__init__accumulator__()
 
-
             annotation_accumulator = self.aggregator.__accumulate__(annotations,annotation_accumulator)
 
         # make sure we update the aggregation for the final subject we read in
@@ -432,7 +442,8 @@ class PanoptesAPI:
                 metadata = self.__get_metadata__(current_subject_id)
                 self.aggregator.__update_subject__(current_subject_id,annotation_accumulator,metadata)
 
-        return count
+
+        return count,current_time
 
     # def __update_scores__(self,additional_conditions = ""):
     #     select = "SELECT subject_ids,annotations from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + additional_conditions
