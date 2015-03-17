@@ -31,7 +31,7 @@ class AnnotationException(Exception):
 
 
 class Aggregation:
-    def __init__(self,update_type):
+    def __init__(self):
         # right now, each time we read in the classifications/annotations for a given subject, we are reading in all
         # of them that have ever been created, even if they were processed during a previous running of this program
         # so we shouldn't try to merge with previous results - would result in definite double counting
@@ -45,22 +45,22 @@ class Aggregation:
         except IOError:
             self.metadata = []
 
-        # technically we could reuse the aggregation results to find the classification count but we want to store
-        # the counts from one running of this program to an other - so best is to use two different variables
-        # to store these values
-        # if we are doing a complete update, start from scratch
-        if update_type == "complete":
-            self.classification_count = []
-        else:
-            # loading the classification - if they don't exist, default to empty dicts
-            # classification_count is useful for helping to determine which subjects we actually want to update
-            try:
-                self.classification_count = pickle.load(open("/tmp/classification_count.pickle","rb"))
-            except IOError:
-                self.classification_count = []
+        # # technically we could reuse the aggregation results to find the classification count but we want to store
+        # # the counts from one running of this program to an other - so best is to use two different variables
+        # # to store these values
+        # # if we are doing a complete update, start from scratch
+        # if update_type == "complete":
+        #     self.classification_count = []
+        # else:
+        #     # loading the classification - if they don't exist, default to empty dicts
+        #     # classification_count is useful for helping to determine which subjects we actually want to update
+        #     try:
+        #         self.classification_count = pickle.load(open("/tmp/classification_count.pickle","rb"))
+        #     except IOError:
+        #         self.classification_count = []
 
     def __cleanup__(self):
-        pickle.dump(self.classification_count,open("/tmp/classification_count.pickle","wb"))
+        #pickle.dump(self.classification_count,open("/tmp/classification_count.pickle","wb"))
         pickle.dump(self.metadata,open("/tmp/metadata.pickle","wb"))
 
     def __score_index__(self,annotations):
@@ -92,8 +92,14 @@ class Aggregation:
             else:
                 return 1  #1
         except IndexError:
-            print >> sys.stderr, "badly formed annotation - should skip"
+            #print >> sys.stderr, "badly formed annotation - should skip"
             raise
+
+    def __expand__(self,subject_id):
+        while len(self.aggregations) <= subject_id:
+            self.aggregations.append(None)
+            #self.classification_count.append(0)
+            self.metadata.append(None)
 
     def __update_subject__(self,subject_id,accumulated_scores,metadata):
         """
@@ -110,38 +116,38 @@ class Aggregation:
         # http://astro-wise.org/awesoft/awehome/AWBASE/common/math/statistics.py
         # calculate the weighted average - same as the average if we hadn't compressed all of the scores into
         # one accumulated value
-        score_sum = reduce(operator.add, accumulated_scores)
-        mean = reduce(operator.add, [weight*x for x, weight in zip([-1,1,3], accumulated_scores)])/score_sum
+        # score_sum = reduce(operator.add, accumulated_scores)
+        # mean = reduce(operator.add, [weight*x for x, weight in zip([-1,1,3], accumulated_scores)])/score_sum
 
-        stdv  = reduce(operator.add, [weight*(x-mean)**2 for x, weight in zip([-1,1,3], accumulated_scores)])
-        stdev = math.sqrt(stdv/score_sum)
+        #stdv  = reduce(operator.add, [weight*(x-mean)**2 for x, weight in zip([-1,1,3], accumulated_scores)])
+        #stdev = math.sqrt(stdv/score_sum)
+
+        values = accumulated_scores
+        mean = (values[0]*-1 + values[1]*1 + values[2]*3)/float(sum(values))
+        # note this gives a biased estimate
+        stdev = math.sqrt(((-1-mean)**2*values[0] + (1-mean)**2*values[1] + (3-mean)**2*values[1])/float(sum(values)))
 
         # save the resulting aggregation - this is the first and only time these values are actually associated
         # with the particular subject id
         # extend the list if we need to
-        while len(self.aggregations) <= subject_id:
-            self.aggregations.append(None)
-            self.classification_count.append(0)
-            self.metadata.append(None)
+        self.__expand__(subject_id)
 
-
-        assert len(self.aggregations) == len(self.classification_count)
-
+        #assert len(self.aggregations) == len(self.classification_count)
         self.aggregations[subject_id] = {"mean":mean,"std":stdev,"count":accumulated_scores}
 
         # and update the classification count
-        self.classification_count[subject_id] = sum(accumulated_scores)
+        #self.classification_count[subject_id] = sum(accumulated_scores)
 
         # only update metadata if it is not none
-        try:
-            if metadata is not None:
-                if isinstance(metadata,str):
-                    self.metadata[subject_id] = json.loads(metadata)
-                else:
-                    self.metadata[subject_id] = metadata
-        except TypeError:
-            print metadata
-            raise
+        self.__update_metadata__(subject_id,metadata)
+
+    def __update_metadata__(self,subject_id,metadata):
+        self.__expand__(subject_id)
+        if metadata is not None:
+            if isinstance(metadata,str):
+                self.metadata[subject_id] = json.loads(metadata)
+            else:
+                self.metadata[subject_id] = metadata
 
     def __have_metadata__(self,subject_id):
         if len(self.metadata) <= subject_id:
@@ -167,7 +173,7 @@ class Aggregation:
             if self.aggregations[subject_id] is not None:
                 yield subject_id,self.aggregations[subject_id]
 
-    def __init__accumulator__(self):
+    def __init__accumulator__(self,subject_id = None):
         return [0,0,0]
 
     def __accumulate__(self,annotation,accumulator):
@@ -240,17 +246,22 @@ class Aggregation:
                     # should never happen but just in case
                     results += str(subject_id) + ",NA,NA,NA,NA"
                 else:
-                    results += str(metadata["candidateID"]) + "," + str(metadata["RA"]) + "," + str(metadata["DEC"]) + "," + str(metadata["mag"]) + "," + str(metadata["mjd"])
+                    for property in ["candidateID","RA","DEC","mag","mjd"]:
+                        try:
+                            results += str(metadata[property]) + "," #+ str(metadata["RA"]) + "," + str(metadata["DEC"]) + "," + str(metadata["mag"]) + "," + str(metadata["mjd"])
+                        except KeyError:
+                            print >> sys.stderr, "missing property: " + property
+                            results += "NA,"
             except TypeError:
                 print metadata
                 raise
-            results += "," + str(agg["mean"]) + "," + str(agg["std"]) + "," + str(agg["count"][0]) + "," + str(agg["count"][1]) + ","+ str(agg["count"][2]) + "\n"
+            results += str(agg["mean"]) + "," + str(agg["std"]) + "," + str(agg["count"][0]) + "," + str(agg["count"][1]) + ","+ str(agg["count"][2]) + "\n"
 
         return results
 
 
 class PanoptesAPI:
-    def __init__(self,update_type="complete",http_update=True): #Supernovae
+    def __init__(self,http_update=False): #Supernovae
         # first find out which environment we are working with
         self.environment = os.getenv('ENVIRONMENT', "staging")
 
@@ -269,9 +280,10 @@ class PanoptesAPI:
         host = api_details[self.environment]["host"] #"https://panoptes-staging.zooniverse.org/"
         owner = api_details[self.environment]["owner"] #"brian-testing" or zooniverse
         project_name = api_details[self.environment]["project_name"]
+        app_client_id = api_details[self.environment]["app_client_id"]
 
         # get the token necessary to connect with panoptes
-        self.http_api = panoptesPythonAPI.PanoptesAPI(host,userid,password)
+        self.http_api = panoptesPythonAPI.PanoptesAPI(host,userid,password,app_client_id)
         #panoptesPythonAPI.get_bearer_token(userid,password)
 
         # get the project id for Supernovae and the workflow version
@@ -304,10 +316,10 @@ class PanoptesAPI:
             print "I am unable to connect to the database"
             raise
 
-        self.aggregator = Aggregation(update_type)
+        self.aggregator = Aggregation()
 
-        assert update_type in ["partial","complete"]
-        self.update_type = update_type
+        # assert update_type in ["partial","complete"]
+        # self.update_type = update_type
 
         assert http_update in [True,False]
         self.http_update = http_update
@@ -323,20 +335,14 @@ class PanoptesAPI:
         except boto.exception.NoAuthHandlerFound:
             print >> sys.stderr, "not able to connect to S3 - will try to keep going but this will probably give you errors later"
 
+        self.__get_all_metadata__()
+
     def __cleanup__(self):
         self.aggregator.__cleanup__()
 
     def __update__(self):
 
-        # if a complete update is wanted, just read through all of the classifications/annotations
-        if self.update_type == "complete":
-            self.__update_aggregations()
-
-            # setting subjects_to_update to none is shorthand for wanting to update all of them
-            subjects_to_update = None
-        # if we want a partial update, use the heuristic to determine which subjects to update
-        else:
-            subjects_to_update = self.__heuristic_update()
+        num_updated = self.__update_aggregations__()
 
         # write out the results to an s3 bucket - file is a csv file labelled with day, hour and minute
         if self.S3_conn is not None:
@@ -353,10 +359,37 @@ class PanoptesAPI:
 
         # if we also want to use the http interface to put the results back onto Panoptes - seems to be running
         # rather slowly right now, so use with caution
-        if self.http_update is True:
-            self.__http_score__update__(subjects_to_update)
+        # if self.http_update is True:
+        #     self.__http_score__update__(subjects_to_update)
+        return num_updated
 
-    def __update_aggregations(self, additional_conditions = ""):
+    def __get_all_metadata__(self):
+        # check to see if the metadata file exists in the first place, if so, don't bother trying to download it
+        if not os.path.isfile("/tmp/metadata.pickle"):
+            select = "SELECT id,metadata from subjects"
+            cur = self.conn.cursor()
+            cur.execute(select)
+            rows = cur.fetchall()
+            for subject_id,metadata in rows:
+                print subject_id
+                self.aggregator.__update_metadata__(subject_id,metadata)
+
+
+    def __get_metadata__(self,subject_id):
+        # do we need to get the metadata for this subject?
+        if not self.aggregator.__have_metadata__(subject_id):
+            select = "SELECT metadata from subjects where id = " + str(subject_id)
+            cur2 = self.conn.cursor()
+            cur2.execute(select)
+            metadata = cur2.fetchone()[0]
+
+        else:
+            # none means there will be no update
+            metadata = None
+
+        return metadata
+
+    def __update_aggregations__(self):
         """
         update
         :param additional_conditions: if you want to restrict the updates to certain subjects
@@ -364,7 +397,7 @@ class PanoptesAPI:
         """
 
 
-        select = "SELECT subject_ids,annotations from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + additional_conditions + " ORDER BY subject_ids"
+        select = "SELECT subject_ids,annotations from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + " ORDER BY subject_ids"
         cur = self.conn.cursor()
         cur.execute(select)
 
@@ -372,6 +405,7 @@ class PanoptesAPI:
         annotation_accumulator = self.aggregator.__init__accumulator__()
 
         for count,(subject_ids,annotations) in enumerate(cur.fetchall()):
+
             #print count, subject_ids
             # have we moved on to a new subject?
             if subject_ids[0] != current_subject_id:
@@ -382,24 +416,7 @@ class PanoptesAPI:
                     # if by some chance all of the classifications we've read in have been discarded
                     # just skip it
                     if annotation_accumulator != [0,0,0]:
-
-                        # do we need to get the metadata for this subject?
-                        if not self.aggregator.__have_metadata__(current_subject_id):
-                            select = "SELECT metadata from subjects where id = " + str(current_subject_id)
-                            cur2 = self.conn.cursor()
-                            cur2.execute(select)
-                            metadata = cur2.fetchone()[0]
-                            if metadata is None:
-                                select = "SELECT * from subjects where id = " + str(current_subject_id)
-                                cur2 = self.conn.cursor()
-                                cur2.execute(select)
-                                print cur2.fetchone()
-                                #assert metadata is not None
-                        else:
-                            # none means there will be no update
-                            metadata = None
-                        #print "aggregating " + str(count)
-
+                        metadata = self.__get_metadata__(current_subject_id)
                         self.aggregator.__update_subject__(current_subject_id,annotation_accumulator,metadata)
 
                 # reset and move on to the next subject
@@ -413,14 +430,10 @@ class PanoptesAPI:
         # on the very off chance that we haven't read in any classifications, double check
         if current_subject_id is not None:
             if annotation_accumulator != [0,0,0]:
-                if not self.aggregator.__have_metadata__(current_subject_id):
-                    select = "SELECT metadata from subjects where id = " + str(current_subject_id)
-                    cur2 = self.conn.cursor()
-                    cur2.execute(select)
-                    metadata = cur2.fetchone()[0]
-                else:
-                    metadata = None
+                metadata = self.__get_metadata__(current_subject_id)
                 self.aggregator.__update_subject__(current_subject_id,annotation_accumulator,metadata)
+
+        return count
 
     # def __update_scores__(self,additional_conditions = ""):
     #     select = "SELECT subject_ids,annotations from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + additional_conditions
@@ -518,11 +531,11 @@ if __name__ == "__main__":
 
     # hard code this for now
     http_update = False
-    stargazing = PanoptesAPI(update_type=update,http_update=http_update)
-    stargazing.__update__()
+    stargazing = PanoptesAPI(http_update=http_update)
+    num_updated = stargazing.__update__()
 
     # cleanup makes sure that we are dumping the aggregation results back to disk
     stargazing.__cleanup__()
 
     end = datetime.datetime.now()
-    print end - start
+    print "updated " + str(num_updated) + " in " + str(end - start)
