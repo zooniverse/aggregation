@@ -10,31 +10,19 @@ class IterativeAggregation(Aggregation):
     def __init__(self):
         Aggregation.__init__(self)
 
-        #create a lock
-        f = open("/tmp/panoptes.lock","w")
-        f.close()
-
-        threshold_date = datetime.datetime(2015,3,16,17,0,0)
-
-        # try loading the aggregations
-        try:
-                self.aggregations = pickle.load(open("/tmp/aggregations.pickle","rb"))
-                self.current_timestamp = pickle.load(open("/tmp/timestamp.pickle","rb"))
-        except IOError:
-            self.aggregations = []
-            # makes it slightly easier to have an actual date in this variable
-            # the value doesn't matter as long as it is before any classifications
-            self.current_timestamp = threshold_date
-
-
-
-    def __cleanup__(self):#, type, value, traceback):
-        Aggregation.__cleanup__(self)
-
-        pickle.dump(self.aggregations,open("/tmp/aggregations.pickle","wb"))
-        pickle.dump(self.current_timestamp,open("/tmp/timestamp.pickle","wb"))
-        #x = raw_input('What is your favourite colour?')
-        os.remove("/tmp/panoptes.lock")
+        # only try loading previous stuff if we don't have a failed run
+        if not self.fail:
+            try:
+                    self.aggregations = pickle.load(open("/tmp/aggregations.pickle","rb"))
+                    self.current_timestamp = pickle.load(open("/tmp/timestamp.pickle","rb"))
+            except IOError:
+                # just in case we got part way through loading the files
+                self.aggregations = []
+                # makes it slightly easier to have an actual date in this variable
+                # the value doesn't matter as long as it is before any classifications
+                self.current_timestamp = self.threshold_date
+        else:
+            print "failed!"
 
     def __init__accumulator__(self,subject_id=None):
         if (subject_id is None) or (len(self.aggregations) <= subject_id) or (self.aggregations[subject_id] is None):
@@ -42,11 +30,7 @@ class IterativeAggregation(Aggregation):
         else:
             return self.aggregations[subject_id]["count"]
 
-    def __get_timestamp__(self):
-        return self.current_timestamp
 
-    def __set_timestamp__(self,timestamp):
-        self.current_timestamp = timestamp
 
 class IterativePantopesAPI(PanoptesAPI):
     def __init__(self,http_update=False):

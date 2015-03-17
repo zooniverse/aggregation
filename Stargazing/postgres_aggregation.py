@@ -36,6 +36,17 @@ class Aggregation:
         # of them that have ever been created, even if they were processed during a previous running of this program
         # so we shouldn't try to merge with previous results - would result in definite double counting
         # so do a hard reset with the aggregations
+        #create a lock
+
+        # do we have a lock from a previous - failed - run of this program (base or iterative)
+        # doesn't really affect the base run but the iterative will need to start from scratch
+        if os.path.isfile("/tmp/panoptes.lock"):
+            self.fail = True
+        else:
+            self.fail = False
+            f = open("/tmp/panoptes.lock","w")
+            f.close()
+
         self.aggregations = []
 
         # try load previously read in metadata - if we can't we'll just have to download it again
@@ -58,10 +69,24 @@ class Aggregation:
         #         self.classification_count = pickle.load(open("/tmp/classification_count.pickle","rb"))
         #     except IOError:
         #         self.classification_count = []
+        self.threshold_date = datetime.datetime(2015,3,16,17,0,0)
+        self.current_timestamp = self.threshold_date
 
     def __cleanup__(self):
         #pickle.dump(self.classification_count,open("/tmp/classification_count.pickle","wb"))
         pickle.dump(self.metadata,open("/tmp/metadata.pickle","wb"))
+        pickle.dump(self.aggregations,open("/tmp/aggregations.pickle","wb"))
+
+        pickle.dump(self.aggregations,open("/tmp/aggregations.pickle","wb"))
+        pickle.dump(self.current_timestamp,open("/tmp/timestamp.pickle","wb"))
+        #x = raw_input('What is your favourite colour?')
+        os.remove("/tmp/panoptes.lock")
+
+    def __get_timestamp__(self):
+        return self.current_timestamp
+
+    def __set_timestamp__(self,timestamp):
+        self.current_timestamp = timestamp
 
     def __score_index__(self,annotations):
         """calculate the score associated with a given classification according to the algorithm
@@ -195,36 +220,6 @@ class Aggregation:
 
         return accumulator
 
-    def __subjects_to_update__(self,subject_list,new_classification_count):
-        """
-        heuristic for selecting which subjects to update when doing a partial update
-        the heuristic is only update if at least there are 5 new classifications and if (before these new
-        classifications) there were under 15 classifications. Subjects are supposed to be retired once they
-        reach 15 classifications but just in case we need to unretire some, this is a bit of a sanity check
-        :param subject_list: which subjects we are looking at
-        :param new_classification_count:
-        :return:
-        """
-        subjects_to_update = []
-
-        for subject_id,count in zip(subject_list,new_classification_count):
-            # have we encountered this subject before?
-            if len(self.classification_count) >= subject_id:
-                # if we have already read in 15 classifications, don't even bother, regardless of many new
-                # classifications there are
-                if self.classification_count[subject_id] < 15:
-                    # how many new classifications can we read in?
-                    count_diff = count - self.classification_count[subject_id]
-
-                    # if we can get a least five new classifications - do it
-                    if count_diff >= 5:
-                        subjects_to_update.append(subject_id)
-            else:
-                # we haven't encountered this one before, just add it to the list
-                subjects_to_update.append(subject_id)
-
-        return subjects_to_update
-
     def __aggregations_to_string__(self):
         """
         convert the aggregation into string format - useful for when you want to print the aggregations out to
@@ -237,10 +232,11 @@ class Aggregation:
 
         results = ""
         for subject_id in subjects_to_print:
+
             agg = self.aggregations[subject_id]
             # add the metadata first
             metadata = self.metadata[subject_id]
-
+            print subject_id,agg
             try:
                 if metadata is None:
                     # should never happen but just in case
@@ -251,7 +247,10 @@ class Aggregation:
                             results += str(metadata[property]) + "," #+ str(metadata["RA"]) + "," + str(metadata["DEC"]) + "," + str(metadata["mag"]) + "," + str(metadata["mjd"])
                         except KeyError:
                             print >> sys.stderr, "missing property: " + property
-                            results += "NA,"
+                            if property == "candidateID":
+                                results += str(subject_id) + ","
+                            else:
+                                results += "NA,"
             except TypeError:
                 print metadata
                 raise
@@ -351,7 +350,7 @@ class PanoptesAPI:
             t = datetime.datetime.now()
             fname = str(t.day) + "_"  + str(t.hour) + "_" + str(t.minute)
             k.key = "Stargazing/"+self.environment+"/"+fname+".csv"
-            csv_contents = "candidateID,RA,DEC,mag,mjd,mean,std,count0,count1,count2\n"
+            csv_contents = "candidateID,RA,DEC,mag,mjd,mean,stdev,count0,count1,count2\n"
             csv_contents += self.aggregator.__aggregations_to_string__()
             k.set_contents_from_string(csv_contents)
         else:
@@ -397,14 +396,14 @@ class PanoptesAPI:
         """
 
 
-        select = "SELECT subject_ids,annotations from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + " ORDER BY subject_ids"
+        select = "SELECT subject_ids,annotations,created_at from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + " ORDER BY subject_ids"
         cur = self.conn.cursor()
         cur.execute(select)
 
         current_subject_id = None
         annotation_accumulator = self.aggregator.__init__accumulator__()
 
-        for count,(subject_ids,annotations) in enumerate(cur.fetchall()):
+        for count,(subject_ids,annotations,time_stamp) in enumerate(cur.fetchall()):
 
             #print count, subject_ids
             # have we moved on to a new subject?
