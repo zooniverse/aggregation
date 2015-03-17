@@ -135,7 +135,10 @@ class Aggregation:
         # only update metadata if it is not none
         try:
             if metadata is not None:
-                self.metadata[subject_id] = metadata
+                if isinstance(metadata,str):
+                    self.metadata[subject_id] = json.loads(metadata)
+                else:
+                    self.metadata[subject_id] = metadata
         except TypeError:
             print metadata
             raise
