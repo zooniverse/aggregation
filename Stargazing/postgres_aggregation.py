@@ -35,29 +35,7 @@ class AnnotationException(Exception):
 
 class Aggregation:
     def __init__(self):
-        # right now, each time we read in the classifications/annotations for a given subject, we are reading in all
-        # of them that have ever been created, even if they were processed during a previous running of this program
-        # so we shouldn't try to merge with previous results - would result in definite double counting
-        # so do a hard reset with the aggregations
-        #create a lock
-
-        # do we have a lock from a previous - failed - run of this program (base or iterative)
-        # doesn't really affect the base run but the iterative will need to start from scratch
-        if os.path.isfile("/tmp/panoptes.lock"):
-            print "resetting"
-            # we need to reset things
-            f = open("/tmp/aggregations.pickle","w")
-            f.close()
-
-            # f = open("/tmp/metadata.pickle","w")
-            # f.close()
-
-            f = open("/tmp/timestamp.pickle","w")
-            f.close()
-        else:
-            f = open("/tmp/panoptes.lock","w")
-            f.close()
-
+        # set the aggregations to be nothing
         self.aggregations = []
 
         # try load previously read in metadata - if we can't we'll just have to download it again
@@ -67,38 +45,18 @@ class Aggregation:
         except (IOError, EOFError) as e:
             self.metadata = []
 
-        try:
-            self.expert_sets = pickle.load(open("/tmp/experts.pickle","rb"))
-        except (IOError, EOFError) as e:
-            self.expert_sets = []
-
-        # # technically we could reuse the aggregation results to find the classification count but we want to store
-        # # the counts from one running of this program to an other - so best is to use two different variables
-        # # to store these values
-        # # if we are doing a complete update, start from scratch
-        # if update_type == "complete":
-        #     self.classification_count = []
-        # else:
-        #     # loading the classification - if they don't exist, default to empty dicts
-        #     # classification_count is useful for helping to determine which subjects we actually want to update
-        #     try:
-        #         self.classification_count = pickle.load(open("/tmp/classification_count.pickle","rb"))
-        #     except IOError:
-        #         self.classification_count = []
+        # the current current timestamp - we need something that is guaranteed to be before any of the
+        # actual classifications - the specific datetime doesn't matter
         self.threshold_date = datetime.datetime(2015,3,16,17,0,0)
         self.current_timestamp = self.threshold_date
 
     def __cleanup__(self):
-        #print "cleaning"
-        #print self.current_timestamp
-        #pickle.dump(self.classification_count,open("/tmp/classification_count.pickle","wb"))
+        """
+        dumps the results to file so that they can be used for future runs
+        :return:
+        """
         pickle.dump(self.metadata,open("/tmp/metadata.pickle","wb"))
-        pickle.dump(self.aggregations,open("/tmp/aggregations.pickle","wb"))
-        pickle.dump(self.expert_sets,open("/tmp/experts.pickle","wb"))
-        #pickle.dump(self.aggregations,open("/tmp/aggregations.pickle","wb"))
-        pickle.dump(self.current_timestamp,open("/tmp/timestamp.pickle","wb"))
-        #x = raw_input('What is your favourite colour?')
-        os.remove("/tmp/panoptes.lock")
+        pickle.dump((self.aggregations,self.current_timestamp),open("/tmp/aggregations.pickle","wb"))
 
     def __get_timestamp__(self):
         return self.current_timestamp
@@ -142,12 +100,18 @@ class Aggregation:
             raise
 
     def __expand__(self,subject_id):
+        """
+        expand the aggregations list and metadata list so that there is room for the given subject_ic
+        :param subject_id:
+        :return:
+        """
+
         while len(self.aggregations) <= subject_id:
             self.aggregations.append(None)
-            #self.classification_count.append(0)
 
             # some subjects will not have any meta data associated with them, so there is a difference between
             # metadata = None, and metadata = -1 (None means in the Panoptes DB there is no metadata)
+            # this should probably never happen - but just in case
             self.metadata.append(-1)
 
     def __update_subject__(self,subject_id,accumulated_scores):
@@ -184,13 +148,13 @@ class Aggregation:
         #assert len(self.aggregations) == len(self.classification_count)
         self.aggregations[subject_id] = {"mean":mean,"std":stdev,"count":accumulated_scores}
 
-        # and update the classification count
-        #self.classification_count[subject_id] = sum(accumulated_scores)
-
-        # only update metadata if it is not none
-        # self.__update_metadata__(subject_id,metadata)
-
     def __update_metadata__(self,subject_id,metadata):
+        """
+        store the metadata for the given subject - convert from str to dict is necessary
+        :param subject_id:
+        :param metadata:
+        :return:
+        """
         self.__expand__(subject_id)
         if metadata is not None:
             if isinstance(metadata,str):
@@ -199,6 +163,11 @@ class Aggregation:
                 self.metadata[subject_id] = metadata
 
     def __have_metadata__(self,subject_id):
+        """
+        do we have the metadata for this subject?
+        :param subject_id:
+        :return:
+        """
         if len(self.metadata) <= subject_id:
             return False
         elif self.metadata[subject_id] is -1:
@@ -299,17 +268,26 @@ class AccumulativeAggregation(Aggregation):
         # only try loading previous stuff if we don't have a failed run
 
         try:
-                self.aggregations = pickle.load(open("/tmp/aggregations.pickle","rb"))
-                self.current_timestamp = pickle.load(open("/tmp/timestamp.pickle","rb"))
+                self.aggregations, self.current_timestamp = pickle.load(open("/tmp/aggregations.pickle","rb"))
+                #self.current_timestamp = pickle.load(open("/tmp/timestamp.pickle","rb"))
                 print "time is " + str(self.current_timestamp)
-        except (IOError,EOFError) as e:
+        except (IOError,EOFError,ValueError) as e:
+            print "resetting"
             # just in case we got part way through loading the files
             self.aggregations = []
             # makes it slightly easier to have an actual date in this variable
             # the value doesn't matter as long as it is before any classifications
             self.current_timestamp = self.threshold_date
+            print "time is " + str(self.current_timestamp)
 
     def __init__accumulator__(self,subject_id=None):
+        """
+        use previously calculated values to init the accumulator
+        if not possible - just return the default beginning accumulator
+        note - the accumulator is the count, nothing else from the aggregations
+        :param subject_id:
+        :return:
+        """
         if (subject_id is None) or (len(self.aggregations) <= subject_id) or (self.aggregations[subject_id] is None):
             return [0,0,0]
         else:
@@ -371,6 +349,7 @@ class PanoptesAPI:
             print "I am unable to connect to the database"
             raise
 
+        # are we doing an accumulative update where we try to use previous results?
         if update == "c":
             self.aggregator = Aggregation()
             self.time_constraints = ""
@@ -388,6 +367,7 @@ class PanoptesAPI:
         assert http_update in [True,False]
         self.http_update = http_update
 
+        # set things up 
         self.S3_conn = None
         try:
             # for dumping results to s3
