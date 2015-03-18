@@ -44,6 +44,7 @@ class Aggregation:
         # do we have a lock from a previous - failed - run of this program (base or iterative)
         # doesn't really affect the base run but the iterative will need to start from scratch
         if os.path.isfile("/tmp/panoptes.lock"):
+            print "resetting"
             # we need to reset things
             f = open("/tmp/aggregations.pickle","w")
             f.close()
@@ -432,7 +433,7 @@ class PanoptesAPI:
             csv_contents = "candidateID,RA,DEC,mag,mjd,mean,stdev,count0,count1,count2\n"
             csv_contents += self.aggregator.__aggregations_to_string__()
             t = datetime.datetime.now()
-            fname = str(t.year) + "-" + str(t.month) + "-" + str(t.day) + "_" + str(t.hour) + "_" + str(t.minute)
+            fname = str(t.year) + "-" + str(t.month) + "-" + str(t.day) + "_" + str(t.hour) + "_0"# + str(t.minute)
 
             self.__write_to_s3__("zooniverse-aggregation","Stargazing/"+self.environment+"/",fname,csv_contents)
 
@@ -495,8 +496,9 @@ class PanoptesAPI:
         :return:
         """
         # SELECT * FROM json_test WHERE data @> '{"a":1}';
-        # metadata_contraints =  " and metadata @> '{\"workflow_version\":"+str(self.workflow_version)+"}'"
-        select = "SELECT subject_ids,annotations,created_at,metadata from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + self.time_constraints +" ORDER BY subject_ids"
+        metadata_constraints =  " and metadata->>'workflow_version' = '"+str(self.workflow_version)+"'"
+        select = "SELECT subject_ids,annotations,created_at from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + metadata_constraints + self.time_constraints +" ORDER BY subject_ids"
+        #print select
         cur = self.conn.cursor()
         cur.execute(select)
 
@@ -511,11 +513,11 @@ class PanoptesAPI:
         #assert False
 
         # print self.workflow_version
-        for count,(subject_ids,annotations,time_stamp,metadata) in enumerate(cur.fetchall()):
+        for count,(subject_ids,annotations,time_stamp) in enumerate(cur.fetchall()):
             # print metadata["workflow_version"]
-            if self.workflow_version != metadata["workflow_version"]:
-                print "old version"
-                continue
+            # if self.workflow_version != metadata["workflow_version"]:
+            #     print "old version"
+            #     continue
             #if subject_ids[0] in range(11):
             #    continue
 
