@@ -503,13 +503,17 @@ class PanoptesAPI:
         users_set = set()
         ip_set = set()
 
+        classification_count = 0
+
         for i,(user_id,user_ip) in enumerate(cur.fetchall()):
             if user_id is not None:
                 users_set.add(user_id)
             else:
                 ip_set.add(user_ip)
 
-        print len(list(users_set)),len(list(ip_set))
+            classification_count += 1
+
+        return  (len(list(users_set))+len(list(ip_set))),classification_count
 
     def __update_aggregations__(self):
         """

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 __author__ = 'greg'
 from postgres_aggregation import PanoptesAPI
-import panoptesPythonAPI
+#import panoptesPythonAPI
 import os
 import yaml
 import urllib2
@@ -14,6 +14,7 @@ else:
     base_directory = "/home/greg"
 
 if __name__ == "__main__":
+    site = os.getenv('SITE', "temp")
     stargazing = PanoptesAPI("c")
     a,count = stargazing.__get_stats__()
     #print count
@@ -41,6 +42,11 @@ if __name__ == "__main__":
     #         pass
     #print a
     #print
-    response = requests.put("https://panoptes-comments.firebaseio.com/stargazing2015-zooniverse-org/projects/2/volunteers-count.json",data=str(a))
-    response = requests.put("https://panoptes-comments.firebaseio.com/stargazing2015-zooniverse-org/projects/2/classifications-count.json",data=str(count))
+    if site == "live":
+        site_id = "1"
+    else:
+        site_id = "2"
+
+    response = requests.put("https://panoptes-comments.firebaseio.com/stargazing2015-zooniverse-org/projects/"+site_id+"/volunteers-count.json",data=str(a))
+    response = requests.put("https://panoptes-comments.firebaseio.com/stargazing2015-zooniverse-org/projects/"+site_id+"/classifications-count.json",data=str(count))
     #print response
