@@ -14,6 +14,9 @@ import datetime
 import numpy as np
 import operator
 import json
+import tarfile
+import cStringIO
+import StringIO
 
 
 # for Greg running on either office/home - which computer am I on?
@@ -294,7 +297,7 @@ class AccumulativeAggregation(Aggregation):
             return self.aggregations[subject_id]["count"]
 
 class PanoptesAPI:
-    def __init__(self,update="complete"): #Supernovae
+    def __init__(self,update,to_stargazing): #Supernovae
         # first find out which environment we are working with
         self.environment = os.getenv('ENVIRONMENT', "staging")
 
@@ -358,6 +361,8 @@ class PanoptesAPI:
             current_timestamp = self.aggregator.__get_timestamp__()
             self.time_constraints = " and created_at>\'" + str(current_timestamp) + "\'"
 
+        self.to_stargazing = to_stargazing
+
         # assert update_type in ["partial","complete"]
         # self.update_type = update_type
 
@@ -384,11 +389,18 @@ class PanoptesAPI:
 
         num_updated = self.__update_aggregations__()
 
-        csv_contents = "candidateID,RA,DEC,mag,mjd,mean,stdev,count0,count1,count2\n"
-        csv_contents += self.aggregator.__aggregations_to_string__()
+
         # write out the results to an s3 bucket - file is a csv file labelled with day, hour and minute
         if self.S3_conn is not None:
-            self.__write_to_s3__("zooniverse-aggregation","Stargazing/"+self.environment+"/",csv_contents)
+            csv_contents = "candidateID,RA,DEC,mag,mjd,mean,stdev,count0,count1,count2\n"
+            csv_contents += self.aggregator.__aggregations_to_string__()
+            t = datetime.datetime.now()
+            fname = str(t.year) + "-" + str(t.month) + "-" + str(t.day) + "_" + str(t.hour) + "_" + str(t.minute)
+
+            self.__write_to_s3__("zooniverse-aggregation","Stargazing/"+self.environment+"/",fname,csv_contents)
+
+            #if self.to_stargazing:
+            #    self.__write_gz_to_s3__("stargazing-data-upload","",fname,csv_contents)
             #self.__write_to_s3__("stargazing-data-upload","",csv_contents)
         else:
             print >> sys.stderr, "not able to connect to S3 - did not write any results to S3"
@@ -399,14 +411,34 @@ class PanoptesAPI:
         #     self.__http_score__update__(subjects_to_update)
         return num_updated
 
-    def __write_to_s3__(self,bucket,path,csv_contents):
+    def __write_to_s3__(self,bucket,path,fname,csv_contents):
         result_bucket = self.S3_conn.get_bucket(bucket)
         k = Key(result_bucket)
         t = datetime.datetime.now()
-        fname = str(t.year) + "-" + str(t.month) + "-" + str(t.day) + "_" + str(t.hour) + "_" + str(t.minute)
+        #fname = str(t.year) + "-" + str(t.month) + "-" + str(t.day) + "_" + str(t.hour) + "_" + str(t.minute)
         k.key = path+fname+".csv"
 
         k.set_contents_from_string(csv_contents)
+
+    # def __write_gz_to_s3__(self,bucket,path,fname,csv_contents):
+    #     result_bucket = self.S3_conn.get_bucket(bucket)
+    #     k = Key(result_bucket)
+    #     k.key = path+fname+".tar.gz"
+    #     #k.set_contents_from_string(result_string)
+    #     st = cStringIO.StringIO()
+    #     result_tar = tarfile.open(mode="w:gz",fileobj = st)
+    #
+    #     data = StringIO.StringIO(csv_contents)
+    #     info = result_tar.tarinfo()
+    #     info.name = fname+'.csv'
+    #     info.size = data.len
+    #
+    #     #data.seek(0)
+    #     result_tar.addfile(info, data)
+    #     result_tar.close()
+    #
+    #     k.set_contents_from_string(st.getvalue())
+    #     st.close()
 
     def __get_all_metadata__(self):
         # check to see if the metadata file exists in the first place, if so, don't bother trying to download it
@@ -441,7 +473,7 @@ class PanoptesAPI:
         :return:
         """
 
-        select = "SELECT subject_ids,annotations,created_at from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + self.time_constraints +" ORDER BY subject_ids"
+        select = "SELECT subject_ids,annotations,created_at,metadata from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + self.time_constraints +" ORDER BY subject_ids"
         cur = self.conn.cursor()
         cur.execute(select)
 
@@ -450,7 +482,11 @@ class PanoptesAPI:
 
         current_time = self.aggregator.__get_timestamp__()
         count = 0
-        for count,(subject_ids,annotations,time_stamp) in enumerate(cur.fetchall()):
+        for count,(subject_ids,annotations,time_stamp,metadata) in enumerate(cur.fetchall()):
+            if self.workflow_version != metadata["workflow_version"]:
+                print "old version"
+                continue
+
             current_time = max(current_time,time_stamp)
             #print count, subject_ids
             # have we moved on to a new subject?
@@ -557,12 +593,13 @@ class PanoptesAPI:
 
 if __name__ == "__main__":
     update = "c"
-    http_update = True
+    to_stargazing = False
+
     start = datetime.datetime.now()
     try:
         opts, args = getopt.getopt(sys.argv[1:],"u:",["update=",])
     except getopt.GetoptError:
-        print "postgres_aggregation -u <COMPLETE or ACCUMULATIVE update> -m <http update method TRUE or FALSE>"
+        print "postgres_aggregation -u <COMPLETE or ACCUMULATIVE update>"
         sys.exit(2)
 
     for opt,arg in opts:
@@ -574,7 +611,7 @@ if __name__ == "__main__":
 
     # hard code this for now
     http_update = False
-    stargazing = PanoptesAPI(update)
+    stargazing = PanoptesAPI(update,to_stargazing)
     num_updated = stargazing.__update__()
 
     # cleanup makes sure that we are dumping the aggregation results back to disk
