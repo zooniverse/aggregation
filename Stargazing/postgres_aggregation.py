@@ -66,6 +66,11 @@ class Aggregation:
         except (IOError, EOFError) as e:
             self.metadata = []
 
+        try:
+            self.expert_sets = pickle.load(open("/tmp/experts.pickle","rb"))
+        except (IOError, EOFError) as e:
+            self.expert_sets = []
+
         # # technically we could reuse the aggregation results to find the classification count but we want to store
         # # the counts from one running of this program to an other - so best is to use two different variables
         # # to store these values
@@ -88,8 +93,8 @@ class Aggregation:
         #pickle.dump(self.classification_count,open("/tmp/classification_count.pickle","wb"))
         pickle.dump(self.metadata,open("/tmp/metadata.pickle","wb"))
         pickle.dump(self.aggregations,open("/tmp/aggregations.pickle","wb"))
-
-        pickle.dump(self.aggregations,open("/tmp/aggregations.pickle","wb"))
+        pickle.dump(self.expert_sets,open("/tmp/experts.pickle","wb"))
+        #pickle.dump(self.aggregations,open("/tmp/aggregations.pickle","wb"))
         pickle.dump(self.current_timestamp,open("/tmp/timestamp.pickle","wb"))
         #x = raw_input('What is your favourite colour?')
         os.remove("/tmp/panoptes.lock")
@@ -97,7 +102,11 @@ class Aggregation:
     def __get_timestamp__(self):
         return self.current_timestamp
 
+    def __set_experts_sets__(self, subject_ids):
+        self.expert_sets = subject_ids
 
+    def __get_experts_sets__(self):
+        return self.expert_sets
 
     def __score_index__(self,annotations):
         """calculate the score associated with a given classification according to the algorithm
@@ -135,9 +144,12 @@ class Aggregation:
         while len(self.aggregations) <= subject_id:
             self.aggregations.append(None)
             #self.classification_count.append(0)
-            self.metadata.append(None)
 
-    def __update_subject__(self,subject_id,accumulated_scores,metadata):
+            # some subjects will not have any meta data associated with them, so there is a difference between
+            # metadata = None, and metadata = -1 (None means in the Panoptes DB there is no metadata)
+            self.metadata.append(-1)
+
+    def __update_subject__(self,subject_id,accumulated_scores):
         """
         set the aggregation result for the given subject_id using the accumulated scores
         for now, assume that the accumulated scores are based on ALL classifications, including ones
@@ -175,7 +187,7 @@ class Aggregation:
         #self.classification_count[subject_id] = sum(accumulated_scores)
 
         # only update metadata if it is not none
-        self.__update_metadata__(subject_id,metadata)
+        # self.__update_metadata__(subject_id,metadata)
 
     def __update_metadata__(self,subject_id,metadata):
         self.__expand__(subject_id)
@@ -188,10 +200,16 @@ class Aggregation:
     def __have_metadata__(self,subject_id):
         if len(self.metadata) <= subject_id:
             return False
-        elif self.metadata[subject_id] is None:
+        elif self.metadata[subject_id] is -1:
             return False
         else:
             return True
+
+    def __metadata_equals_none__(self, subject_id):
+        assert len(self.metadata) > subject_id
+        assert self.metadata[subject_id] is not -1
+
+        return self.metadata[subject_id] is None
 
     def __list_aggregations__(self,subjects_ids=None):
         """
@@ -380,7 +398,16 @@ class PanoptesAPI:
         except boto.exception.NoAuthHandlerFound:
             print >> sys.stderr, "not able to connect to S3 - will try to keep going but this will probably give you errors later"
 
-        self.__get_all_metadata__()
+        self.__set_metadata__()
+        #self.__set_expert_sets__()
+        # cur = self.conn.cursor()
+        # cur.execute("SELECT * from subject_sets where subject_sets.project_id="+str(self.project_id)+" and subject_sets.workflow_id=" + str(self.workflow_id))
+        # rows = cur.fetchall()
+        # print cur.description
+        # for r in rows:
+        #     print r
+        #
+        # assert False
 
     def __cleanup__(self):
         self.aggregator.__cleanup__()
@@ -388,7 +415,17 @@ class PanoptesAPI:
     def __update__(self):
 
         num_updated = self.__update_aggregations__()
+        # ids,counts = self.__find_classification_count__()
 
+        # print ids[:10]
+        # for i,c in zip(ids,counts):
+        #     print i,c
+        #     print self.aggregator.metadata[i]["candidateID"]
+        # print
+        # for i,agg in enumerate(self.aggregator.aggregations):
+        #     if (agg is not None) and (sum(agg["count"]) >= 5):
+        #
+        #         print i,sum(agg["count"])
 
         # write out the results to an s3 bucket - file is a csv file labelled with day, hour and minute
         if self.S3_conn is not None:
@@ -420,27 +457,8 @@ class PanoptesAPI:
 
         k.set_contents_from_string(csv_contents)
 
-    # def __write_gz_to_s3__(self,bucket,path,fname,csv_contents):
-    #     result_bucket = self.S3_conn.get_bucket(bucket)
-    #     k = Key(result_bucket)
-    #     k.key = path+fname+".tar.gz"
-    #     #k.set_contents_from_string(result_string)
-    #     st = cStringIO.StringIO()
-    #     result_tar = tarfile.open(mode="w:gz",fileobj = st)
-    #
-    #     data = StringIO.StringIO(csv_contents)
-    #     info = result_tar.tarinfo()
-    #     info.name = fname+'.csv'
-    #     info.size = data.len
-    #
-    #     #data.seek(0)
-    #     result_tar.addfile(info, data)
-    #     result_tar.close()
-    #
-    #     k.set_contents_from_string(st.getvalue())
-    #     st.close()
 
-    def __get_all_metadata__(self):
+    def __set_metadata__(self):
         # check to see if the metadata file exists in the first place, if so, don't bother trying to download it
         if not os.path.isfile("/tmp/metadata.pickle"):
             select = "SELECT id,metadata from subjects"
@@ -452,7 +470,7 @@ class PanoptesAPI:
                 self.aggregator.__update_metadata__(subject_id,metadata)
 
 
-    def __get_metadata__(self,subject_id):
+    def __update_metadata__(self,subject_id):
         # do we need to get the metadata for this subject?
         if not self.aggregator.__have_metadata__(subject_id):
             select = "SELECT metadata from subjects where id = " + str(subject_id)
@@ -460,19 +478,24 @@ class PanoptesAPI:
             cur2.execute(select)
             metadata = cur2.fetchone()[0]
 
-        else:
-            # none means there will be no update
-            metadata = None
 
-        return metadata
+            self.aggregator.__update_metadata__(subject_id,metadata)
 
+    def __is_expert__(self,subject_id):
+        select = "SELECT expert from subjects where id = " + str(subject_id)
+        cur2 = self.conn.cursor()
+        cur2.execute(select)
+        expert = cur2.fetchone()[0]
+
+        return expert
     def __update_aggregations__(self):
         """
         update
         :param additional_conditions: if you want to restrict the updates to certain subjects
         :return:
         """
-
+        # SELECT * FROM json_test WHERE data @> '{"a":1}';
+        # metadata_contraints =  " and metadata @> '{\"workflow_version\":"+str(self.workflow_version)+"}'"
         select = "SELECT subject_ids,annotations,created_at,metadata from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + self.time_constraints +" ORDER BY subject_ids"
         cur = self.conn.cursor()
         cur.execute(select)
@@ -482,10 +505,19 @@ class PanoptesAPI:
 
         current_time = self.aggregator.__get_timestamp__()
         count = 0
+
+        #expert_sets = self.aggregator.__get_experts_sets__()
+        #print expert_sets
+        #assert False
+
+        # print self.workflow_version
         for count,(subject_ids,annotations,time_stamp,metadata) in enumerate(cur.fetchall()):
+            # print metadata["workflow_version"]
             if self.workflow_version != metadata["workflow_version"]:
                 print "old version"
                 continue
+            #if subject_ids[0] in range(11):
+            #    continue
 
             current_time = max(current_time,time_stamp)
             #print count, subject_ids
@@ -498,8 +530,20 @@ class PanoptesAPI:
                     # if by some chance all of the classifications we've read in have been discarded
                     # just skip it
                     if annotation_accumulator != [0,0,0]:
-                        metadata = self.__get_metadata__(current_subject_id)
-                        self.aggregator.__update_subject__(current_subject_id,annotation_accumulator,metadata)
+                        # if a new subject has been added, we will need to download the metadata for this subject
+                        # I realize that I have already downloaded the metadata field as part of my query so this
+                        # is slightly inefficient - the idea being that in the future when I figure out how to
+                        # I can add the metadata_constraints which will allow me to not have to get the metadata as
+                        # part of my query
+                        self.__update_metadata__(current_subject_id)
+
+                        # we should skip over any subject which does not have metadata
+
+                        # metadata = self.__get_metadata__(current_subject_id)
+                        # if metadata is not None:
+
+
+                        self.aggregator.__update_subject__(current_subject_id,annotation_accumulator)
 
                 # reset and move on to the next subject
                 current_subject_id = subject_ids[0]
@@ -511,8 +555,8 @@ class PanoptesAPI:
         # on the very off chance that we haven't read in any classifications, double check
         if current_subject_id is not None:
             if annotation_accumulator != [0,0,0]:
-                metadata = self.__get_metadata__(current_subject_id)
-                self.aggregator.__update_subject__(current_subject_id,annotation_accumulator,metadata)
+                # metadata = self.__get_metadata__(current_subject_id)
+                self.aggregator.__update_subject__(current_subject_id,annotation_accumulator)
 
         self.aggregator.__set_timestamp__(current_time)
         return count
@@ -552,6 +596,25 @@ class PanoptesAPI:
                 aggregation_id,etag = panoptesPythonAPI.find_aggregation_etag(self.workflow_id,subject_id,self.token)
                 panoptesPythonAPI.update_aggregation(self.workflow_id,self.workflow_version,subject_id,aggregation_id,self.token,aggregation,etag)
 
+    def __set_expert_sets__(self):
+        # check to see if the metadata file exists in the first place, if so, don't bother trying to download it
+        if not os.path.isfile("/tmp/experts.pickle"):
+            cur = self.conn.cursor()
+            cur.execute("SELECT subject_id from set_member_subjects inner join subject_sets on set_member_subjects.subject_set_id=subject_sets.id where subject_sets.project_id="+str(self.project_id)+" and subject_sets.workflow_id=" + str(self.workflow_id) +" ORDER BY subject_id")
+            rows = cur.fetchall()
+            all_subjects = [c[0] for c in rows]
+
+            cur.execute("SELECT subject_id from set_member_subjects inner join subject_sets on set_member_subjects.subject_set_id=subject_sets.id where (subject_sets.expert_set = FALSE or subject_sets.expert_set IS NULL) and subject_sets.project_id="+str(self.project_id)+" and subject_sets.workflow_id=" + str(self.workflow_id) +" ORDER BY subject_id")
+            rows = cur.fetchall()
+            non_expert_subjects = [c[0] for c in rows]
+
+            print all_subjects[:100]
+            print non_expert_subjects[:100]
+            print [s for s in all_subjects if not(s in non_expert_subjects)]
+
+            print subject_ids
+            self.aggregator.__set_experts_sets__(subject_ids)
+
     def __find_classification_count__(self):
         """
         finds the classification count for every subject in the current project/workflow
@@ -568,13 +631,14 @@ class PanoptesAPI:
 
         # keeping the below commands in as a reminder of how to do the relevant SQL commands
         # cur.execute("SELECT subject_id from set_member_subjects where subject_set_id=4 OR subject_set_id=3")
-        # cur.execute("SELECT expert_set from subject_sets where subject_sets.project_id="+str(project_id)+" and subject_sets.workflow_id=" + str(workflow_id))
+        cur.execute("SELECT expert_set from subject_sets where subject_sets.project_id="+str(project_id)+" and subject_sets.workflow_id=" + str(workflow_id))
+        rows = cur.fetchall()
 
 
         cur.execute("SELECT subject_id,classification_count from set_member_subjects inner join subject_sets on set_member_subjects.subject_set_id=subject_sets.id where (subject_sets.expert_set = FALSE or subject_sets.expert_set IS NULL) and subject_sets.project_id="+str(self.project_id)+" and subject_sets.workflow_id=" + str(self.workflow_id) +" ORDER BY subject_id")
         rows = cur.fetchall()
         for subject_id,count in rows:
-            if count > 0:
+            if count >= 5:
                 new_classification_count.append(count)
                 ids.append(subject_id)
 
