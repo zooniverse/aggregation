@@ -11,13 +11,8 @@ import getopt
 import boto
 from boto.s3.key import Key
 import datetime
-import numpy as np
-import operator
 import json
-import tarfile
-import cStringIO
-import StringIO
-
+import urllib2
 
 # for Greg running on either office/home - which computer am I on?
 if os.path.exists("/home/ggdhines"):
@@ -45,7 +40,7 @@ class Aggregation:
             self.metadata = pickle.load(open("/tmp/metadata.pickle","rb"))
         except (IOError, EOFError) as e:
             self.metadata = []
-        
+
         # the current current timestamp - we need something that is guaranteed to be before any of the
         # actual classifications - the specific datetime doesn't matter
         self.threshold_date = datetime.datetime(2015,3,16,17,0,0)
@@ -321,13 +316,28 @@ class PanoptesAPI:
         app_client_id = api_details[self.environment]["app_client_id"]
 
         # get the token necessary to connect with panoptes
-        self.http_api = panoptesPythonAPI.PanoptesAPI(host,userid,password,app_client_id)
+        self.http_api = None
+        self.project_id = None
+        self.workflow_version = None
+        self.workflow_id = None
+        for i in range(20):
+            try:
+                self.http_api = panoptesPythonAPI.PanoptesAPI(host,userid,password,app_client_id)
+                # get the project id for Supernovae and the workflow version
+                self.project_id = self.http_api.get_project_id(project_name,owner=owner) #or zooniverse
+                self.workflow_version = self.http_api.get_workflow_version(self.project_id)
+                self.workflow_id = self.http_api.get_workflow_id(self.project_id)
+                break
+            except (urllib2.HTTPError,urllib2.URLError) as e:
+                print "trying to connect/init again again"
+                pass
+
+        if None in [self.http_api,self.project_id,self.workflow_id ,self.workflow_version]:
+            raise urllib2.HTTPError()
+
         #panoptesPythonAPI.get_bearer_token(userid,password)
 
-        # get the project id for Supernovae and the workflow version
-        self.project_id = self.http_api.get_project_id(project_name,owner=owner) #or zooniverse
-        self.workflow_version = self.http_api.get_workflow_version(self.project_id)
-        self.workflow_id = self.http_api.get_workflow_id(self.project_id)
+
 
         # print "project id  is " + str(project_id)
         # print "workflow id is " + str(workflow_id)
@@ -347,12 +357,18 @@ class PanoptesAPI:
         host = database_details[self.environment]["host"]
 
         # try connecting to the db
-        try:
-            details = "dbname='"+database+"' user='"+ username+ "' host='"+ host + "' password='"+password+"'"
-            self.conn = psycopg2.connect(details)
-        except:
-            print "I am unable to connect to the database"
-            raise
+        self.conn = None
+        details = "dbname='"+database+"' user='"+ username+ "' host='"+ host + "' password='"+password+"'"
+        for i in range(20):
+            try:
+                self.conn = psycopg2.connect(details)
+                break
+            except psycopg2.OperationalError as e:
+                pass
+
+        if self.conn is None:
+            raise psycopg2.OperationalError()
+
 
         # are we doing an accumulative update where we try to use previous results?
         if update == "c":
