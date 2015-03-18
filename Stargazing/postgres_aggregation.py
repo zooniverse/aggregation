@@ -34,6 +34,7 @@ class AnnotationException(Exception):
 
 
 class Aggregation:
+    #@profile
     def __init__(self):
         # set the aggregations to be nothing
         self.aggregations = []
@@ -44,7 +45,7 @@ class Aggregation:
             self.metadata = pickle.load(open("/tmp/metadata.pickle","rb"))
         except (IOError, EOFError) as e:
             self.metadata = []
-
+        
         # the current current timestamp - we need something that is guaranteed to be before any of the
         # actual classifications - the specific datetime doesn't matter
         self.threshold_date = datetime.datetime(2015,3,16,17,0,0)
@@ -112,7 +113,7 @@ class Aggregation:
             # some subjects will not have any meta data associated with them, so there is a difference between
             # metadata = None, and metadata = -1 (None means in the Panoptes DB there is no metadata)
             # this should probably never happen - but just in case
-            self.metadata.append(-1)
+            self.metadata.append(None)
 
     def __update_subject__(self,subject_id,accumulated_scores):
         """
@@ -170,7 +171,7 @@ class Aggregation:
         """
         if len(self.metadata) <= subject_id:
             return False
-        elif self.metadata[subject_id] is -1:
+        elif self.metadata[subject_id] is None:
             return False
         else:
             return True
@@ -245,7 +246,7 @@ class Aggregation:
                         try:
                             results += str(metadata[property]) + "," #+ str(metadata["RA"]) + "," + str(metadata["DEC"]) + "," + str(metadata["mag"]) + "," + str(metadata["mjd"])
                         except KeyError:
-                            print >> sys.stderr, "missing property: " + property
+                            #print >> sys.stderr, "missing property: " + property
                             if property == "candidateID":
                                 results += str(subject_id) + ","
                             else:
@@ -253,6 +254,8 @@ class Aggregation:
             except TypeError:
                 print metadata
                 raise
+            #print results
+
             results += str(agg["mean"]) + "," + str(agg["std"]) + "," + str(agg["count"][0]) + "," + str(agg["count"][1]) + ","+ str(agg["count"][2]) + "\n"
 
         return results
@@ -293,8 +296,10 @@ class AccumulativeAggregation(Aggregation):
         else:
             return self.aggregations[subject_id]["count"]
 
+
 class PanoptesAPI:
-    def __init__(self,update,to_stargazing): #Supernovae
+    #@profile
+    def __init__(self,update): #Supernovae
         # first find out which environment we are working with
         self.environment = os.getenv('ENVIRONMENT', "staging")
 
@@ -367,7 +372,7 @@ class PanoptesAPI:
         assert http_update in [True,False]
         self.http_update = http_update
 
-        # set things up 
+        # set things up
         self.S3_conn = None
         try:
             # for dumping results to s3
@@ -393,6 +398,7 @@ class PanoptesAPI:
     def __cleanup__(self):
         self.aggregator.__cleanup__()
 
+    #@profile
     def __update__(self):
 
         num_updated = self.__update_aggregations__()
@@ -452,15 +458,16 @@ class PanoptesAPI:
 
 
     def __update_metadata__(self,subject_id):
-        # do we need to get the metadata for this subject?
         if not self.aggregator.__have_metadata__(subject_id):
-            select = "SELECT metadata from subjects where id = " + str(subject_id)
-            cur2 = self.conn.cursor()
-            cur2.execute(select)
-            metadata = cur2.fetchone()[0]
+            # do we need to get the metadata for this subject?
+            if not self.aggregator.__have_metadata__(subject_id):
+                select = "SELECT metadata from subjects where id = " + str(subject_id)
+                cur2 = self.conn.cursor()
+                cur2.execute(select)
+                metadata = cur2.fetchone()[0]
 
 
-            self.aggregator.__update_metadata__(subject_id,metadata)
+                self.aggregator.__update_metadata__(subject_id,metadata)
 
     def __is_expert__(self,subject_id):
         select = "SELECT expert from subjects where id = " + str(subject_id)
@@ -469,6 +476,13 @@ class PanoptesAPI:
         expert = cur2.fetchone()[0]
 
         return expert
+
+    def __get_stats__(self):
+        select = "SELECT subject_ids,annotations,created_at from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + metadata_constraints + self.time_constraints +" ORDER BY subject_ids"
+        #print select
+        cur = self.conn.cursor()
+        cur.execute(select)
+
     def __update_aggregations__(self):
         """
         update
@@ -657,7 +671,7 @@ if __name__ == "__main__":
 
     # hard code this for now
     http_update = False
-    stargazing = PanoptesAPI(update,to_stargazing)
+    stargazing = PanoptesAPI(update)
     num_updated = stargazing.__update__()
 
     # cleanup makes sure that we are dumping the aggregation results back to disk
