@@ -266,9 +266,35 @@ class Aggregation:
 
         return results
 
+    def __set_timestamp__(self,timestamp):
+        self.current_timestamp = timestamp
+
+
+class AccumulativeAggregation(Aggregation):
+    def __init__(self):
+        Aggregation.__init__(self)
+
+        # only try loading previous stuff if we don't have a failed run
+
+        try:
+                self.aggregations = pickle.load(open("/tmp/aggregations.pickle","rb"))
+                self.current_timestamp = pickle.load(open("/tmp/timestamp.pickle","rb"))
+                print "time is " + str(self.current_timestamp)
+        except (IOError,EOFError) as e:
+            # just in case we got part way through loading the files
+            self.aggregations = []
+            # makes it slightly easier to have an actual date in this variable
+            # the value doesn't matter as long as it is before any classifications
+            self.current_timestamp = self.threshold_date
+
+    def __init__accumulator__(self,subject_id=None):
+        if (subject_id is None) or (len(self.aggregations) <= subject_id) or (self.aggregations[subject_id] is None):
+            return [0,0,0]
+        else:
+            return self.aggregations[subject_id]["count"]
 
 class PanoptesAPI:
-    def __init__(self,http_update=False,aggregator=Aggregation): #Supernovae
+    def __init__(self,update="complete"): #Supernovae
         # first find out which environment we are working with
         self.environment = os.getenv('ENVIRONMENT', "staging")
 
@@ -323,7 +349,14 @@ class PanoptesAPI:
             print "I am unable to connect to the database"
             raise
 
-        self.aggregator = aggregator()
+        if update == "c":
+            self.aggregator = Aggregation()
+            self.time_constraints = ""
+        else:
+            print "accumulative"
+            self.aggregator = AccumulativeAggregation()
+            current_timestamp = self.aggregator.__get_timestamp__()
+            self.time_constraints = " and created_at>\'" + str(current_timestamp) + "\'"
 
         # assert update_type in ["partial","complete"]
         # self.update_type = update_type
@@ -349,19 +382,14 @@ class PanoptesAPI:
 
     def __update__(self):
 
-        num_updated, new_time = self.__update_aggregations__()
+        num_updated = self.__update_aggregations__()
 
         csv_contents = "candidateID,RA,DEC,mag,mjd,mean,stdev,count0,count1,count2\n"
         csv_contents += self.aggregator.__aggregations_to_string__()
         # write out the results to an s3 bucket - file is a csv file labelled with day, hour and minute
         if self.S3_conn is not None:
-            result_bucket = self.S3_conn.get_bucket("zooniverse-aggregation")
-            k = Key(result_bucket)
-            t = datetime.datetime.now()
-            fname = str(t.day) + "_"  + str(t.hour) + "_" + str(t.minute)
-            k.key = "Stargazing/"+self.environment+"/"+fname+".csv"
-
-            k.set_contents_from_string(csv_contents)
+            self.__write_to_s3__("zooniverse-aggregation","Stargazing/"+self.environment+"/",csv_contents)
+            #self.__write_to_s3__("stargazing-data-upload","",csv_contents)
         else:
             print >> sys.stderr, "not able to connect to S3 - did not write any results to S3"
 
@@ -370,6 +398,15 @@ class PanoptesAPI:
         # if self.http_update is True:
         #     self.__http_score__update__(subjects_to_update)
         return num_updated
+
+    def __write_to_s3__(self,bucket,path,csv_contents):
+        result_bucket = self.S3_conn.get_bucket(bucket)
+        k = Key(result_bucket)
+        t = datetime.datetime.now()
+        fname = str(t.year) + "-" + str(t.month) + "-" + str(t.day) + "_" + str(t.hour) + "_" + str(t.minute)
+        k.key = path+fname+".csv"
+
+        k.set_contents_from_string(csv_contents)
 
     def __get_all_metadata__(self):
         # check to see if the metadata file exists in the first place, if so, don't bother trying to download it
@@ -397,15 +434,14 @@ class PanoptesAPI:
 
         return metadata
 
-    def __update_aggregations__(self,time_constraints=""):
+    def __update_aggregations__(self):
         """
         update
         :param additional_conditions: if you want to restrict the updates to certain subjects
         :return:
         """
 
-
-        select = "SELECT subject_ids,annotations,created_at from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + time_constraints +" ORDER BY subject_ids"
+        select = "SELECT subject_ids,annotations,created_at from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + self.time_constraints +" ORDER BY subject_ids"
         cur = self.conn.cursor()
         cur.execute(select)
 
@@ -442,8 +478,8 @@ class PanoptesAPI:
                 metadata = self.__get_metadata__(current_subject_id)
                 self.aggregator.__update_subject__(current_subject_id,annotation_accumulator,metadata)
 
-
-        return count,current_time
+        self.aggregator.__set_timestamp__(current_time)
+        return count
 
     # def __update_scores__(self,additional_conditions = ""):
     #     select = "SELECT subject_ids,annotations from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + additional_conditions
@@ -520,28 +556,25 @@ class PanoptesAPI:
 
 
 if __name__ == "__main__":
-    update = "complete"
+    update = "c"
     http_update = True
     start = datetime.datetime.now()
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"u:m:",["update=",])
+        opts, args = getopt.getopt(sys.argv[1:],"u:",["update=",])
     except getopt.GetoptError:
-        print "postgres_aggregation -u <COMPLETE or PARTIAL update> -m <http update method TRUE or FALSE>"
+        print "postgres_aggregation -u <COMPLETE or ACCUMULATIVE update> -m <http update method TRUE or FALSE>"
         sys.exit(2)
 
     for opt,arg in opts:
         # are we doing a partial or complete update?
         if opt in ["-u", "-update"]:
-            update = arg.lower()
-            assert update in ["complete", "partial"]
-        elif opt in ["-m", "-method"]:
-            http_update = arg.lower()
-            # convert from string into boolean
-            http_update = (http_update[0] == "t")
+            update = arg.lower()[0]
+            assert update in ["c", "a"]
+
 
     # hard code this for now
     http_update = False
-    stargazing = PanoptesAPI(http_update=http_update)
+    stargazing = PanoptesAPI(update)
     num_updated = stargazing.__update__()
 
     # cleanup makes sure that we are dumping the aggregation results back to disk
