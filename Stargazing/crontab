@@ -1,2 +1,1 @@
-0 1-23 * * * root cd /app && /app/postgres_aggregation.py -u partial >> /var/log/aggregation_partial.log 2>&1
-0 0 * * * root cd /app && /app/postgres_aggregation.py -u complete >> /var/log/aggregation_complete.log 2>&1
+0 * * * * root cd /app && /app/postgres_aggregation.py -u a >> /var/log/aggregation_partial.log 2>&1
