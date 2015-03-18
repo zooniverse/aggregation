@@ -297,7 +297,7 @@ class PanoptesAPI:
     def __init__(self,update): #Supernovae
         # first find out which environment we are working with
         self.environment = os.getenv('ENVIRONMENT', "staging")
-
+        print self.environment
         # next connect to the Panoptes http API
 
         # get my userID and password
@@ -380,13 +380,13 @@ class PanoptesAPI:
             current_timestamp = self.aggregator.__get_timestamp__()
             self.time_constraints = " and created_at>\'" + str(current_timestamp) + "\'"
 
-        self.to_stargazing = to_stargazing
+        # self.e = to_stargazing
 
         # assert update_type in ["partial","complete"]
         # self.update_type = update_type
 
-        assert http_update in [True,False]
-        self.http_update = http_update
+        #assert http_update in [True,False]
+        #self.http_update = http_update
 
         # set things up
         self.S3_conn = None
@@ -436,7 +436,7 @@ class PanoptesAPI:
             csv_contents += self.aggregator.__aggregations_to_string__()
             t = datetime.datetime.now()
             fname = str(t.year) + "-" + str(t.month) + "-" + str(t.day) + "_" + str(t.hour) + "_0"# + str(t.minute)
-
+            print self.environment
             self.__write_to_s3__("zooniverse-aggregation","Stargazing/"+self.environment+"/",fname,csv_contents)
 
             #if self.to_stargazing:
@@ -494,10 +494,22 @@ class PanoptesAPI:
         return expert
 
     def __get_stats__(self):
-        select = "SELECT subject_ids,annotations,created_at from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + metadata_constraints + self.time_constraints +" ORDER BY subject_ids"
+        metadata_constraints =  " and metadata->>'workflow_version' = '"+str(self.workflow_version)+"'"
+        select = "SELECT user_id,user_ip from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + metadata_constraints + self.time_constraints +" ORDER BY subject_ids"
         #print select
         cur = self.conn.cursor()
         cur.execute(select)
+
+        users_set = set()
+        ip_set = set()
+
+        for i,(user_id,user_ip) in enumerate(cur.fetchall()):
+            if user_id is not None:
+                users_set.add(user_id)
+            else:
+                ip_set.add(user_ip)
+
+        print len(list(users_set)),len(list(ip_set))
 
     def __update_aggregations__(self):
         """
@@ -669,7 +681,7 @@ class PanoptesAPI:
 
 if __name__ == "__main__":
     update = "c"
-    to_stargazing = False
+    #to_stargazing = False
 
     start = datetime.datetime.now()
     try:
@@ -686,7 +698,7 @@ if __name__ == "__main__":
 
 
     # hard code this for now
-    http_update = False
+    # http_update = False
     stargazing = PanoptesAPI(update)
     num_updated = stargazing.__update__()
 
