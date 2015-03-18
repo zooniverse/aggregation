@@ -241,7 +241,7 @@ class Aggregation:
                         try:
                             results += str(metadata[property]) + "," #+ str(metadata["RA"]) + "," + str(metadata["DEC"]) + "," + str(metadata["mag"]) + "," + str(metadata["mjd"])
                         except KeyError:
-                            #print >> sys.stderr, "missing property: " + property
+                            print >> sys.stderr, "missing property: " + property
                             if property == "candidateID":
                                 results += str(subject_id) + ","
                             else:
@@ -435,7 +435,7 @@ class PanoptesAPI:
             csv_contents = "candidateID,RA,DEC,mag,mjd,mean,stdev,count0,count1,count2\n"
             csv_contents += self.aggregator.__aggregations_to_string__()
             t = datetime.datetime.now()
-            fname = str(t.year) + "-" + str(t.month) + "-" + str(t.day) + "_" + str(t.hour) + "_0"# + str(t.minute)
+            fname = str(t.year) + "-" + str(t.month) + "-" + str(t.day) + "_" + str(t.hour) + "_" + str(t.minute)
             print self.environment
             self.__write_to_s3__("zooniverse-aggregation","Stargazing/"+self.environment+"/",fname,csv_contents)
 
@@ -536,6 +536,7 @@ class PanoptesAPI:
 
         # print self.workflow_version
         for count,(subject_ids,annotations,time_stamp) in enumerate(cur.fetchall()):
+            # print count
             # print metadata["workflow_version"]
             # if self.workflow_version != metadata["workflow_version"]:
             #     print "old version"
