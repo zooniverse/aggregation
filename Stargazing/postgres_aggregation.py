@@ -398,7 +398,7 @@ class PanoptesAPI:
 
 
         # are we doing an accumulative update where we try to use previous results?
-        if update == "c":
+        if True:
             self.aggregator = Aggregation(user_threshold,score_threshold)
             self.time_constraints = ""
         else:
