@@ -30,7 +30,7 @@ class AnnotationException(Exception):
 
 class Aggregation:
     #@profile
-    def __init__(self):
+    def __init__(self, user_threshold, score_threshold):
         # set the aggregations to be nothing
         self.aggregations = []
 
@@ -45,6 +45,11 @@ class Aggregation:
         # actual classifications - the specific datetime doesn't matter
         self.threshold_date = datetime.datetime(2015,3,16,17,0,0)
         self.current_timestamp = self.threshold_date
+
+        self.user_threshold = user_threshold
+        self.score_threshold = score_threshold
+
+        print self.user_threshold,self.score_threshold
 
     def __cleanup__(self):
         """
@@ -222,7 +227,7 @@ class Aggregation:
         a csv file
         """
         # start by getting all aggregations that have at least 5 classifications
-        subjects_to_print = [subject_id for subject_id,agg in enumerate(self.aggregations) if (agg is not None) and (sum(agg["count"]) >= 2) and (agg["mean"] > 1)]
+        subjects_to_print = [subject_id for subject_id,agg in enumerate(self.aggregations) if (agg is not None) and (sum(agg["count"]) >= self.user_threshold) and (agg["mean"] >= self.score_threshold)]
         # now sort these aggregations
         subjects_to_print.sort(key = lambda x: sum(self.aggregations[x]["count"]),reverse = True)
         subjects_to_print.sort(key = lambda x: self.aggregations[x]["mean"],reverse = True)
@@ -308,7 +313,7 @@ class AccumulativeAggregation(Aggregation):
 
 class PanoptesAPI:
     #@profile
-    def __init__(self,update): #Supernovae
+    def __init__(self,user_threshold,score_threshold): #Supernovae
         # first find out which environment we are working with
         self.environment = os.getenv('ENVIRONMENT', "staging")
         print self.environment
@@ -387,9 +392,10 @@ class PanoptesAPI:
 
         # are we doing an accumulative update where we try to use previous results?
         if update == "c":
-            self.aggregator = Aggregation()
+            self.aggregator = Aggregation(user_threshold,score_threshold)
             self.time_constraints = ""
         else:
+            assert False
             print "accumulative"
             self.aggregator = AccumulativeAggregation()
             current_timestamp = self.aggregator.__get_timestamp__()
@@ -708,24 +714,26 @@ class PanoptesAPI:
 if __name__ == "__main__":
     update = "c"
     #to_stargazing = False
-
+    user_threshold = 5
+    score_threshold = 1
     start = datetime.datetime.now()
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"u:",["update=",])
+        opts, args = getopt.getopt(sys.argv[1:],"u:s:")
     except getopt.GetoptError:
-        print "postgres_aggregation -u <COMPLETE or ACCUMULATIVE update>"
+        print "postgres_aggregation -u <user threshold for csv output> -s <score threshold for csv output>"
         sys.exit(2)
 
     for opt,arg in opts:
         # are we doing a partial or complete update?
-        if opt in ["-u", "-update"]:
-            update = arg.lower()[0]
-            assert update in ["c", "a"]
+        if opt == "-u":
+            user_threshold = int(arg)
+        elif opt == "-s":
+            score_threshold = float(arg)
 
 
     # hard code this for now
     # http_update = False
-    stargazing = PanoptesAPI(update)
+    stargazing = PanoptesAPI(user_threshold,score_threshold)
     num_updated = stargazing.__update__()
 
     # cleanup makes sure that we are dumping the aggregation results back to disk
