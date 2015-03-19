@@ -334,6 +334,7 @@ class PanoptesAPI:
         self.project_id = None
         self.workflow_version = None
         self.workflow_id = None
+        print "connecting to Panoptes http api"
         for i in range(20):
             try:
                 self.http_api = panoptesPythonAPI.PanoptesAPI(host,userid,password,app_client_id)
@@ -355,7 +356,7 @@ class PanoptesAPI:
 
         # print "project id  is " + str(project_id)
         # print "workflow id is " + str(workflow_id)
-
+        print "connecting to Panoptes database"
         # now load in the details for accessing the database
         try:
             database_file = open("config/database.yml")
@@ -404,6 +405,7 @@ class PanoptesAPI:
 
         # set things up
         self.S3_conn = None
+        print "connecting to s3 output bucket"
         try:
             # for dumping results to s3
             AWS_ACCESS_KEY_ID  = os.getenv('AWS_ACCESS_KEY_ID', None)
@@ -424,6 +426,8 @@ class PanoptesAPI:
         #     print r
         #
         # assert False
+
+        print "set up is done"
 
     def __cleanup__(self):
         self.aggregator.__cleanup__()
