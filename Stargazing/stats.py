@@ -15,7 +15,7 @@ else:
 
 if __name__ == "__main__":
     site = os.getenv('SITE', "temp")
-    stargazing = PanoptesAPI("c")
+    stargazing = PanoptesAPI(0,0)
     a,count = stargazing.__get_stats__()
     #print count
     #environment = os.getenv('ENVIRONMENT', "staging")
