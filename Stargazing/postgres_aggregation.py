@@ -222,7 +222,7 @@ class Aggregation:
         a csv file
         """
         # start by getting all aggregations that have at least 5 classifications
-        subjects_to_print = [subject_id for subject_id,agg in enumerate(self.aggregations) if (agg is not None) and (sum(agg["count"]) >= 5)]
+        subjects_to_print = [subject_id for subject_id,agg in enumerate(self.aggregations) if (agg is not None) and (sum(agg["count"]) >= 2) and (agg["mean"] > 1)]
         # now sort these aggregations
         subjects_to_print.sort(key = lambda x: sum(self.aggregations[x]["count"]),reverse = True)
         subjects_to_print.sort(key = lambda x: self.aggregations[x]["mean"],reverse = True)
@@ -434,7 +434,7 @@ class PanoptesAPI:
 
     #@profile
     def __update__(self):
-
+        print "about to update"
         num_updated = self.__update_aggregations__()
         # ids,counts = self.__find_classification_count__()
 
@@ -544,9 +544,10 @@ class PanoptesAPI:
         metadata_constraints =  " and metadata->>'workflow_version' = '"+str(self.workflow_version)+"'"
         select = "SELECT subject_ids,annotations,created_at from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + metadata_constraints + self.time_constraints +" ORDER BY subject_ids"
         #print select
+        print "going to get cursor"
         cur = self.conn.cursor()
         cur.execute(select)
-
+        print "got cursor"
         current_subject_id = None
         annotation_accumulator = self.aggregator.__init__accumulator__()
 
@@ -559,6 +560,7 @@ class PanoptesAPI:
 
         # print self.workflow_version
         for count,(subject_ids,annotations,time_stamp) in enumerate(cur.fetchall()):
+            #print count
             # print count
             # print metadata["workflow_version"]
             # if self.workflow_version != metadata["workflow_version"]:
