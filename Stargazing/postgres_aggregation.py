@@ -98,7 +98,7 @@ class Aggregation:
             else:
                 return 1  #1
         except IndexError:
-            #print >> sys.stderr, "badly formed annotation - should skip"
+            print >> sys.stderr, "badly formed annotation - should skip"
             raise
 
     def __expand__(self,subject_id):
@@ -216,7 +216,7 @@ class Aggregation:
 
         try:
             accumulator[self.__score_index__(annotation)] += 1
-        except IndexError:
+        except (IndexError,AnnotationException) as e:
             pass
 
         return accumulator
