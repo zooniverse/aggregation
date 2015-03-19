@@ -277,6 +277,11 @@ class Aggregation:
     def __set_timestamp__(self,timestamp):
         self.current_timestamp = timestamp
 
+    def __to_prune__(self):
+        subjects_to_prune = [subject_id for subject_id,agg in enumerate(self.aggregations) if (agg is not None) and (sum(agg["count"]) >= 5) and (agg["mean"] == -1)]
+
+        return subjects_to_prune
+
 
 class AccumulativeAggregation(Aggregation):
     def __init__(self):
@@ -297,6 +302,7 @@ class AccumulativeAggregation(Aggregation):
             self.current_timestamp = self.threshold_date
             print "time is " + str(self.current_timestamp)
 
+
     def __init__accumulator__(self,subject_id=None):
         """
         use previously calculated values to init the accumulator
@@ -314,6 +320,7 @@ class AccumulativeAggregation(Aggregation):
 class PanoptesAPI:
     #@profile
     def __init__(self,user_threshold,score_threshold): #Supernovae
+        self.user_threshold = user_threshold
         # first find out which environment we are working with
         self.environment = os.getenv('ENVIRONMENT', "staging")
         print self.environment
@@ -438,6 +445,10 @@ class PanoptesAPI:
     def __cleanup__(self):
         self.aggregator.__cleanup__()
 
+
+    def __to_prune__(self):
+        return self.aggregator.__to_prune__()
+
     #@profile
     def __update__(self):
         print "about to update"
@@ -460,7 +471,7 @@ class PanoptesAPI:
             csv_contents = "candidateID,mean,url\n"
             csv_contents += self.aggregator.__aggregations_to_string__()
             t = datetime.datetime.now()
-            fname = str(t.year) + "-" + str(t.month) + "-" + str(t.day) + "_" + str(t.hour) + "_" + str(t.minute)
+            fname = str(t.year) + "-" + str(t.month) + "-" + str(t.day) + "_" + str(t.hour) + "_" + str(t.minute)+"_"+str(self.user_threshold)+"users"
             print self.environment
             self.__write_to_s3__("zooniverse-aggregation","Stargazing/"+self.environment+"/",fname,csv_contents)
 

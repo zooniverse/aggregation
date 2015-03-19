@@ -1,2 +1,3 @@
 0 * * * * root cd /app && /app/postgres_aggregation.py >> /var/log/aggregation_partial.log 2>&1
+30 * * * * root cd /app && /app/postgres_aggregation.py -u 10 >> /var/log/aggregation_partial.log 2>&1
 0,5,10,15,20,25,30,35,40,45,50,55 * * * * root cd /app && /app/stats.py >> /var/log/stats.log 2>&1
