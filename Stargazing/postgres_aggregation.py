@@ -69,6 +69,7 @@ class Aggregation:
         an example of the json format used is
         [{u'task': u'centered_in_crosshairs', u'value': 1}, {u'task': u'subtracted', u'value': 1}, {u'task': u'circular', u'value': 1}, {u'task': u'centered_in_host', u'value': 0}]
         """
+
         try:
             if annotations[0]["task"] != "centered_in_crosshairs":
                 raise AnnotationException((annotations,0,"centered_in_crosshairs"))
@@ -223,6 +224,7 @@ class Aggregation:
         # start by getting all aggregations that have at least 5 classifications
         subjects_to_print = [subject_id for subject_id,agg in enumerate(self.aggregations) if (agg is not None) and (sum(agg["count"]) >= 5)]
         # now sort these aggregations
+        subjects_to_print.sort(key = lambda x: sum(self.aggregations[x]["count"]),reverse = True)
         subjects_to_print.sort(key = lambda x: self.aggregations[x]["mean"],reverse = True)
 
         results = ""
@@ -232,26 +234,38 @@ class Aggregation:
             # add the metadata first
             metadata = self.metadata[subject_id]
             #print subject_id,agg
-            try:
-                if metadata is None:
-                    # should never happen but just in case
-                    results += str(subject_id) + ",NA,NA,NA,NA"
-                else:
-                    for property in ["candidateID","RA","DEC","mag","mjd"]:
-                        try:
-                            results += str(metadata[property]) + "," #+ str(metadata["RA"]) + "," + str(metadata["DEC"]) + "," + str(metadata["mag"]) + "," + str(metadata["mjd"])
-                        except KeyError:
-                            print >> sys.stderr, "missing property: " + property
-                            if property == "candidateID":
-                                results += str(subject_id) + ","
-                            else:
-                                results += "NA,"
-            except TypeError:
-                print metadata
-                raise
-            #print results
 
-            results += str(agg["mean"]) + "," + str(agg["std"]) + "," + str(agg["count"][0]) + "," + str(agg["count"][1]) + ","+ str(agg["count"][2]) + "\n"
+
+            #results += str(subject_id) + ","
+            if "candidateID" in metadata:
+                results += metadata["candidateID"] + ","
+                results += str(agg["mean"]) + ",https://stargazing2015.zooniverse.org/#/projects/zooniverse/Snapshot%20Supernova/subjects/"+str(subject_id)+"\n"
+            else:
+                pass
+                #results += "NA,"
+
+
+            # try:
+            #
+            #     if metadata is None:
+            #         # should never happen but just in case
+            #         results += str(subject_id) + ",NA,NA,NA,NA"
+            #     else:
+            #         for property in ["candidateID","RA","DEC","mag","mjd"]:
+            #             try:
+            #                 results += str(metadata[property]) + "," #+ str(metadata["RA"]) + "," + str(metadata["DEC"]) + "," + str(metadata["mag"]) + "," + str(metadata["mjd"])
+            #             except KeyError:
+            #                 print >> sys.stderr, "missing property: " + property
+            #                 if property == "candidateID":
+            #                     results += str(subject_id) + ","
+            #                 else:
+            #                     results += "NA,"
+            # except TypeError:
+            #     print metadata
+            #     raise
+            # #print results
+            #
+            # results += str(agg["mean"]) + "," + str(agg["std"]) + "," + str(agg["count"][0]) + "," + str(agg["count"][1]) + ","+ str(agg["count"][2]) + "\n"
 
         return results
 
@@ -432,7 +446,8 @@ class PanoptesAPI:
 
         # write out the results to an s3 bucket - file is a csv file labelled with day, hour and minute
         if self.S3_conn is not None:
-            csv_contents = "candidateID,RA,DEC,mag,mjd,mean,stdev,count0,count1,count2\n"
+            #csv_contents = "candidateID,RA,DEC,mag,mjd,mean,stdev,count0,count1,count2\n"
+            csv_contents = "candidateID,mean,url\n"
             csv_contents += self.aggregator.__aggregations_to_string__()
             t = datetime.datetime.now()
             fname = str(t.year) + "-" + str(t.month) + "-" + str(t.day) + "_" + str(t.hour) + "_" + str(t.minute)
