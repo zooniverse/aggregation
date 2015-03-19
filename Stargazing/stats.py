@@ -46,17 +46,24 @@ if __name__ == "__main__":
         site_id = "1"
     else:
         site_id = "2"
+    # site_id = "1"
+    # print a,count
+    #response = requests.get("https://panoptes-comments.firebaseio.com/stargazing2015-zooniverse-org/projects/"+site_id+"/classifications-count.json")
+    #print response.status_code
+    #print response.text
 
-    for i in range(20):
-        response = requests.put("https://panoptes-comments.firebaseio.com/stargazing2015-zooniverse-org/projects/"+site_id+"/volunteers-count.json",data=str(a))
-        if response.status_code == 200:
-            break
-        else:
-            print response.status_code
+    response = requests.put("https://panoptes-comments.firebaseio.com/stargazing2015-zooniverse-org/projects/"+site_id+"/volunteers-count.json",data=str(a))
+    print response.status_code
+    #     if response.status_code == 200:
+    #         break
+    #     else:
+    #         print response.status_code
+    #
 
-    for i in range(20):
-        response = requests.put("https://panoptes-comments.firebaseio.com/stargazing2015-zooniverse-org/projects/"+site_id+"/classifications-count.json",data=str(count))
-        if response.status_code == 200:
-            break
-        else:
-            print response.status_code
+    response = requests.put("https://panoptes-comments.firebaseio.com/stargazing2015-zooniverse-org/projects/"+site_id+"/classifications-count.json",data=str(count))
+    print response.status_code
+    #     if response.status_code == 200:
+    #         break
+    #     else:
+    #         print response.status_code
+
