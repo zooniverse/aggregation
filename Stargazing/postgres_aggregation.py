@@ -243,7 +243,7 @@ class Aggregation:
 
             #results += str(subject_id) + ","
             if "candidateID" in metadata:
-                results += metadata["candidateID"] + ","
+                results += str(subject_id)+","+metadata["candidateID"] + ","
                 results += str(agg["mean"]) + ",https://stargazing2015.zooniverse.org/#/projects/zooniverse/Snapshot%20Supernova/subjects/"+str(subject_id)+"\n"
             else:
                 pass
@@ -468,7 +468,7 @@ class PanoptesAPI:
         # write out the results to an s3 bucket - file is a csv file labelled with day, hour and minute
         if self.S3_conn is not None:
             #csv_contents = "candidateID,RA,DEC,mag,mjd,mean,stdev,count0,count1,count2\n"
-            csv_contents = "candidateID,mean,url\n"
+            csv_contents = "subjectID,candidateID,mean,url\n"
             csv_contents += self.aggregator.__aggregations_to_string__()
             t = datetime.datetime.now()
             fname = str(t.year) + "-" + str(t.month) + "-" + str(t.day) + "_" + str(t.hour) + "_" + str(t.minute)+"_"+str(self.user_threshold)+"users"
@@ -509,17 +509,17 @@ class PanoptesAPI:
                 self.aggregator.__update_metadata__(subject_id,metadata)
 
 
-    def __update_metadata__(self,subject_id):
-        if not self.aggregator.__have_metadata__(subject_id):
-            # do we need to get the metadata for this subject?
-            if not self.aggregator.__have_metadata__(subject_id):
-                select = "SELECT metadata from subjects where id = " + str(subject_id)
-                cur2 = self.conn.cursor()
-                cur2.execute(select)
-                metadata = cur2.fetchone()[0]
-
-
-                self.aggregator.__update_metadata__(subject_id,metadata)
+    # def __update_metadata__(self,subject_id):
+    #     if not self.aggregator.__have_metadata__(subject_id):
+    #         # do we need to get the metadata for this subject?
+    #         if not self.aggregator.__have_metadata__(subject_id):
+    #             select = "SELECT metadata from subjects where id = " + str(subject_id)
+    #             cur2 = self.conn.cursor()
+    #             cur2.execute(select)
+    #             metadata = cur2.fetchone()[0]
+    #
+    #
+    #             self.aggregator.__update_metadata__(subject_id,metadata)
 
     def __is_expert__(self,subject_id):
         select = "SELECT expert from subjects where id = " + str(subject_id)
@@ -531,7 +531,7 @@ class PanoptesAPI:
 
     def __get_stats__(self):
         metadata_constraints =  " and metadata->>'workflow_version' = '"+str(self.workflow_version)+"'"
-        select = "SELECT user_id,user_ip from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + metadata_constraints + self.time_constraints +" ORDER BY subject_ids"
+        select = "SELECT user_id,user_ip from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + metadata_constraints
         #print select
         cur = self.conn.cursor()
         cur.execute(select)
@@ -558,13 +558,42 @@ class PanoptesAPI:
         :return:
         """
         # SELECT * FROM json_test WHERE data @> '{"a":1}';
+        # select = "SELECT id from users where display_name = \'zookeeper\'"
+        # print select
+        # cur = self.conn.cursor()
+        # cur.execute(select)
+        # chris_id = cur.fetchone()[0]
+        # print chris_id
+        # select = "SELECT subject_ids,annotations,created_at from classifications where user_id = " + str(chris_id)
+        # print select
+        # cur = self.conn.cursor()
+        # cur.execute(select)
+        #
+        # for subject_ids, annotations,created_at in cur.fetchall():
+        #     print created_at, subject_ids, annotations
+        # #print classification_list
+        #
+        # assert False
+        #
+        #
+        start = datetime.datetime.now()
         metadata_constraints =  " and metadata->>'workflow_version' = '"+str(self.workflow_version)+"'"
-        select = "SELECT subject_ids,annotations,created_at from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + metadata_constraints + self.time_constraints +" ORDER BY subject_ids"
+        metadata_constraints = ""
+        select = "SELECT subject_ids,annotations,metadata from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + metadata_constraints #+ self.time_constraints
+        # select = "SELECT subject_ids,annotations,created_at,user_id,metadata,project_id,workflow_id from classifications"
         #print select
-        print "going to get cursor"
+        #print select
+        #print "going to get cursor"
         cur = self.conn.cursor()
         cur.execute(select)
-        print "got cursor"
+
+        classification_list = list(cur.fetchall())
+        print "fetched"
+        classification_list.sort(key = lambda x:x[0])
+        end = datetime.datetime.now()
+        print "it took " + str(end-start)
+
+        #print "got cursor and finished sorting"
         current_subject_id = None
         annotation_accumulator = self.aggregator.__init__accumulator__()
 
@@ -576,7 +605,20 @@ class PanoptesAPI:
         #assert False
 
         # print self.workflow_version
-        for count,(subject_ids,annotations,time_stamp) in enumerate(cur.fetchall()):
+        for count,(subject_ids,annotations,metadata) in enumerate(classification_list):
+            #print count
+            #print user_id
+            # if user_id is not None:
+            #     print type(user_id),type(chris_id)
+            #     print user_id,chris_id
+            #     assert False
+            # if user_id == chris_id:
+            #     print time_stamp
+            #     print annotations
+            #     print metadata
+            #     print project_id
+            #     print workflow_id
+            #     print
             #print count
             # print count
             # print metadata["workflow_version"]
@@ -586,7 +628,7 @@ class PanoptesAPI:
             #if subject_ids[0] in range(11):
             #    continue
 
-            current_time = max(current_time,time_stamp)
+            #current_time = max(current_time,time_stamp)
             #print count, subject_ids
             # have we moved on to a new subject?
             if subject_ids[0] != current_subject_id:
@@ -602,7 +644,7 @@ class PanoptesAPI:
                         # is slightly inefficient - the idea being that in the future when I figure out how to
                         # I can add the metadata_constraints which will allow me to not have to get the metadata as
                         # part of my query
-                        self.__update_metadata__(current_subject_id)
+                        self.aggregator.__update_metadata__(current_subject_id,metadata)
 
                         # we should skip over any subject which does not have metadata
 
