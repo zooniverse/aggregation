@@ -43,7 +43,7 @@ class Aggregation:
 
         # the current current timestamp - we need something that is guaranteed to be before any of the
         # actual classifications - the specific datetime doesn't matter
-        self.threshold_date = datetime.datetime(2015,3,16,17,0,0)
+        self.threshold_date = datetime.datetime(2015,3,20,12,0,0)
         self.current_timestamp = self.threshold_date
 
         self.user_threshold = user_threshold
@@ -227,7 +227,11 @@ class Aggregation:
         a csv file
         """
         # start by getting all aggregations that have at least 5 classifications
-        subjects_to_print = [subject_id for subject_id,agg in enumerate(self.aggregations) if (agg is not None) and (sum(agg["count"]) >= self.user_threshold) and (agg["mean"] >= self.score_threshold)]
+        # print self.aggregations[1:10]
+        # print self.user_threshold,self.score_threshold
+        # print type(self.user_threshold),type(self.score_threshold)
+        subjects_to_print = [subject_id for subject_id,agg in enumerate(self.aggregations) if (agg is not None) and (sum(agg["count"]) >= 5) and (agg["mean"] >= 1)]
+        # print len(subjects_to_print)
         # now sort these aggregations
         subjects_to_print.sort(key = lambda x: sum(self.aggregations[x]["count"]),reverse = True)
         subjects_to_print.sort(key = lambda x: self.aggregations[x]["mean"],reverse = True)
@@ -239,15 +243,18 @@ class Aggregation:
             # add the metadata first
             metadata = self.metadata[subject_id]
             #print subject_id,agg
-
-
+            # print subject_id,metadata
+            #
             #results += str(subject_id) + ","
-            if "candidateID" in metadata:
-                results += str(subject_id)+","+metadata["candidateID"] + ","
-                results += str(agg["mean"]) + ",https://stargazing2015.zooniverse.org/#/projects/zooniverse/Snapshot%20Supernova/subjects/"+str(subject_id)+"\n"
-            else:
+            try:
+                if "candidateID" in metadata:
+                    results += str(subject_id)+","+metadata["candidateID"] + ","
+                    results += str(agg["mean"]) + "," + str(sum(agg["count"])) + ",https://stargazing2015.zooniverse.org/#/projects/zooniverse/Snapshot%20Supernova/subjects/"+str(subject_id)+"\n"
+                else:
+                    pass
+                    #results += "NA,"
+            except TypeError:
                 pass
-                #results += "NA,"
 
 
             # try:
@@ -400,13 +407,13 @@ class PanoptesAPI:
         # are we doing an accumulative update where we try to use previous results?
         if True:
             self.aggregator = Aggregation(user_threshold,score_threshold)
-            self.time_constraints = ""
+            current_timestamp = self.aggregator.__get_timestamp__()
+            self.time_constraints = " and created_at>\'" + str(current_timestamp) + "\'"
         else:
             assert False
             print "accumulative"
             self.aggregator = AccumulativeAggregation()
-            current_timestamp = self.aggregator.__get_timestamp__()
-            self.time_constraints = " and created_at>\'" + str(current_timestamp) + "\'"
+
 
         # self.e = to_stargazing
 
@@ -429,6 +436,7 @@ class PanoptesAPI:
         except boto.exception.NoAuthHandlerFound:
             print >> sys.stderr, "not able to connect to S3 - will try to keep going but this will probably give you errors later"
 
+        print "setting meta data"
         self.__set_metadata__()
         #self.__set_expert_sets__()
         # cur = self.conn.cursor()
@@ -468,7 +476,7 @@ class PanoptesAPI:
         # write out the results to an s3 bucket - file is a csv file labelled with day, hour and minute
         if self.S3_conn is not None:
             #csv_contents = "candidateID,RA,DEC,mag,mjd,mean,stdev,count0,count1,count2\n"
-            csv_contents = "subjectID,candidateID,mean,url\n"
+            csv_contents = "subjectID,candidateID,mean,count,url\n"
             csv_contents += self.aggregator.__aggregations_to_string__()
             t = datetime.datetime.now()
             fname = str(t.year) + "-" + str(t.month) + "-" + str(t.day) + "_" + str(t.hour) + "_" + str(t.minute)+"_"+str(self.user_threshold)+"users"
@@ -503,9 +511,23 @@ class PanoptesAPI:
             select = "SELECT id,metadata from subjects"
             cur = self.conn.cursor()
             cur.execute(select)
+
+            # rows = cur.fetchmany(200)
+            # for subject_id,metadata in rows:
+            #     print subject_id
+            #     self.aggregator.__update_metadata__(subject_id,metadata)
+            #
+            # print "got past"
+
             rows = cur.fetchall()
             for subject_id,metadata in rows:
-                print subject_id
+                # if "1339276" in metadata["candidateID"]:
+                #     print metadata["candidateID"]
+                #     print subject_id
+                # if "FMTJ14303011-1152196" == metadata["candidateID"]:
+                #     print 1
+                #     print subject_id
+
                 self.aggregator.__update_metadata__(subject_id,metadata)
 
 
@@ -577,9 +599,12 @@ class PanoptesAPI:
         #
         #
         start = datetime.datetime.now()
+
+
         metadata_constraints =  " and metadata->>'workflow_version' = '"+str(self.workflow_version)+"'"
-        metadata_constraints = ""
-        select = "SELECT subject_ids,annotations,metadata from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + metadata_constraints #+ self.time_constraints
+        #metadata_constraints = ""
+        select = "SELECT subject_ids,annotations,user_id from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + metadata_constraints + self.time_constraints
+        print select
         # select = "SELECT subject_ids,annotations,created_at,user_id,metadata,project_id,workflow_id from classifications"
         #print select
         #print select
@@ -605,8 +630,12 @@ class PanoptesAPI:
         #assert False
 
         # print self.workflow_version
-        for count,(subject_ids,annotations,metadata) in enumerate(classification_list):
-            #print count
+        for count,(subject_ids,annotations,user_id) in enumerate(classification_list):
+            # if subject_ids[0] == 42056:
+            #     print user_id
+            #     print annotations
+            #     print
+            # print self.aggregator.metadata[subject_ids[0]]
             #print user_id
             # if user_id is not None:
             #     print type(user_id),type(chris_id)
@@ -644,7 +673,7 @@ class PanoptesAPI:
                         # is slightly inefficient - the idea being that in the future when I figure out how to
                         # I can add the metadata_constraints which will allow me to not have to get the metadata as
                         # part of my query
-                        self.aggregator.__update_metadata__(current_subject_id,metadata)
+                        # self.aggregator.__update_metadata__(current_subject_id,metadata)
 
                         # we should skip over any subject which does not have metadata
 
@@ -793,4 +822,4 @@ if __name__ == "__main__":
     stargazing.__cleanup__()
 
     end = datetime.datetime.now()
-    print "updated " + str(num_updated) + " in " + str(end - start)
+    #print "updated " + str(num_updated) + " in " + str(end - start)
