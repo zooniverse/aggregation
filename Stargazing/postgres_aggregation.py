@@ -326,10 +326,10 @@ class AccumulativeAggregation(Aggregation):
 
 class PanoptesAPI:
     #@profile
-    def __init__(self,user_threshold,score_threshold): #Supernovae
+    def __init__(self,user_threshold= None, score_threshold= None): #Supernovae
         self.user_threshold = user_threshold
         # first find out which environment we are working with
-        self.environment = os.getenv('ENVIRONMENT', "staging")
+        self.environment = os.getenv('ENVIRONMENT', "production")
         print self.environment
         # next connect to the Panoptes http API
 
@@ -572,6 +572,18 @@ class PanoptesAPI:
             classification_count += 1
 
         return  (len(list(users_set))+len(list(ip_set))),classification_count
+
+    def __yield_classifications__(self):
+        metadata_constraints =  " and metadata->>'workflow_version' = '"+str(self.workflow_version)+"'"
+        #metadata_constraints = ""
+        #user_id = t[2], created_at = t[4], user_ip=t[3],annotations=t[1],subject_id=t[0][0]
+        select = "SELECT user_id,created_at,user_ip,annotations,subject_ids from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id) + metadata_constraints
+        print select
+        cur = self.conn.cursor()
+        cur.execute(select)
+
+        for ii,t in enumerate(cur.fetchall()):
+            yield t
 
     def __update_aggregations__(self):
         """
