@@ -52,8 +52,29 @@ class Cluster:
         self.min_cluster_size = min_cluster_size
         self.clusterResults = {}
 
+    def __display__markings__(self, subject_id,fname):
+        """
+        display the results of clustering algorithm - the image must already have been downloaded
+        :param subject_id:
+        :param fname: the file name of the downloaded image
+        :return:
+        """
+
+        image_file = cbook.get_sample_data(fname)
+        image = plt.imread(image_file)
+
+        fig, ax = plt.subplots()
+        im = ax.imshow(image)
+
+        for (x, y), pts, users in zip(*self.clusterResults[subject_id]):
+            plt.plot([x, ], [y, ], 'o', color="red")
+
+
+        plt.show()
+        plt.close()
+
     @abc.abstractmethod
-    def __fit__(self,user_ids,markings,jpeg_file=None):
+    def __fit__(self,markings,user_ids,jpeg_file=None):
         """
         the main function for clustering
         :param user_ids:
@@ -72,28 +93,27 @@ class Cluster:
 
         return (cluster_centers , markings_per_cluster, users_per_cluster), time_to_cluster
 
-    def __cluster_subject__(self,subject_id,jpeg_file=None,more_to_do=False):
+    def __cluster_subject__(self,subject_id,jpeg_file=None):
         """
         the function to call from outside to do the clustering
         override but call if you want to add additional functionality
         :param subject_id: what is the subject (in Ouroboros == zooniverse_id)
         :param jpeg_file: for debugging - to show step by step what is happening
-        :param more_to_do: by default, cluster_subject will return the results directly to the project_api class
-        but we might have more we want to do with the results before sending back
         :return:
         """
         # start by calling the api to get the annotations along with the list of who made each marking
         # so for this function, we know that annotations = markings
-        users, markings = self.project_api.__get_cluster_annotations__()
+        users, markings = self.project_api.__get_markings__(subject_id)
 
         # if there are any markings - cluster
         # otherwise, just set to empty
         if markings != []:
             cluster_results,time_to_cluster = self.__fit__(markings,users,jpeg_file)
-
         else:
             cluster_results = [],[],[]
             time_to_cluster = 0
 
-        return cluster_results,time_to_cluster
+        self.clusterResults[subject_id] = cluster_results
+
+        return time_to_cluster
 

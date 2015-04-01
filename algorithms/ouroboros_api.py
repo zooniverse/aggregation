@@ -4,7 +4,8 @@ import abc
 import cPickle as pickle
 import os
 import csv
-
+import re
+import urllib
 
 class OuroborosAPI:
     __metaclass__ = abc.ABCMeta
@@ -34,6 +35,32 @@ class OuroborosAPI:
         # use this to store classifications - only makes sense if we are using this data multiple times
         # if you are just doing a straight run through of all the data, don't use this
         self.classifications = {}
+
+        current_directory = os.getcwd()
+        slash_indices = [m.start() for m in re.finditer('/', current_directory)]
+        self.base_directory = current_directory[:slash_indices[2]+1]
+
+    def __get_image_fname__(self,subject_id):
+        """
+        return the file names for all the images associated with a given subject_id
+        also download them if necessary
+        :param subject_id:
+        :return:
+        """
+        subject = self.subject_collection.find_one({"zooniverse_id": subject_id})
+        url = subject["location"]["standard"]
+
+        slash_index = url.rfind("/")
+        object_id = url[slash_index+1:]
+
+        #print object_id
+
+        if not(os.path.isfile(self.base_directory+"/Databases/"+self.project+"/images/"+object_id)):
+            urllib.urlretrieve(url, self.base_directory+"/Databases/"+self.project+"/images/"+object_id)
+
+        fname = self.base_directory+"/Databases/"+self.project+"/images/"+object_id
+
+        return fname
 
     def __get_subjects_with_gold_standard__(self,require_completed=False,remove_blanks=False,limit=-1):
         """
@@ -125,7 +152,7 @@ class OuroborosAPI:
             # just read in the results
             mongo_results = list(self.classification_collection.find({"subjects.zooniverse_id":zooniverse_id}))
 
-        annotations = []
+        annotations_list = []
         user_list = []
         for user_index, classification in enumerate(mongo_results):
                 # get the name of this user
@@ -140,10 +167,12 @@ class OuroborosAPI:
                     assert "user_name" in classification
                     continue
 
-                annotations.append(self.__classification_to_annotations__(classification))
-                user_list.append(user_id)
+                annotations = self.__classification_to_annotations__(classification)
+                if annotations != []:
+                    annotations_list.append(annotations)
+                    user_list.append(user_id)
 
-        return user_list,annotations
+        return user_list,annotations_list
 
 
 class MarkingProject(OuroborosAPI):
@@ -154,50 +183,59 @@ class MarkingProject(OuroborosAPI):
         self.dimensions = dimensions
         self.scale = scale
 
-    @abc.abstractmethod
-    def __get_cluster_annotations__(self,zooniverse_id):
-        """
-        get all aspects of the annotations that are relevant to clustering
-        override parent class so that we can restrict the annotations to only the data we need for clustering
-        so for example, we might have an X,Y point and an associated label "adult penguin". That label is not
-        useful for clustering - at least with how the current set of clustering algorithms work; if we two users
-        with close points but one says "adult penguin" and the other says "chick" then we assume that the users
-        are talking about the same point, just confused about what kind of animal is at this point
-        resolving what kind of animal we have is something that will be done at different point
-        also things like PCA or such for converting higher dimensional markings down into lower dimensional ones
-        should be done here
-        :param zooniverse_id:
-        :return:
-        """
-        return [],[]
+    # @abc.abstractmethod
+    # def __get_cluster_annotations__(self,zooniverse_id):
+    #     """
+    #     get all aspects of the annotations that are relevant to clustering
+    #     override parent class so that we can restrict the annotations to only the data we need for clustering
+    #     so for example, we might have an X,Y point and an associated label "adult penguin". That label is not
+    #     useful for clustering - at least with how the current set of clustering algorithms work; if we two users
+    #     with close points but one says "adult penguin" and the other says "chick" then we assume that the users
+    #     are talking about the same point, just confused about what kind of animal is at this point
+    #     resolving what kind of animal we have is something that will be done at different point
+    #     also things like PCA or such for converting higher dimensional markings down into lower dimensional ones
+    #     should be done here
+    #     :param zooniverse_id:
+    #     :return:
+    #     """
+    #     return [],[]
 
-
     @abc.abstractmethod
-    def __get_markings__(self,annotations):
+    def __annotations_to_markings__(self,annotations):
         """
-        This is the main function projects will have to override - given a classification, we need to return the list
-        of all markings in that classification
+        This is the main function projects will have to override - given a set of annotations, we need to return the list
+        of all markings in that annotation
         """
         return []
 
+    def __get_markings__(self,subject_id):
+        """
+        just allows us to user different terminology so that we are clear about returning markings
+        :param subject_id:
+        :return:
+        """
+        return OuroborosAPI.__get_annotations__(self,subject_id)
+
     def __classification_to_annotations__(self,classification):
         annotations = classification["annotations"]
-        markings = self.__get_markings__(annotations)
+        markings = self.__annotations_to_markings__(annotations)
 
         # go through the markings in reverse order and remove any that are outside of the ROI
         # also, scale as necessary
         assert isinstance(markings, list)
         for marking_index in range(len(markings)-1, -1, -1):
             mark = markings[marking_index]
-            assert isinstance(mark, dict)
-
-            # start by scaling
-            for param in self.dimensions:
-                mark[param] = float(mark[param])*self.scale
+            # assert isinstance(mark, dict)
+            #
+            # # start by scaling
+            # for param in self.dimensions:
+            #     mark[param] = float(mark[param])*self.scale
 
             # check to see if this marking is in the ROI
             if not(self.__in_roi__(mark)):
                 markings.pop(marking_index)
+
+        return markings
 
     def __in_roi__(self,marking):
         """
@@ -241,11 +279,9 @@ class MarkingProject(OuroborosAPI):
 
 
 class PenguinWatch(MarkingProject):
-    def __init__(self,date,roi_directory,pickle_directory="/tmp/"):
+    def __init__(self,date,roi_directory=None,pickle_directory="/tmp/"):
         """
-        :param roi_file:  is where the tab delimited file with the roi list is held
-        going to be dependent on each computer so figure this should be opened somewhere else so we minimize
-        how often we refer to the directory structure
+        :param roi_directory:  the directory where roi.tsv is stored. if None we will try a standard directory
         :param date:
         :param to_pickle:
         :return:
@@ -255,6 +291,9 @@ class PenguinWatch(MarkingProject):
         # init the ROI dictionary
         self.roi_dict = {}
         # read in the ROI
+        if roi_directory is None:
+            roi_directory = self.base_directory + "github/Penguins/public/"
+
         with open(roi_directory+"roi.tsv","rb") as roi_file:
             roi_file.readline()
             reader = csv.reader(roi_file,delimiter="\t")
@@ -263,31 +302,31 @@ class PenguinWatch(MarkingProject):
                 t = [r.split(",") for r in l[1:] if r != ""]
                 self.roi_dict[path] = [(int(x)/1.92,int(y)/1.92) for (x,y) in t]
 
-    def __get_markings__(self,annotations):
+    def __annotations_to_markings__(self,annotations):
         """
         find where markings are in the annotations and retrieve them
         :param annotations:
-        :return:
+        :return: each marking is of two parts - the first are things we can cluster on - for example, x,y coordinates
+        the second part is stuff we might want to use with classification - i.e. which animal species
         """
         for ann in annotations:
             if ("key" in ann) and (ann["key"] == "marking"):
                 # try to extract and return the markings
                 # if something is wrong with the list (usually shouldn't happen) - return an empty list
                 try:
-                    print ann["value"].values()
-                    assert False
-                    return ann["value"].values()
+                    values = ann["value"].values()
+                    return [((float(v["x"])*self.scale,float(v["y"])*self.scale),(v["value"],)) for v in values]
                 except (AttributeError,KeyError) as e:
                     return []
 
         # did not find any values corresponding to markings, so return an empty list
         return []
 
-    def __get_cluster_annotations__(self,zooniverse_id):
-        users, markings = OuroborosAPI.__get_annotations__(self,zooniverse_id)
-
-        # extract the x and y coordinates
-        markings = [(m["x"],m["y"]) for m in markings]
-
-        return users,markings
+    # def __get_cluster_annotations__(self,zooniverse_id):
+    #     users, markings = OuroborosAPI.__get_annotations__(self,zooniverse_id)
+    #
+    #     # extract the x and y coordinates
+    #     markings = [(m["x"],m["y"]) for m in markings]
+    #
+    #     return users,markings
 

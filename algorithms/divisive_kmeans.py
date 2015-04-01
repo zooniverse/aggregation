@@ -15,7 +15,7 @@ class DivisiveKMeans(Cluster):
     def __init__(self, project_api,min_cluster_size=1,fix_distinct_clusters=False):
         Cluster.__init__(self,project_api,min_cluster_size)
 
-        self.fix_distinct_clusters = min_cluster_size
+        self.fix_distinct_clusters = fix_distinct_clusters
 
     def __cluster_subject__(self,subject_id,jpeg_file=None):
         """
@@ -39,7 +39,9 @@ class DivisiveKMeans(Cluster):
         else:
             return time_to_cluster
 
-    def __fit__(self,user_ids,markings,jpeg_file=None):
+
+
+    def __fit__(self,markings,user_ids,jpeg_file=None):
         """
         the main function - currently works for any number of dimensions
         :param markings: the actual markings
@@ -47,16 +49,21 @@ class DivisiveKMeans(Cluster):
         :param jpeg_file: in case we need to show the step by step of how this algorithm works - for debugging
         :return:
         """
+        # associate each marking with their correspondng user and extract only the relevant part of the marking for
+        # the clustering
+        l = [[(u,m[0]) for m in marking] for u,marking in zip(user_ids,markings)]
+        user_list,pts_list = zip(*[item for sublist in l for item in sublist])
+
         total_kmeans = 0
         start = time.time()
         # check to see if we need to split at all, i.e. there might only be one animal in total
         # or just one user has marked this image
-        if len(user_ids) == len(list(set(user_ids))):
+        if len(user_list) == len(list(set(user_list))):
             # do these points meet the minimum threshold value?
-            if len(markings) >= self.min_cluster_size:
-                X,Y = zip(*markings)
+            if len(pts_list) >= self.min_cluster_size:
+                X,Y = zip(*pts_list)
                 cluster_centers = [(np.mean(X),np.mean(Y)), ]
-                end_clusters = [markings,]
+                end_clusters = [pts_list,]
                 end = time.time()
 
                 return (cluster_centers, end_clusters,user_ids), end - start
@@ -66,8 +73,7 @@ class DivisiveKMeans(Cluster):
 
         # clusters_to_go is a stack where we push clusters onto which we still have to process
         # i.e. split into subclusters such that each cluster contains at most one marking from each user
-        clusters_to_go = []
-        clusters_to_go.append((markings,user_ids,1))
+        clusters_to_go = [(pts_list,user_list)]
 
         # this is what we return
         end_clusters = []
