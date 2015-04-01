@@ -5,7 +5,9 @@ import cPickle as pickle
 import os
 import csv
 import re
+import matplotlib.pyplot as plt
 import urllib
+import matplotlib.cbook as cbook
 
 class OuroborosAPI:
     __metaclass__ = abc.ABCMeta
@@ -40,7 +42,7 @@ class OuroborosAPI:
         slash_indices = [m.start() for m in re.finditer('/', current_directory)]
         self.base_directory = current_directory[:slash_indices[2]+1]
 
-    def __get_image_fname__(self,subject_id):
+    def __display_image__(self,subject_id):
         """
         return the file names for all the images associated with a given subject_id
         also download them if necessary
@@ -60,7 +62,13 @@ class OuroborosAPI:
 
         fname = self.base_directory+"/Databases/"+self.project+"/images/"+object_id
 
-        return fname
+        image_file = cbook.get_sample_data(fname)
+        image = plt.imread(image_file)
+
+        fig, ax = plt.subplots()
+        im = ax.imshow(image)
+
+        return ax
 
     def __get_subjects_with_gold_standard__(self,require_completed=False,remove_blanks=False,limit=-1):
         """
@@ -290,6 +298,7 @@ class PenguinWatch(MarkingProject):
 
         # init the ROI dictionary
         self.roi_dict = {}
+        self.subject_to_site = {}
         # read in the ROI
         if roi_directory is None:
             roi_directory = self.base_directory + "github/Penguins/public/"
@@ -301,6 +310,33 @@ class PenguinWatch(MarkingProject):
                 path = l[0]
                 t = [r.split(",") for r in l[1:] if r != ""]
                 self.roi_dict[path] = [(int(x)/1.92,int(y)/1.92) for (x,y) in t]
+
+    def __classification_to_annotations__(self,classification):
+        """
+        override so that we can read in which ROI we should use
+        :param classification:
+        :return:
+        """
+        # have we already found the ROI for this subject?
+
+        print classification["subjects"]
+        object_id = classification["subject_ids"][0]
+        print type(object_id)
+
+        # if we haven't already read in this image find out what site it is from
+        if not(object_id in self.subject_to_site):
+            path = self.subject_collection.find_one({"_id":object_id})["metadata"]["path"]
+            assert isinstance(path,unicode)
+            slash_index = path.index("/")
+            underscore_index = path.index("_")
+            site_name = path[slash_index+1:underscore_index]
+
+            if not(site_name in self.roi_dict.keys()):
+                assert False
+            else:
+                self.subject_to_site[object_id] = site_name
+
+        return MarkingProject.__classification_to_annotations__(self,classification)
 
     def __annotations_to_markings__(self,annotations):
         """
@@ -322,11 +358,31 @@ class PenguinWatch(MarkingProject):
         # did not find any values corresponding to markings, so return an empty list
         return []
 
-    # def __get_cluster_annotations__(self,zooniverse_id):
-    #     users, markings = OuroborosAPI.__get_annotations__(self,zooniverse_id)
-    #
-    #     # extract the x and y coordinates
-    #     markings = [(m["x"],m["y"]) for m in markings]
-    #
-    #     return users,markings
+    def __display_image__(self,subject_id):
+        """
+        overwrite so that we can display the ROI
+        :param subject_id:
+        :return:
+        """
+        ax = MarkingProject.__display_image__(self,subject_id)
 
+        return ax
+
+    def __in_roi__(self,marking):
+        for segment_index in range(len(roi)-1):
+                if (roi[segment_index][0] <= x) and (roi[segment_index+1][0] >= x):
+                    rX1,rY1 = roi[segment_index]
+                    rX2,rY2 = roi[segment_index+1]
+
+                    m = (rY2-rY1)/float(rX2-rX1)
+                    rY = m*(x-rX1)+rY1
+
+                    if y >= rY:
+                        # we have found a valid marking
+                        # create a special type of animal None that is used when the animal type is missing
+                        # thus, the marking will count towards not being noise but will not be used when determining the type
+
+                        yield (x,y),animal_type
+                        break
+                    else:
+                        break

@@ -10,6 +10,8 @@ from copy import deepcopy
 import warnings
 import time
 import random
+from clustering import Cluster
+import abc
 
 class TooBig(Exception):
     def __init__(self):
@@ -41,13 +43,21 @@ class AgglomerativeNode(NodeTemplate):
 class AgglomerativeLeaf(NodeTemplate):
     def __init__(self,pt,user):
         NodeTemplate.__init__(self,pt,[pt],[user])
-
         self.x,self.y = pt
 
-class Agglomerative:
-    def __init__(self, min_samples=1):
-        self.min_samples = min_samples
+        # rare but it happens - some users can give the EXACT same x and y values for a marking
+        # this causes a problem with using the pts as keys
+        # so let's add a very small random offset - no guarantee that it will work but pretty sure
+        x,y = pt
+        x += random.uniform(-0.0001,0.0001)
+        y += random.uniform(-0.0001,0.0001)
+        self.key = x,y
+
+class Agglomerative(Cluster):
+    def __init__(self, project_api,min_cluster_size=1):
+        Cluster.__init__(self,project_api,min_cluster_size)
         self.distances = {}
+        self.dbscan_preprocess = False
 
     def __set_distances__(self,clusters):
         for c1 in clusters:
@@ -81,72 +91,20 @@ class Agglomerative:
         else:
             return [l]
 
-    # def __get_clusters__(self,forest):
-    #     for tree in forest:
-    #         tree.__get_cluster__()
-
-    # def getClusters(self, hierarchy):
-    #     centers = []
-    #     clusters = []
-    #     users = []
-    #
-    #     if isinstance(hierarchy,tuple):
-    #         #print "here - grrrrr"
-    #         centers = [(hierarchy[0],hierarchy[1])]
-    #         clusters = [[(hierarchy[0],hierarchy[1])]]
-    #         users = [[hierarchy[2], ], ]
-    #     elif self.averageLinkage(hierarchy[0],hierarchy[1]) == float("inf"):
-    #         centers,clusters,users = self.getClusters(hierarchy[0])
-    #         #clusters.extend(self.getClusters(hierarchy[0]))
-    #         #clusters.extend(self.getClusters(hierarchy[1]))
-    #         centers_rhs,clusters_rhs,users_rhs = self.getClusters(hierarchy[1])
-    #         centers.extend(centers_rhs)
-    #         clusters.extend(clusters_rhs)
-    #         users.extend(users_rhs)
-    #     else:
-    #         newCluster = self.flatten(hierarchy)
-    #         if len(newCluster) >= 1:
-    #             x,y,u = zip(*newCluster)
-    #             # cluster_centers, end_clusters,end_users
-    #             #clusters = [((np.mean(x),np.mean(y)),zip(x,y),u)]
-    #             centers = [(np.mean(x),np.mean(y))]
-    #             clusters = [zip(x,y)]
-    #             users = [u]
-    #         else:
-    #             print "too small"
-    #
-    #     return centers,clusters,users
-
-    def averageLinkage(self,c1,c2):
-        d = []
-        flattened1 = self.flatten(c1)
-        flattened2 = self.flatten(c2)
-
-        for pt1 in flattened1:
-            x1,y1,u1 = pt1
-            for pt2 in flattened2:
-                x2,y2,u2 = pt2
-                if u1 == u2:
-                    d.append(float("inf"))
-                else:
-                    d.append(math.sqrt((x2-x1)**2+(y2-y1)**2))
-
-        return np.mean(d)
-
-    # def mergeClusters(self,c1,c2):
-    #     retval = c1[:]
-    #     retval.extend(c2)
-    #
-    #     return retval
-    #
-    # def findClusterCenter(self,cluster):
-    #     x,y,u = zip(*self.flatten(cluster))
-    #     return np.mean(x),np.mean(y)
 
     def __agglomerate_clusters__(self,clusters,fname = None):
-        old_objective = None
-        while len(clusters) > 1:
+        """
+        agglomerative clusters - keep going until none of the clusters can be merged
+        use fname if we want to see step by step pictures
+        :todo: - make sure that fname is properly supported
+        :param clusters:
+        :param fname:
+        :return:
+        """
 
+        # keep going while there is more than one cluster - we can stop earlier than that
+        while len(clusters) > 1:
+            # we want the merger with minimum distance
             objective_func = float("inf")
             bestChoice = None
 
@@ -167,42 +125,39 @@ class Agglomerative:
 
                     plt.show()
 
+            # look at merging every possible pair of clusters
             for i,c1 in enumerate(clusters):
                 for j,c2 in enumerate(clusters[i+1:]):
                     try:
-                        if c1.key < c2.key:
-                            clusterDist = self.distances[c1.key][c2.key]
-                        else:
-                            clusterDist = self.distances[c2.key][c1.key]
+                        clusterDist = self.__get_dist__(c1.key,c2.key)
                     except KeyError:
                         # not stored - so there should be an overlap between the users
                         continue
 
+                    # have we improved on the objective function
                     if clusterDist < objective_func:
                             objective_func = clusterDist
                             bestChoice = (i,i+1+j)
             if not(fname is None):
                 print objective_func
-            # if there is no merging to be done
+
+            # if there is no merging to be done - stop
             if bestChoice is None:
                 break
 
-            #if (old_objective is not None) and (objective_func > (3*old_objective)):
-            #    break
-
-            # old_objective = objective_func
-            if (objective_func/float(len(c1.markings)+len(c2.markings))) > (5*objective_func):
-                break
-            old_objective = objective_func/float(len(c1.markings)+len(c2.markings))
+            # heuristics to avoid select clusters from opposite sides of the images
+            # todo: make it so that you can turn the heuristics on and off
+            # if (objective_func/float(len(c1.markings)+len(c2.markings))) > (5*objective_func):
+            #     break
+            # old_objective = objective_func/float(len(c1.markings)+len(c2.markings))
 
 
             # the second one comes later, so pop it first so we don't mess up  indices
+            # note that this does not mean that the key for c1 is lower than c2
             c2 = clusters.pop(bestChoice[1])
             c1 = clusters.pop(bestChoice[0])
 
-            #print str(objective_func) + "\t" + str(objective_func/float(len(c1.markings)+len(c2.markings)))
-            #print c1.users,c2.users
-
+            # update the distances and create a new merged node
             if c1.key < c2.key:
                 self.__update_distances__(clusters,c1,c2)
                 clusters.append(AgglomerativeNode(c1,c2))
@@ -210,92 +165,98 @@ class Agglomerative:
                 self.__update_distances__(clusters,c2,c1)
                 clusters.append(AgglomerativeNode(c2,c1))
 
-
-            for c in clusters:
-                if c1.key < c2.key:
-                    if c.key == c1.key:
-                        continue
-
-                    try:
-                        self.__get_dist__(c.key,c1.key)
-                    except KeyError:
-                        overlap = [u for u in c.users if u in c1.users]
-                        if overlap == []:
-                            raise
-                else:
-                    if c.key == c2.key:
-                        continue
-
-                    try:
-                        self.__get_dist__(c.key,c2.key)
-                    except KeyError:
-                        overlap = [u for u in c.users if u in c2.users]
-                        if overlap == []:
-                            raise
+            # a bit of error checking - commented out but might still be useful
+            # basically checking to make sure that we are only keeping distances for pairs of nodes with no overlap
+            # for c in clusters:
+            #     if c1.key < c2.key:
+            #         if c.key == c1.key:
+            #             continue
+            #
+            #         try:
+            #             self.__get_dist__(c.key,c1.key)
+            #         except KeyError:
+            #             overlap = [u for u in c.users if u in c1.users]
+            #             if overlap == []:
+            #                 raise
+            #     else:
+            #         if c.key == c2.key:
+            #             continue
+            #
+            #         try:
+            #             self.__get_dist__(c.key,c2.key)
+            #         except KeyError:
+            #             overlap = [u for u in c.users if u in c2.users]
+            #             if overlap == []:
+            #                 raise
 
         return clusters
 
     def __get_dist__(self,key1,key2):
+        """
+        return a distance
+        :param key1:
+        :param key2:
+        :return:
+        """
         if key1 < key2:
-            try:
-                return self.distances[key1][key2]
-            except KeyError:
-                # print
-                # print
-                # print sorted(self.distances.keys(), key = lambda x:x[0])
-                # print key1,key2
-                # print self.distances[key1].keys()
-                # print self.distances[key2].keys()
-                raise
+            return self.distances[key1][key2]
         else:
-            try:
-                return self.distances[key2][key1]
-            except KeyError:
-                # print
-                # print
-                # print sorted(self.distances.keys(), key = lambda x:x[0])
-                # print key1, key2
-                # print sorted(self.distances[key1].keys())
-                # print sorted(self.distances[key2].keys())
-                raise
+            return self.distances[key2][key1]
 
     def __delete_dist__(self,key1,key2):
+        """
+        delete a distance if we no longer need it - so one of the keys' cluster is going away
+        :param key1:
+        :param key2:
+        :return:
+        """
         if key1 < key2:
-            try:
-                del self.distances[key1][key2]
-            except KeyError:
-                # print self.distances.keys()
-                # print self.distances[key1].keys()
-                raise
+            del self.distances[key1][key2]
         else:
-            try:
-                del self.distances[key2][key1]
-            except KeyError:
-                # print self.distances.keys()
-                # print self.distances[key2].keys()
-                raise
+            del self.distances[key2][key1]
 
     def __set_distance__(self,key1,key2,dist):
+        """
+        set the distance between two clusters identified by their keys
+        since the distance from a to b is equal to the distance from b to a, we only need to store one of them
+        so let's only store based on the lower key value
+        :param key1:
+        :param key2:
+        :param dist:
+        :return:
+        """
         if key1 < key2:
             self.distances[key1][key2] = dist
         else:
             self.distances[key2][key1] = dist
 
     def __update_distances__(self,clusters,c_i,c_j):
-        # c_j is the cluster that we going to  delete (or at least it will  become part of c_i)
-        #print (c_i.key,c_j.key)
-        # make sure we have the right order
+        """
+        update the distances between clusters as the result of merging c_i and c_j. c_j is going to become part
+        of c_i. Use  Lance Williams algorithm. For documentation see
+        http://en.wikipedia.org/wiki/Ward%27s_method
+        or watch
+        https://www.youtube.com/watch?v=aXsaFNVzzfI
+        :param clusters:
+        :param c_i:
+        :param c_j: c_j is the cluster that we going to  delete (or at least it will  become part of c_i)
+        :return:
+        """
+        # we need c_i to have the smaller key so switch if necessary. This is the result of using points in clusters
+        # as a key for that cluster
         if c_i.key > c_j.key:
             temp = c_j
             c_j = c_i
             c_i = temp
 
         assert c_i.key < c_j.key
+
         for c_k in clusters:
+            # the distance from c_i or c_j to c_i \cup c_j is going to be zero so worry about that later
             if (c_k.key == c_i.key) or (c_k.key == c_j.key):
                 pass
 
-            # is there an overlap?
+            # is there an overlap between clusters?
             # if there is already an overlap between c_k and c_i, then there shouldn't be any values stored
             # but if there is an overlap between c_k and c_j, we need to just delete it
             overlap_ki = [u for u in c_k.users if u in c_i.users]
@@ -307,197 +268,102 @@ class Agglomerative:
                 # print "1"
                 pass
             elif overlap_kj != []:
-                # print "2"
                 # overlap with c_j, which means that distance[c_k][c_j] shouldn't exist in the first place
                 # and as a result of the merge, we shouldn't have distance[c_k][c_i] either
                 self.__delete_dist__(c_k.key,c_i.key)
 
             elif overlap_ki != []:
-                # print "3"
                 # overlap with c_i so distance[c_k][c_i] shouldn't exist. Get rid of distance[c_k][c_j] since it will
                 # be going away anyways
                 self.__delete_dist__(c_k.key,c_j.key)
             else:
-                # print "4"
                 # no overlaps
-
                 # since we are only storing the distances values when c < c', we need to be slightly cute about this
-                t = 0
-                #t += self.alpha(c_i.size, c_j.size, c_k.size)(c_i.size+c_k.size)/total_size*self.__get_dist__(c_i.key,c_k.key)
-                t += self.alpha(c_i.size, c_j.size, c_k.size)*self.__get_dist__(c_i.key,c_k.key)
-                #t += (c_j.size+c_k.size)/total_size*self.__get_dist__(c_j.key,c_k.key)
+                # the following are the actual terms of the Lance Williams equation
+                t = self.alpha(c_i.size, c_j.size, c_k.size)*self.__get_dist__(c_i.key,c_k.key)
                 t += self.alpha(c_j.size, c_i.size, c_k.size)*self.__get_dist__(c_j.key,c_k.key)
-                #t += self.beta(c_i.size + c_j.size + c_k.size)-c_k.size/total_size*self.distances[c_i.key][c_j.key]
                 t += self.beta(c_i.size, c_j.size, c_k.size)*self.distances[c_i.key][c_j.key]
-                try:
-                    t += self.gamma()* math.fabs(self.__get_dist__(c_i.key,c_k.key) - self.__get_dist__(c_j.key,c_k.key))
-                except KeyError:
-                    print self.__get_dist__(c_i.key,c_k.key)
-                    print self.__get_dist__(c_j.key,c_k.key)
-                    raise
+                t += self.gamma()* math.fabs(self.__get_dist__(c_i.key,c_k.key) - self.__get_dist__(c_j.key,c_k.key))
 
                 # update the distances
                 self.__set_distance__(c_i.key,c_k.key,t)
 
-                # delete the value if we are storing it
+                # c_j is going to disappear so delete any distance values associated with it
+                # note we didn't delete until now since we needed this value for the update
                 self.__delete_dist__(c_k.key,c_j.key)
 
+        # finish removing any references to c_j
         del self.distances[c_j.key]
 
+    @abc.abstractmethod
     def alpha(self,i,j,k):
-        assert False
+        """
+        calculate the alpha value between clusters i,j and k - j and k are the ones that are about to be merged
+        :param i:
+        :param j:
+        :param k:
+        :return:
+        """
+        return 0
 
+    @abc.abstractmethod
     def beta(self,i,j,k):
-        assert False
+        """
+        calculate the beta value between clusters i,j and k - j and k are the ones that are about to be merged
+        :param i:
+        :param j:
+        :param k:
+        :return:
+        """
+        return 0
 
+    @abc.abstractmethod
     def gamma(self):
-        assert False
+        """
+        calculate the gamma value
+        :return:
+        """
+        return 0
 
-    def __total_distance__(self,c1,c2):
-        dist = []
-        for (x1,y1) in c1.markings:
-            for (x2,y2) in c2.markings:
-                dist.append(math.sqrt((x1-x2)**2+(y1-y2)**2))
+    def __fit__(self,markings,user_ids,jpeg_file=None):
+        # associate each marking with their corresponding user and extract only the relevant part of the marking for
+        # the clustering
+        l = [[(u,m[0]) for m in marking] for u,marking in zip(user_ids,markings)]
+        l_flattened = [item for sublist in l for item in sublist]
 
-        return sum(dist)
-
-    def __average_distance__(self,c1,c2):
-        dist = []
-        for (x1,y1) in c1.markings:
-            for (x2,y2) in c2.markings:
-                dist.append(math.sqrt((x1-x2)**2+(y1-y2)**2))
-
-        return np.mean(dist)
-
-    # def __agglomerate_clusters2__(self,clusters):
-    #     #
-    #     while len(clusters) > 1:
-    #             minAvg = float("inf")
-    #             bestChoice = None
-    #
-    #             for i,c1 in enumerate(clusters):
-    #                 for j,c2 in enumerate(clusters[i+1:]):
-    #                     clusterDist = self.averageLinkage(c1,c2)
-    #
-    #                     if clusterDist <= minAvg:
-    #                         minAvg = clusterDist
-    #                         bestChoice = (i,i+1+j)
-    #
-    #             # if there is no merging to be done
-    #             if bestChoice is None:
-    #                 return clusters
-    #
-    #             i,j = bestChoice
-    #             assert(j > i)
-    #             c2 = clusters.pop(j)
-    #             c1 = clusters.pop(i)
-    #             clusters.append([c1,c2])
-    #
-    #     return clusters
-
-    def __fit__(self,markings,user_ids,dbscan_preprocess=False,fname=None):
-        #if len(markings) > 500:
-        #    raise TooBig()
-        print "Number of markings: " + str(len(markings))
-        markings = [(x,y+random.uniform(0,0.0001)) for (x,y) in markings]
-
-        # X = np.array(XYpts)
-        # #use DBSCAN to create connectivity constraints
-        # #keep expanding until there is no more noise
-        # for first_epsilon in [25,50,100,200,300,400,600,800]:
-        #     db = DBSCAN(eps=first_epsilon, min_samples=min(3,len(XYpts))).fit(X)
-        #
-        #     if not(-1 in db.labels_):
-        #         break
         end_clusters =[]
         start = time.time()
-        if dbscan_preprocess:
+        if self.dbscan_preprocess:
+            # todo: add dbscan preprocessing
             pass
 
-            assert(not(-1 in db.labels_))
-            labels = db.labels_
-        else:
-            #starting_clusters = [((x,y),(x,y,user)) for (x,y), user in zip(markings,user_ids)]
-            starting_clusters = [AgglomerativeLeaf(pt,user) for pt,user in zip(markings,user_ids)]
-            self.__set_distances__(starting_clusters)
-            end_clusters = self.__agglomerate_clusters__(starting_clusters,fname)
-        # end_clusters = []
-        # #print max(labels)
-        # #do agglomerative clustering on each individual "sub" cluser
-        # for k in sorted(set(labels)):
-        #     clusters = [(x,y,user) for (x,y), user, l in zip(XYpts,user_ids,labels) if l == k]
-        #     #keep on merging as much as possible
-        #     while len(clusters) > 1:
-        #         minAvg = float("inf")
-        #         bestChoice = None
-        #
-        #         for i,c1 in enumerate(clusters):
-        #             for j,c2 in enumerate(clusters[i+1:]):
-        #                 clusterDist = self.averageLinkage(c1,c2)
-        #
-        #                 if clusterDist <= minAvg:
-        #                     minAvg = clusterDist
-        #                     bestChoice = (i,i+1+j)
-        #
-        #         i,j = bestChoice
-        #         assert(j > i)
-        #         c2 = clusters.pop(j)
-        #         c1 = clusters.pop(i)
-        #         clusters.append([c1,c2])
-        #
-        #     end_clusters.append(deepcopy(clusters[0]))
-        #
-        # print "+ " + str(len(end_clusters))
-        #
-        # #now merge each of these "intermediate" clusters together
-        # #stop if the minAverage is infinity - at this point we are just merging pts from the same users
-        # while len(end_clusters) > 1:
-        #     minAvg = float("inf")
-        #     bestChoice = None
-        #     for i,c1 in enumerate(end_clusters):
-        #         for j,c2 in enumerate(end_clusters[i+1:]):
-        #             clusterDist = self.averageLinkage(c1,c2)
-        #
-        #             if clusterDist <= minAvg:
-        #                 minAvg = clusterDist
-        #                 bestChoice = (i,i+1+j)
-        #
-        #     #if minAvg == float("inf"):
-        #     #    break
-        #
-        #     i,j = bestChoice
-        #     assert(j > i)
-        #     c2 = end_clusters.pop(j)
-        #     c1 = end_clusters.pop(i)
-        #     end_clusters.append([c1,c2])
-        #
-        # #print len(end_clusters[0])
-        # #print len(end_clusters[0][0])
-        # #print len(end_clusters[0][1])
-        #
-        # # newick = toNewick(end_clusters[0]) + ";"
-        # # print newick
-        # # t = Tree(newick)
-        # # ts = TreeStyle()
-        # # ts.show_leaf_name = True
-        # # #ts.show_branch_length = True
-        # # ts.show_branch_support = True
-        # # t.render("/home/greg/mytree.pdf", w=400, units="mm",tree_style=ts)
-        # # #t.show(tree_style=ts)
+        # start by creating a singleton cluster for each cluster
+        starting_clusters = [AgglomerativeLeaf(pts,user) for user,pts in l_flattened]
+        # then init the distances between each cluster
+        self.__set_distances__(starting_clusters)
+        # then agglomerative the clusters
+        end_clusters = self.__agglomerate_clusters__(starting_clusters)
+
+        # convert each tree into a list of pts and users - the cluster which this tree represents
         results = [node.__get_cluster__() for node in end_clusters]
         markings,users = zip(*results)
+
+        # find the center of each cluster
         centers = []
         for cluster in markings:
             X,Y = zip(*cluster)
             centers.append((np.mean(X),np.mean(Y)))
         end = time.time()
-        print "Seconds to cluster: " + str(end-start)
-        print "Number of clusters: " + str(len(centers))
+
         return (centers, markings,users), end-start
 
+
 class Ward(Agglomerative):
-    def __init__(self):
-        Agglomerative.__init__(self)
+    """
+    choose alpha, beta and gamma values which result in using the Ward distance to merge clusters
+    """
+    def __init__(self, project_api,min_cluster_size=1):
+        Agglomerative.__init__(self,project_api,min_cluster_size)
 
     def alpha(self,i,j,k):
         return (i+k)/float(i+j+k)

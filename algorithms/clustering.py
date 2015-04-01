@@ -52,23 +52,23 @@ class Cluster:
         self.min_cluster_size = min_cluster_size
         self.clusterResults = {}
 
-    def __display__markings__(self, subject_id,fname):
+    def __display__markings__(self, subject_id):
         """
         display the results of clustering algorithm - the image must already have been downloaded
         :param subject_id:
         :param fname: the file name of the downloaded image
         :return:
         """
+        ax = self.project_api.__display_image__(subject_id)
 
-        image_file = cbook.get_sample_data(fname)
-        image = plt.imread(image_file)
-
-        fig, ax = plt.subplots()
-        im = ax.imshow(image)
+        # image_file = cbook.get_sample_data(fname)
+        # image = plt.imread(image_file)
+        #
+        # fig, ax = plt.subplots()
+        # im = ax.imshow(image)
 
         for (x, y), pts, users in zip(*self.clusterResults[subject_id]):
-            plt.plot([x, ], [y, ], 'o', color="red")
-
+            ax.plot([x, ], [y, ], 'o', color="red")
 
         plt.show()
         plt.close()
