@@ -42,7 +42,7 @@ class OuroborosAPI:
         slash_indices = [m.start() for m in re.finditer('/', current_directory)]
         self.base_directory = current_directory[:slash_indices[2]+1]
 
-    def __display_image__(self,subject_id):
+    def __display_image__(self,subject_id,args,kwargs):
         """
         return the file names for all the images associated with a given subject_id
         also download them if necessary
@@ -68,7 +68,8 @@ class OuroborosAPI:
         fig, ax = plt.subplots()
         im = ax.imshow(image)
 
-        return ax
+        ax.plot(*args,**kwargs)
+        plt.show()
 
     def __get_subjects_with_gold_standard__(self,require_completed=False,remove_blanks=False,limit=-1):
         """
@@ -228,24 +229,21 @@ class MarkingProject(OuroborosAPI):
         annotations = classification["annotations"]
         markings = self.__annotations_to_markings__(annotations)
 
+        object_id = classification["subject_ids"][0]
+
         # go through the markings in reverse order and remove any that are outside of the ROI
         # also, scale as necessary
         assert isinstance(markings, list)
         for marking_index in range(len(markings)-1, -1, -1):
-            mark = markings[marking_index]
-            # assert isinstance(mark, dict)
-            #
-            # # start by scaling
-            # for param in self.dimensions:
-            #     mark[param] = float(mark[param])*self.scale
+            marking = markings[marking_index]
 
             # check to see if this marking is in the ROI
-            if not(self.__in_roi__(mark)):
+            if not(self.__in_roi__(object_id,marking)):
                 markings.pop(marking_index)
 
         return markings
 
-    def __in_roi__(self,marking):
+    def __in_roi__(self,object_id,marking):
         """
         is this marking within the specific ROI (if one doesn't exist, then by default yes)
         only override if you want specific ROIs implemented
@@ -254,36 +252,6 @@ class MarkingProject(OuroborosAPI):
 
         """
         return True
-
-    # def __list_markings__(self, zooniverse_id):
-    #     """
-    #     :param classification is the classification we are parsing
-    #     :return yield the list of all markings for this classification, scaled as necessary and having removed
-    #     any and all points outside the ROI. Only works for two dimensions named "x" and "y".
-    #     each marking will contain the x and y coordinates and what animal_type it is. For more detailed information
-    #     such as tag number (e.g. condor watch) - you will have to override this function
-    #
-    #     this is a separate function from __classification_to_markings__ - that function will be entirely dependent
-    #     on the specific project and how its classification records are stored in MongoDB
-    #
-    #     return 3 things - a list of user ids, a list of corresponding markings, and a list of user ids which are
-    #     actually ip addresses - on the off chance that someone uses the ip address later, we do not want to match them
-    #     up - just because someone is using the same ip address does not mean that they are the same user
-    #     """
-    #     for user,classification in self.__get_classifications__(zooniverse_id):
-    #         markings = self.__classification_to_markings__(classification)
-    #
-    #         # get the name of this user
-    #         if "user_name" in classification:
-    #             user = classification["user_name"]
-    #         else:
-    #             user = classification["user_ip"]
-    #
-    #             if not(user == self.expert):
-    #                 self.ips_per_subject[zooniverse_id].append(user)
-    #
-    #         if user == self.expert:
-    #             continue
 
 
 class PenguinWatch(MarkingProject):
@@ -358,31 +326,37 @@ class PenguinWatch(MarkingProject):
         # did not find any values corresponding to markings, so return an empty list
         return []
 
-    def __display_image__(self,subject_id):
+    def __display_image__(self,subject_id,args,kwargs):
         """
         overwrite so that we can display the ROI
         :param subject_id:
         :return:
         """
-        ax = MarkingProject.__display_image__(self,subject_id)
+        MarkingProject.__display_image__(self,subject_id,args,kwargs)
 
-        return ax
+    def __in_roi__(self,object_id,marking):
+        site = self.subject_to_site[object_id]
+        roi = self.roi_dict[site]
 
-    def __in_roi__(self,marking):
+        x,y = marking[0]
+
+        # find the line segment that "surrounds" x and see if y is above that line segment (remember that
+        # images are flipped)
         for segment_index in range(len(roi)-1):
-                if (roi[segment_index][0] <= x) and (roi[segment_index+1][0] >= x):
-                    rX1,rY1 = roi[segment_index]
-                    rX2,rY2 = roi[segment_index+1]
+            if (roi[segment_index][0] <= x) and (roi[segment_index+1][0] >= x):
+                rX1,rY1 = roi[segment_index]
+                rX2,rY2 = roi[segment_index+1]
 
-                    m = (rY2-rY1)/float(rX2-rX1)
-                    rY = m*(x-rX1)+rY1
+                m = (rY2-rY1)/float(rX2-rX1)
+                rY = m*(x-rX1)+rY1
 
-                    if y >= rY:
-                        # we have found a valid marking
-                        # create a special type of animal None that is used when the animal type is missing
-                        # thus, the marking will count towards not being noise but will not be used when determining the type
+                if y >= rY:
+                    # we have found a valid marking
+                    # create a special type of animal None that is used when the animal type is missing
+                    # thus, the marking will count towards not being noise but will not be used when determining the type
 
-                        yield (x,y),animal_type
-                        break
-                    else:
-                        break
+                    return True
+                else:
+                    return False
+
+        assert False

@@ -18,11 +18,6 @@ import ouroboros_api
 from pylab import meshgrid,cm,imshow,contour,clabel,colorbar,axis,title,show
 import abc
 
-import numpy as np
-from mpl_toolkits.mplot3d import Axes3D
-# # for Greg - which computer am I on?
-# import ibcc
-# import multiClickCorrect
 
 
 
@@ -59,19 +54,11 @@ class Cluster:
         :param fname: the file name of the downloaded image
         :return:
         """
-        ax = self.project_api.__display_image__(subject_id)
+        x,y = zip(*self.clusterResults[subject_id][0])
+        args = [x,y,'o']
+        kwargs = {"color":"red"}
 
-        # image_file = cbook.get_sample_data(fname)
-        # image = plt.imread(image_file)
-        #
-        # fig, ax = plt.subplots()
-        # im = ax.imshow(image)
-
-        for (x, y), pts, users in zip(*self.clusterResults[subject_id]):
-            ax.plot([x, ], [y, ], 'o', color="red")
-
-        plt.show()
-        plt.close()
+        ax = self.project_api.__display_image__(subject_id,args,kwargs)
 
     @abc.abstractmethod
     def __fit__(self,markings,user_ids,jpeg_file=None):
