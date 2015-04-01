@@ -140,10 +140,11 @@ class OuroborosAPI:
         """
         return []
 
-    def __get_annotations__(self,zooniverse_id):
+    def __get_annotations__(self,zooniverse_id,expert_markings=False):
         """
         read through and return all of the relevant annotations associated with the given zooniverse_id
         :param zooniverse_id:
+        :param expert_markings: do we want to read in markings from experts - either yes or no, shouldn't mix
         :return:
         """
 
@@ -170,10 +171,10 @@ class OuroborosAPI:
                 else:
                     user_id = classification["user_ip"]
 
-                # skip any users who are experts
-                if user_id in self.experts:
-                    # experts should never be identified by their ip address
-                    assert "user_name" in classification
+                # skip any users who are experts if we do not want experts
+                # if we want experts, skip anyone who is not
+                # != should be equal to XOR
+                if (user_id in self.experts) != expert_markings:
                     continue
 
                 annotations = self.__classification_to_annotations__(classification)
@@ -217,13 +218,13 @@ class MarkingProject(OuroborosAPI):
         """
         return []
 
-    def __get_markings__(self,subject_id):
+    def __get_markings__(self,subject_id,expert_markings=False):
         """
         just allows us to user different terminology so that we are clear about returning markings
         :param subject_id:
         :return:
         """
-        return OuroborosAPI.__get_annotations__(self,subject_id)
+        return OuroborosAPI.__get_annotations__(self,subject_id,expert_markings)
 
     def __classification_to_annotations__(self,classification):
         annotations = classification["annotations"]
