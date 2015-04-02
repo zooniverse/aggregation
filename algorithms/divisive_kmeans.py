@@ -16,6 +16,7 @@ class DivisiveKMeans(Cluster):
         Cluster.__init__(self,project_api,min_cluster_size)
 
         self.fix_distinct_clusters = fix_distinct_clusters
+        self.alg = "divisivekmeans"
 
     def __cluster_subject__(self,subject_id,jpeg_file=None):
         """

@@ -42,6 +42,27 @@ class OuroborosAPI:
         slash_indices = [m.start() for m in re.finditer('/', current_directory)]
         self.base_directory = current_directory[:slash_indices[2]+1]
 
+        # record which users viewed which subjects
+        self.users_per_subject = {}
+        # record which users were not logged in while viewing subjects
+        self.ips_per_subject = {}
+
+        # all_ips is only really useful if we want to keep track on non-logged in users between subjects
+        self.all_users = set()
+        self.all_ips = set()
+
+    def __users__(self,subject_id):
+        return self.users_per_subject[subject_id]
+
+    def __ips__(self,subject_id):
+        return self.ips_per_subject[subject_id]
+
+    def __all_users__(self):
+        return self.all_users
+
+    def __all_ips__(self):
+        return self.all_ips
+
     def __display_image__(self,subject_id,args_l,kwargs_l):
         """
         return the file names for all the images associated with a given subject_id
@@ -165,12 +186,14 @@ class OuroborosAPI:
 
         annotations_list = []
         user_list = []
+        ip_list = []
         for user_index, classification in enumerate(mongo_results):
                 # get the name of this user
                 if "user_name" in classification:
                     user_id = classification["user_name"]
                 else:
                     user_id = classification["user_ip"]
+                    ip_list.append(user_id)
 
                 # skip any users who are experts if we do not want experts
                 # if we want experts, skip anyone who is not
@@ -182,6 +205,14 @@ class OuroborosAPI:
                 if annotations != []:
                     annotations_list.append(annotations)
                     user_list.append(user_id)
+
+        # if we are not reading in the expert's classifications then we should update the ids
+        if not expert_markings:
+            self.users_per_subject[zooniverse_id] = user_list
+            self.ips_per_subject[zooniverse_id] = ip_list
+
+            self.all_users.update(user_list)
+            self.all_ips.update(ip_list)
 
         return user_list,annotations_list
 
@@ -298,8 +329,28 @@ class PenguinWatch(MarkingProject):
             underscore_index = path.index("_")
             site_name = path[slash_index+1:underscore_index]
 
+            # hard code some name changes in
+            if site_name == "BOOTa2012a":
+                site_name = "PCHAa2013"
+            elif site_name == "BOOTb2013a":
+                site_name = "PCHb2013"
+            elif site_name == "DANCa2012a":
+                site_namefit = "DANCa2013"
+            elif site_name == "MAIVb2012a":
+                site_name = "MAIVb2013"
+            elif site_name == "NEKOa2012a":
+                site_name = "NEKOa2013"
+            elif site_name == "PETEa2013a":
+                site_name = "PETEa2013a"
+            elif site_name == "PETEa2013b":
+                site_name = "PETEa2013a"
+            elif site_name == "PETEb2012b":
+                site_name = "PETEb2013"
+            elif site_name == "SIGNa2013a":
+                site_name = "SIGNa2013"
+
             if not(site_name in self.roi_dict.keys()):
-                assert False
+                self.subject_to_site[object_id] = None
             else:
                 self.subject_to_site[object_id] = site_name
 
@@ -335,7 +386,18 @@ class PenguinWatch(MarkingProject):
         MarkingProject.__display_image__(self,subject_id,args_l,kwargs_l)
 
     def __in_roi__(self,object_id,marking):
+        """
+        check to see if the marking is within the roi - should be the case but sometimes weird things happen
+        and users are able to give points outside of the roi.
+        also - if there is no roi, then the whole image is valid
+        :param object_id:
+        :param marking:
+        :return:
+        """
         site = self.subject_to_site[object_id]
+        if site is None:
+            return True
+
         roi = self.roi_dict[site]
 
         x,y = marking[0]
