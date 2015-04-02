@@ -421,4 +421,5 @@ class PenguinWatch(MarkingProject):
                 else:
                     return False
 
-        assert False
+        # probably shouldn't happen too often but if it does, assume that we are outside of the ROI
+        return False

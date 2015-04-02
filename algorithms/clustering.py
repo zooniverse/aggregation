@@ -7,6 +7,8 @@ import numpy as np
 import os
 import re
 import ibcc
+import csv
+import matplotlib.pyplot as plt
 
 def index(a, x):
     'Locate the leftmost value exactly equal to x'
@@ -158,23 +160,32 @@ class Cluster:
         """
         # get the markings made by the experts
         gold_markings = self.project_api.__get_markings__(subject_id,expert_markings=True)
-        # extract the actual points
-        gold_pts = zip(*gold_markings[1][0])[0]
+        cluster_centers = self.clusterResults[subject_id][0]
 
+        # init the set of correct markings, the missed ones, the false positives and the distance
+        # between a correct marking and its corresponding gold standard pt - used for debugging
         self.correct_pts[subject_id] = []
         self.missed_pts[subject_id] = []
         self.user_gold_distance[subject_id] = []
+        self.false_positives[subject_id] = []
 
-        cluster_centers = self.clusterResults[subject_id][0]
-
-        # if either of these sets are empty, then by def'n we can't have any correct WRT this image
-        if (cluster_centers == []) or (gold_pts == []):
+        # if there are no gold markings, technically everything is a false positive
+        if gold_markings == ([],[]):
+            self.false_positives[subject_id] = cluster_centers
             return
 
+        # so we know that there is at least one gold standard pt - but are there are any user clusters?
+        # extract the actual points
+        gold_pts = zip(*gold_markings[1][0])[0]
+
+        # if there are no user markings, we have missed everything
+        if cluster_centers == []:
+            self.missed_pts = gold_pts
+            return
+
+        # we know that there are both gold standard points and user clusters - we need to match them up
         # user to gold - for a gold point X, what are the user points for which X is the closest gold point?
         userToGold = [[] for i in range(len(gold_pts))]
-        # and the same from gold to user
-        goldToUser = [[] for i in range(len(cluster_centers))]
 
         # find which gold standard pts, the user cluster pts are closest to
         # this will tell us which gold points we have actually found
@@ -261,11 +272,12 @@ class Cluster:
         # because ibcc needs indices to be nice and ordered with no gaps, we have to make two passes through the data
         to_ibcc = []
 
-        self.global_index_list = {}
+        # for each global cluster index, store what image/subject it is from and what its local index is
+        # wrt to that subject
+        self.global_to_local = []
 
         # print out the classifications and set up the priors using majority voting
         for zooniverse_id in self.clusterResults:
-            self.global_index_list[zooniverse_id] = []
             if self.clusterResults[zooniverse_id] is None:
                 continue
 
@@ -275,7 +287,8 @@ class Cluster:
             ips_per_subject = self.project_api.__ips__(zooniverse_id)
 
             # process each cluster (possible animal), one at a time
-            for cluster_center,cluster_markings,user_per_cluster in zip(*self.clusterResults[zooniverse_id]):
+            # only the names of users who marked this cluster matter - the specific x,y points are irrelevant right now
+            for local_index,user_per_cluster in enumerate(self.clusterResults[zooniverse_id][2]):
                 # moving on to the next animal so increase counter
                 # universal counter over all images
                 cluster_count += 1
@@ -284,7 +297,8 @@ class Cluster:
                 pos = 0
                 neg = 0
 
-                self.global_index_list[zooniverse_id].append(cluster_count) #(cluster_count,cluster_center[:]))
+                # note that the cluster with index cluster_count is from subject zooniverse_id
+                self.global_to_local.append((zooniverse_id,local_index))
 
                 # for this cluster, go through each user and see if they marked this cluster
                 # check whether or not each user marked this cluster
@@ -299,7 +313,7 @@ class Cluster:
                             user_index = -(ips_per_subject.index(user_id)+ip_offset+1)
                         else:
                             # we are treating all occurances of this ip address as being from the same user
-                            user_index = -all_ips.index(u)-1
+                            user_index = -all_ips.index(user_id)-1
                     else:
                         # user was logged in
                         # todo: use bisect to increase speed
@@ -349,7 +363,6 @@ class Cluster:
 
         # create the prior estimate and the default confusion matrix
         prior = real_animals/float(real_animals + fake_animals)
-        print prior
 
         t = np.mean(true_pos)
         f = np.mean(true_neg)
@@ -392,3 +405,46 @@ class Cluster:
         ibcc.runIbcc(self.base_directory+"/Databases/"+self.alg+"_ibcc.py")
 
 
+    def __roc__(self,plot=False):
+        """
+        do a roc analysis of the ibcc results
+        :param plot:
+        :return:
+        """
+        # start by finding the correct markings for all of the images we have done
+        for subject_id in self.clusterResults:
+            self.__find_correct_markings__(subject_id)
+
+        truePos = []
+        falsePos = []
+
+        with open(self.base_directory+"/Databases/"+self.alg+"_signal.out","rb") as f:
+            reader = csv.reader(f,delimiter=" ")
+            for r in reader:
+                # t is 1-prob, so we can just ignore it t= temp or trash
+                ii,t,prob = r
+                # which subject does this cluster belong to and what is its local index?
+                subject_id, local_index = self.global_to_local[int(float(ii))]
+                print self.clusterResults[subject_id]
+                print local_index
+                center = self.clusterResults[subject_id][0][local_index]
+
+                if center in self.correct_pts[subject_id]:
+                    truePos.append(float(prob))
+                else:
+                    falsePos.append(float(prob))
+
+        alphas = truePos[:]
+        alphas.extend(falsePos)
+        alphas.sort()
+        X = []
+        Y = []
+        for a in alphas:
+            X.append(len([x for x in falsePos if x >= a]))
+            Y.append(len([y for y in truePos if y >= a]))
+
+
+        plt.plot(X,Y)
+        plt.xlabel("False Positive Count")
+        plt.ylabel("True Positive Count")
+        plt.show()
