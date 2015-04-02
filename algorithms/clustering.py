@@ -41,6 +41,8 @@ class Cluster:
         self.missed_pts = {}
         # for false positives (according to the gold standard)
         self.false_positives = {}
+        # we also need to map between user points and gold points
+        self.user_gold_mapping = {}
 
         # the distance between a user cluster and what we believe to do the corresponding goal standard point
         self.user_gold_distance = {}
@@ -56,6 +58,8 @@ class Cluster:
 
         # for creating names of ibcc output files
         self.alg = None
+
+
 
     def __display__markings__(self, subject_id):
         """
@@ -204,7 +208,8 @@ class Cluster:
                     min_dist = dist
                     closest_gold_index = gold_index
 
-            userToGold[closest_gold_index].append(local_index)
+            if min_dist < 20:
+                userToGold[closest_gold_index].append(local_index)
 
         # and now find out which user clusters are actually correct
         # that will be the user point which is closest to the gold point
@@ -222,9 +227,13 @@ class Cluster:
 
             # if none then we haven't found this point
             if closest_user_index is not None:
-                self.correct_pts[subject_id].append(cluster_centers[closest_user_index])
-                self.user_gold_distance[subject_id].append((cluster_centers[closest_user_index],g_pt,min_dist))
+                u_pt = cluster_centers[closest_user_index]
+                self.correct_pts[subject_id].append(u_pt)
+                # todo: probably remove for production - only really useful for papers
+                self.user_gold_distance[subject_id].append((u_pt,g_pt,min_dist))
                 distances_l.append(min_dist)
+
+                self.user_gold_mapping[(subject_id,tuple(u_pt))] = g_pt
             else:
                 self.missed_pts[subject_id].append(g_pt)
 
@@ -232,6 +241,40 @@ class Cluster:
 
         # what were the false positives?
         self.false_positives[subject_id] = [pt for pt in cluster_centers if not(pt in self.correct_pts[subject_id])]
+
+    def __setup_gold_indices__(self):
+        """
+        if we want to use gold standard data for IBCC, we need to know which indices have gold standard data
+        and also insert spots for gold standard points which all users missed
+        """
+        cluster_count = -1
+        global_to_local = []
+        global_gold_standard_indices = []
+
+        # go through each subject and convert local indices into global ones
+        for zooniverse_id in self.clusterResults:
+            if not(self.clusterResults[zooniverse_id] is None):
+                for local_index,center in enumerate(self.clusterResults[zooniverse_id][0]):
+                    cluster_count += 1
+
+                    # note that the cluster with index cluster_count is from subject zooniverse_id
+                    global_to_local.append((zooniverse_id,local_index))
+                    # does this result have a gold standard counterpart?
+                    if (zooniverse_id,tuple(center)) in self.user_gold_mapping:
+                        global_index = len(global_to_local)-1
+                        global_gold_standard_indices.append(global_index)
+
+            # include spots for animals which users missed
+            for i in self.missed_pts[zooniverse_id]:
+                cluster_count += 1
+                global_to_local.append((zooniverse_id,None))
+
+                # and add to the list
+                global_index = len(global_to_local)-1
+                global_gold_standard_indices.append(global_index)
+
+        return global_to_local,global_gold_standard_indices
+
 
     def __signal_ibcc__(self,split_ip_address=True):
         """
@@ -425,8 +468,6 @@ class Cluster:
                 ii,t,prob = r
                 # which subject does this cluster belong to and what is its local index?
                 subject_id, local_index = self.global_to_local[int(float(ii))]
-                print self.clusterResults[subject_id]
-                print local_index
                 center = self.clusterResults[subject_id][0][local_index]
 
                 if center in self.correct_pts[subject_id]:
@@ -434,6 +475,7 @@ class Cluster:
                 else:
                     falsePos.append(float(prob))
 
+        # create the ROC curve
         alphas = truePos[:]
         alphas.extend(falsePos)
         alphas.sort()
