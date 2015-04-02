@@ -9,6 +9,7 @@ import re
 import ibcc
 import csv
 import matplotlib.pyplot as plt
+import random
 
 def index(a, x):
     'Locate the leftmost value exactly equal to x'
@@ -18,7 +19,18 @@ def index(a, x):
     raise ValueError
 
 
+# code from
+# http://stackoverflow.com/questions/2130016/splitting-a-list-of-arbitrary-size-into-only-roughly-n-equal-parts
+def chunk_it(seq, num):
+    avg = len(seq) / float(num)
+    out = []
+    last = 0.0
 
+    while last < len(seq):
+        out.append(seq[int(last):int(last + avg)])
+        last += avg
+
+    return out
 
 
 
@@ -242,14 +254,24 @@ class Cluster:
         # what were the false positives?
         self.false_positives[subject_id] = [pt for pt in cluster_centers if not(pt in self.correct_pts[subject_id])]
 
-    def __setup_gold_indices__(self):
+    def __setup_global_indices__(self,include_gold=False):
         """
         if we want to use gold standard data for IBCC, we need to know which indices have gold standard data
         and also insert spots for gold standard points which all users missed
+        :param include_gold - if we should make sure to include even those gold standard points for which
+        there are not corresponding user clusters
         """
         cluster_count = -1
         global_to_local = []
-        global_gold_standard_indices = []
+
+        # whether each point is true or positive according to the gold standard
+        # minus equals false
+        # go with indices to help with IBCC stuff
+        global_gold_indices = []
+
+        # # keep special track of all of the points that were completely missed - they will need to be added in
+        # # specially to the IBCC input file
+        # missed_gold_indices = []
 
         # go through each subject and convert local indices into global ones
         for zooniverse_id in self.clusterResults:
@@ -260,23 +282,167 @@ class Cluster:
                     # note that the cluster with index cluster_count is from subject zooniverse_id
                     global_to_local.append((zooniverse_id,local_index))
                     # does this result have a gold standard counterpart?
+                    global_index = len(global_to_local)-1
                     if (zooniverse_id,tuple(center)) in self.user_gold_mapping:
-                        global_index = len(global_to_local)-1
-                        global_gold_standard_indices.append(global_index)
+                        global_gold_indices.append(global_index)
+                    else:
+                        global_gold_indices.append(-global_index)
 
-            # include spots for animals which users missed
-            for i in self.missed_pts[zooniverse_id]:
-                cluster_count += 1
-                global_to_local.append((zooniverse_id,None))
+            # if we are going this for the indices of true positive gold standard examples then we should make sure
+            # to include even those pts which users missed
+            if include_gold:
+                # include spots for animals which users missed
+                for i in self.missed_pts[zooniverse_id]:
+                    cluster_count += 1
+                    global_to_local.append((zooniverse_id,None))
 
-                # and add to the list
-                global_index = len(global_to_local)-1
-                global_gold_standard_indices.append(global_index)
+                    # and add to the list
+                    global_index = len(global_to_local)-1
+                    global_gold_indices.append(global_index)
 
-        return global_to_local,global_gold_standard_indices
+        return global_to_local,global_gold_indices
 
+    def __signal_ibcc_gold__(self,global_indices,split_ip_address=True,gold_standard_pts=[]):
+        """
+        uses gold standard from experts instead of priors based on majority voting
+        :param global_indices:
+        :param split_ip_address:
+        :param gold_standard_pts:
+        :return:
+        """
 
-    def __signal_ibcc__(self,split_ip_address=True):
+        # intermediate holder variable
+        # because ibcc needs indices to be nice and ordered with no gaps, we have to make two passes through the data
+        to_ibcc = []
+
+        all_users = list(self.project_api.__all_users__())
+        all_ips = list(self.project_api.__all_ips__())
+        ip_offset = 0
+
+        # there will be some redundancy reading in the subject list - so keep track of the current subject_id
+        # and only update when necessary
+        users_per_subject = None
+        ips_per_subject = None
+        current_subject = None
+
+        for global_index,(subject_id,local_index) in enumerate(global_indices):
+            # only update when necessary - when we have moved on to a new subject
+            if subject_id != current_subject:
+                if current_subject is not None:
+                    ip_offset += len(ips_per_subject)
+                # get the list of all the users who viewed this subject
+                # and the ip addresses of every user who was not logged in while viewing the subjects
+                users_per_subject = self.project_api.__users__(subject_id)
+                ips_per_subject = self.project_api.__ips__(subject_id)
+
+                current_subject = subject_id
+
+            # in this case, we know that no user marked this animal
+            # this is either provided gold standard data, or a test - in which case we should ignore
+            # this data
+            if local_index is None:
+                if not(global_index in gold_standard_pts):
+                    continue
+                else:
+                    user_per_cluster = []
+            else:
+                user_per_cluster = self.clusterResults[subject_id][2][local_index]
+
+            for user_id in users_per_subject:
+                # if the user was not logged in
+                if user_id in ips_per_subject:
+                    # if we are considering the ip addresses of each user (i.e. those that were not logged in)
+                    # separately for each image - assign a user index based only this image
+                    # use negative indices to differentiate ip addresses and users
+                    # +1 assures that we don't have 0 - which is "both" positive and negative
+                    if split_ip_address:
+                        user_index = -(ips_per_subject.index(user_id)+ip_offset+1)
+                    else:
+                        # we are treating all occurances of this ip address as being from the same user
+                        user_index = -all_ips.index(user_id)-1
+                else:
+                    # user was logged in
+                    # todo: use bisect to increase speed
+                    user_index = all_users.index(user_id)
+
+                if user_id in user_per_cluster:
+                    to_ibcc.append((user_id,user_index,global_index,1))
+                else:
+                    to_ibcc.append((user_id,user_index,global_index,0))
+
+        ibcc_user_list = []
+        # we might have skips in the subject list
+        ibcc_cluster_list = []
+
+        # this is also for other functions to be able to interpret the results
+        self.ibcc_users = []
+        self.ibcc_subjects = []
+
+        for user,user_index,cluster_index,found in to_ibcc:
+            # can't use bisect or the indices will be out of order
+            if not(user_index in ibcc_user_list):
+                ibcc_user_list.append(user_index)
+                self.ibcc_users.append(user)
+            if not(cluster_index in ibcc_cluster_list):
+                ibcc_cluster_list.append(cluster_index)
+
+        # write out the input file for IBCC
+        with open(self.base_directory+"/Databases/"+self.alg+"_ibcc.csv","wb") as f:
+            f.write("a,b,c\n")
+            for user,user_index,cluster_index,found in to_ibcc:
+                i = ibcc_user_list.index(user_index)
+                j = ibcc_cluster_list.index(cluster_index)
+                f.write(str(i)+","+str(j)+","+str(found)+"\n")
+
+        # write out the input file for IBCC
+        with open(self.base_directory+"/Databases/"+self.alg+"_gold.csv","wb") as f:
+            f.write("a,b\n")
+            for gold_index in gold_standard_pts:
+                if gold_index < 0:
+                    f.write(str(-gold_index)+",0\n")
+                else:
+                    f.write(str(gold_index)+",1\n")
+
+        # create the config file
+        with open(self.base_directory+"/Databases/"+self.alg+"_ibcc.py","wb") as f:
+            f.write("import numpy as np\n")
+            f.write("scores = np.array([0,1])\n")
+            f.write("nScores = len(scores)\n")
+            f.write("nClasses = 2\n")
+            f.write("inputFile = \""+self.base_directory+"/Databases/"+self.alg+"_ibcc.csv\"\n")
+            f.write("outputFile = \""+self.base_directory+"/Databases/"+self.alg+"_signal.out\"\n")
+            f.write("confMatFile = \""+self.base_directory+"/Databases/"+self.alg+"_ibcc.mat\"\n")
+            f.write("goldFile= \""+self.base_directory+"/Databases/"+self.alg+"_gold.csv\"\n")
+
+        # start by removing all temp files
+        try:
+            os.remove(self.base_directory+"/Databases/"+self.alg+"_signal.out")
+        except OSError:
+            pass
+
+        try:
+            os.remove(self.base_directory+"/Databases/"+self.alg+"_ibcc.mat")
+        except OSError:
+            pass
+
+        try:
+            os.remove(self.base_directory+"/Databases/"+self.alg+"_ibcc.csv.dat")
+        except OSError:
+            pass
+
+        # pickle.dump((big_subjectList,big_userList),open(base_directory+"/Databases/tempOut.pickle","wb"))
+        ibcc.runIbcc(self.base_directory+"/Databases/"+self.alg+"_ibcc.py")
+
+    def __split_gold_standards__(self,gold_indices,num_splits):
+        """
+        for when we want to do cross validation with IBCC and provide some of the gold standard data a time
+        :param num_splits:
+        :return:
+        """
+        random.shuffle(gold_indices)
+        return chunk_it(gold_indices,num_splits)
+
+    def __signal_ibcc_majority__(self,split_ip_address=True):
         """
         run ibcc to determine which clusters are signal or noise
 
@@ -448,7 +614,7 @@ class Cluster:
         ibcc.runIbcc(self.base_directory+"/Databases/"+self.alg+"_ibcc.py")
 
 
-    def __roc__(self,plot=False):
+    def __roc__(self,gold_standard=[]):
         """
         do a roc analysis of the ibcc results
         :param plot:
@@ -461,11 +627,16 @@ class Cluster:
         truePos = []
         falsePos = []
 
+        # we don't care if the gold standard labels are positive or negative - we just need to ignore them
+        gold_standard = [abs(g) for g in gold_standard]
+
         with open(self.base_directory+"/Databases/"+self.alg+"_signal.out","rb") as f:
             reader = csv.reader(f,delimiter=" ")
             for r in reader:
                 # t is 1-prob, so we can just ignore it t= temp or trash
                 ii,t,prob = r
+                if ii in gold_standard:
+                    continue
                 # which subject does this cluster belong to and what is its local index?
                 subject_id, local_index = self.global_to_local[int(float(ii))]
                 center = self.clusterResults[subject_id][0][local_index]
