@@ -47,6 +47,12 @@ class Cluster:
         self.min_cluster_size = min_cluster_size
         self.clusterResults = {}
 
+        self.correct_pts = {}
+        # for gold points which we have missed
+        self.missed_pts = {}
+        # for false positives (according to the gold standard)
+        self.false_positives = {}
+
     def __display__markings__(self, subject_id):
         """
         display the results of clustering algorithm - the image must already have been downloaded
@@ -58,7 +64,26 @@ class Cluster:
         args = [x,y,'o']
         kwargs = {"color":"red"}
 
-        ax = self.project_api.__display_image__(subject_id,args,kwargs)
+        ax = self.project_api.__display_image__(subject_id,[args],[kwargs])
+
+    def __display_results__(self,subject_id):
+        # green is for correct points
+        x,y = zip(*self.correct_pts[subject_id])
+        args_l = [[x,y,'o'],]
+        kwargs_l = [{"color":"green"},]
+
+        # yellow is for missed points
+        x,y = zip(*self.missed_pts[subject_id])
+        args_l.append([x,y,'o'])
+        kwargs_l.append({"color":"yellow"})
+
+        # red is for false positives
+        print self.false_positives[subject_id]
+        x,y = zip(*self.false_positives[subject_id])
+        args_l.append([x,y,'o'])
+        kwargs_l.append({"color":"red"})
+
+        ax = self.project_api.__display_image__(subject_id,args_l,kwargs_l)
 
     @abc.abstractmethod
     def __fit__(self,markings,user_ids,jpeg_file=None):
@@ -103,4 +128,99 @@ class Cluster:
         self.clusterResults[subject_id] = cluster_results
 
         return time_to_cluster
+
+    def __find_correct_markings__(self,subject_id):
+        """
+        find which user clusters we think are correct points
+        :param subject_id:
+        :return:
+        """
+        # get the markings made by the experts
+        gold_markings = self.project_api.__get_markings__(subject_id,expert_markings=True)
+        # extract the actual points
+        gold_pts = zip(*gold_markings[1][0])[0]
+
+        self.correct_pts[subject_id] = []
+        self.missed_pts[subject_id] = []
+
+        cluster_centers = self.clusterResults[subject_id][0]
+
+        # if either of these sets are empty, then by def'n we can't have any correct WRT this image
+        if (cluster_centers == []) or (gold_pts == []):
+            return
+
+        # user to gold - for a gold point X, what are the user points for which X is the closest gold point?
+        userToGold = [[] for i in range(len(gold_pts))]
+        # and the same from gold to user
+        goldToUser = [[] for i in range(len(cluster_centers))]
+
+        # find which gold standard pts, the user cluster pts are closest to
+        # this will tell us which gold points we have actually found
+        for local_index, u_pt in enumerate(cluster_centers):
+            # dist = [math.sqrt((float(pt["x"])-x)**2+(float(pt["y"])-y)**2) for g_pt in gold_pts]
+            min_dist = float("inf")
+            closest_gold_index = None
+
+            # find the nearest gold point to the cluster center
+            # doing this in a couple of lines so that things are simpler - need to allow
+            # for an arbitrary number of dimensions
+            for gold_index,g_pt in enumerate(gold_pts):
+                dist = math.sqrt(sum([(u-g)**2 for (u,g) in zip(u_pt,g_pt)]))
+
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_gold_index = gold_index
+
+            userToGold[closest_gold_index].append(local_index)
+
+        # and now find out which user clusters are actually correct
+        # that will be the user point which is closest to the gold point
+        for gold_index,g_pt in enumerate(gold_pts):
+            min_dist = float("inf")
+            closest_user_index = None
+
+            for u_index in userToGold[gold_index]:
+                dist = math.sqrt(sum([(u-g)**2 for (u,g) in zip(cluster_centers[u_index],g_pt)]))
+
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_user_index = u_index
+
+            # if none then we haven't found this point
+            if closest_user_index is not None:
+                self.correct_pts[subject_id].append(cluster_centers[closest_user_index])
+            else:
+                self.missed_pts[subject_id].append(g_pt)
+
+        # what were the false positives?
+        self.false_positives[subject_id] = [pt for pt in cluster_centers if not(pt in self.correct_pts[subject_id])]
+
+        print self.correct_pts[subject_id]
+        print self.false_positives[subject_id]
+        # for local_index, u_pt in enumerate(cluster_centers):
+        #     # dist = [math.sqrt((float(pt["x"])-x)**2+(float(pt["y"])-y)**2) for g_pt in gold_pts]
+        #     min_dist = float("inf")
+        #     closest_gold_pt = None
+        #
+        #     # find the nearest gold point to the cluster center
+        #     # doing this in a couple of lines so that things are simpler - need to allow
+        #     # for an arbitrary number of dimensions
+        #     for gold_index,g_pt in enumerate(gold_pts):
+        #         dist = math.sqrt(sum([(u-g)**2 for (u,g) in zip (u_pt,g_pt)]))
+        #
+        #         if dist < min_dist:
+        #             min_dist = dist
+        #             closest_gold_pt = gold_index
+        #
+        #     userToGold[closest_gold_pt].append(local_index)
+        #
+        # for gold_index, pt in enumerate(gold_pts):
+        #     dist = [math.sqrt((float(pt["x"])-x)**2+(float(pt["y"])-y)**2) for (x,y) in cluster_centers]
+        #     goldToUser[dist.index(min(dist))].append(gold_index)
+        #
+        # for local_index in range(len(cluster_centers)):
+        #     if len(goldToUser[local_index]) >= 1:
+        #             self.correct_pts[subject_id].append(local_index)
+
+
 

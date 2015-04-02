@@ -42,7 +42,7 @@ class OuroborosAPI:
         slash_indices = [m.start() for m in re.finditer('/', current_directory)]
         self.base_directory = current_directory[:slash_indices[2]+1]
 
-    def __display_image__(self,subject_id,args,kwargs):
+    def __display_image__(self,subject_id,args_l,kwargs_l):
         """
         return the file names for all the images associated with a given subject_id
         also download them if necessary
@@ -68,7 +68,8 @@ class OuroborosAPI:
         fig, ax = plt.subplots()
         im = ax.imshow(image)
 
-        ax.plot(*args,**kwargs)
+        for args,kwargs in zip(args_l,kwargs_l):
+            ax.plot(*args,**kwargs)
         plt.show()
 
     def __get_subjects_with_gold_standard__(self,require_completed=False,remove_blanks=False,limit=-1):
@@ -287,10 +288,7 @@ class PenguinWatch(MarkingProject):
         :return:
         """
         # have we already found the ROI for this subject?
-
-        print classification["subjects"]
         object_id = classification["subject_ids"][0]
-        print type(object_id)
 
         # if we haven't already read in this image find out what site it is from
         if not(object_id in self.subject_to_site):
@@ -327,13 +325,14 @@ class PenguinWatch(MarkingProject):
         # did not find any values corresponding to markings, so return an empty list
         return []
 
-    def __display_image__(self,subject_id,args,kwargs):
+    def __display_image__(self,subject_id,args_l,kwargs_l):
         """
         overwrite so that we can display the ROI
         :param subject_id:
         :return:
         """
-        MarkingProject.__display_image__(self,subject_id,args,kwargs)
+        # todo: add in displaying the ROI - if we want
+        MarkingProject.__display_image__(self,subject_id,args_l,kwargs_l)
 
     def __in_roi__(self,object_id,marking):
         site = self.subject_to_site[object_id]
