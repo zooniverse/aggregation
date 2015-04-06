@@ -566,7 +566,9 @@ class Cluster:
         # write out the input file for IBCC
         with open(self.base_directory+"/Databases/"+self.alg+"_ibcc.csv","wb") as f:
             f.write("a,b,c\n")
-            for user,user_index,animal_index,found in to_ibcc:
+            for marking_count,(user,user_index,animal_index,found) in enumerate(to_ibcc):
+                if marking_count == 200:
+                    break
                 i = ibcc_user_list.index(user_index)
                 f.write(str(i)+","+str(animal_index)+","+str(found)+"\n")
 
