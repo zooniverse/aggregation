@@ -601,31 +601,36 @@ class Cluster:
         ibcc.runIbcc(self.base_directory+"/Databases/"+self.alg+"_ibcc.py")
 
 
-    def __roc__(self,gold_standard=[]):
+    def __roc__(self,global_cluster_list,actually_used_clusters,training_clusters):
         """
         do a roc analysis of the ibcc results
         :param plot:
+        :param training_clusters: which clusters with gold standard data were used for training
+        we will have to ignore these clusters
+        :param actually_used_clusters: a mapping from the clusters with ibcc based indices to
+        global based indices
         :return:
         """
-        # start by finding the correct markings for all of the images we have done
-        for subject_id in self.clusterResults:
-            self.__find_correct_markings__(subject_id)
+        # # start by finding the correct markings for all of the images we have done
+        # for subject_id in self.clusterResults:
+        #     self.__find_correct_markings__(subject_id)
 
         truePos = []
         falsePos = []
-
-        # we don't care if the gold standard labels are positive or negative - we just need to ignore them
-        gold_standard = [abs(g) for g in gold_standard]
 
         with open(self.base_directory+"/Databases/"+self.alg+"_signal.out","rb") as f:
             reader = csv.reader(f,delimiter=" ")
             for r in reader:
                 # t is 1-prob, so we can just ignore it t= temp or trash
                 ii,t,prob = r
-                if ii in gold_standard:
+                global_index = actually_used_clusters[int(float(ii))]
+                subject_id,local_index = global_cluster_list[global_index]
+                if ii in training_clusters:
+                    continue
+                if local_index is None:
                     continue
                 # which subject does this cluster belong to and what is its local index?
-                subject_id, local_index = self.global_to_local[int(float(ii))]
+                # subject_id, local_index = self.global_to_local[int(float(ii))]
                 center = self.clusterResults[subject_id][0][local_index]
 
                 if center in self.correct_pts[subject_id]:
