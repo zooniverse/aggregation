@@ -63,7 +63,7 @@ class OuroborosAPI:
     def __all_ips__(self):
         return self.all_ips
 
-    def __display_image__(self,subject_id,args_l,kwargs_l):
+    def __display_image__(self,subject_id,args_l,kwargs_l,block=True):
         """
         return the file names for all the images associated with a given subject_id
         also download them if necessary
@@ -91,7 +91,10 @@ class OuroborosAPI:
 
         for args,kwargs in zip(args_l,kwargs_l):
             ax.plot(*args,**kwargs)
-        plt.show()
+        plt.show(block=block)
+
+    def __close_image__(self):
+        plt.close()
 
     def __get_subjects_with_gold_standard__(self,require_completed=False,remove_blanks=False,limit=-1):
         """
@@ -105,7 +108,7 @@ class OuroborosAPI:
         subjects = set()
 
         for count, classification in enumerate(self.classification_collection.find({"user_name": {"$in": self.experts}})):
-            if count == limit:
+            if len(list(subjects)) == limit:
                 break
 
             zooniverse_id = classification["subjects"][0]["zooniverse_id"]
@@ -376,14 +379,16 @@ class PenguinWatch(MarkingProject):
         # did not find any values corresponding to markings, so return an empty list
         return []
 
-    def __display_image__(self,subject_id,args_l,kwargs_l):
+    def __display_image__(self,subject_id,args_l,kwargs_l,block=True):
         """
         overwrite so that we can display the ROI
         :param subject_id:
         :return:
         """
         # todo: add in displaying the ROI - if we want
-        MarkingProject.__display_image__(self,subject_id,args_l,kwargs_l)
+        MarkingProject.__display_image__(self,subject_id,args_l,kwargs_l,block=block)
+
+
 
     def __in_roi__(self,object_id,marking):
         """

@@ -40,7 +40,58 @@ class DivisiveKMeans(Cluster):
         else:
             return time_to_cluster
 
-    def __fit__(self,markings,user_ids,jpeg_file=None):
+    def __correct__(self):
+        """
+        find any nearest neighbour tuples of clusters which have no users in common and merge them
+        :return:
+        """
+        for subject_id,results in self.clusterResults.items():
+            i = 0
+            # the length of results[2] may and probably will change as we correct things
+            # so don't use a for loop
+            # -1 so we always have at least one more element to compare against
+            while i < len(results[2])-1:
+                users_i = results[2][i]
+                pts_i = results[1][i]
+                cluster_i = results[0][i]
+
+                closest_distance = float("inf")
+                closest_neighbour = None
+                overlap = None
+                # check the overlap between i and all clusters "above" it - overlap is symmetrical so we don't need
+                # to check both ways. Also we are going backwards so that we can pop stuff from the list without
+                # messing the indexing up
+                for j in range(len(results[2])-1,i,-1):
+                    assert j != i
+                    users_j = results[2][j]
+                    cluster_j = results[0][j]
+                    dist = math.sqrt(sum([(pi-pj)**2 for (pi,pj) in zip(cluster_i,cluster_j)]))
+
+                    if dist < closest_distance:
+                        closest_distance = dist
+                        overlap = [u for u in users_j if u in users_i]
+                        closest_neighbour = j
+
+                if len(overlap) == 0:
+                    # remove the j'th element and merge it with the i'th one
+                    center = results[0].pop(closest_neighbour)
+                    pts = results[1].pop(closest_neighbour)
+                    users = results[2].pop(closest_neighbour)
+
+                    # to allow for generalizations where the overlap is non-empty, we need  a way to merge points
+                    for users in overlap:
+                        # todo: do generalization
+                        pass
+
+                    results[1][i].extend(pts)
+                    results[2][i].extend(users)
+
+                    # calculate the new center
+                    results[0][i] = [np.mean(axis) for axis in zip(*results[1][i])]
+                # move on to the next element
+                i += 1
+
+    def __fit__(self,markings,user_ids,jpeg_file=None,debug=False):
         """
         the main function - currently works for any number of dimensions
         :param markings: the actual markings
@@ -50,6 +101,7 @@ class DivisiveKMeans(Cluster):
         """
         # associate each marking with their correspondng user and extract only the relevant part of the marking for
         # the clustering
+
         l = [[(u,m[0]) for m in marking] for u,marking in zip(user_ids,markings)]
         user_list,pts_list = zip(*[item for sublist in l for item in sublist])
 
@@ -65,7 +117,7 @@ class DivisiveKMeans(Cluster):
                 end_clusters = [pts_list,]
                 end = time.time()
 
-                return (cluster_centers, end_clusters,user_ids), end - start
+                return (cluster_centers, end_clusters,[user_ids,]), end - start
             else:
                 end = time.time()
                 return ([],[], []), end - start
@@ -159,4 +211,5 @@ class DivisiveKMeans(Cluster):
         for c in end_clusters:
             assert(len(c) >= self.min_cluster_size)
         end = time.time()
+
         return (cluster_centers, end_clusters,end_users),end-start

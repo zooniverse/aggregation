@@ -122,10 +122,10 @@ class Cluster:
         args_l.append([x,y,'o'])
         kwargs_l.append({"color":"red"})
 
-        ax = self.project_api.__display_image__(subject_id,args_l,kwargs_l)
+        self.project_api.__display_image__(subject_id,args_l,kwargs_l)
 
     @abc.abstractmethod
-    def __fit__(self,markings,user_ids,jpeg_file=None):
+    def __fit__(self,markings,user_ids,jpeg_file=None,debug=False):
         """
         the main function for clustering
         :param user_ids:
@@ -159,7 +159,8 @@ class Cluster:
         # if there are any markings - cluster
         # otherwise, just set to empty
         if markings != []:
-            cluster_results,time_to_cluster = self.__fit__(markings,users,jpeg_file)
+
+            cluster_results,time_to_cluster = self.__fit__(markings,users,debug=(subject_id == u"APZ000247i"))
         else:
             cluster_results = [],[],[]
             time_to_cluster = 0
@@ -201,7 +202,7 @@ class Cluster:
 
         # we know that there are both gold standard points and user clusters - we need to match them up
         # user to gold - for a gold point X, what are the user points for which X is the closest gold point?
-        userToGold = [[] for i in range(len(gold_pts))]
+        users_to_gold = [[] for i in range(len(gold_pts))]
 
         # find which gold standard pts, the user cluster pts are closest to
         # this will tell us which gold points we have actually found
@@ -220,8 +221,8 @@ class Cluster:
                     min_dist = dist
                     closest_gold_index = gold_index
 
-            if min_dist < 20:
-                userToGold[closest_gold_index].append(local_index)
+            # if min_dist < 20:
+            users_to_gold[closest_gold_index].append(local_index)
 
         # and now find out which user clusters are actually correct
         # that will be the user point which is closest to the gold point
@@ -230,7 +231,7 @@ class Cluster:
             min_dist = float("inf")
             closest_user_index = None
 
-            for u_index in userToGold[gold_index]:
+            for u_index in users_to_gold[gold_index]:
                 dist = math.sqrt(sum([(u-g)**2 for (u,g) in zip(cluster_centers[u_index],g_pt)]))
 
                 if dist < min_dist:
@@ -253,6 +254,8 @@ class Cluster:
 
         # what were the false positives?
         self.false_positives[subject_id] = [pt for pt in cluster_centers if not(pt in self.correct_pts[subject_id])]
+
+        return users_to_gold
 
     def __setup_global_indices__(self,include_gold=False):
         """
@@ -599,6 +602,107 @@ class Cluster:
 
         # pickle.dump((big_subjectList,big_userList),open(base_directory+"/Databases/tempOut.pickle","wb"))
         ibcc.runIbcc(self.base_directory+"/Databases/"+self.alg+"_ibcc.py")
+
+    def __review_training_set__(self,global_cluster_list,training_set):
+        current_subject = None
+        users_to_gold = None
+        for ii in training_set:
+            # only checking negative results, so skip over the positive ones
+            if training_set[ii] is True:
+                continue
+
+            subject_id,local_index = global_cluster_list[ii]
+
+            # which subject does this cluster belong to and what is its local index?
+            # subject_id, local_index = self.global_to_local[int(float(ii))]
+            center = self.clusterResults[subject_id][0][local_index]
+
+            args_l = [[center[0],center[1],'x'],]
+            kwargs_l = [{"color":"red"},]
+
+            self.project_api.__display_image__(subject_id,args_l,kwargs_l,block=False)
+            f = raw_input("is this a true positive? ") or "n"
+            if f[0].lower() == "y":
+                training_set[ii] = True
+            self.project_api.__close_image__()
+
+        return training_set
+
+    def __review_gold__(self,global_cluster_list,actually_used_clusters,training_clusters):
+        """
+        do a roc analysis of the ibcc results
+        :param plot:
+        :param training_clusters: which clusters with gold standard data were used for training
+        we will have to ignore these clusters
+        :param actually_used_clusters: a mapping from the clusters with ibcc based indices to
+        global based indices
+        :return:
+        """
+        current_subject = None
+        users_to_gold = None
+        with open(self.base_directory+"/Databases/"+self.alg+"_signal.out","rb") as f:
+            reader = csv.reader(f,delimiter=" ")
+            for r in reader:
+                # t is 1-prob, so we can just ignore it t= temp or trash
+                ii,t,prob = r
+                global_index = actually_used_clusters[int(float(ii))]
+                subject_id,local_index = global_cluster_list[global_index]
+
+                if subject_id != current_subject:
+                    users_to_gold = self.__find_correct_markings__(subject_id)
+                    current_subject = subject_id
+
+                if ii in training_clusters:
+                    continue
+                if local_index is None:
+                    continue
+                # which subject does this cluster belong to and what is its local index?
+                # subject_id, local_index = self.global_to_local[int(float(ii))]
+                center = self.clusterResults[subject_id][0][local_index]
+
+                prob = float(prob)
+
+                if not(center in self.correct_pts[subject_id]):
+                    if prob > 0.8:
+                        print prob
+                        try:
+                            gold_pts = zip(*self.project_api.__get_markings__(subject_id,expert_markings=True)[1][0])[0]
+                            x,y = zip(*gold_pts)
+                            args_l = [[x,y,'o'],]
+                            kwargs_l = [{"color":"green"},]
+
+                            for g_index,u_list in enumerate(users_to_gold):
+                                gold = gold_pts[g_index]
+                                for u_index in u_list:
+                                    user = self.clusterResults[subject_id][0][u_index]
+
+                                    args_l.append([[user[0],gold[0]],[user[1],gold[1]],'-'])
+                                    kwargs_l.append({"color":"blue"})
+
+
+
+                        except IndexError:
+                            args_l = []
+                            kwargs_l = []
+
+                        try:
+                            x,y = zip(*self.correct_pts[subject_id])
+                            args_l.append([x,y,'o'],)
+                            kwargs_l.append({"color":"yellow"},)
+                        except ValueError:
+                            pass
+
+                        # red is for false positives
+                        x,y = self.clusterResults[subject_id][0][local_index]
+                        args_l.append([x,y,'x'])
+                        kwargs_l.append({"color":"red"})
+
+                        self.project_api.__display_image__(subject_id,args_l,kwargs_l,block=False)
+                        f = raw_input("is this a true positive? ") or "y"
+                        if f[0].lower() == "y":
+                            self.correct_pts[subject_id].append(center)
+                        self.project_api.__close_image__()
+
 
 
     def __roc__(self,global_cluster_list,actually_used_clusters,training_clusters):
