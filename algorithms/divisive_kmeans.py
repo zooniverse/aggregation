@@ -40,8 +40,6 @@ class DivisiveKMeans(Cluster):
         else:
             return time_to_cluster
 
-
-
     def __fit__(self,markings,user_ids,jpeg_file=None):
         """
         the main function - currently works for any number of dimensions
