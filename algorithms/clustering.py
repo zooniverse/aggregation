@@ -407,7 +407,7 @@ class Cluster:
                     socket.inet_aton(user_id)
                     if split_ip_address:
                         user_id += subject_id
-                except socket.error:
+                except (socket.error,UnicodeEncodeError) as e:
                     # logged in user, nothing to do
                     pass
                 if user_id in user_per_cluster:
