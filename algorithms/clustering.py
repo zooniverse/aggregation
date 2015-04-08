@@ -430,6 +430,29 @@ class Cluster:
         random.shuffle(gold_list)
         return chunk_it(gold_list,num_splits)
 
+    def __majority_vote__(self):
+        global_index = -1
+        with open(self.base_directory+"Databases/"+self.alg+"_majority_vote.csv","wb") as f:
+            for zooniverse_id in self.clusterResults:
+                if self.clusterResults[zooniverse_id] is None:
+                    continue
+
+                users_per_subject = self.project_api.__users__(zooniverse_id)
+                ips_per_subject = self.project_api.__ips__(zooniverse_id)
+
+                num_users = len(users_per_subject) + len(ips_per_subject)
+
+                for local_index,markings_in_cluster in enumerate(self.clusterResults[zooniverse_id][1]):
+                    global_index += 1
+                    num_markings = len(markings_in_cluster)
+
+                    probability = num_markings/float(num_users)
+
+                    f.write(str(global_index)+" "+str(1-probability)+" "+str(probability)+"\n")
+
+        return self.base_directory+"Databases/"+self.alg+"_majority_vote.csv"
+
+
     def __signal_ibcc_majority__(self,split_ip_address=True):
         """
         run ibcc to determine which clusters are signal or noise
@@ -703,9 +726,7 @@ class Cluster:
                             self.correct_pts[subject_id].append(center)
                         self.project_api.__close_image__()
 
-
-
-    def __roc__(self,global_cluster_list,actually_used_clusters,training_clusters):
+    def __roc__(self,fname,global_cluster_list,actually_used_clusters=None,training_clusters=[]):
         """
         do a roc analysis of the ibcc results
         :param plot:
@@ -722,7 +743,11 @@ class Cluster:
         truePos = []
         falsePos = []
 
-        with open(self.base_directory+"/Databases/"+self.alg+"_signal.out","rb") as f:
+        # if no list is provided - assume that all clusters were used
+        if actually_used_clusters is None:
+            actually_used_clusters = range(len(global_cluster_list))
+
+        with open(fname,"rb") as f:
             reader = csv.reader(f,delimiter=" ")
             for r in reader:
                 # t is 1-prob, so we can just ignore it t= temp or trash
