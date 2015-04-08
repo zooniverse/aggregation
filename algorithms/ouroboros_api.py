@@ -58,7 +58,7 @@ class OuroborosAPI:
         # a case where users are only logged in some of the time
         self.user_ip_addresses = {}
 
-    def __optimize_classification_collections__(self):
+    def __optimize_classification_collections__(self,with_experts_only=False):
         """
         creates a new collection which has indices for the zooniverse_id of the subject
         :return:
@@ -74,8 +74,20 @@ class OuroborosAPI:
         new_classification_collection.create_index([("user_ip",pymongo.ASCENDING),])
         new_classification_collection.create_index([("zooniverse_id",pymongo.ASCENDING),])
 
+        if with_experts_only:
+            gold_subjects = list(self.__get_subjects_with_gold_standard__())
+        else:
+            gold_subjects = None
+
         for classification in self.classification_collection.find():
             post = dict()
+            zooniverse_id = classification["subjects"][0]["zooniverse_id"]
+
+
+            if with_experts_only and (zooniverse_id not in gold_subjects):
+                continue
+
+            post["zooniverse_id"] = zooniverse_id
             try:
                 post["user_name"] = classification["user_name"]
             except KeyError:
@@ -83,7 +95,7 @@ class OuroborosAPI:
 
             post["user_ip"] = classification["user_ip"]
             post["annotations"] = classification["annotations"]
-            post["zooniverse_id"] = classification["subjects"][0]["zooniverse_id"]
+
             post["subject_id"] = classification["subjects"][0]["id"]
 
             new_classification_collection.insert(post)
@@ -227,7 +239,20 @@ class OuroborosAPI:
         :return:
         """
 
-        mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
+        #mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
+        # if we are storing values from previous runs
+        if self.pickle_directory != "":
+            fname = self.pickle_directory+zooniverse_id+".pickle"
+            # check if we have read in this subject before
+            if os.path.isfile(fname):
+                mongo_results = pickle.load(open(fname,"rb"))
+            else:
+                mongo_results = list(self.classification_collection.find({"subjects.zooniverse_id":zooniverse_id}))
+                pickle.dump(mongo_results,open(fname,"wb"))
+        else:
+            # just read in the results
+            mongo_results = list(self.classification_collection.find({"subjects.zooniverse_id":zooniverse_id}))
+
 
         annotations_list = []
         user_list = []
@@ -429,7 +454,7 @@ class PenguinWatch(MarkingProject):
                 try:
                     values = ann["value"].values()
                     return [((float(v["x"])*self.scale,float(v["y"])*self.scale),(v["value"],)) for v in values]
-                except (AttributeError,KeyError) as e:
+                except (AttributeError,KeyError,ValueError) as e:
                     return []
 
         # did not find any values corresponding to markings, so return an empty list
