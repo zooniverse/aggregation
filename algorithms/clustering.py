@@ -311,6 +311,9 @@ class Cluster:
 
         return global_indices,global_gold_indices
 
+    def __weighted_majority_voting__(self):
+        pass
+
     def __signal_ibcc_gold__(self,global_indices,gold_standard_pts,split_ip_address=True):
         """
         uses gold standard from experts instead of priors based on majority voting
@@ -325,8 +328,6 @@ class Cluster:
         # because ibcc needs indices to be nice and ordered with no gaps, we have to make two passes through the data
         to_ibcc = []
 
-        # used if we need to treat the same ip address from different subjects as different users
-        ip_offset = 0
 
         # there will be some redundancy reading in the subject list - so keep track of the current subject_id
         # and only update when necessary
@@ -341,8 +342,6 @@ class Cluster:
         for global_cluster_index,(subject_id,local_index) in enumerate(global_indices):
             # only update when necessary - when we have moved on to a new subject
             if subject_id != current_subject:
-                if current_subject is not None:
-                    ip_offset += len(ips_per_subject)
                 # get the list of all the users who viewed this subject
                 # and the ip addresses of every user who was not logged in while viewing the subjects
                 users_per_subject = self.project_api.__users__(subject_id)
@@ -368,6 +367,20 @@ class Cluster:
                     to_ibcc.append((user_id,global_cluster_index,1))
                 else:
                     to_ibcc.append((user_id,global_cluster_index,0))
+
+            # repeat for users who are not logged in
+            for user_id in ips_per_subject:
+                if user_id in user_per_cluster:
+                    # if we are treating the same ip address for different subjects as completely different users
+                    # add on the subject name to create a unique id
+                    if split_ip_address:
+                        user_id += subject_id
+                    to_ibcc.append((user_id,global_cluster_index,1))
+                else:
+                    if split_ip_address:
+                        user_id += subject_id
+                    to_ibcc.append((user_id,global_cluster_index,0))
+
         print len(actually_used_clusters)
 
         # gives each user an index with no gaps in the list
@@ -417,7 +430,7 @@ class Cluster:
         # pickle.dump((big_subjectList,big_userList),open(base_directory+"/Databases/tempOut.pickle","wb"))
         ibcc.runIbcc(self.base_directory+"/Databases/"+self.alg+"_ibcc.py")
 
-        return user_indices,actually_used_clusters
+        return self.base_directory+"/Databases/"+self.alg+"_signal.out", user_indices,actually_used_clusters
 
     def __split_gold_standards__(self,gold_indices,num_splits):
         """
@@ -451,6 +464,8 @@ class Cluster:
                     f.write(str(global_index)+" "+str(1-probability)+" "+str(probability)+"\n")
 
         return self.base_directory+"Databases/"+self.alg+"_majority_vote.csv"
+
+
 
 
     def __signal_ibcc_majority__(self,split_ip_address=True):
