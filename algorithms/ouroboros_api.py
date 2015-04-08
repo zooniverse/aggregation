@@ -8,6 +8,8 @@ import re
 import matplotlib.pyplot as plt
 import urllib
 import matplotlib.cbook as cbook
+import datetime
+import warnings
 
 class OuroborosAPI:
     __metaclass__ = abc.ABCMeta
@@ -24,10 +26,12 @@ class OuroborosAPI:
 
         # connection to the MongoDB/ouroboros database
         client = pymongo.MongoClient()
-        db = client[project+"_"+date]
-        self.classification_collection = db[project+"_classifications"]
-        self.subject_collection = db[project+"_subjects"]
-        self.user_collection = db[project+"_users"]
+        self.db = client[project+"_"+date]
+        self.classification_collection = self.db[project+"_classifications"]
+        self.subject_collection = self.db[project+"_subjects"]
+        self.user_collection = self.db[project+"_users"]
+
+        self.id_prefix = "subjects."
 
         self.pickle_directory = pickle_directory
         self.experts = experts
@@ -53,6 +57,39 @@ class OuroborosAPI:
         # used to keep track of the ip addresses of logged in users - so we can tell if there is ever
         # a case where users are only logged in some of the time
         self.user_ip_addresses = {}
+
+    def __optimize_classification_collections__(self):
+        """
+        creates a new collection which has indices for the zooniverse_id of the subject
+        :return:
+        """
+        self.id_prefix = ""
+        if "optimized_classifications" in self.db.collection_names():
+            warnings.warn("The optimized version of the classifications collection already exists. You will need to manually delete this if you want to redo its creation.")
+            self.classification_collection = self.db["optimized_classifications"]
+            return
+
+        new_classification_collection = self.db["optimized_classifications"]
+        new_classification_collection.create_index([("user_name",pymongo.ASCENDING),])
+        new_classification_collection.create_index([("user_ip",pymongo.ASCENDING),])
+        new_classification_collection.create_index([("zooniverse_id",pymongo.ASCENDING),])
+
+        for classification in self.classification_collection.find():
+            post = dict()
+            try:
+                post["user_name"] = classification["user_name"]
+            except KeyError:
+                pass
+
+            post["user_ip"] = classification["user_ip"]
+            post["annotations"] = classification["annotations"]
+            post["zooniverse_id"] = classification["subjects"][0]["zooniverse_id"]
+            post["subject_id"] = classification["subjects"][0]["id"]
+
+            new_classification_collection.insert(post)
+
+        self.classification_collection = self.db["optimized_classifications"]
+
 
     def __users__(self,subject_id):
         """
@@ -103,7 +140,7 @@ class OuroborosAPI:
     def __close_image__(self):
         plt.close()
 
-    def __get_subjects_with_gold_standard__(self,require_completed=False,remove_blanks=False,limit=-1):
+    def __get_subjects_with_gold_standard__(self,require_completed=True,remove_blanks=True,limit=-1):
         """
         find the zooniverse ids of all the subjects with gold standard data. Allows for more than one expert
         :param require_completed: return only those subjects which have been retired/completed
@@ -112,13 +149,20 @@ class OuroborosAPI:
         :return:
         """
         # todo: use the pickle directory
+        # if we have provided a limit, use it
+        classification_iterator = self.classification_collection.find({"user_name": {"$in": self.experts}})
+        # if limit != -1:
+        #     classification_iterator = classification_iterator.limit(limit)
         subjects = set()
-
-        for count, classification in enumerate(self.classification_collection.find({"user_name": {"$in": self.experts}})):
-            if len(list(subjects)) == limit:
+        count = 0
+        for classification in classification_iterator:
+            if (limit > 0) and (count > limit):
                 break
 
-            zooniverse_id = classification["subjects"][0]["zooniverse_id"]
+            try:
+                zooniverse_id = classification["subjects"][0]["zooniverse_id"]
+            except KeyError:
+                zooniverse_id = classification["zooniverse_id"]
 
             # if we have additional constraints on the subject
             if require_completed or remove_blanks:
@@ -133,11 +177,14 @@ class OuroborosAPI:
                     if subject["metadata"]["retire_reason"] in ["blank"]:
                         continue
 
-            subjects.add(zooniverse_id)
+            if zooniverse_id not in subjects:
+                subjects.add(zooniverse_id)
+                yield zooniverse_id
+            count += 1
 
-        self.gold_standard_subjects = list(subjects)
-
-        return self.gold_standard_subjects
+        # self.gold_standard_subjects = list(subjects)
+        #
+        # return self.gold_standard_subjects
 
     def __get_completed_subjects__(self):
         """
@@ -180,19 +227,7 @@ class OuroborosAPI:
         :return:
         """
 
-
-        # if we are storing values from previous runs
-        if self.pickle_directory != "":
-            fname = self.pickle_directory+zooniverse_id+".pickle"
-            #check if we have read in this subject before
-            if os.path.isfile(fname):
-                mongo_results = pickle.load(open(fname,"rb"))
-            else:
-                mongo_results = list(self.classification_collection.find({"subjects.zooniverse_id":zooniverse_id}))
-                pickle.dump(mongo_results,open(fname,"wb"))
-        else:
-            # just read in the results
-            mongo_results = list(self.classification_collection.find({"subjects.zooniverse_id":zooniverse_id}))
+        mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
 
         annotations_list = []
         user_list = []
@@ -280,7 +315,10 @@ class MarkingProject(OuroborosAPI):
         annotations = classification["annotations"]
         markings = self.__annotations_to_markings__(annotations)
 
-        object_id = classification["subject_ids"][0]
+        try:
+            object_id = classification["subject_ids"][0]
+        except KeyError:
+            object_id = classification["subject_id"]
 
         # go through the markings in reverse order and remove any that are outside of the ROI
         # also, scale as necessary
@@ -337,7 +375,10 @@ class PenguinWatch(MarkingProject):
         :return:
         """
         # have we already found the ROI for this subject?
-        object_id = classification["subject_ids"][0]
+        try:
+            object_id = classification["subject_ids"][0]
+        except KeyError:
+            object_id = classification["subject_id"]
 
         # if we haven't already read in this image find out what site it is from
         if not(object_id in self.subject_to_site):
