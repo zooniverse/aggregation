@@ -45,23 +45,32 @@ class OuroborosAPI:
         # record which users viewed which subjects
         self.users_per_subject = {}
         # record which users were not logged in while viewing subjects
-        self.ips_per_subject = {}
+        # self.ips_per_subject = {}
 
         # all_ips is only really useful if we want to keep track on non-logged in users between subjects
         self.all_users = set()
-        self.all_ips = set()
+        # self.all_ips = set()
+        # used to keep track of the ip addresses of logged in users - so we can tell if there is ever
+        # a case where users are only logged in some of the time
+        self.user_ip_addresses = {}
 
     def __users__(self,subject_id):
+        """
+        for a given subject_id return the set of all users - logged in or not - which viewed that subject
+        if the user was not logged in, use the ip_address
+        :param subject_id:
+        :return:
+        """
         return self.users_per_subject[subject_id]
 
-    def __ips__(self,subject_id):
-        return self.ips_per_subject[subject_id]
+    # def __ips__(self,subject_id):
+    #     return self.ips_per_subject[subject_id]
 
     def __all_users__(self):
         return self.all_users
 
-    def __all_ips__(self):
-        return self.all_ips
+    # def __all_ips__(self):
+    #     return self.all_ips
 
     def __display_image__(self,subject_id,args_l,kwargs_l,block=True):
         """
@@ -75,8 +84,6 @@ class OuroborosAPI:
 
         slash_index = url.rfind("/")
         object_id = url[slash_index+1:]
-
-        #print object_id
 
         if not(os.path.isfile(self.base_directory+"/Databases/"+self.project+"/images/"+object_id)):
             urllib.urlretrieve(url, self.base_directory+"/Databases/"+self.project+"/images/"+object_id)
@@ -193,15 +200,23 @@ class OuroborosAPI:
         for user_index, classification in enumerate(mongo_results):
                 # get the name of this user
                 if "user_name" in classification:
-                    user_id = classification["user_name"]
+                    # add the _ just we know for certain whether a user was logged in
+                    # just in case a username is "10" for example, which is a valid ip address
+                    user_id = classification["user_name"]+"_"
+
+                    if not(user_id in self.user_ip_addresses):
+                        self.user_ip_addresses[user_id] = set([classification["user_ip"]])
+                    else:
+                        self.user_ip_addresses[user_id].add(classification["user_ip"])
                 else:
                     user_id = classification["user_ip"]
-                    ip_list.append(user_id)
+                    logged_in_user = False
 
                 # skip any users who are experts if we do not want experts
                 # if we want experts, skip anyone who is not
                 # != should be equal to XOR
-                if (user_id in self.experts) != expert_markings:
+                # need to remove the last character - "_" for testing if the user is an expert
+                if (user_id[:-1] in self.experts) != expert_markings:
                     continue
 
                 annotations = self.__classification_to_annotations__(classification)
@@ -211,11 +226,11 @@ class OuroborosAPI:
 
         # if we are not reading in the expert's classifications then we should update the ids
         if not expert_markings:
-            self.users_per_subject[zooniverse_id] = user_list
-            self.ips_per_subject[zooniverse_id] = ip_list
+            self.users_per_subject[zooniverse_id] = set(user_list)
+            # self.ips_per_subject[zooniverse_id] = set(ip_list)
 
             self.all_users.update(user_list)
-            self.all_ips.update(ip_list)
+            # self.all_ips.update(ip_list)
 
         return user_list,annotations_list
 

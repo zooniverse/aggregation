@@ -10,6 +10,8 @@ import ibcc
 import csv
 import matplotlib.pyplot as plt
 import random
+import socket
+import warnings
 
 def index(a, x):
     'Locate the leftmost value exactly equal to x'
@@ -250,11 +252,9 @@ class Cluster:
             else:
                 self.missed_pts[subject_id].append(g_pt)
 
-        # print np.mean(distances_l)
 
         # what were the false positives?
         self.false_positives[subject_id] = [pt for pt in cluster_centers if not(pt in self.correct_pts[subject_id])]
-
         return users_to_gold
 
     def __setup_global_indices__(self,include_gold=False):
@@ -283,6 +283,8 @@ class Cluster:
         # missed_gold_indices = []
 
         # go through each subject and convert local indices into global ones
+        if self.user_gold_mapping == {}:
+            warnings.warn("Empty set of true positives")
         for zooniverse_id in self.clusterResults:
             if not(self.clusterResults[zooniverse_id] is None):
                 for local_index,center in enumerate(self.clusterResults[zooniverse_id][0]):
@@ -311,7 +313,42 @@ class Cluster:
 
         return global_indices,global_gold_indices
 
-    def __weighted_majority_voting__(self):
+    def __weighted_majority_voting__(self,global_indices,gold_standard_pts,split_ip_address=True):
+        user_accuracy = {}
+        for gold_index in gold_standard_pts:
+            subject_id,local_index = global_indices[gold_index]
+            users_per_subject = self.project_api.__users__(subject_id)
+            ips_per_subject = self.project_api.__ips__(subject_id)
+            print users_per_subject
+            print ips_per_subject
+
+            if local_index is None:
+                user_per_cluster = []
+            else:
+                user_per_cluster = self.clusterResults[subject_id][2][local_index]
+
+            for user_id in users_per_subject:
+                if user_id not in user_accuracy:
+                    # TP FP FN TN
+                    user_accuracy[user_id] = [0,0,0,0]
+
+                # true positive
+                if gold_standard_pts[gold_index] is True:
+                    # did the user see this "thing"?
+                    if user_id in user_per_cluster:
+                        user_accuracy[user_id][0] += 1
+                    else:
+                        user_accuracy[user_id][2] += 1
+                # a false positive
+                else:
+                    # did the user see this "thing"?
+                    if user_id in user_per_cluster:
+                        user_accuracy[user_id][1] += 1
+                    else:
+                        user_accuracy[user_id][3] += 1
+
+        print user_accuracy
+
         pass
 
     def __signal_ibcc_gold__(self,global_indices,gold_standard_pts,split_ip_address=True):
@@ -323,7 +360,6 @@ class Cluster:
         using a negative index is a way of giving a false positive
         :return:
         """
-        print len(global_indices)
         # intermediate holder variable
         # because ibcc needs indices to be nice and ordered with no gaps, we have to make two passes through the data
         to_ibcc = []
@@ -345,14 +381,14 @@ class Cluster:
                 # get the list of all the users who viewed this subject
                 # and the ip addresses of every user who was not logged in while viewing the subjects
                 users_per_subject = self.project_api.__users__(subject_id)
-                ips_per_subject = self.project_api.__ips__(subject_id)
+                # ips_per_subject = self.project_api.__ips__(subject_id)
 
                 current_subject = subject_id
 
-            # in this case, we know that no user marked this animal
-            # this is either provided gold standard data, or a test - in which case we should ignore
-            # this data
             if local_index is None:
+                # in this case, we know that no user marked this animal
+                # this is either provided gold standard data, or a test - in which case we should ignore
+                # this data
                 if not(global_cluster_index in gold_standard_pts):
                     continue
                 else:
@@ -362,26 +398,22 @@ class Cluster:
 
             actually_used_clusters.append(global_cluster_index)
 
-            for user_id in users_per_subject:
+            for user_id in list(users_per_subject):
+                # check to see if this user was logged in - if not, the user_id should be an ip address
+                # if not logged in, we just need to decide whether to add the subject_name on to the user_id
+                # which as a result treats the same ip address for different subjects as completely different
+                # users
+                try:
+                    socket.inet_aton(user_id)
+                    if split_ip_address:
+                        user_id += subject_id
+                except socket.error:
+                    # logged in user, nothing to do
+                    pass
                 if user_id in user_per_cluster:
                     to_ibcc.append((user_id,global_cluster_index,1))
                 else:
                     to_ibcc.append((user_id,global_cluster_index,0))
-
-            # repeat for users who are not logged in
-            for user_id in ips_per_subject:
-                if user_id in user_per_cluster:
-                    # if we are treating the same ip address for different subjects as completely different users
-                    # add on the subject name to create a unique id
-                    if split_ip_address:
-                        user_id += subject_id
-                    to_ibcc.append((user_id,global_cluster_index,1))
-                else:
-                    if split_ip_address:
-                        user_id += subject_id
-                    to_ibcc.append((user_id,global_cluster_index,0))
-
-        print len(actually_used_clusters)
 
         # gives each user an index with no gaps in the list
         user_indices = []
