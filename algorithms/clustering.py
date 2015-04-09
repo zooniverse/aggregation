@@ -92,6 +92,21 @@ class Cluster:
 
         ax = self.project_api.__display_image__(subject_id,[args],[kwargs])
 
+    def __raw_clusters__(self,subject_id):
+        colours = ["green","red","blue","purple","yellow","coral","tan","steelblue","fuchsia","darksage","peru"]
+        args = []
+        kwargs = []
+        for ii,cluster in enumerate(self.clusterResults[subject_id][1]):
+            args_c = []
+            kwargs_c = {"color":colours[ii]}
+            for x,y in cluster:
+                args_c.extend([x,y,'o'])
+
+            args.append(args_c)
+            kwargs.append(kwargs_c)
+
+        self.project_api.__display_image__(subject_id,args,kwargs)
+
     def __check_correctness__(self,subject_id):
         """
         display any and all pairs of users/gold standard points which we think are too far apart

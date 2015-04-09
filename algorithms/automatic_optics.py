@@ -136,7 +136,10 @@ class AutomaticOptics(Cluster):
         # the length of results[2] may and probably will change as we correct things
         # so don't use a for loop
         # -1 so we always have at least one more element to compare against
+        print "starting length is " + str(len(results[2]))
+
         while i < len(results[2])-1:
+            print results[0][i]
             users_i = results[2][i]
             pts_i = results[1][i]
             cluster_i = results[0][i]
@@ -158,6 +161,10 @@ class AutomaticOptics(Cluster):
                     overlap = [u for u in users_j if u in users_i]
                     closest_neighbour = j
 
+            print closest_distance
+            print overlap
+            print
+
             if len(overlap) == 0:
                 # remove the j'th element and merge it with the i'th one
                 center = results[0].pop(closest_neighbour)
@@ -178,6 +185,8 @@ class AutomaticOptics(Cluster):
                 results[0][i] = [np.mean(axis) for axis in zip(*results[1][i])]
             # move on to the next element
             i += 1
+
+        print "ending length is " + str(len(results[2]))
 
     def __fit__(self,markings,user_ids,jpeg_file=None,debug=False):
         print
