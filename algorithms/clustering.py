@@ -82,9 +82,13 @@ class Cluster:
         :param fname: the file name of the downloaded image
         :return:
         """
-        x,y = zip(*self.clusterResults[subject_id][0])
-        args = [x,y,'o']
-        kwargs = {"color":"red"}
+        try:
+            x,y = zip(*self.clusterResults[subject_id][0])
+            args = [x,y,'o']
+            kwargs = {"color":"red"}
+        except ValueError:
+            args = []
+            kwargs = {}
 
         ax = self.project_api.__display_image__(subject_id,[args],[kwargs])
 
@@ -157,11 +161,9 @@ class Cluster:
         # start by calling the api to get the annotations along with the list of who made each marking
         # so for this function, we know that annotations = markings
         users, markings = self.project_api.__get_markings__(subject_id)
-
         # if there are any markings - cluster
         # otherwise, just set to empty
         if markings != []:
-
             cluster_results,time_to_cluster = self.__fit__(markings,users,debug=(subject_id == u"APZ000247i"))
         else:
             cluster_results = [],[],[]

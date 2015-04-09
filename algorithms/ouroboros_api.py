@@ -161,6 +161,7 @@ class OuroborosAPI:
         :return:
         """
         # todo: use the pickle directory
+        # todo: not sure if remove blanks is working properly
         # if we have provided a limit, use it
         classification_iterator = self.classification_collection.find({"user_name": {"$in": self.experts}})
         # if limit != -1:
@@ -168,7 +169,7 @@ class OuroborosAPI:
         subjects = set()
         count = 0
         for classification in classification_iterator:
-            if (limit > 0) and (count > limit):
+            if (limit > 0) and (count >= limit):
                 break
 
             try:
@@ -247,42 +248,41 @@ class OuroborosAPI:
             if os.path.isfile(fname):
                 mongo_results = pickle.load(open(fname,"rb"))
             else:
-                mongo_results = list(self.classification_collection.find({"subjects.zooniverse_id":zooniverse_id}))
+                mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
                 pickle.dump(mongo_results,open(fname,"wb"))
         else:
             # just read in the results
-            mongo_results = list(self.classification_collection.find({"subjects.zooniverse_id":zooniverse_id}))
-
+            mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
 
         annotations_list = []
         user_list = []
         ip_list = []
         for user_index, classification in enumerate(mongo_results):
-                # get the name of this user
-                if "user_name" in classification:
-                    # add the _ just we know for certain whether a user was logged in
-                    # just in case a username is "10" for example, which is a valid ip address
-                    user_id = classification["user_name"]+"_"
+            # get the name of this user
+            if "user_name" in classification:
+                # add the _ just we know for certain whether a user was logged in
+                # just in case a username is "10" for example, which is a valid ip address
+                user_id = classification["user_name"]+"_"
 
-                    if not(user_id in self.user_ip_addresses):
-                        self.user_ip_addresses[user_id] = set([classification["user_ip"]])
-                    else:
-                        self.user_ip_addresses[user_id].add(classification["user_ip"])
+                if not(user_id in self.user_ip_addresses):
+                    self.user_ip_addresses[user_id] = set([classification["user_ip"]])
                 else:
-                    user_id = classification["user_ip"]
-                    logged_in_user = False
+                    self.user_ip_addresses[user_id].add(classification["user_ip"])
+            else:
+                user_id = classification["user_ip"]
+                logged_in_user = False
 
-                # skip any users who are experts if we do not want experts
-                # if we want experts, skip anyone who is not
-                # != should be equal to XOR
-                # need to remove the last character - "_" for testing if the user is an expert
-                if (user_id[:-1] in self.experts) != expert_markings:
-                    continue
+            # skip any users who are experts if we do not want experts
+            # if we want experts, skip anyone who is not
+            # != should be equal to XOR
+            # need to remove the last character - "_" for testing if the user is an expert
+            if (user_id[:-1] in self.experts) != expert_markings:
+                continue
 
-                annotations = self.__classification_to_annotations__(classification)
-                if annotations != []:
-                    annotations_list.append(annotations)
-                    user_list.append(user_id)
+            annotations = self.__classification_to_annotations__(classification)
+            if annotations != []:
+                annotations_list.append(annotations)
+                user_list.append(user_id)
 
         # if we are not reading in the expert's classifications then we should update the ids
         if not expert_markings:
