@@ -185,15 +185,18 @@ class OuroborosAPI:
 
                 if require_completed:
                     if subject["state"] != "complete":
+                        print "a"
                         continue
                 if remove_blanks:
                     if subject["metadata"]["retire_reason"] in ["blank"]:
+                        print "b"
                         continue
 
             if zooniverse_id not in subjects:
                 subjects.add(zooniverse_id)
+                count += 1
                 yield zooniverse_id
-            count += 1
+
 
         # self.gold_standard_subjects = list(subjects)
         #

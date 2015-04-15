@@ -9,11 +9,11 @@ import re
 import ibcc
 import csv
 import matplotlib.pyplot as plt
-import matplotlib
 import random
 import socket
 import warnings
 import scipy
+from shapely.geometry import Polygon
 
 def index(a, x):
     'Locate the leftmost value exactly equal to x'
@@ -73,8 +73,8 @@ def onpick(clustering_alg):
         artist = event.artist
         x, y = artist.get_xdata(), artist.get_ydata()
         ind = event.ind
-        clustering_alg.x_roc = x[ind[0]]
-        clustering_alg.y_roc = y[ind[0]]
+        clustering_alg.x_roc = float(x[ind[0]])
+        clustering_alg.y_roc = float(y[ind[0]])
         # print
 
         plt.close()
@@ -237,7 +237,24 @@ class Cluster:
         return time_to_cluster
 
     def __get_densities__(self,subject_id):
-        scipy.spatial.ConvexHull()
+        """
+        return the density of all clusters which have at least three points
+        (otherwise the convex hull is 1 or 2 D)
+        :param subject_id:
+        :return:
+        """
+        densities = []
+        for cluster in  self.clusterResults[subject_id][1]:
+            if len(cluster) >= 3:
+                hull_indices =  scipy.spatial.ConvexHull(cluster).vertices
+                hull = [cluster[i] for i in hull_indices]
+
+                area = Polygon(hull).area
+                density = area/len(cluster)
+                densities.append(density)
+
+        return densities
+
 
 
     def __find_correct_markings__(self,subject_id):
