@@ -9,9 +9,11 @@ import re
 import ibcc
 import csv
 import matplotlib.pyplot as plt
+import matplotlib
 import random
 import socket
 import warnings
+import scipy
 
 def index(a, x):
     'Locate the leftmost value exactly equal to x'
@@ -35,6 +37,49 @@ def chunk_it(seq, num):
     return out
 
 
+def line_picker(line, mouseevent):
+    """
+    code copied from
+    http://matplotlib.org/examples/event_handling/pick_event_demo.html
+    find the points within a certain distance from the mouseclick in
+    data coords and attach some extra attributes, pickx and picky
+    which are the data points that were picked
+    """
+    if mouseevent.xdata is None: return False, dict()
+    xdata = line.get_xdata()
+    ydata = line.get_ydata()
+    maxd = 0.05
+    d = np.sqrt((xdata-mouseevent.xdata)**2. + (ydata-mouseevent.ydata)**2.)
+
+    ind = np.nonzero(np.less_equal(d, maxd))
+    if len(ind):
+        pickx = np.take(xdata, ind)
+        picky = np.take(ydata, ind)
+        props = dict(ind=ind, pickx=pickx, picky=picky)
+        return True, props
+    else:
+        return False, dict()
+
+def onpick(clustering_alg):
+    assert isinstance(clustering_alg,Cluster)
+    def onpick2(event):
+        """
+        again - copied from
+        http://matplotlib.org/examples/event_handling/pick_event_demo.html
+        :param event:
+        :return:
+        """
+
+        artist = event.artist
+        x, y = artist.get_xdata(), artist.get_ydata()
+        ind = event.ind
+        clustering_alg.x_roc = x[ind[0]]
+        clustering_alg.y_roc = y[ind[0]]
+        # print
+
+        plt.close()
+
+    return onpick2
 
 class Cluster:
     __metaclass__ = abc.ABCMeta
@@ -72,6 +117,9 @@ class Cluster:
 
         # for creating names of ibcc output files
         self.alg = None
+
+        self.x_roc = None
+        self.y_roc = None
 
 
 
@@ -187,6 +235,10 @@ class Cluster:
         self.clusterResults[subject_id] = cluster_results
         self.processed_subjects.add(subject_id)
         return time_to_cluster
+
+    def __get_densities__(self,subject_id):
+        scipy.spatial.ConvexHull()
+
 
     def __find_correct_markings__(self,subject_id):
         """
@@ -842,7 +894,11 @@ class Cluster:
             Y.append(len([y for y in truePos if y >= a]))
 
 
-        plt.plot(X,Y)
+        fig, ax = plt.subplots()
+        line, = ax.plot(X,Y,picker=10)
         plt.xlabel("False Positive Count")
         plt.ylabel("True Positive Count")
+        fig.canvas.mpl_connect('pick_event', onpick(self))
         plt.show()
+
+        print self.x_roc

@@ -51,7 +51,6 @@ class DivisiveKMeans(Cluster):
         # so don't use a for loop
         # -1 so we always have at least one more element to compare against
         while i < len(results[2])-1:
-            print results[0][i]
             users_i = results[2][i]
             pts_i = results[1][i]
             cluster_i = results[0][i]
