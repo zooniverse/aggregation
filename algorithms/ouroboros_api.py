@@ -10,6 +10,7 @@ import urllib
 import matplotlib.cbook as cbook
 import datetime
 import warnings
+import random
 
 class OuroborosAPI:
     __metaclass__ = abc.ABCMeta
@@ -121,7 +122,7 @@ class OuroborosAPI:
     # def __all_ips__(self):
     #     return self.all_ips
 
-    def __display_image__(self,subject_id,args_l,kwargs_l,block=True):
+    def __display_image__(self,subject_id,args_l,kwargs_l,block=True,title=None):
         """
         return the file names for all the images associated with a given subject_id
         also download them if necessary
@@ -147,12 +148,15 @@ class OuroborosAPI:
 
         for args,kwargs in zip(args_l,kwargs_l):
             ax.plot(*args,**kwargs)
+
+        if title is not None:
+            ax.set_title(title)
         plt.show(block=block)
 
     def __close_image__(self):
         plt.close()
 
-    def __get_subjects_with_gold_standard__(self,require_completed=True,remove_blanks=True,limit=-1):
+    def __get_subjects_with_gold_standard__(self,require_completed=True,remove_blanks=True,limit=-1,maximum_number_gold_markings=None):
         """
         find the zooniverse ids of all the subjects with gold standard data. Allows for more than one expert
         :param require_completed: return only those subjects which have been retired/completed
@@ -163,7 +167,8 @@ class OuroborosAPI:
         # todo: use the pickle directory
         # todo: not sure if remove blanks is working properly
         # if we have provided a limit, use it
-        classification_iterator = self.classification_collection.find({"user_name": {"$in": self.experts}})
+        classification_iterator = list(self.classification_collection.find({"user_name": {"$in": self.experts}}))
+        random.shuffle(classification_iterator)
         # if limit != -1:
         #     classification_iterator = classification_iterator.limit(limit)
         subjects = set()
@@ -177,7 +182,17 @@ class OuroborosAPI:
             except KeyError:
                 zooniverse_id = classification["zooniverse_id"]
 
+            if zooniverse_id in ["APZ00017op"]:
+                continue
+
+            try:
+                num_gold_markings =len(classification["annotations"][1]["value"])
+                if (maximum_number_gold_markings is not None) and (num_gold_markings > maximum_number_gold_markings):
+                    continue
+            except KeyError:
+                continue
             # if we have additional constraints on the subject
+
             if require_completed or remove_blanks:
                 # retrieve the subject first and then check conditions - this way we avoid having to search
                 # through the whole DB
@@ -235,7 +250,7 @@ class OuroborosAPI:
         """
         return []
 
-    def __get_annotations__(self,zooniverse_id,expert_markings=False):
+    def __get_annotations__(self,zooniverse_id,max_users=None,expert_markings=False):
         """
         read through and return all of the relevant annotations associated with the given zooniverse_id
         :param zooniverse_id:
@@ -260,6 +275,7 @@ class OuroborosAPI:
         annotations_list = []
         user_list = []
         ip_list = []
+
         for user_index, classification in enumerate(mongo_results):
             # get the name of this user
             if "user_name" in classification:
@@ -287,6 +303,11 @@ class OuroborosAPI:
                 annotations_list.append(annotations)
                 user_list.append(user_id)
 
+            if max_users is not None:
+                if len(user_list) == max_users:
+                    break
+
+        # print "num users " + str(len(user_list))
         # if we are not reading in the expert's classifications then we should update the ids
         if not expert_markings:
             self.users_per_subject[zooniverse_id] = set(user_list)
@@ -331,13 +352,13 @@ class MarkingProject(OuroborosAPI):
         """
         return []
 
-    def __get_markings__(self,subject_id,expert_markings=False):
+    def __get_markings__(self,subject_id,max_users=None,expert_markings=False):
         """
         just allows us to user different terminology so that we are clear about returning markings
         :param subject_id:
         :return:
         """
-        return OuroborosAPI.__get_annotations__(self,subject_id,expert_markings)
+        return OuroborosAPI.__get_annotations__(self,subject_id,max_users,expert_markings)
 
     def __classification_to_annotations__(self,classification):
         annotations = classification["annotations"]
@@ -463,14 +484,14 @@ class PenguinWatch(MarkingProject):
         # did not find any values corresponding to markings, so return an empty list
         return []
 
-    def __display_image__(self,subject_id,args_l,kwargs_l,block=True):
+    def __display_image__(self,subject_id,args_l,kwargs_l,block=True,title=None):
         """
         overwrite so that we can display the ROI
         :param subject_id:
         :return:
         """
         # todo: add in displaying the ROI - if we want
-        MarkingProject.__display_image__(self,subject_id,args_l,kwargs_l,block=block)
+        MarkingProject.__display_image__(self,subject_id,args_l,kwargs_l,block,title)
 
 
 
@@ -490,6 +511,9 @@ class PenguinWatch(MarkingProject):
         roi = self.roi_dict[site]
 
         x,y = marking[0]
+
+        if y > 750:
+            return False
 
         # find the line segment that "surrounds" x and see if y is above that line segment (remember that
         # images are flipped)

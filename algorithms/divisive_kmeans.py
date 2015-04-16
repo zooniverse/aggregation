@@ -16,9 +16,9 @@ class DivisiveKMeans(Cluster):
         Cluster.__init__(self,project_api,min_cluster_size)
 
         self.fix_distinct_clusters = fix_distinct_clusters
-        self.alg = "divisivekmeans"
+        self.algorithm_name = "divisivekmeans"
 
-    def __cluster_subject__(self,subject_id,jpeg_file=None):
+    def __cluster_subject__(self,subject_id,max_users=None,jpeg_file=None):
         """
         override the parent method but still call it - also for correcting problems with nearest neighbours etc.
         things that only make sense with divisive k-means
@@ -26,21 +26,21 @@ class DivisiveKMeans(Cluster):
         :param jpeg_file:
         :return:
         """
-        time_to_cluster = Cluster.__cluster_subject__(self,subject_id,jpeg_file)
+        time_to_cluster = Cluster.__cluster_subject__(self,subject_id,max_users,jpeg_file)
 
         # kmeans will sometimes split clusters such that we have two nearest neighbour clusters with no users
         # in common - both representing the same animal/thing. Do we want to find such cases and fix them?
         # in this case fixing is just a case of merging the clusters
-        if self.fix_distinct_clusters:
-            start = time.time()
-            self.clusterResults[subject_id] = self.correction.__fix__(self.clusterResults[subject_id])
-            end = time.time()
+        # if self.fix_distinct_clusters:
+        #     start = time.time()
+        #     self.clusterResults[subject_id] = self.correction.__fix__(self.clusterResults[subject_id])
+        #     end = time.time()
+        #
+        #     return time_to_cluster + (end-start)
+        # else:
+        return time_to_cluster
 
-            return time_to_cluster + (end-start)
-        else:
-            return time_to_cluster
-
-    def __correct__(self,subject_id):
+    def __correct__(self,subject_id,debug=False):
         """
         find any nearest neighbour tuples of clusters which have no users in common and merge them
         :return:
@@ -72,7 +72,13 @@ class DivisiveKMeans(Cluster):
                     overlap = [u for u in users_j if u in users_i]
                     closest_neighbour = j
 
-            if len(overlap) == 0:
+            if (len(overlap) == 0) and (closest_distance < 10):
+                if debug:
+                    x = [results[0][i][0],results[0][j][0]]
+                    y = [results[0][i][1],results[0][j][1]]
+
+                    ax = self.project_api.__display_image__(subject_id,[[x,y]],[{"color":"red"}])
+
                 # remove the j'th element and merge it with the i'th one
                 center = results[0].pop(closest_neighbour)
                 pts = results[1].pop(closest_neighbour)
@@ -90,6 +96,8 @@ class DivisiveKMeans(Cluster):
                 results[0][i] = [np.mean(axis) for axis in zip(*results[1][i])]
             # move on to the next element
             i += 1
+
+        print "- " +str(len(self.clusterResults[subject_id][0]))
 
     def __fit__(self,markings,user_ids,jpeg_file=None,debug=False):
         """
@@ -193,7 +201,7 @@ class DivisiveKMeans(Cluster):
                         # find the center of this cluster - just take the average in every direction
                         # slightly complicated so that we don't presume how many dimensions we have
                         # todo: make having the median an option
-                        temp_cluster_centers.append([np.mean(axis) for axis in zip(*points)])
+                        temp_cluster_centers.append([np.median(axis) for axis in zip(*points)])
                         temp_users.append(users)
                     else:
                         temp_clusters_to_go.append((points,users))
@@ -211,5 +219,5 @@ class DivisiveKMeans(Cluster):
         for c in end_clusters:
             assert(len(c) >= self.min_cluster_size)
         end = time.time()
-
+        print "- " +str(len(cluster_centers))
         return (cluster_centers, end_clusters,end_users),end-start

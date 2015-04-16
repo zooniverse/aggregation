@@ -10,6 +10,7 @@ import automatic_optics
 class Agglomerative(clustering.Cluster):
     def __init__(self,project_api,min_cluster_size=1):
         clustering.Cluster.__init__(self,project_api,min_cluster_size)
+        self.algorithm_name = "agglomerative"
 
     def __add_cluster(self,cluster_centers,end_clusters,end_users,node):
         cluster_centers.append([np.mean(axis) for axis in zip(*node.pts)])
@@ -44,8 +45,6 @@ class Agglomerative(clustering.Cluster):
             rnode = nodes[rchild_index]
             lnode = nodes[lchild_index]
 
-
-
             if (rnode is None) or (lnode is None):
                 if rnode is not None:
                     cluster_centers,end_clusters,end_users = self.__add_cluster(cluster_centers,end_clusters,end_users,rnode)
@@ -55,7 +54,7 @@ class Agglomerative(clustering.Cluster):
             else:
                 cur_height = max(rnode.height,lnode.height)
                 #print max_height,cur_height
-                if cur_height < (max_height-1):
+                if False:#cur_height < (max_height-1):
                     cluster_centers,end_clusters,end_users = self.__add_cluster(cluster_centers,end_clusters,end_users,rnode)
                     cluster_centers,end_clusters,end_users = self.__add_cluster(cluster_centers,end_clusters,end_users,lnode)
                     nodes.append(None)

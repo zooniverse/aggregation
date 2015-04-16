@@ -17,6 +17,8 @@ class AbstractNode:
         self.depth = None
         self.height = None
 
+        self.users = None
+
     def __set_parent__(self,node):
         assert isinstance(node,InnerNode)
         self.parent = node
@@ -30,18 +32,19 @@ class AbstractNode:
 
 
 class LeafNode(AbstractNode):
-    def __init__(self,value,index):
+    def __init__(self,value,index,user=None):
         AbstractNode.__init__(self)
         self.value = value
         self.index = index
-
+        self.users = [user,]
         self.height = 0
+        self.pts = [value,]
 
     def __traversal__(self):
         return [(self.value,self.index),]
 
 class InnerNode(AbstractNode):
-    def __init__(self,rchild,lchild,dist):
+    def __init__(self,rchild,lchild,dist=None):
         AbstractNode.__init__(self)
         assert isinstance(rchild,(LeafNode,InnerNode))
         assert isinstance(lchild,(LeafNode,InnerNode))
@@ -53,6 +56,14 @@ class InnerNode(AbstractNode):
         lchild.__set_parent__(self)
 
         self.dist = dist
+
+        assert (self.lchild.users is None) == (self.rchild.users is None)
+        if self.lchild.users is not None:
+            self.users = self.lchild.users[:]
+            self.users.extend(self.rchild.users)
+
+        self.pts = self.lchild.pts[:]
+        self.pts.extend(self.rchild.pts[:])
 
         self.height = max(rchild.height,lchild.height)+1
 
@@ -136,10 +147,8 @@ class AutomaticOptics(Cluster):
         # the length of results[2] may and probably will change as we correct things
         # so don't use a for loop
         # -1 so we always have at least one more element to compare against
-        print "starting length is " + str(len(results[2]))
 
         while i < len(results[2])-1:
-            print results[0][i]
             users_i = results[2][i]
             pts_i = results[1][i]
             cluster_i = results[0][i]
@@ -160,10 +169,6 @@ class AutomaticOptics(Cluster):
                     closest_distance = dist
                     overlap = [u for u in users_j if u in users_i]
                     closest_neighbour = j
-
-            print closest_distance
-            print overlap
-            print
 
             if len(overlap) == 0:
                 # remove the j'th element and merge it with the i'th one
@@ -189,10 +194,9 @@ class AutomaticOptics(Cluster):
         print "ending length is " + str(len(results[2]))
 
     def __fit__(self,markings,user_ids,jpeg_file=None,debug=False):
-        print
         l = [[(u,m[0]) for m in marking] for u,marking in zip(user_ids,markings)]
         user_list,pts_list = zip(*[item for sublist in l for item in sublist])
-        assert len(pts_list) == len(list(set(pts_list)))
+        # assert len(pts_list) == len(list(set(pts_list)))
         labels = range(len(pts_list))
         variables = ["X","Y"]
         # X = np.random.random_sample([5,3])*10
@@ -274,5 +278,4 @@ class AutomaticOptics(Cluster):
         clusters = create_clusters(zip(*reachability_ordering)[0],important_local_maxima)
         users_per_cluster = [[user_list[pts_list.index(p)] for p in c] for c in clusters]
         cluster_centers = [[np.mean(axis) for axis in zip(*c)] for c in clusters]
-        print clusters
         return (cluster_centers,clusters,users_per_cluster),0

@@ -15,6 +15,149 @@ import warnings
 import scipy
 from shapely.geometry import Polygon
 
+cnames = {
+'aliceblue':            '#F0F8FF',
+'antiquewhite':         '#FAEBD7',
+'aqua':                 '#00FFFF',
+'aquamarine':           '#7FFFD4',
+'azure':                '#F0FFFF',
+'beige':                '#F5F5DC',
+'bisque':               '#FFE4C4',
+'black':                '#000000',
+'blanchedalmond':       '#FFEBCD',
+'blue':                 '#0000FF',
+'blueviolet':           '#8A2BE2',
+'brown':                '#A52A2A',
+'burlywood':            '#DEB887',
+'cadetblue':            '#5F9EA0',
+'chartreuse':           '#7FFF00',
+'chocolate':            '#D2691E',
+'coral':                '#FF7F50',
+'cornflowerblue':       '#6495ED',
+'cornsilk':             '#FFF8DC',
+'crimson':              '#DC143C',
+'cyan':                 '#00FFFF',
+'darkblue':             '#00008B',
+'darkcyan':             '#008B8B',
+'darkgoldenrod':        '#B8860B',
+'darkgray':             '#A9A9A9',
+'darkgreen':            '#006400',
+'darkkhaki':            '#BDB76B',
+'darkmagenta':          '#8B008B',
+'darkolivegreen':       '#556B2F',
+'darkorange':           '#FF8C00',
+'darkorchid':           '#9932CC',
+'darkred':              '#8B0000',
+'darksalmon':           '#E9967A',
+'darkseagreen':         '#8FBC8F',
+'darkslateblue':        '#483D8B',
+'darkslategray':        '#2F4F4F',
+'darkturquoise':        '#00CED1',
+'darkviolet':           '#9400D3',
+'deeppink':             '#FF1493',
+'deepskyblue':          '#00BFFF',
+'dimgray':              '#696969',
+'dodgerblue':           '#1E90FF',
+'firebrick':            '#B22222',
+'floralwhite':          '#FFFAF0',
+'forestgreen':          '#228B22',
+'fuchsia':              '#FF00FF',
+'gainsboro':            '#DCDCDC',
+'ghostwhite':           '#F8F8FF',
+'gold':                 '#FFD700',
+'goldenrod':            '#DAA520',
+'gray':                 '#808080',
+'green':                '#008000',
+'greenyellow':          '#ADFF2F',
+'honeydew':             '#F0FFF0',
+'hotpink':              '#FF69B4',
+'indianred':            '#CD5C5C',
+'indigo':               '#4B0082',
+'ivory':                '#FFFFF0',
+'khaki':                '#F0E68C',
+'lavender':             '#E6E6FA',
+'lavenderblush':        '#FFF0F5',
+'lawngreen':            '#7CFC00',
+'lemonchiffon':         '#FFFACD',
+'lightblue':            '#ADD8E6',
+'lightcoral':           '#F08080',
+'lightcyan':            '#E0FFFF',
+'lightgoldenrodyellow': '#FAFAD2',
+'lightgreen':           '#90EE90',
+'lightgray':            '#D3D3D3',
+'lightpink':            '#FFB6C1',
+'lightsalmon':          '#FFA07A',
+'lightseagreen':        '#20B2AA',
+'lightskyblue':         '#87CEFA',
+'lightslategray':       '#778899',
+'lightsteelblue':       '#B0C4DE',
+'lightyellow':          '#FFFFE0',
+'lime':                 '#00FF00',
+'limegreen':            '#32CD32',
+'linen':                '#FAF0E6',
+'magenta':              '#FF00FF',
+'maroon':               '#800000',
+'mediumaquamarine':     '#66CDAA',
+'mediumblue':           '#0000CD',
+'mediumorchid':         '#BA55D3',
+'mediumpurple':         '#9370DB',
+'mediumseagreen':       '#3CB371',
+'mediumslateblue':      '#7B68EE',
+'mediumspringgreen':    '#00FA9A',
+'mediumturquoise':      '#48D1CC',
+'mediumvioletred':      '#C71585',
+'midnightblue':         '#191970',
+'mintcream':            '#F5FFFA',
+'mistyrose':            '#FFE4E1',
+'moccasin':             '#FFE4B5',
+'navajowhite':          '#FFDEAD',
+'navy':                 '#000080',
+'oldlace':              '#FDF5E6',
+'olive':                '#808000',
+'olivedrab':            '#6B8E23',
+'orange':               '#FFA500',
+'orangered':            '#FF4500',
+'orchid':               '#DA70D6',
+'palegoldenrod':        '#EEE8AA',
+'palegreen':            '#98FB98',
+'paleturquoise':        '#AFEEEE',
+'palevioletred':        '#DB7093',
+'papayawhip':           '#FFEFD5',
+'peachpuff':            '#FFDAB9',
+'peru':                 '#CD853F',
+'pink':                 '#FFC0CB',
+'plum':                 '#DDA0DD',
+'powderblue':           '#B0E0E6',
+'purple':               '#800080',
+'red':                  '#FF0000',
+'rosybrown':            '#BC8F8F',
+'royalblue':            '#4169E1',
+'saddlebrown':          '#8B4513',
+'salmon':               '#FA8072',
+'sandybrown':           '#FAA460',
+'seagreen':             '#2E8B57',
+'seashell':             '#FFF5EE',
+'sienna':               '#A0522D',
+'silver':               '#C0C0C0',
+'skyblue':              '#87CEEB',
+'slateblue':            '#6A5ACD',
+'slategray':            '#708090',
+'snow':                 '#FFFAFA',
+'springgreen':          '#00FF7F',
+'steelblue':            '#4682B4',
+'tan':                  '#D2B48C',
+'teal':                 '#008080',
+'thistle':              '#D8BFD8',
+'tomato':               '#FF6347',
+'turquoise':            '#40E0D0',
+'violet':               '#EE82EE',
+'wheat':                '#F5DEB3',
+'white':                '#FFFFFF',
+'whitesmoke':           '#F5F5F5',
+'yellow':               '#FFFF00',
+'yellowgreen':          '#9ACD32'}
+colour_list = cnames.keys()
+
 def index(a, x):
     'Locate the leftmost value exactly equal to x'
     i = bisect.bisect_left(a, x)
@@ -121,7 +264,60 @@ class Cluster:
         self.x_roc = None
         self.y_roc = None
 
+        self.algorithm_name = None
 
+    def __compare_against__(self,other_clustering,subject_id):
+        assert isinstance(other_clustering,Cluster)
+        assert subject_id in other_clustering.clusterResults
+
+        for ii,our_cluster in enumerate(self.clusterResults[subject_id][1]):
+            overlap_count = 0
+            args = []
+            kwargs = []
+            for their_cluster in other_clustering.clusterResults[subject_id][1]:
+                overlap = [pt for pt in our_cluster if pt in their_cluster]
+                if overlap != []:
+                    x,y = zip(*overlap)
+                    args.append([x,y,'o'])
+                    kwargs.append({"color":colour_list[overlap_count]})
+
+                    # are there any points in their cluster which are not in our cluster?
+                    not_in = [pt for pt in their_cluster if not(pt in our_cluster)]
+                    if not_in != []:
+                        x,y = zip(*not_in)
+                        args.append([x,y,'>'])
+                        kwargs.append({"color":colour_list[overlap_count]})
+
+                    overlap_count += 1
+
+            if overlap_count > 1:
+                self.project_api.__display_image__(subject_id,args,kwargs)
+
+        # for their_cluster in other_clustering.clusterResults[subject_id][1]:
+        #     overlap_count = 0
+        #     args = []
+        #     kwargs = []
+        #     for ii,our_cluster in enumerate(self.clusterResults[subject_id][1]):
+        #         overlap = [pt for pt in their_cluster if pt in our_cluster]
+        #         if overlap != []:
+        #             x,y = zip(*overlap)
+        #             args.append([x,y,'x'])
+        #             kwargs.append({"color":colour_list[overlap_count]})
+        #
+        #             # are there any points in our cluster which are not in their cluster?
+        #             not_in = [pt for pt in our_cluster if not(pt in their_cluster)]
+        #             if not_in != []:
+        #                 x,y = zip(*not_in)
+        #                 args.append([x,y,'<'])
+        #                 kwargs.append({"color":colour_list[overlap_count]})
+        #
+        #             overlap_count += 1
+        #
+        #     if overlap_count > 1:
+        #         self.project_api.__display_image__(subject_id,args,kwargs)
+
+    def __correct__(self,subject_id):
+        pass
 
     def __display__markings__(self, subject_id):
         """
@@ -141,12 +337,12 @@ class Cluster:
         ax = self.project_api.__display_image__(subject_id,[args],[kwargs])
 
     def __raw_clusters__(self,subject_id):
-        colours = ["green","red","blue","purple","yellow","coral","tan","steelblue","fuchsia","darksage","peru"]
+        #colours = ["green","red","blue","purple","yellow","coral","tan","steelblue","fuchsia","darksage","peru"]
         args = []
         kwargs = []
         for ii,cluster in enumerate(self.clusterResults[subject_id][1]):
             args_c = []
-            kwargs_c = {"color":colours[ii]}
+            kwargs_c = {"color":cnames.keys()[ii]}
             for x,y in cluster:
                 args_c.extend([x,y,'o'])
 
@@ -164,7 +360,6 @@ class Cluster:
         args = []
         for u_pt,g_pt,dist in self.user_gold_distance[subject_id]:
             if dist > 5:
-                print dist
                 args.extend([[u_pt[0],g_pt[0]],[u_pt[1],g_pt[1]],"o-"])
 
         if args != []:
@@ -176,22 +371,40 @@ class Cluster:
         :param subject_id:
         :return:
         """
+        args_l = []
+        kwargs_l = []
+        for cluster in self.clusterResults[subject_id][1]:
+            x,y = zip(*cluster)
+            args_l.append([x,y,'x'])
+            kwargs_l.append({"color":"blue"})
+
         # green is for correct points
-        x,y = zip(*self.correct_pts[subject_id])
-        args_l = [[x,y,'o'],]
-        kwargs_l = [{"color":"green"},]
+        try:
+            x,y = zip(*self.correct_pts[subject_id])
+            args_l.append([x,y,'o'])
+            kwargs_l.append({"color":"green"})
+        except ValueError:
+            pass
 
         # yellow is for missed points
-        x,y = zip(*self.missed_pts[subject_id])
-        args_l.append([x,y,'o'])
-        kwargs_l.append({"color":"yellow"})
+        try:
+            x,y = zip(*self.missed_pts[subject_id])
+            args_l.append([x,y,'o'])
+            kwargs_l.append({"color":"yellow"})
+        except ValueError:
+            pass
 
         # red is for false positives
-        x,y = zip(*self.false_positives[subject_id])
-        args_l.append([x,y,'o'])
-        kwargs_l.append({"color":"red"})
+        try:
+            x,y = zip(*self.false_positives[subject_id])
+            args_l.append([x,y,'o'])
+            kwargs_l.append({"color":"red"})
+        except ValueError:
+            pass
 
-        self.project_api.__display_image__(subject_id,args_l,kwargs_l)
+
+
+        self.project_api.__display_image__(subject_id,args_l,kwargs_l,title=self.algorithm_name)
 
     @abc.abstractmethod
     def __fit__(self,markings,user_ids,jpeg_file=None,debug=False):
@@ -213,7 +426,7 @@ class Cluster:
 
         return (cluster_centers , markings_per_cluster, users_per_cluster), time_to_cluster
 
-    def __cluster_subject__(self,subject_id,jpeg_file=None):
+    def __cluster_subject__(self,subject_id,max_users=None,jpeg_file=None):
         """
         the function to call from outside to do the clustering
         override but call if you want to add additional functionality
@@ -223,7 +436,7 @@ class Cluster:
         """
         # start by calling the api to get the annotations along with the list of who made each marking
         # so for this function, we know that annotations = markings
-        users, markings = self.project_api.__get_markings__(subject_id)
+        users, markings = self.project_api.__get_markings__(subject_id,max_users=max_users)
         # if there are any markings - cluster
         # otherwise, just set to empty
         if markings != []:
@@ -250,7 +463,7 @@ class Cluster:
                 hull = [cluster[i] for i in hull_indices]
 
                 area = Polygon(hull).area
-                density = area/len(cluster)
+                density = len(cluster)/area
                 densities.append(density)
 
         return densities
@@ -277,7 +490,7 @@ class Cluster:
         # if there are no gold markings, technically everything is a false positive
         if gold_markings == ([],[]):
             self.false_positives[subject_id] = cluster_centers
-            return
+            return 0
 
         # so we know that there is at least one gold standard pt - but are there are any user clusters?
         # extract the actual points
@@ -285,8 +498,8 @@ class Cluster:
 
         # if there are no user markings, we have missed everything
         if cluster_centers == []:
-            self.missed_pts = gold_pts
-            return
+            self.missed_pts[subject_id] = gold_pts
+            return 0
 
         # we know that there are both gold standard points and user clusters - we need to match them up
         # user to gold - for a gold point X, what are the user points for which X is the closest gold point?
@@ -309,8 +522,8 @@ class Cluster:
                     min_dist = dist
                     closest_gold_index = gold_index
 
-            # if min_dist < 20:
-            users_to_gold[closest_gold_index].append(local_index)
+            if min_dist < 30:
+                users_to_gold[closest_gold_index].append(local_index)
 
         # and now find out which user clusters are actually correct
         # that will be the user point which is closest to the gold point
@@ -336,12 +549,30 @@ class Cluster:
 
                 self.user_gold_mapping[(subject_id,tuple(u_pt))] = g_pt
             else:
-                self.missed_pts[subject_id].append(g_pt)
-
+                try:
+                    self.missed_pts[subject_id].append(g_pt)
+                except TypeError:
+                    print self.missed_pts[subject_id]
+                    raise
 
         # what were the false positives?
         self.false_positives[subject_id] = [pt for pt in cluster_centers if not(pt in self.correct_pts[subject_id])]
-        return users_to_gold
+        return len(self.correct_pts[subject_id])
+
+    def __analyze_missed_gold_pts__(self,subject_id):
+        should_have_found = set([])
+        for g_pt in self.missed_pts[subject_id]:
+            for cluster_index in range(len(self.clusterResults[subject_id][0])):
+                cluster_center = self.clusterResults[subject_id][0][cluster_index]
+                cluster_pts = self.clusterResults[subject_id][1][cluster_index]
+
+                for u_pt in cluster_pts:
+                    dist_to_center = math.sqrt(sum([(a-b)**2 for (a,b) in zip(u_pt,cluster_center)]))
+                    dist_to_gold = math.sqrt(sum([(a-b)**2 for (a,b) in zip(u_pt,g_pt)]))
+
+                    if dist_to_center > dist_to_gold:
+                        should_have_found.add(g_pt)
+        return len(list(should_have_found)),len(self.missed_pts[subject_id]) - len(list(should_have_found))
 
     def __setup_global_indices__(self,include_gold=False):
         """
