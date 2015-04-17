@@ -13,7 +13,7 @@ class Agglomerative(clustering.Cluster):
         self.algorithm_name = "agglomerative"
 
     def __add_cluster(self,cluster_centers,end_clusters,end_users,node):
-        cluster_centers.append([np.mean(axis) for axis in zip(*node.pts)])
+        cluster_centers.append([np.median(axis) for axis in zip(*node.pts)])
         end_clusters.append(node.pts)
         end_users.append(node.users)
 
@@ -72,5 +72,5 @@ class Agglomerative(clustering.Cluster):
                         nodes.append(automatic_optics.InnerNode(rnode,lnode))
 
         end = time.time()
-        print "- " +str(len(cluster_centers))
+        # print "- " +str(len(cluster_centers))
         return (cluster_centers, end_clusters,end_users),end-start

@@ -97,7 +97,7 @@ class DivisiveKMeans(Cluster):
             # move on to the next element
             i += 1
 
-        print "- " +str(len(self.clusterResults[subject_id][0]))
+        # print "- " +str(len(self.clusterResults[subject_id][0]))
 
     def __fit__(self,markings,user_ids,jpeg_file=None,debug=False):
         """
@@ -219,5 +219,5 @@ class DivisiveKMeans(Cluster):
         for c in end_clusters:
             assert(len(c) >= self.min_cluster_size)
         end = time.time()
-        print "- " +str(len(cluster_centers))
+        # print "- " +str(len(cluster_centers))
         return (cluster_centers, end_clusters,end_users),end-start

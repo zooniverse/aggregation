@@ -156,12 +156,13 @@ class OuroborosAPI:
     def __close_image__(self):
         plt.close()
 
-    def __get_subjects_with_gold_standard__(self,require_completed=True,remove_blanks=True,limit=-1,maximum_number_gold_markings=None):
+    def __get_subjects_with_gold_standard__(self,require_completed=True,remove_blanks=True,limit=-1,maximum_number_gold_markings=None,minimum_number_gold_markings=None,minimum_users=None):
         """
         find the zooniverse ids of all the subjects with gold standard data. Allows for more than one expert
         :param require_completed: return only those subjects which have been retired/completed
         :param remove_blanks: discard any subjects which were retired due to being blank
         :param limit - we want a limit on the number of subjects found
+        :param minimum_users - does NOT include the expert
         :return:
         """
         # todo: use the pickle directory
@@ -189,6 +190,9 @@ class OuroborosAPI:
                 num_gold_markings =len(classification["annotations"][1]["value"])
                 if (maximum_number_gold_markings is not None) and (num_gold_markings > maximum_number_gold_markings):
                     continue
+
+                if (minimum_number_gold_markings is not None) and (num_gold_markings < minimum_number_gold_markings):
+                    continue
             except KeyError:
                 continue
             # if we have additional constraints on the subject
@@ -206,6 +210,22 @@ class OuroborosAPI:
                     if subject["metadata"]["retire_reason"] in ["blank"]:
                         print "b"
                         continue
+
+            if minimum_users is not None:
+                if self.pickle_directory != "":
+                    fname = self.pickle_directory+zooniverse_id+".pickle"
+                    # check if we have read in this subject before
+                    if os.path.isfile(fname):
+                        mongo_results = pickle.load(open(fname,"rb"))
+                    else:
+                        mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
+                        pickle.dump(mongo_results,open(fname,"wb"))
+                else:
+                    # just read in the results
+                    mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
+
+                if len(mongo_results) < minimum_users:
+                    continue
 
             if zooniverse_id not in subjects:
                 subjects.add(zooniverse_id)
@@ -275,6 +295,8 @@ class OuroborosAPI:
         annotations_list = []
         user_list = []
         ip_list = []
+
+        print len(mongo_results)
 
         for user_index, classification in enumerate(mongo_results):
             # get the name of this user
