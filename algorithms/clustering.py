@@ -233,7 +233,7 @@ class Cluster:
         :param min_cluster_size: minimum number of points in a cluster to not be considered noise
         :return:
         """
-        assert isinstance(project_api,ouroboros_api.MarkingProject)
+        # assert isinstance(project_api,ouroboros_api.MarkingProject)
         self.project_api = project_api
         self.min_cluster_size = min_cluster_size
         self.clusterResults = {}
@@ -335,6 +335,9 @@ class Cluster:
             kwargs = {}
 
         ax = self.project_api.__display_image__(subject_id,[args],[kwargs])
+
+    def __get_results__(self,subject_id):
+        return self.clusterResults[subject_id]
 
     def __raw_clusters__(self,subject_id):
         #colours = ["green","red","blue","purple","yellow","coral","tan","steelblue","fuchsia","darksage","peru"]
