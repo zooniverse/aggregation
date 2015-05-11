@@ -39,9 +39,9 @@ class OuroborosAPI:
 
         self.gold_standard_subjects = None
 
-        # use this to store classifications - only makes sense if we are using this data multiple times
-        # if you are just doing a straight run through of all the data, don't use this
-        self.classifications = {}
+        # # use this to store classifications - only makes sense if we are using this data multiple times
+        # # if you are just doing a straight run through of all the data, don't use this
+        # self.classifications = {}
 
         current_directory = os.getcwd()
         slash_indices = [m.start() for m in re.finditer('/', current_directory)]
@@ -59,9 +59,11 @@ class OuroborosAPI:
         # a case where users are only logged in some of the time
         self.user_ip_addresses = {}
 
-    def __optimize_classification_collections__(self,with_experts_only=False):
+
+    def __optimize_classification_collections__(self):
         """
         creates a new collection which has indices for the zooniverse_id of the subject
+        :param gold_restrictions: if we only want a set of subjects for which we have gold standard data
         :return:
         """
         self.id_prefix = ""
@@ -75,17 +77,12 @@ class OuroborosAPI:
         new_classification_collection.create_index([("user_ip",pymongo.ASCENDING),])
         new_classification_collection.create_index([("zooniverse_id",pymongo.ASCENDING),])
 
-        if with_experts_only:
-            gold_subjects = list(self.__get_subjects_with_gold_standard__())
-        else:
-            gold_subjects = None
-
         for classification in self.classification_collection.find():
             post = dict()
             zooniverse_id = classification["subjects"][0]["zooniverse_id"]
 
 
-            if with_experts_only and (zooniverse_id not in gold_subjects):
+            if (self.gold_standard_subjects != []) and (zooniverse_id not in self.gold_standard_subjects):
                 continue
 
             post["zooniverse_id"] = zooniverse_id
@@ -103,6 +100,9 @@ class OuroborosAPI:
 
         self.classification_collection = self.db["optimized_classifications"]
 
+    def __classifications__per_gold_subject__(self):
+        for subject_id in self.gold_standard_subjects:
+            classifications = self.classification_collection.find({"subjects.zooniverse_id":subject_id})
 
     def __users__(self,subject_id):
         """
@@ -156,7 +156,24 @@ class OuroborosAPI:
     def __close_image__(self):
         plt.close()
 
-    def __get_subjects_with_gold_standard__(self,require_completed=True,remove_blanks=True,limit=-1,maximum_number_gold_markings=None,minimum_number_gold_markings=None,minimum_users=None):
+    def __set_gold_standard__(self,remove_blanks=True,limit=float('inf'),maximum_number_gold_markings=float("inf"),minimum_number_gold_markings=0,minimum_users=0):
+        """
+        set up a list of subjects with gold standard data which we can use for testing
+        :param require_completed:
+        :param remove_blanks:
+        :param limit:
+        :param maximum_number_gold_markings:
+        :param minimum_number_gold_markings:
+        :param minimum_users:
+        :return:
+        """
+        self.gold_standard_subjects = []
+        for subject_id in self.__get_subjects_with_gold_standard__(True,remove_blanks,limit,maximum_number_gold_markings,minimum_number_gold_markings,minimum_users):
+            gold_classifications = self.classification_collection.find({"user_name": {"$in": self.experts},"subjects.zooniverse_id":subject_id})
+            self.gold_standard_subjects.append(subject_id)
+            break
+
+    def __get_subjects_with_gold_standard__(self,require_completed=True,remove_blanks=True,limit=float("inf"),maximum_number_gold_markings=float("inf"),minimum_number_gold_markings=0,minimum_users=0):
         """
         find the zooniverse ids of all the subjects with gold standard data. Allows for more than one expert
         :param require_completed: return only those subjects which have been retired/completed
@@ -175,7 +192,7 @@ class OuroborosAPI:
         subjects = set()
         count = 0
         for classification in classification_iterator:
-            if (limit > 0) and (count >= limit):
+            if count >= limit:
                 break
 
             try:
@@ -186,56 +203,40 @@ class OuroborosAPI:
             if zooniverse_id in ["APZ00017op"]:
                 continue
 
-            try:
+            # if we have provided a minimum or maximum number of markings
+            if (maximum_number_gold_markings < float("inf")) or (minimum_number_gold_markings > 0):
                 num_gold_markings =len(classification["annotations"][1]["value"])
-                if (maximum_number_gold_markings is not None) and (num_gold_markings > maximum_number_gold_markings):
+                if num_gold_markings > maximum_number_gold_markings:
                     continue
 
-                if (minimum_number_gold_markings is not None) and (num_gold_markings < minimum_number_gold_markings):
+                if num_gold_markings < minimum_number_gold_markings:
                     continue
-            except KeyError:
-                continue
+
             # if we have additional constraints on the subject
-
+            # these constraints depend on the subject, not the classification
             if require_completed or remove_blanks:
                 # retrieve the subject first and then check conditions - this way we avoid having to search
                 # through the whole DB
                 subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})
-
                 if require_completed:
                     if subject["state"] != "complete":
-                        print "a"
                         continue
                 if remove_blanks:
                     if subject["metadata"]["retire_reason"] in ["blank"]:
-                        print "b"
                         continue
 
-            if minimum_users is not None:
-                if self.pickle_directory != "":
-                    fname = self.pickle_directory+zooniverse_id+".pickle"
-                    # check if we have read in this subject before
-                    if os.path.isfile(fname):
-                        mongo_results = pickle.load(open(fname,"rb"))
-                    else:
-                        mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
-                        pickle.dump(mongo_results,open(fname,"wb"))
-                else:
-                    # just read in the results
-                    mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
 
-                if len(mongo_results) < minimum_users:
+            if minimum_users > 0:
+                subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})
+                if subject["classification_count"] < minimum_users:
                     continue
 
+            # if we are reading in more than one expert's classifications, there is a chance we might
+            # read in the same subject multiple times, make sure we only print it out once
             if zooniverse_id not in subjects:
                 subjects.add(zooniverse_id)
                 count += 1
                 yield zooniverse_id
-
-
-        # self.gold_standard_subjects = list(subjects)
-        #
-        # return self.gold_standard_subjects
 
     def __get_completed_subjects__(self):
         """
@@ -278,27 +279,25 @@ class OuroborosAPI:
         :return:
         """
 
-        #mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
-        # if we are storing values from previous runs
-        if self.pickle_directory != "":
-            fname = self.pickle_directory+zooniverse_id+".pickle"
-            # check if we have read in this subject before
-            if os.path.isfile(fname):
-                mongo_results = pickle.load(open(fname,"rb"))
-            else:
-                mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
-                pickle.dump(mongo_results,open(fname,"wb"))
-        else:
-            # just read in the results
-            mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
+        # #mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
+        # # if we are storing values from previous runs
+        # if self.pickle_directory != "":
+        #     fname = self.pickle_directory+zooniverse_id+".pickle"
+        #     # check if we have read in this subject before
+        #     if os.path.isfile(fname):
+        #         mongo_results = pickle.load(open(fname,"rb"))
+        #     else:
+        #         mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
+        #         pickle.dump(mongo_results,open(fname,"wb"))
+        # else:
+        #     # just read in the results
+        #     mongo_results = list(self.classification_collection.find({self.id_prefix+"zooniverse_id":zooniverse_id}))
 
         annotations_list = []
         user_list = []
         ip_list = []
 
-        print len(mongo_results)
-
-        for user_index, classification in enumerate(mongo_results):
+        for user_index, classification in enumerate(self.classification_collection.find({"user_name": {"$in": self.experts},"subjects.zooniverse_id":zooniverse_id})):
             # get the name of this user
             if "user_name" in classification:
                 # add the _ just we know for certain whether a user was logged in
@@ -345,9 +344,9 @@ class OuroborosAPI:
 class MarkingProject(OuroborosAPI):
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, project, date, dimensions, scale=1, experts=[],pickle_directory="/tmp/"):
+    def __init__(self, project, date, scale=1, experts=[],pickle_directory="/tmp/"):
         OuroborosAPI.__init__(self, project, date, experts=experts,pickle_directory=pickle_directory)
-        self.dimensions = dimensions
+        # self.dimensions = dimensions
         self.scale = scale
 
     # @abc.abstractmethod
