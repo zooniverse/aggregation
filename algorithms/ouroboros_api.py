@@ -11,6 +11,13 @@ import matplotlib.cbook as cbook
 import datetime
 import warnings
 import random
+import clustering
+import math
+import numpy
+
+import itertools
+def findsubsets(S,m):
+    return set(itertools.combinations(S, m))
 
 class OuroborosAPI:
     __metaclass__ = abc.ABCMeta
@@ -41,7 +48,8 @@ class OuroborosAPI:
 
         # # use this to store classifications - only makes sense if we are using this data multiple times
         # # if you are just doing a straight run through of all the data, don't use this
-        # self.classifications = {}
+        self.annotations = {}
+        self.gold_annotations = {}
 
         current_directory = os.getcwd()
         slash_indices = [m.start() for m in re.finditer('/', current_directory)]
@@ -59,6 +67,43 @@ class OuroborosAPI:
         # a case where users are only logged in some of the time
         self.user_ip_addresses = {}
 
+    def __get_classifications__(self,subject_id,cluster_alg=None):
+        pass
+
+    def __evaluate__(self,results,clusteringAlg=None):
+        errors = []
+        for subject_id in self.gold_standard_subjects:
+            # print self.subject_collection.find_one({"zooniverse_id":subject_id})["location"]["standard"]
+            if self.gold_annotations[subject_id] == []:
+                continue
+            for pt,gold_classification in self.gold_annotations[subject_id][0]:
+                closest_distance = float("inf")
+                best_classification = None
+                for center,users,classification in zip(clusteringAlg.clusterResults[subject_id][0],clusteringAlg.clusterResults[subject_id][2],results[subject_id]):
+                    dist = math.sqrt((center[0]-pt[0])**2+(center[1]-pt[1])**2)
+                    if dist < closest_distance:
+                        closest_distance = dist
+                        best_classification = classification
+
+                print (best_classification,gold_classification)
+                if best_classification != gold_classification:
+                    errors.append(-math.log(math.pow(10,-15)))
+                else:
+                    errors.append(-math.log(1-math.pow(10,-15)))
+
+        print errors
+        print numpy.mean(errors)
+            # if clusteringAlg is not None:
+            #     assert isinstance(clusteringAlg,clustering.Cluster)
+            #     for center,users,classification in zip(clusteringAlg.clusterResults[subject_id][0],clusteringAlg.clusterResults[subject_id][2],results[subject_id]):
+            #
+            #
+            #         print center,users,classification
+            # #     print clusteringAlg.clusterResults[subject_id][0]
+            # # print results[subject_id]
+            # print "----"
+            # print self.gold_annotations[subject_id]
+            # print
 
     def __optimize_classification_collections__(self):
         """
@@ -100,9 +145,9 @@ class OuroborosAPI:
 
         self.classification_collection = self.db["optimized_classifications"]
 
-    def __classifications__per_gold_subject__(self):
-        for subject_id in self.gold_standard_subjects:
-            classifications = self.classification_collection.find({"subjects.zooniverse_id":subject_id})
+    # def __classifications__per_gold_subject__(self):
+    #     for subject_id in self.gold_standard_subjects:
+    #         user_list,annotations_list = self.__get_annotations__(subject_id)
 
     def __users__(self,subject_id):
         """
@@ -156,6 +201,49 @@ class OuroborosAPI:
     def __close_image__(self):
         plt.close()
 
+    def __top_users__(self):
+        all_subjects = set()
+        users = list(self.user_collection.find().sort("classification_count",-1).limit(10))
+        users.append({"name":"yshish"})
+        all = []
+        self.experts = []
+        for u in users:
+            classifications = self.classification_collection.find({"user_name":u["name"],"tutorial":{"$ne":True}})
+            subject_ids = [c["subjects"][0]["zooniverse_id"] for c in classifications]
+            t = []
+
+            all.append(set(subject_ids))
+            self.experts.append(u["name"])
+        print self.experts
+
+        for subset in  findsubsets(range(len(self.experts)-1),2):
+            old_len = len(list(all_subjects))
+            # print subset
+            s = all[-1]
+            for i in subset:
+                s = s.intersection(all[i])
+            all_subjects = all_subjects.union(s)
+            if len(list(all_subjects)) != old_len:
+                # print len(list(all_subjects)), old_len
+                print [self.experts[i] for i in subset], len(list(all_subjects)) - old_len
+        # all_subjects = random.sample(all_subjects,100)
+
+        t = []
+        for zooniverse_id in list(all_subjects):
+            subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})
+            if (subject["state"] == "complete") and (subject["metadata"]["retire_reason"] != "blank"):
+                # all_subjects.remove(zooniverse_id)
+                t.append(zooniverse_id)
+
+        all_subjects = random.sample(t,400)
+        for zooniverse_id in list(all_subjects):
+            self.__store_annotations__(zooniverse_id,expert_markings=True)
+        # print len(list(all_subjects))
+        self.gold_standard_subjects = list(all_subjects)
+
+        # print all
+
+
     def __set_gold_standard__(self,remove_blanks=True,limit=float('inf'),maximum_number_gold_markings=float("inf"),minimum_number_gold_markings=0,minimum_users=0):
         """
         set up a list of subjects with gold standard data which we can use for testing
@@ -167,25 +255,24 @@ class OuroborosAPI:
         :param minimum_users:
         :return:
         """
-        self.gold_standard_subjects = []
-        for subject_id in self.__get_subjects_with_gold_standard__(True,remove_blanks,limit,maximum_number_gold_markings,minimum_number_gold_markings,minimum_users):
-            gold_classifications = self.classification_collection.find({"user_name": {"$in": self.experts},"subjects.zooniverse_id":subject_id})
-            self.gold_standard_subjects.append(subject_id)
-            break
 
-    def __get_subjects_with_gold_standard__(self,require_completed=True,remove_blanks=True,limit=float("inf"),maximum_number_gold_markings=float("inf"),minimum_number_gold_markings=0,minimum_users=0):
-        """
-        find the zooniverse ids of all the subjects with gold standard data. Allows for more than one expert
-        :param require_completed: return only those subjects which have been retired/completed
-        :param remove_blanks: discard any subjects which were retired due to being blank
-        :param limit - we want a limit on the number of subjects found
-        :param minimum_users - does NOT include the expert
-        :return:
-        """
-        # todo: use the pickle directory
-        # todo: not sure if remove blanks is working properly
-        # if we have provided a limit, use it
-        classification_iterator = list(self.classification_collection.find({"user_name": {"$in": self.experts}}))
+        # for subject_id in self.__get_subjects_with_gold_standard__(True,remove_blanks,limit,maximum_number_gold_markings,minimum_number_gold_markings,minimum_users):
+        #     # gold_classifications = self.classification_collection.find({"user_name": {"$in": self.experts},"subjects.zooniverse_id":subject_id})
+        #     self.gold_standard_subjects.append(subject_id)
+
+    # def __get_subjects_with_gold_standard__(self,require_completed=True,remove_blanks=True,limit=float("inf"),maximum_number_gold_markings=float("inf"),minimum_number_gold_markings=0,minimum_users=0):
+    #     """
+    #     find the zooniverse ids of all the subjects with gold standard data. Allows for more than one expert
+    #     :param require_completed: return only those subjects which have been retired/completed
+    #     :param remove_blanks: discard any subjects which were retired due to being blank
+    #     :param limit - we want a limit on the number of subjects found
+    #     :param minimum_users - does NOT include the expert
+    #     :return:
+    #     """
+    #     # todo: use the pickle directory
+    #     # todo: not sure if remove blanks is working properly
+    #     # if we have provided a limit, use it
+        classification_iterator = list(self.classification_collection.find({"user_name": {"$in": self.experts},"tutorial":{"$ne":True}}))
         random.shuffle(classification_iterator)
         # if limit != -1:
         #     classification_iterator = classification_iterator.limit(limit)
@@ -214,16 +301,21 @@ class OuroborosAPI:
 
             # if we have additional constraints on the subject
             # these constraints depend on the subject, not the classification
-            if require_completed or remove_blanks:
-                # retrieve the subject first and then check conditions - this way we avoid having to search
-                # through the whole DB
-                subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})
-                if require_completed:
-                    if subject["state"] != "complete":
-                        continue
-                if remove_blanks:
-                    if subject["metadata"]["retire_reason"] in ["blank"]:
-                        continue
+            # if remove_blanks:
+            #     # retrieve the subject first and then check conditions - this way we avoid having to search
+            #     # through the whole DB
+            #     subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})
+            #     # if require_completed:
+            #     #     if subject["state"] != "complete":
+            #     #         continue
+            subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})
+            if subject["state"] != "complete":
+                continue
+
+            if remove_blanks:
+
+                if subject["metadata"]["retire_reason"] in ["blank"]:
+                    continue
 
 
             if minimum_users > 0:
@@ -236,7 +328,10 @@ class OuroborosAPI:
             if zooniverse_id not in subjects:
                 subjects.add(zooniverse_id)
                 count += 1
-                yield zooniverse_id
+                self.__store_annotations__(zooniverse_id,expert_markings=True)
+                # yield zooniverse_id
+
+        self.gold_standard_subjects = list(subjects)
 
     def __get_completed_subjects__(self):
         """
@@ -271,7 +366,7 @@ class OuroborosAPI:
         """
         return []
 
-    def __get_annotations__(self,zooniverse_id,max_users=None,expert_markings=False):
+    def __store_annotations__(self,zooniverse_id,max_users=float("inf"),expert_markings=False):
         """
         read through and return all of the relevant annotations associated with the given zooniverse_id
         :param zooniverse_id:
@@ -297,48 +392,63 @@ class OuroborosAPI:
         user_list = []
         ip_list = []
 
-        for user_index, classification in enumerate(self.classification_collection.find({"user_name": {"$in": self.experts},"subjects.zooniverse_id":zooniverse_id})):
+        constraints = {"subjects.zooniverse_id":zooniverse_id}
+        if expert_markings:
+            constraints["user_name"] = {"$in": self.experts}
+        else:
+            constraints["user_name"] = {"$nin": self.experts}
+        print zooniverse_id
+        for user_index, classification in enumerate(self.classification_collection.find(constraints)):
             # get the name of this user
             if "user_name" in classification:
                 # add the _ just we know for certain whether a user was logged in
                 # just in case a username is "10" for example, which is a valid ip address
                 user_id = classification["user_name"]+"_"
 
-                if not(user_id in self.user_ip_addresses):
-                    self.user_ip_addresses[user_id] = set([classification["user_ip"]])
-                else:
-                    self.user_ip_addresses[user_id].add(classification["user_ip"])
+                # if not(user_id in self.user_ip_addresses):
+                #     self.user_ip_addresses[user_id] = set([classification["user_ip"]])
+                # else:
+                #     self.user_ip_addresses[user_id].add(classification["user_ip"])
             else:
                 user_id = classification["user_ip"]
+                #classification["user_ip"]
                 logged_in_user = False
+            print user_id
 
             # skip any users who are experts if we do not want experts
             # if we want experts, skip anyone who is not
             # != should be equal to XOR
             # need to remove the last character - "_" for testing if the user is an expert
-            if (user_id[:-1] in self.experts) != expert_markings:
-                continue
+            # if (user_id[:-1] in self.experts) != expert_markings:
+            #     continue
 
             annotations = self.__classification_to_annotations__(classification)
+
             if annotations != []:
                 annotations_list.append(annotations)
                 user_list.append(user_id)
+            # else:
+            #     print classification
+            #     assert False
 
-            if max_users is not None:
-                if len(user_list) == max_users:
-                    break
+            if len(user_list) == max_users:
+                break
 
-        # print "num users " + str(len(user_list))
-        # if we are not reading in the expert's classifications then we should update the ids
-        if not expert_markings:
-            self.users_per_subject[zooniverse_id] = set(user_list)
-            # self.ips_per_subject[zooniverse_id] = set(ip_list)
+        # # print "num users " + str(len(user_list))
+        # # if we are not reading in the expert's classifications then we should update the ids
+        # if not expert_markings:
+        #     self.users_per_subject[zooniverse_id] = set(user_list)
+        #     # self.ips_per_subject[zooniverse_id] = set(ip_list)
+        #
+        #     self.all_users.update(user_list)
+        #     # self.all_ips.update(ip_list)
 
-            self.all_users.update(user_list)
-            # self.all_ips.update(ip_list)
-
-
-        return user_list,annotations_list
+        assert len(user_list) == len(annotations_list)
+        if expert_markings:
+            self.gold_annotations[zooniverse_id] = (user_list,annotations_list)
+        else:
+            self.annotations[zooniverse_id] = (user_list,annotations_list)
+        # return user_list,annotations_list
 
 
 class MarkingProject(OuroborosAPI):
@@ -374,13 +484,42 @@ class MarkingProject(OuroborosAPI):
         """
         return []
 
-    def __get_markings__(self,subject_id,max_users=None,expert_markings=False):
+    def __get_markings__(self,subject_id,expert_markings=False):
         """
         just allows us to user different terminology so that we are clear about returning markings
         :param subject_id:
         :return:
         """
-        return OuroborosAPI.__get_annotations__(self,subject_id,max_users,expert_markings)
+        if expert_markings:
+            return self.gold_annotations[subject_id]
+        else:
+            return self.annotations[subject_id]
+
+    def __get_classifications__(self,subject_id,cluster_alg=None,gold_standard=False):
+        assert isinstance(cluster_alg,clustering.Cluster)
+        if gold_standard:
+            l = [[(m[0],(u,m[1])) for m in marking] for u,marking in zip(self.gold_annotations[subject_id][0],self.gold_annotations[subject_id][1])]
+            results = cluster_alg.goldResults[subject_id]
+        else:
+            l = [[(m[0],(u,m[1])) for m in marking] for u,marking in zip(self.annotations[subject_id][0],self.annotations[subject_id][1])]
+            results = cluster_alg.clusterResults[subject_id]
+
+        l =  [item for sublist in l for item in sublist]
+        if l == []:
+            return []
+        pts,classifications = zip(*l)
+
+        classifications_per_cluster = []
+
+        for cluster in results[1]:
+            classifications_per_cluster.append([])
+            for pt in cluster:
+                classifications_per_cluster[-1].append(classifications[pts.index(pt)])
+
+        return classifications_per_cluster
+
+    def __store_markings__(self,subject_id,max_users=None,expert_markings=False):
+        OuroborosAPI.__store_annotations__(self,subject_id,max_users,expert_markings)
 
     def __classification_to_annotations__(self,classification):
         annotations = classification["annotations"]

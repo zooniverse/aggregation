@@ -27,9 +27,7 @@ class Agglomerative(clustering.Cluster):
         end_users = []
 
         l = [[(u,m[0],m[1]) for m in marking] for u,marking in zip(user_ids,markings)]
-        print markings
         user_list,pts_list,text_list = zip(*[item for sublist in l for item in sublist])
-        print text_list
         labels = [str(i) for i in pts_list]
         df = pd.DataFrame(np.array(pts_list), columns=["X","Y"], index=labels)
         row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
@@ -73,14 +71,13 @@ class Agglomerative(clustering.Cluster):
                 # print text2
                 # print [lnode.]
 
-                if text1 != []:
-                    pts1 = sorted(pts1,key = lambda x:x[0])
-                    pts2 = sorted(pts2,key = lambda x:x[0])
-                    print pts1
-                    print pts2
-                    assert pts1 != pts2
-                    print "===-0--"
-
+                # if text1 != []:
+                #     pts1 = sorted(pts1,key = lambda x:x[0])
+                #     pts2 = sorted(pts2,key = lambda x:x[0])
+                #     print pts1
+                #     print pts2
+                #     assert pts1 != pts2
+                #     print "===-0--"
 
                 if intersection != []:
                     cluster_centers,end_clusters,end_users = self.__add_cluster(cluster_centers,end_clusters,end_users,rnode)
@@ -89,6 +86,9 @@ class Agglomerative(clustering.Cluster):
                     nodes.append(None)
                 else:
                     nodes.append(automatic_optics.InnerNode(rnode,lnode))
+
+        if nodes[-1] is not None:
+            self.__add_cluster(cluster_centers,end_clusters,end_users,nodes[-1])
 
         end = time.time()
         # print "- " +str(len(cluster_centers))

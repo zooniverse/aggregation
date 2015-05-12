@@ -237,6 +237,7 @@ class Cluster:
         self.project_api = project_api
         self.min_cluster_size = min_cluster_size
         self.clusterResults = {}
+        self.goldResults = {}
 
         self.correct_pts = {}
         # for gold points which we have missed
@@ -429,7 +430,7 @@ class Cluster:
 
         return (cluster_centers , markings_per_cluster, users_per_cluster), time_to_cluster
 
-    def __cluster_subject__(self,subject_id,max_users=None,jpeg_file=None):
+    def __cluster_subject__(self,subject_id,max_users=None,jpeg_file=None,gold_standard=False):
         """
         the function to call from outside to do the clustering
         override but call if you want to add additional functionality
@@ -439,7 +440,7 @@ class Cluster:
         """
         # start by calling the api to get the annotations along with the list of who made each marking
         # so for this function, we know that annotations = markings
-        users, markings = self.project_api.__get_markings__(subject_id,max_users=max_users)
+        users, markings = self.project_api.__get_markings__(subject_id,gold_standard)
         # if there are any markings - cluster
         # otherwise, just set to empty
         if markings != []:
@@ -448,7 +449,10 @@ class Cluster:
             cluster_results = [],[],[]
             time_to_cluster = 0
 
-        self.clusterResults[subject_id] = cluster_results
+        if gold_standard:
+            self.goldResults[subject_id] = cluster_results
+        else:
+            self.clusterResults[subject_id] = cluster_results
         self.processed_subjects.add(subject_id)
         return time_to_cluster
 
