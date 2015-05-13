@@ -42,6 +42,10 @@ class Agglomerative(clustering.Cluster):
         l = [[(u,m[0],m[1]) for m in marking] for u,marking in zip(user_ids,markings)]
         user_list,pts_list,string_list = zip(*[item for sublist in l for item in sublist])
 
+        for x,y,z in zip(user_list,pts_list,string_list):
+            print x,y,z
+
+
         # for i in range(len(string_list)):
         #     for j in range(i+1,len(string_list)):
         #         if self.levenshtein(string_list[i],string_list[j]) > 25:
@@ -81,19 +85,44 @@ class Agglomerative(clustering.Cluster):
                 t.extend(clusters[int(c2)])
                 clusters.append(t)
             else:
-                if (clusters[int(c1)] is not None) and (clusters[int(c2)] is not None):
-                    users1,pts,strings1 = zip(*clusters[int(c1)])
-                    users2,pts,strings2= zip(*clusters[int(c2)])
+                # if (clusters[int(c1)] is not None) and (clusters[int(c2)] is not None):
+                #     users1,pts,strings1 = zip(*clusters[int(c1)])
+                #     users2,pts,strings2= zip(*clusters[int(c2)])
 
                 if clusters[int(c1)] is not None:
                     users,pts,strings = zip(*clusters[int(c1)])
-                    if not(len(users) == len(list(set(users)))):
-                        print users
-                        print strings
-                        print pts
-                    # assert len(users) == len(list(set(users)))
-                    else:
-                        cluster_centers.append([np.median(axis) for axis in zip(*pts)])
+                    # if not(len(users) == len(list(set(users)))):
+                    #     user_set = list(set(users))
+                    #     count = [sum([1. for u in users if u == uprime]) for uprime in user_set]
+                    #     # assert False
+                    #     multiple_count = [index for index,c in enumerate(count) if c > 1]
+                    #     for i in multiple_count:
+                    #         multi_user = user_set[i]
+                    #
+                    #         print multi_user
+                    #         for index,u in enumerate(users):
+                    #             if u == multi_user:
+                    #                 print pts[index]
+                    #                 print strings[index]
+                    #                 print "--"
+                    #         # print count
+                    #         # print users
+                    #         # print strings
+                    #     # print pts
+                    #     assert False
+                    # # assert len(users) == len(list(set(users)))
+                    # else:
+                    center = []
+                    for axis in zip(*pts):
+                        positive = [p for p in axis if p > 0]
+                        if positive != []:
+                            center.append(np.median(positive))
+                        else:
+                            center.append(float("inf"))
+
+                    if max(center) < float("inf"):
+                        cluster_centers.append(center[:])
+                        # cluster_centers.append([np.median([a for a in axis if a > 0]) for axis in zip(*pts)])
                         # print strings
                         end_clusters.append(pts)
                         end_users.append(users)
@@ -101,20 +130,34 @@ class Agglomerative(clustering.Cluster):
 
                 if clusters[int(c2)] is not None:
                     users,pts,strings = zip(*clusters[int(c2)])
-                    if not(len(users) == len(list(set(users)))):
-                        print users
-                        print strings
-                        print pts
-                    # assert len(users) == len(list(set(users)))
-                    # print strings
-                    else:
-                        cluster_centers.append([np.median(axis) for axis in zip(*pts)])
+                    # if not(len(users) == len(list(set(users)))):
+                    #     print users
+                    #     print strings
+                    #     print pts
+                    #     assert False
+                    # # assert len(users) == len(list(set(users)))
+                    # # print strings
+                    # else:
+                    center = []
+                    for axis in zip(*pts):
+                        positive = [p for p in axis if p > 0]
+                        if positive != []:
+                            center.append(np.median(positive))
+                        else:
+                            center.append(float("inf"))
+
+                    if max(center) < float("inf"):
+                        cluster_centers.append(center[:])
+                        # cluster_centers.append([np.median([a for a in axis if a > 0]) for axis in zip(*pts)])
                         end_clusters.append(pts)
                         end_users.append(users)
                         string_clusters.append(strings)
 
                 clusters.append(None)
         end = time.time()
+        # assert len(cluster_centers) == len(list(set(cluster_centers)))
+        for c in cluster_centers:
+            assert min(c) > 0
         # for s in string_clusters:
         #     print len(s)
         #     print s

@@ -411,7 +411,7 @@ class Cluster:
         self.project_api.__display_image__(subject_id,args_l,kwargs_l,title=self.algorithm_name)
 
     @abc.abstractmethod
-    def __fit__(self,markings,user_ids,jpeg_file=None,debug=False):
+    def __inner_fit__(self,markings,user_ids,jpeg_file=None,debug=False):
         """
         the main function for clustering
         :param user_ids:
@@ -430,7 +430,7 @@ class Cluster:
 
         return (cluster_centers , markings_per_cluster, users_per_cluster), time_to_cluster
 
-    def __cluster_subject__(self,subject_id,max_users=None,jpeg_file=None,gold_standard=False):
+    def __fit__(self,subject_id,max_users=None,jpeg_file=None,gold_standard=False):
         """
         the function to call from outside to do the clustering
         override but call if you want to add additional functionality
@@ -442,12 +442,16 @@ class Cluster:
         # so for this function, we know that annotations = markings
         users, markings = self.project_api.__get_markings__(subject_id,gold_standard)
         # if there are any markings - cluster
+        print users
+        print markings
+        print
         # otherwise, just set to empty
-        if markings != []:
-            cluster_results,time_to_cluster = self.__fit__(markings,users,debug=(subject_id == u"APZ000247i"))
-        else:
+        if (markings == []) or (markings == [[] for i in users]):
             cluster_results = [],[],[]
             time_to_cluster = 0
+        else:
+            cluster_results,time_to_cluster = self.__inner_fit__(markings,users)
+
 
         if gold_standard:
             self.goldResults[subject_id] = cluster_results
