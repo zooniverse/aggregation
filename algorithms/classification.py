@@ -59,7 +59,7 @@ class IBCC(Classification):
         self.species = {"lobate":0,"larvaceanhouse":0,"salp":0,"thalasso":0,"doliolidwithouttail":0,"rocketthimble":1,"rockettriangle":1,"siphocorncob":1,"siphotwocups":1,"doliolidwithtail":1,"cydippid":2,"solmaris":2,"medusafourtentacles":2,"medusamorethanfourtentacles":2,"medusagoblet":2,"beroida":3,"cestida":3,"radiolariancolonies":3,"larvacean":3,"arrowworm":3,"shrimp":4,"polychaeteworm":4,"copepod":4}
         self.candidates = self.species.keys()
 
-    def create_configfile(self,priors):
+    def create_configfile(self,priors,confusion_matrix):
         """
         write out the config file for running IBCC
         :return:
@@ -81,16 +81,16 @@ class IBCC(Classification):
             f.write("confMatFile = \""+self.base_directory+"Databases/plankton_ibcc.mat\"\n")
             # f.write("nu0 = np.array("+str([100/num_classes for i in range(num_classes)])+")\n")
             f.write("nu0 = np.array("+str([priors[s] for s in self.candidates])+")\n")
-            confusion_matrix = [[1 for i in range(num_classes)] for j in range(num_classes)]
-            for i in range(num_classes):
-                confusion_matrix[i][i] = 20
+            # confusion_matrix = [[1 for i in range(num_classes)] for j in range(num_classes)]
+            # for i in range(num_classes):
+            #     confusion_matrix[i][i] = 20
 
             f.write("alpha0 = np.array("+str(confusion_matrix)+")\n")
 
     def __classify__(self,subject_ids,gold_standard=False):
         self.results = {}
         classification_counter = -1
-        candidates = []
+        # candidates = []
         users = []
         agreement = 0
         nonagreement = 0
@@ -99,7 +99,7 @@ class IBCC(Classification):
         # self.create_configfile(len(self.species))
         nclasses = len(self.species)
         nu0 = [100/nclasses for i in range(nclasses)]
-        confusion_matrix = [[1 for i in range(nclasses)] for j in range(nclasses)]
+        confusion_matrix = [[0.2 for i in range(nclasses)] for j in range(nclasses)]
         for i in range(nclasses):
             confusion_matrix[i][i] = 20
 
@@ -108,6 +108,7 @@ class IBCC(Classification):
         elections = []
 
         priors = {s:1 for s in self.candidates}
+        confusion = [[1 for i in self.candidates] for j in self.candidates]
 
         with open(self.base_directory+"Databases/plankton_ibcc.csv",'wb') as f:
             for subject_id in subject_ids:
@@ -128,8 +129,8 @@ class IBCC(Classification):
                                 vote_counts[vote] = 1
                             else:
                                 vote_counts[vote] += 1
-                            if not(vote in candidates):
-                                candidates.append(vote)
+                            # if not(vote in candidates):
+                            #     candidates.append(vote)
                             if not(user in users):
                                 users.append(user)
                             # print vote,self.species[vote.lower()],pt
@@ -140,8 +141,9 @@ class IBCC(Classification):
                         priors[most_votes.lower()] += 1
 
                         # now that we know what the majority vote estimate is, estimate the confusion matrix
-                        
-
+                        most_votes_index = self.candidates.index(most_votes.lower())
+                        for user,vote,pt in poll:
+                            confusion[most_votes_index][self.candidates.index(vote.lower())] += 1/float(len(poll))
 
                         elections.append((subject_id,poll_index))
                         if len(vote_counts) ==1:
@@ -157,15 +159,22 @@ class IBCC(Classification):
                     else:
                         notenough +=1
 
-
-        self.create_configfile(priors)
+        confusion_matrix = []
+        print "^^^^^"
+        for c in confusion:
+            # print c
+            t = [int(a/min(c)) for a in c]
+            confusion_matrix.append(t)
+            print sum(t)
+            # print
+        self.create_configfile(priors,confusion_matrix)
 
         # ibcc.runIbcc(self.base_directory+"Databases/config.py")
         ibcc.load_and_run_ibcc(self.base_directory+"Databases/config.py")
         results = {}
         with open(self.base_directory+"Databases/plankton_ibcc.out","rb") as f:
             for i,l in enumerate(f.readlines()):
-                print "===-----"
+                # print "===-----"
                 subject_id = elections[i][0]
                 if not(subject_id in results):
                     results[subject_id] = []

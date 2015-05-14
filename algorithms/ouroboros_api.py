@@ -14,7 +14,7 @@ import random
 import clustering
 import math
 import numpy
-
+import json
 import itertools
 def findsubsets(S,m):
     return set(itertools.combinations(S, m))
@@ -69,7 +69,6 @@ class OuroborosAPI:
         pass
 
     def __evaluate__(self,candidates,results,clusteringAlg=None):
-        # todo - fix nearest neighbour - calculation must go both ways
         errors = []
         percentage = []
         for subject_id in self.gold_standard_subjects:
@@ -81,25 +80,137 @@ class OuroborosAPI:
             if not(subject_id in results):
                 continue
 
-            for pt,gold_classification in self.gold_annotations[subject_id][1][0]:
+            # map each cluster to its nearest gold standard point
+            cluster_to_gold = []#[[] for i in self.gold_annotations[subject_id][1][0]]
+            gold_to_cluster = []#[] for i in clusteringAlg.clusterResults[subject_id][0]]
+
+            for cluster_index,cluster_center in enumerate(clusteringAlg.clusterResults[subject_id][0]):
+                closest_distance = float("inf")
+                closest_gold = None
+                for gold_index,(gold_center,gold_classification) in enumerate(self.gold_annotations[subject_id][1][0]):
+                    dist = math.sqrt((cluster_center[0]-gold_center[0])**2+(cluster_center[1]-gold_center[1])**2)
+                    if dist < closest_distance:
+                        closest_distance = dist
+                        closest_gold = gold_index
+
+                cluster_to_gold.append(closest_gold)
+
+            for gold_index,(gold_center,gold_classification) in enumerate(self.gold_annotations[subject_id][1][0]):
+                closest_distance = float("inf")
+                closest_cluster = None
+                for cluster_index,cluster_center in enumerate(clusteringAlg.clusterResults[subject_id][0]):
+                    dist = math.sqrt((cluster_center[0]-gold_center[0])**2+(cluster_center[1]-gold_center[1])**2)
+                    if dist < closest_distance:
+                        closest_distance = dist
+                        closest_cluster = cluster_index
+
+                gold_to_cluster.append(closest_cluster)
+
+            # print cluster_to_gold
+            # print gold_to_cluster
+            # print
+
+            if (cluster_to_gold == []) or (gold_to_cluster == []):
+                continue
+
+            assert len(clusteringAlg.clusterResults[subject_id][0]) == len(results[subject_id])
+            for cluster_index,classification in enumerate(results[subject_id]):
+                gold_index = cluster_to_gold[cluster_index]
+
+                if gold_to_cluster[gold_index] != cluster_index:
+                    continue
+
+                gold_pt,gold_classification = self.gold_annotations[subject_id][1][0][gold_index]
+                # convert the gold standard label into an index
+                candidate_index = candidates.index(gold_classification.lower())
+                classification = results[subject_id][cluster_index]
+                probability = classification[candidate_index]
+                non_extreme_probability = max(min(probability,1-math.pow(10,-15)),math.pow(10,-15))
+
+                individual_errors = -math.log(non_extreme_probability)
+                errors.append(individual_errors)
+                # else:
+                #     errors.append(-math.log(1-math.pow(10,-15)))
+                percentage.append(max(classification))
+
+                if -math.log(non_extreme_probability) > 1:
+                    print "***"
+                    print subject_id
+                    print gold_pt,gold_classification
+                    # print -math.log(non_extreme_probability)
+                    print candidates[classification.index(max(classification))]
+                    print self.gold_annotations[subject_id]
+                    individual_results = [candidates[r.index(max(r))] for r in results[subject_id]]
+                    print zip(clusteringAlg.clusterResults[subject_id][0],individual_results)
+                    print
+                    print "---=="
+                    annotations_list = [item for sublist in self.annotations[subject_id][1] for item in sublist]
+                    for pt in clusteringAlg.clusterResults[subject_id][1][cluster_index]:
+                        for ann in annotations_list:
+                            if pt == ann[0]:
+                                print ann
+                    print
+            continue
+
+            for gold_pt,gold_classification in self.gold_annotations[subject_id][1][0]:
                 closest_distance = float("inf")
                 best_classification = None
+                num_users = None
+                best_index = None
+                closest_center = None
 
-                for center,users,classification in zip(clusteringAlg.clusterResults[subject_id][0],clusteringAlg.clusterResults[subject_id][2],results[subject_id]):
-                    dist = math.sqrt((center[0]-pt[0])**2+(center[1]-pt[1])**2)
+                # print len(clusteringAlg.clusterResults[subject_id][0])
+                # print len(results[subject_id])
+                print "**"
+                print  len(clusteringAlg.clusterResults[subject_id][0]), len(results[subject_id])
+                assert len(clusteringAlg.clusterResults[subject_id][0]) == len(results[subject_id])
+                for cluster_index in range(len(clusteringAlg.clusterResults[subject_id][0])):
+                    center = clusteringAlg.clusterResults[subject_id][0][cluster_index]
+                    classification = results[subject_id][cluster_index]
+                    users = clusteringAlg.clusterResults[subject_id][2][cluster_index]
+                # for center,users,classification in zip(clusteringAlg.clusterResults[subject_id][0],clusteringAlg.clusterResults[subject_id][2],results[subject_id]):
+                    dist = math.sqrt((center[0]-gold_pt[0])**2+(center[1]-gold_pt[1])**2)
                     if dist < closest_distance:
                         closest_distance = dist
                         best_classification = classification
+                        num_users = len(users)
+                        best_index = cluster_index
+                        closest_center = center
 
-                print (best_classification,gold_classification)
+                # print (best_classification,gold_classification)
                 if best_classification is not None:
                     gold_index = candidates.index(gold_classification.lower())
                     # if best_classification[0] != gold_classification:
                     non_extreme_probability = max(min(best_classification[gold_index],1-math.pow(10,-15)),math.pow(10,-15))
-                    errors.append(-math.log(non_extreme_probability))
+
+
+                    if -math.log(non_extreme_probability) > 5:
+                        print "***"
+                        print subject_id
+                        print gold_pt,gold_classification
+                        # print -math.log(non_extreme_probability)
+                        print candidates[best_classification.index(max(best_classification))]
+                        print self.gold_annotations[subject_id]
+                        print clusteringAlg.clusterResults[subject_id][0]
+                        print
+                        print "---=="
+                        annotations_list = [item for sublist in self.annotations[subject_id][1] for item in sublist]
+                        for pt in clusteringAlg.clusterResults[subject_id][1][best_index]:
+                            for ann in annotations_list:
+                                if pt == ann[0]:
+                                    print ann
+
+
+
+                        # self.__display_image__(subject_id,[[[gold_pt[0],closest_center[0]],[gold_pt[1],closest_center[1]]]],[{"color":"black","linewidth":30}])
+
+                    non_extreme_probability = min(max(0.01,non_extreme_probability),0.8)
+                    individual_errors = -math.log(non_extreme_probability)
+                    errors.append(individual_errors)
                     # else:
                     #     errors.append(-math.log(1-math.pow(10,-15)))
                     percentage.append(max(best_classification))
+                    # print individual_errors,num_users
 
         print errors
         print numpy.mean(errors)
@@ -204,6 +315,7 @@ class OuroborosAPI:
         im = ax.imshow(image)
 
         for args,kwargs in zip(args_l,kwargs_l):
+            print args,kwargs
             ax.plot(*args,**kwargs)
 
         if title is not None:
@@ -382,6 +494,8 @@ class OuroborosAPI:
         else:
             constraints["user_name"] = {"$nin": self.experts}
 
+
+
         for user_index, classification in enumerate(self.classification_collection.find(constraints)):
             # get the name of this user
             if "user_name" in classification:
@@ -395,14 +509,23 @@ class OuroborosAPI:
             annotations = self.__classification_to_annotations__(classification)
 
             # if annotations != []:
-            annotations_list.append(annotations)
-            user_list.append(user_id)
+            if user_id not in user_list:
+                annotations_list.append(annotations)
+                user_list.append(user_id)
 
 
             if len(user_list) == max_users:
                 break
 
         assert len(user_list) == len(annotations_list)
+        if expert_markings:
+            if len(self.experts) != len(annotations_list):
+
+                for c in self.classification_collection.find(constraints):
+                    print c["created_at"]
+                    print json.dumps(c["annotations"], sort_keys=True,indent=4, separators=(',', ': '))
+                    print
+            assert len(self.experts) == len(annotations_list)
         # store the classifications/annotations in the appropriate dictionary
         if expert_markings:
             self.gold_annotations[zooniverse_id] = (user_list,annotations_list)
