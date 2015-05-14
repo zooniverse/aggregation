@@ -59,12 +59,17 @@ class IBCC(Classification):
         self.species = {"lobate":0,"larvaceanhouse":0,"salp":0,"thalasso":0,"doliolidwithouttail":0,"rocketthimble":1,"rockettriangle":1,"siphocorncob":1,"siphotwocups":1,"doliolidwithtail":1,"cydippid":2,"solmaris":2,"medusafourtentacles":2,"medusamorethanfourtentacles":2,"medusagoblet":2,"beroida":3,"cestida":3,"radiolariancolonies":3,"larvacean":3,"arrowworm":3,"shrimp":4,"polychaeteworm":4,"copepod":4}
         self.candidates = self.species.keys()
 
-    def create_configfile(self,num_classes):
+    def create_configfile(self,priors):
         """
         write out the config file for running IBCC
         :return:
         """
-        os.remove(self.base_directory+"Databases/plankton_ibcc.csv.dat")
+        try:
+            os.remove(self.base_directory+"Databases/plankton_ibcc.csv.dat")
+        except OSError:
+            pass
+
+        num_classes = len(priors)
 
         with open(self.base_directory+"Databases/config.py",'wb') as f:
             f.write("import numpy as np\n")
@@ -74,7 +79,8 @@ class IBCC(Classification):
             f.write("inputFile = \""+self.base_directory+"Databases/plankton_ibcc.csv\"\n")
             f.write("outputFile = \""+self.base_directory+"Databases/plankton_ibcc.out\"\n")
             f.write("confMatFile = \""+self.base_directory+"Databases/plankton_ibcc.mat\"\n")
-            f.write("nu0 = np.array("+str([100/num_classes for i in range(num_classes)])+")\n")
+            # f.write("nu0 = np.array("+str([100/num_classes for i in range(num_classes)])+")\n")
+            f.write("nu0 = np.array("+str([priors[s] for s in self.candidates])+")\n")
             confusion_matrix = [[1 for i in range(num_classes)] for j in range(num_classes)]
             for i in range(num_classes):
                 confusion_matrix[i][i] = 20
@@ -98,8 +104,10 @@ class IBCC(Classification):
             confusion_matrix[i][i] = 20
 
         # classifer = ibcc.IBCC(nclasses=nclasses,nscores=nclasses,alpha0=confusion_matrix,nu0=nu0)
-        self.create_configfile(len(self.species))
+
         elections = []
+
+        priors = {s:1 for s in self.candidates}
 
         with open(self.base_directory+"Databases/plankton_ibcc.csv",'wb') as f:
             for subject_id in subject_ids:
@@ -128,6 +136,13 @@ class IBCC(Classification):
                             f.write(str(users.index(user))+","+str(classification_counter)+","+str(self.candidates.index(vote.lower()))+"\n")
                             # print users.index(user),classification_counter,self.candidates.index(vote)
 
+                        most_votes = max(vote_counts,key=lambda x:vote_counts[x])
+                        priors[most_votes.lower()] += 1
+
+                        # now that we know what the majority vote estimate is, estimate the confusion matrix
+                        
+
+
                         elections.append((subject_id,poll_index))
                         if len(vote_counts) ==1:
                             agreement +=1
@@ -141,6 +156,10 @@ class IBCC(Classification):
                             all_elections[local_candidates] += 1
                     else:
                         notenough +=1
+
+
+        self.create_configfile(priors)
+
         # ibcc.runIbcc(self.base_directory+"Databases/config.py")
         ibcc.load_and_run_ibcc(self.base_directory+"Databases/config.py")
         results = {}
