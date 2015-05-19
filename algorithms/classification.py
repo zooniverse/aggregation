@@ -89,42 +89,64 @@ class IBCC(Classification):
 
     def __classify__(self,subject_ids,gold_standard=False):
         self.results = {}
-        classification_counter = -1
+        # might be over doing the elections analogy but can't think of a better way to describe things
+        # ridings is a list of tuples (subject_ids, cluster_center) so we can match up the results from IBCC
+        # if no clustering was involved (so only one classification per subject_id) then cluster_center should
+        # be None
+        ridings = []
+        # ridings_dict stores the "ridings" by subject id - that way, we don't need to search through all
+        # of the ridings, everytime we want to find the "elections" for a given subject_id
+        ridings_dict = {}
         # candidates = []
         users = []
         agreement = 0
         nonagreement = 0
         notenough = 0
-        all_elections = {}
+        # all_elections = {}
         # self.create_configfile(len(self.species))
         nclasses = len(self.species)
         nu0 = [100/nclasses for i in range(nclasses)]
         confusion_matrix = [[0.2 for i in range(nclasses)] for j in range(nclasses)]
-        for i in range(nclasses):
-            confusion_matrix[i][i] = 20
+
+
 
         # classifer = ibcc.IBCC(nclasses=nclasses,nscores=nclasses,alpha0=confusion_matrix,nu0=nu0)
 
-        elections = []
-
         priors = {s:1 for s in self.candidates}
-        confusion = [[1 for i in self.candidates] for j in self.candidates]
+        # confusion = [[1 for i in self.candidates] for j in self.candidates]
+
+        # for i in range(nclasses):
+        #     confusion[i][i] = 20
 
         with open(self.base_directory+"Databases/plankton_ibcc.csv",'wb') as f:
+            f.write("a,b,c\n")
             for subject_id in subject_ids:
                 # print "-----"
                 # print self.project.gold_annotations[subject_id]
                 self.results[subject_id] = []
 
-                for poll_index,poll in enumerate(self.project.__get_classifications__(subject_id,cluster_alg=self.cluster_alg,gold_standard=gold_standard)):
-                    # print poll
-                    local_candidates = set()
+                # cluster centers only make sense if we have a clustering setup - otherwise they should just be empty
+                cluster_centers,polls = self.project.__get_classifications__(subject_id,cluster_alg=self.cluster_alg,gold_standard=gold_standard)
+
+                for poll_index,(center,poll) in enumerate(zip(cluster_centers,polls)):
+                    print center
+                    print poll
+                    print
+                    # local_candidates = set()
                     vote_counts = {}
                     if len(poll) > 0:
-                        classification_counter  += 1
+                        # classification_counter  += 1
+                        ridings.append((subject_id,center))
+                        if not(subject_id in ridings_dict):
+                            ridings_dict[subject_id] = [center]
+                        else:
+                            ridings_dict[subject_id].append(center)
+
                         for user,vote,pt in poll:
                             # assert isinstance(vote,unicode)
-                            local_candidates.add(vote)
+                            # local_candidates.add(vote)
+
+                            # use majority voting to establish priors
                             if not(vote in vote_counts):
                                 vote_counts[vote] = 1
                             else:
@@ -134,7 +156,7 @@ class IBCC(Classification):
                             if not(user in users):
                                 users.append(user)
                             # print vote,self.species[vote.lower()],pt
-                            f.write(str(users.index(user))+","+str(classification_counter)+","+str(self.candidates.index(vote.lower()))+"\n")
+                            f.write(str(users.index(user))+","+str(len(ridings)-1)+","+str(self.candidates.index(vote.lower()))+"\n")
                             # print users.index(user),classification_counter,self.candidates.index(vote)
 
                         most_votes = max(vote_counts,key=lambda x:vote_counts[x])
@@ -143,30 +165,31 @@ class IBCC(Classification):
                         # now that we know what the majority vote estimate is, estimate the confusion matrix
                         most_votes_index = self.candidates.index(most_votes.lower())
                         for user,vote,pt in poll:
-                            confusion[most_votes_index][self.candidates.index(vote.lower())] += 1/float(len(poll))
+                            confusion_matrix[most_votes_index][self.candidates.index(vote.lower())] += 1/float(len(poll))
 
-                        elections.append((subject_id,poll_index))
+
                         if len(vote_counts) ==1:
                             agreement +=1
                         else:
                             nonagreement += 1
                         # print local_candidates
-                        local_candidates = tuple(sorted(list(local_candidates)))
-                        if not(local_candidates in all_elections):
-                            all_elections[local_candidates] = 1
-                        else:
-                            all_elections[local_candidates] += 1
+                        # local_candidates = tuple(sorted(list(local_candidates)))
+                        # if not(local_candidates in all_elections):
+                        #     all_elections[local_candidates] = 1
+                        # else:
+                        #     all_elections[local_candidates] += 1
                     else:
                         notenough +=1
 
-        confusion_matrix = []
+        # confusion_matrix = []
         print "^^^^^"
-        for c in confusion:
+        for i,row in enumerate(confusion_matrix):
             # print c
-            t = [int(a/min(c)) for a in c]
-            confusion_matrix.append(t)
-            print sum(t)
+            confusion_matrix[i] = [int(a/min(row)) for a in row]
+
             # print
+        print
+        print sum(priors.values())
         self.create_configfile(priors,confusion_matrix)
 
         # ibcc.runIbcc(self.base_directory+"Databases/config.py")
@@ -175,9 +198,11 @@ class IBCC(Classification):
         with open(self.base_directory+"Databases/plankton_ibcc.out","rb") as f:
             for i,l in enumerate(f.readlines()):
                 # print "===-----"
-                subject_id = elections[i][0]
+                subject_id,center = ridings[i]
+
                 if not(subject_id in results):
                     results[subject_id] = []
+
                 # print elections[i]
                 probabilities = [float(p) for j,p in enumerate(l.split(" ")[1:])]
                 results[subject_id].append(probabilities)
@@ -197,4 +222,4 @@ class IBCC(Classification):
         # nx.draw(G)
         # plt.show()
         # print agreement,nonagreement,notenough
-        return self.candidates,results
+        return self.candidates,ridings_dict,results

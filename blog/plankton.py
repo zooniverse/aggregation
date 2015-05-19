@@ -4,18 +4,21 @@ from agglomerative import Agglomerative
 from classification import MajorityVote,IBCC
 import numpy
 import matplotlib.pyplot as plt
+import cPickle as pickle
+import os
 
 class PlanktonPortal(MarkingProject):
     def __init__(self,date="2015-05-08"):
         MarkingProject.__init__(self, "plankton", date,experts=["yshish"])
 
-    def __annotations_to_markings__(self,annotations):
+    def __classification_to_annotations__(self,classification,):
         """
         This is the main function projects will have to override - given a set of annotations, we need to return the list
         of all markings in that annotation
         """
+        (lb_roi,ub_roi) = self.current_roi
         markings = []
-        for ann in annotations:
+        for ann in classification["annotations"]:
             if "finished_at" in ann:
                 break
             x_pts=[]
@@ -26,6 +29,9 @@ class PlanktonPortal(MarkingProject):
 
             x = numpy.mean(x_pts)
             y = numpy.mean(y_pts)
+
+            if not(MarkingProject.__in_roi__(self,(x,y),lb_roi,ub_roi)):
+                continue
 
             try:
                 species = ann["species"]
@@ -39,30 +45,44 @@ class PlanktonPortal(MarkingProject):
         # assert False
         return markings
 
+    def __get_roi__(self,subject_id):
+
+
+        subject = self.subject_collection.find_one({"zooniverse_id":subject_id})
+        cutout = subject["metadata"]["cutout"]
+        width = cutout["width"]
+        height = cutout["height"]
+        lb_roi = [[0,0],[width,0]]
+        ub_roi = [[0,height],[width,height]]
+
+        return lb_roi,ub_roi
+
 project = PlanktonPortal()
 # project.__top_users__()
-project.__set_gold_standard__(max_subjects=500)
+#project.__set_subjects__([u'APK00011p5', u'APK0001bw9', u'APK0001dj4', u'APK00019zu', u'APK00018ri', u'APK0001dxl', u'APK0001ana', u'APK0000ppu', u'APK0000dvx', u'APK0000pyd', u'APK00019ol', u'APK00072zo', u'APK0000h5h', u'APK00001fk', u'APK0000a69', u'APK0000km2', u'APK000175z', u'APK00019yw', u'APK0000e39', u'APK0000kga'])
+project.__random_gold_sample__(max_subjects=200)
 
 clustering = Agglomerative(project)
 classifier = IBCC(project,clustering)
 
 for subject_id in project.gold_standard_subjects:
     print subject_id
-    project.__store_markings__(subject_id,max_users=20)
+    project.__store_annotations__(subject_id,max_users=20)
     clustering.__fit__(subject_id)
     clustering.__fit__(subject_id,gold_standard=True)
 
+# clustering.__check__()
 
-candidates,results = classifier.__classify__(project.gold_standard_subjects,gold_standard=False)
-errors,percentage = project.__evaluate__(candidates,results,clustering)
-
-sorted_percentage = sorted(list(set(percentage)))
-c = zip(errors,percentage)
-
-avg_error = [numpy.mean([e for e,p in c if p >= s]) for s in sorted_percentage]
-coverage = [sum([1 for e,p in c if p >= s])/float(len(c)) for s in sorted_percentage]
-plt.plot(coverage,avg_error)
-plt.show()
+# candidates,ridings,results = classifier.__classify__(project.gold_standard_subjects,gold_standard=False)
+# errors,percentage = project.__evaluate__(candidates,ridings,results,clustering)
+#
+# sorted_percentage = sorted(list(set(percentage)))
+# c = zip(errors,percentage)
+#
+# avg_error = [numpy.mean([e for e,p in c if p >= s]) for s in sorted_percentage]
+# coverage = [sum([1 for e,p in c if p >= s])/float(len(c)) for s in sorted_percentage]
+# plt.plot(coverage,avg_error)
+# plt.show()
 # project.__set_gold_standard__(limit=100)
 #
 # agglomerative = Agglomerative(project)

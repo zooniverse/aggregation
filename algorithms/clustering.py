@@ -233,7 +233,7 @@ class Cluster:
         :param min_cluster_size: minimum number of points in a cluster to not be considered noise
         :return:
         """
-        # assert isinstance(project_api,ouroboros_api.MarkingProject)
+        assert isinstance(project_api,ouroboros_api.MarkingProject)
         self.project_api = project_api
         self.min_cluster_size = min_cluster_size
         self.clusterResults = {}
@@ -411,7 +411,7 @@ class Cluster:
         self.project_api.__display_image__(subject_id,args_l,kwargs_l,title=self.algorithm_name)
 
     @abc.abstractmethod
-    def __inner_fit__(self,markings,user_ids,jpeg_file=None,debug=False):
+    def __inner_fit__(self,markings,user_ids,jpeg_file=None,debug=False,gold_standard=False,subject_id=None):
         """
         the main function for clustering
         :param user_ids:
@@ -442,15 +442,13 @@ class Cluster:
         # so for this function, we know that annotations = markings
         users, markings = self.project_api.__get_markings__(subject_id,gold_standard)
         # if there are any markings - cluster
-        print users
-        print markings
-        print
+
         # otherwise, just set to empty
         if (markings == []) or (markings == [[] for i in users]):
             cluster_results = [],[],[]
             time_to_cluster = 0
         else:
-            cluster_results,time_to_cluster = self.__inner_fit__(markings,users)
+            cluster_results,time_to_cluster = self.__inner_fit__(markings,users,gold_standard,subject_id=subject_id)
 
 
         if gold_standard:

@@ -6,12 +6,16 @@ from scipy.spatial.distance import pdist,squareform
 from scipy.cluster.hierarchy import linkage
 import time
 import automatic_optics
-
+from scipy.stats import beta
+import math
+import numpy
 
 class Agglomerative(clustering.Cluster):
     def __init__(self,project_api,min_cluster_size=1):
         clustering.Cluster.__init__(self,project_api,min_cluster_size)
         self.algorithm_name = "agglomerative"
+        self.all_distances = []
+        self.max = 0
 
     def __add_cluster(self,cluster_centers,end_clusters,end_users,node):
         cluster_centers.append([np.median(axis) for axis in zip(*node.pts)])
@@ -20,7 +24,7 @@ class Agglomerative(clustering.Cluster):
 
         return cluster_centers,end_clusters,end_users
 
-    def __inner_fit__(self,markings,user_ids,jpeg_file=None,debug=False):
+    def __inner_fit__(self,markings,user_ids,jpeg_file=None,debug=False,gold_standard=False,subject_id=None):
         start = time.time()
 
         cluster_centers = []
@@ -98,4 +102,66 @@ class Agglomerative(clustering.Cluster):
 
         end = time.time()
         # print "- " +str(len(cluster_centers))
+
+        if not gold_standard:
+            for cluster_index in range(len(cluster_centers)):
+                center = cluster_centers[cluster_index]
+                cluster = end_clusters[cluster_index]
+            # for center,cluster in zip(cluster_centers,end_clusters):
+                if len(cluster) <= 2:
+                    continue
+                print "==--"
+                pts_and_dist = [(math.sqrt((center[0]-p[0])**2+(center[1]-p[1])**2),p) for p in cluster]
+                # print pts_and_dist
+                # self.all_distances.extend(distances)
+                # self.max = max(self.max,max(distances))
+                pts_and_dist.sort(key=lambda x:x[0])
+                pts_and_dist = [(d[0]/(2.*pts_and_dist[-1][0]),d[1]) for d in pts_and_dist]
+                distances,pts = zip(*pts_and_dist)
+
+
+                for ii in range(4,len(distances)-1):
+                # for ii in range(len(distances)-1,3,-1):
+                    # offset = -4
+
+                    mean=numpy.mean(distances[:ii])
+                    var=numpy.var(distances[:ii],ddof=1)
+
+                    # ii = len(distances)+offset
+
+                    if var >= (mean*(1-mean)):
+                        continue
+                        # ii -= 1
+                        # mean=numpy.mean(distances[:ii])
+                        # var=numpy.var(distances[:ii],ddof=1)
+
+                    # print ii
+                    alpha1=mean*(mean*(1-mean)/var-1)
+                    beta1=alpha1*(1-mean)/mean
+                    # print ii,len(distances)
+                    # for d in sorted(distances):
+                    print ii, beta.cdf(distances[ii],alpha1,beta1)
+                    # if beta.cdf(distances[ii],alpha1,beta1) == 1.:
+
+                print
+                args_l = [[[center[0],pts[-1][0]],[center[1],pts[-1][1]]]]
+                self.project_api.__display_image__(subject_id,args_l,[{"color":"blue"}])
+                # # assert var<mean*(1-mean)
+        # print self.max
         return (cluster_centers, end_clusters,end_users),end-start
+
+    def __check__(self):
+        self.all_distances = [d/max(self.all_distances) for d in self.all_distances]
+        mean=numpy.mean(self.all_distances)
+        var=numpy.var(self.all_distances,ddof=1)
+
+        ii = len(self.all_distances)
+        while var >= (mean*(1-mean)):
+            ii -= 1
+            mean=numpy.mean(self.all_distances[:ii])
+            var=numpy.var(self.all_distances[:ii],ddof=1)
+
+        alpha1=mean*(mean*(1-mean)/var-1)
+        beta1=alpha1*(1-mean)/mean
+        for d in sorted(self.all_distances):
+            print d,beta.cdf(d,alpha1,beta1)

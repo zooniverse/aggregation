@@ -16,6 +16,8 @@ import math
 import numpy
 import json
 import itertools
+import matplotlib.cm as cm
+
 def findsubsets(S,m):
     return set(itertools.combinations(S, m))
 
@@ -68,7 +70,12 @@ class OuroborosAPI:
     def __get_classifications__(self,subject_id,cluster_alg=None,gold_standard=False):
         pass
 
-    def __evaluate__(self,candidates,results,clusteringAlg=None):
+    def __evaluate__(self,candidates,ridings,results,clustering_alg=None):
+        assert isinstance(ridings,dict)
+        assert isinstance(results,dict)
+
+        assert len(ridings) == len(results)
+
         errors = []
         percentage = []
         for subject_id in self.gold_standard_subjects:
@@ -84,7 +91,7 @@ class OuroborosAPI:
             cluster_to_gold = []#[[] for i in self.gold_annotations[subject_id][1][0]]
             gold_to_cluster = []#[] for i in clusteringAlg.clusterResults[subject_id][0]]
 
-            for cluster_index,cluster_center in enumerate(clusteringAlg.clusterResults[subject_id][0]):
+            for cluster_index,cluster_center in enumerate(ridings[subject_id]):
                 closest_distance = float("inf")
                 closest_gold = None
                 for gold_index,(gold_center,gold_classification) in enumerate(self.gold_annotations[subject_id][1][0]):
@@ -98,7 +105,7 @@ class OuroborosAPI:
             for gold_index,(gold_center,gold_classification) in enumerate(self.gold_annotations[subject_id][1][0]):
                 closest_distance = float("inf")
                 closest_cluster = None
-                for cluster_index,cluster_center in enumerate(clusteringAlg.clusterResults[subject_id][0]):
+                for cluster_index,cluster_center in enumerate(ridings[subject_id]):
                     dist = math.sqrt((cluster_center[0]-gold_center[0])**2+(cluster_center[1]-gold_center[1])**2)
                     if dist < closest_distance:
                         closest_distance = dist
@@ -113,7 +120,7 @@ class OuroborosAPI:
             if (cluster_to_gold == []) or (gold_to_cluster == []):
                 continue
 
-            assert len(clusteringAlg.clusterResults[subject_id][0]) == len(results[subject_id])
+            # assert len(clusteringAlg.clusterResults[subject_id][0]) == len(results[subject_id])
             for cluster_index,classification in enumerate(results[subject_id]):
                 gold_index = cluster_to_gold[cluster_index]
 
@@ -141,11 +148,11 @@ class OuroborosAPI:
                     print candidates[classification.index(max(classification))]
                     print self.gold_annotations[subject_id]
                     individual_results = [candidates[r.index(max(r))] for r in results[subject_id]]
-                    print zip(clusteringAlg.clusterResults[subject_id][0],individual_results)
-                    print
+                    print zip(clustering_alg.clusterResults[subject_id][0],individual_results)
+                    print max(results[subject_id][cluster_index]),probability
                     print "---=="
                     annotations_list = [item for sublist in self.annotations[subject_id][1] for item in sublist]
-                    for pt in clusteringAlg.clusterResults[subject_id][1][cluster_index]:
+                    for pt in clustering_alg.clusterResults[subject_id][1][cluster_index]:
                         for ann in annotations_list:
                             if pt == ann[0]:
                                 print ann
@@ -312,7 +319,7 @@ class OuroborosAPI:
         image = plt.imread(image_file)
 
         fig, ax = plt.subplots()
-        im = ax.imshow(image)
+        im = ax.imshow(image,cmap = cm.Greys_r)
 
         for args,kwargs in zip(args_l,kwargs_l):
             print args,kwargs
@@ -373,8 +380,13 @@ class OuroborosAPI:
 
         # print all
 
+    def __set_subjects__(self,subject_ids):
+        self.gold_standard_subjects = []
+        for subject_id in subject_ids:
+            self.gold_standard_subjects.append(subject_id)
+            self.__store_annotations__(subject_id,expert_markings=True)
 
-    def __set_gold_standard__(self,remove_blanks=True,max_subjects=float('inf'),maximum_number_gold_markings=float("inf"),minimum_number_gold_markings=0,minimum_users=0):
+    def __random_gold_sample__(self,remove_blanks=True,max_subjects=float('inf'),maximum_number_gold_markings=float("inf"),minimum_number_gold_markings=0,minimum_users=0):
         """
         set up a list of subjects with gold standard data which we can use for testing
 
@@ -475,6 +487,8 @@ class OuroborosAPI:
         """
         return []
 
+
+
     def __store_annotations__(self,zooniverse_id,max_users=float("inf"),expert_markings=False):
         """
         read through and return all of the relevant annotations associated with the given zooniverse_id
@@ -487,6 +501,8 @@ class OuroborosAPI:
         annotations_list = []
         user_list = []
 
+        print expert_markings
+
         # create a set of constraints for searching through the mongodb
         constraints = {"subjects.zooniverse_id":zooniverse_id}
         if expert_markings:
@@ -494,6 +510,12 @@ class OuroborosAPI:
         else:
             constraints["user_name"] = {"$nin": self.experts}
 
+        print constraints
+
+        # print zooniverse_id
+        # subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})
+        # cutout = subject["metadata"]["cutout"]
+        # roi = self.__get_roi__(zooniverse_id)
 
 
         for user_index, classification in enumerate(self.classification_collection.find(constraints)):
@@ -516,6 +538,8 @@ class OuroborosAPI:
 
             if len(user_list) == max_users:
                 break
+
+
 
         assert len(user_list) == len(annotations_list)
         if expert_markings:
@@ -542,30 +566,39 @@ class MarkingProject(OuroborosAPI):
         # self.dimensions = dimensions
         self.scale = scale
 
+        self.roi_dict = {}
+        self.current_roi = None
+
+
+
+    def __store_annotations__(self,zooniverse_id,max_users=float("inf"),expert_markings=False):
+        """
+        override the parent method so that we can apply ROIs
+        read through and return all of the relevant annotations associated with the given zooniverse_id
+        :param zooniverse_id: id of the subject
+        :param max_users: maximum number of classifications to read in
+        :param expert_markings: do we want to read in markings from experts - either yes or no, shouldn't mix
+        :return:
+        """
+        if not(zooniverse_id in self.roi_dict):
+            self.roi_dict[zooniverse_id] = self.__get_roi__(zooniverse_id)
+
+        self.current_roi = self.roi_dict[zooniverse_id]
+        OuroborosAPI.__store_annotations__(self,zooniverse_id,max_users,expert_markings)
+
+        self.current_roi = None
+
     # @abc.abstractmethod
-    # def __get_cluster_annotations__(self,zooniverse_id):
+    # def __classification_to_markings__(self,classification,roi):
     #     """
-    #     get all aspects of the annotations that are relevant to clustering
-    #     override parent class so that we can restrict the annotations to only the data we need for clustering
-    #     so for example, we might have an X,Y point and an associated label "adult penguin". That label is not
-    #     useful for clustering - at least with how the current set of clustering algorithms work; if we two users
-    #     with close points but one says "adult penguin" and the other says "chick" then we assume that the users
-    #     are talking about the same point, just confused about what kind of animal is at this point
-    #     resolving what kind of animal we have is something that will be done at different point
-    #     also things like PCA or such for converting higher dimensional markings down into lower dimensional ones
-    #     should be done here
-    #     :param zooniverse_id:
-    #     :return:
+    #     This is the main function projects will have to override - given a set of annotations, we need to return the list
+    #     of all markings in that annotation
     #     """
-    #     return [],[]
+    #     return []
 
     @abc.abstractmethod
-    def __annotations_to_markings__(self,annotations):
-        """
-        This is the main function projects will have to override - given a set of annotations, we need to return the list
-        of all markings in that annotation
-        """
-        return []
+    def __get_roi__(self,subject_id):
+        pass
 
     def __get_markings__(self,subject_id,expert_markings=False):
         """
@@ -609,7 +642,7 @@ class MarkingProject(OuroborosAPI):
         l =  [item for sublist in l for item in sublist]
 
         if l == []:
-            return []
+            return [],[]
 
         # split points and classifications into two lists
         pts,classifications = zip(*l)
@@ -626,41 +659,85 @@ class MarkingProject(OuroborosAPI):
                 value.append(pt)
                 classifications_per_cluster[-1].append(value)
 
-        return classifications_per_cluster
+        return results[0],classifications_per_cluster
 
-    def __store_markings__(self,subject_id,max_users=None,expert_markings=False):
-        OuroborosAPI.__store_annotations__(self,subject_id,max_users,expert_markings)
+    # def __store_markings__(self,subject_id,max_users=None,expert_markings=False):
+    #     OuroborosAPI.__store_annotations__(self,subject_id,max_users,expert_markings)
 
-    def __classification_to_annotations__(self,classification):
-        annotations = classification["annotations"]
-        markings = self.__annotations_to_markings__(annotations)
+    # def __classification_to_annotations__(self,classification):
+    #     annotations = classification["annotations"]
+    #     markings = self.__annotations_to_markings__(annotations)
+    #
+    #     try:
+    #         object_id = classification["subject_ids"][0]
+    #     except KeyError:
+    #         object_id = classification["subject_id"]
+    #
+    #     # go through the markings in reverse order and remove any that are outside of the ROI
+    #     # also, scale as necessary
+    #     assert isinstance(markings, list)
+    #     for marking_index in range(len(markings)-1, -1, -1):
+    #         marking = markings[marking_index]
+    #
+    #         # check to see if this marking is in the ROI
+    #         if not(self.__in_roi__(object_id,marking)):
+    #             markings.pop(marking_index)
+    #
+    #     return markings
 
-        try:
-            object_id = classification["subject_ids"][0]
-        except KeyError:
-            object_id = classification["subject_id"]
-
-        # go through the markings in reverse order and remove any that are outside of the ROI
-        # also, scale as necessary
-        assert isinstance(markings, list)
-        for marking_index in range(len(markings)-1, -1, -1):
-            marking = markings[marking_index]
-
-            # check to see if this marking is in the ROI
-            if not(self.__in_roi__(object_id,marking)):
-                markings.pop(marking_index)
-
-        return markings
-
-    def __in_roi__(self,object_id,marking):
+    def __in_roi__(self,marking,lb_roi,ub_roi):
         """
-        is this marking within the specific ROI (if one doesn't exist, then by default yes)
-        only override if you want specific ROIs implemented
+        is this marking within the specific ROI
+        even if there is specifically defined ROI (as in penguin watch), markings may occasionally
+        be outside of the image (just plain error) so we need to exclude those
         :param marking:
+        :param lb_roi: the marking must be above this multiline
+        :param ub_roi: the marking must be below this multiline
         :return:
 
         """
-        return True
+        # todo: refactor a bit
+        x,y = marking
+        if (x < lb_roi[0][0]) or (x > lb_roi[-1][0]):
+            return False
+
+        print x,y
+        print lb_roi,ub_roi
+
+        # find the line segment that "surrounds" x and see if y is above that line segment (remember that
+        # images are flipped)
+        for segment_index in range(len(lb_roi)-1):
+            if (lb_roi[segment_index][0] <= x) and (lb_roi[segment_index+1][0] >= x):
+                rX1,rY1 = lb_roi[segment_index]
+                rX2,rY2 = lb_roi[segment_index+1]
+
+                m = (rY2-rY1)/float(rX2-rX1)
+                rY = m*(x-rX1)+rY1
+
+                if y >= rY:
+                    # the point satisfies the lb_roi
+                    break
+                else:
+                    return False
+
+        if (x < ub_roi[0][0]) or (x > ub_roi[-1][0]):
+            return False
+
+        for segment_index in range(len(ub_roi)-1):
+            if (ub_roi[segment_index][0] <= x) and (ub_roi[segment_index+1][0] >= x):
+                rX1,rY1 = ub_roi[segment_index]
+                rX2,rY2 = ub_roi[segment_index+1]
+
+                m = (rY2-rY1)/float(rX2-rX1)
+                rY = m*(x-rX1)+rY1
+
+                if y <= rY:
+                    # the point satisfies the lb_roi
+                    return True
+                else:
+                    return False
+
+        assert False
 
 
 class PenguinWatch(MarkingProject):
