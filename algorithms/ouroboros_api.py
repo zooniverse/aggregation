@@ -88,30 +88,52 @@ class OuroborosAPI:
                 continue
 
             # map each cluster to its nearest gold standard point
-            cluster_to_gold = []#[[] for i in self.gold_annotations[subject_id][1][0]]
+            # None is when there are not enough markings in a cluster
+            cluster_to_gold = []#None for i in clustering_alg.clusterResults[subject_id][0]]
             gold_to_cluster = []#[] for i in clusteringAlg.clusterResults[subject_id][0]]
+            print clustering_alg.clusterResults[subject_id][0]
+            print ridings[subject_id]
 
-            for cluster_index,cluster_center in enumerate(ridings[subject_id]):
+            # only go through  those clusters which have enough markings
+            for cluster_center in ridings[subject_id]:
+                # cluster_index = clustering_alg.clusterResults[subject_id][0].index(cluster_center)
+
                 closest_distance = float("inf")
                 closest_gold = None
+
+                # go through each of the gold markings and determine the distance
                 for gold_index,(gold_center,gold_classification) in enumerate(self.gold_annotations[subject_id][1][0]):
                     dist = math.sqrt((cluster_center[0]-gold_center[0])**2+(cluster_center[1]-gold_center[1])**2)
+
+                    # if the distance is less then the smallest found so far, then we need to update
                     if dist < closest_distance:
                         closest_distance = dist
                         closest_gold = gold_index
 
                 cluster_to_gold.append(closest_gold)
 
+            # now map the gold standard markings to the user clusters
+            # ie for each gold standard marking, find the closest user cluster
+            # if the closest user cluster does not have enough users, then there is no mapping
             for gold_index,(gold_center,gold_classification) in enumerate(self.gold_annotations[subject_id][1][0]):
                 closest_distance = float("inf")
+                # closest_index = None
                 closest_cluster = None
-                for cluster_index,cluster_center in enumerate(ridings[subject_id]):
+
+                # go though each of the user clusters and determine the distance
+                for cluster_index,cluster_center in enumerate(clustering_alg.clusterResults[subject_id][0]):
                     dist = math.sqrt((cluster_center[0]-gold_center[0])**2+(cluster_center[1]-gold_center[1])**2)
                     if dist < closest_distance:
                         closest_distance = dist
-                        closest_cluster = cluster_index
+                        # closest_index = cluster_index
+                        closest_cluster = cluster_center
 
-                gold_to_cluster.append(closest_cluster)
+                # convert from the list of all clusters into the list of just those clusters which have enough users
+                # if the closest cluster does not have enough  users, just set the value to none
+                if closest_cluster in ridings[subject_id]:
+                    gold_to_cluster.append(ridings[subject_id].index(closest_cluster))
+                else:
+                    gold_to_cluster.append(None)
 
             # print cluster_to_gold
             # print gold_to_cluster
@@ -123,7 +145,13 @@ class OuroborosAPI:
             # assert len(clusteringAlg.clusterResults[subject_id][0]) == len(results[subject_id])
             for cluster_index,classification in enumerate(results[subject_id]):
                 gold_index = cluster_to_gold[cluster_index]
+                # we did not have enough markings for this cluster
+                if gold_index is None:
+                    continue
 
+                assert isinstance(gold_index,int)
+
+                # if this cluster does not match up with the gold standard
                 if gold_to_cluster[gold_index] != cluster_index:
                     continue
 
@@ -152,6 +180,7 @@ class OuroborosAPI:
                     print max(results[subject_id][cluster_index]),probability
                     print "---=="
                     annotations_list = [item for sublist in self.annotations[subject_id][1] for item in sublist]
+
                     for pt in clustering_alg.clusterResults[subject_id][1][cluster_index]:
                         for ann in annotations_list:
                             if pt == ann[0]:
@@ -386,6 +415,52 @@ class OuroborosAPI:
             self.gold_standard_subjects.append(subject_id)
             self.__store_annotations__(subject_id,expert_markings=True)
 
+    def __gold_sample__(self,required_users,optional_users,max_subjects=float('inf')):
+        base_classifications = list(self.classification_collection.find({"user_name": {"$in":required_users},"tutorial":{"$ne":True}},{"subjects.zooniverse_id":1}))
+        print len(base_classifications)
+        base_subjects = set([c["subjects"][0]["zooniverse_id"] for c in base_classifications])
+        print len(base_subjects)
+        other_subjects = {}
+        for user in optional_users:
+            other_classifications =  list(self.classification_collection.find({"user_name": user,"tutorial":{"$ne":True}}))
+            other_subjects[user] = set([c["subjects"][0]["zooniverse_id"] for c in other_classifications])
+
+        self.possible_subjects = set()
+
+        for users in findsubsets(optional_users,2):
+            subjects = base_subjects.copy()
+            assert isinstance(subjects,set)
+            for u in users:
+                subjects = subjects.intersection(other_subjects[u])
+
+            self.possible_subjects = self.possible_subjects.union(subjects)
+
+        print len(self.possible_subjects)
+        subject_ids = list(self.possible_subjects)
+        random.shuffle(subject_ids)
+        potential_subjects = []
+        for subject_id in subject_ids:
+            subject = self.subject_collection.find_one({"zooniverse_id":subject_id})
+            if subject["classification_count"] >= 5:
+                potential_subjects.append(subject_id)
+
+
+        self.experts = required_users
+        self.experts.extend(optional_users)
+        self.gold_standard_subjects = []
+        for subject_id in potential_subjects:
+            self.__store_annotations__(subject_id)
+
+            if len(self.annotations[subject_id][0]) >= 5:
+                self.gold_standard_subjects.append(subject_id)
+                self.__store_annotations__(subject_id,expert_markings=True)
+
+            if len(self.gold_standard_subjects) >= max_subjects:
+                break
+
+        print len(self.gold_standard_subjects)
+
+
     def __random_gold_sample__(self,remove_blanks=True,max_subjects=float('inf'),maximum_number_gold_markings=float("inf"),minimum_number_gold_markings=0,minimum_users=0):
         """
         set up a list of subjects with gold standard data which we can use for testing
@@ -501,7 +576,7 @@ class OuroborosAPI:
         annotations_list = []
         user_list = []
 
-        print expert_markings
+        # print expert_markings
 
         # create a set of constraints for searching through the mongodb
         constraints = {"subjects.zooniverse_id":zooniverse_id}
@@ -510,13 +585,12 @@ class OuroborosAPI:
         else:
             constraints["user_name"] = {"$nin": self.experts}
 
-        print constraints
+        # print constraints
 
         # print zooniverse_id
         # subject = self.subject_collection.find_one({"zooniverse_id":zooniverse_id})
         # cutout = subject["metadata"]["cutout"]
         # roi = self.__get_roi__(zooniverse_id)
-
 
         for user_index, classification in enumerate(self.classification_collection.find(constraints)):
             # get the name of this user
@@ -535,21 +609,19 @@ class OuroborosAPI:
                 annotations_list.append(annotations)
                 user_list.append(user_id)
 
-
             if len(user_list) == max_users:
                 break
 
-
-
         assert len(user_list) == len(annotations_list)
-        if expert_markings:
-            if len(self.experts) != len(annotations_list):
-
-                for c in self.classification_collection.find(constraints):
-                    print c["created_at"]
-                    print json.dumps(c["annotations"], sort_keys=True,indent=4, separators=(',', ': '))
-                    print
-            assert len(self.experts) == len(annotations_list)
+        # print len(self.experts),len(annotations_list)
+        # if expert_markings:
+        #     if len(self.experts) != len(annotations_list):
+        #
+        #         for c in self.classification_collection.find(constraints):
+        #             print c["created_at"]
+        #             print json.dumps(c["annotations"], sort_keys=True,indent=4, separators=(',', ': '))
+        #             print
+        #     assert len(self.experts) == len(annotations_list)
         # store the classifications/annotations in the appropriate dictionary
         if expert_markings:
             self.gold_annotations[zooniverse_id] = (user_list,annotations_list)
@@ -652,11 +724,14 @@ class MarkingProject(OuroborosAPI):
         # iterate over the points making up each cluster
         for cluster in results[1]:
             classifications_per_cluster.append([])
+            if cluster is None:
+                continue
             for pt in cluster:
                 # extract the user name and classification which correspond to this point
                 # also add the point itself
                 value = list(classifications[pts.index(pt)])
                 value.append(pt)
+                value = tuple(value)
                 classifications_per_cluster[-1].append(value)
 
         return results[0],classifications_per_cluster
@@ -700,9 +775,6 @@ class MarkingProject(OuroborosAPI):
         x,y = marking
         if (x < lb_roi[0][0]) or (x > lb_roi[-1][0]):
             return False
-
-        print x,y
-        print lb_roi,ub_roi
 
         # find the line segment that "surrounds" x and see if y is above that line segment (remember that
         # images are flipped)

@@ -18,6 +18,11 @@ class Agglomerative(clustering.Cluster):
         self.max = 0
 
     def __add_cluster(self,cluster_centers,end_clusters,end_users,node):
+        # if len(node.pts) < 4:
+        #     cluster_centers.append(None)
+        #     end_clusters.append(None)
+        #     end_users.append(None)
+        # else:
         cluster_centers.append([np.median(axis) for axis in zip(*node.pts)])
         end_clusters.append(node.pts)
         end_users.append(node.users)
@@ -103,51 +108,56 @@ class Agglomerative(clustering.Cluster):
         end = time.time()
         # print "- " +str(len(cluster_centers))
 
-        if not gold_standard:
-            for cluster_index in range(len(cluster_centers)):
-                center = cluster_centers[cluster_index]
-                cluster = end_clusters[cluster_index]
-            # for center,cluster in zip(cluster_centers,end_clusters):
-                if len(cluster) <= 2:
-                    continue
-                print "==--"
-                pts_and_dist = [(math.sqrt((center[0]-p[0])**2+(center[1]-p[1])**2),p) for p in cluster]
-                # print pts_and_dist
-                # self.all_distances.extend(distances)
-                # self.max = max(self.max,max(distances))
-                pts_and_dist.sort(key=lambda x:x[0])
-                pts_and_dist = [(d[0]/(2.*pts_and_dist[-1][0]),d[1]) for d in pts_and_dist]
-                distances,pts = zip(*pts_and_dist)
-
-
-                for ii in range(4,len(distances)-1):
-                # for ii in range(len(distances)-1,3,-1):
-                    # offset = -4
-
-                    mean=numpy.mean(distances[:ii])
-                    var=numpy.var(distances[:ii],ddof=1)
-
-                    # ii = len(distances)+offset
-
-                    if var >= (mean*(1-mean)):
-                        continue
-                        # ii -= 1
-                        # mean=numpy.mean(distances[:ii])
-                        # var=numpy.var(distances[:ii],ddof=1)
-
-                    # print ii
-                    alpha1=mean*(mean*(1-mean)/var-1)
-                    beta1=alpha1*(1-mean)/mean
-                    # print ii,len(distances)
-                    # for d in sorted(distances):
-                    print ii, beta.cdf(distances[ii],alpha1,beta1)
-                    # if beta.cdf(distances[ii],alpha1,beta1) == 1.:
-
-                print
-                args_l = [[[center[0],pts[-1][0]],[center[1],pts[-1][1]]]]
-                self.project_api.__display_image__(subject_id,args_l,[{"color":"blue"}])
-                # # assert var<mean*(1-mean)
-        # print self.max
+        # if not gold_standard:
+        #     for cluster_index in range(len(cluster_centers)):
+        #
+        #         center = cluster_centers[cluster_index]
+        #         if center is None:
+        #             continue
+        #         cluster = end_clusters[cluster_index]
+        #         assert len(cluster) >= 4
+        #         print "==--"
+        #         pts_and_dist = [(math.sqrt((center[0]-p[0])**2+(center[1]-p[1])**2),p) for p in cluster]
+        #         # print pts_and_dist
+        #         # self.all_distances.extend(distances)
+        #         # self.max = max(self.max,max(distances))
+        #         pts_and_dist.sort(key=lambda x:x[0])
+        #         pts_and_dist = [(d[0]/(2.*pts_and_dist[-1][0]),d[1]) for d in pts_and_dist]
+        #         distances,pts = zip(*pts_and_dist)
+        #         assert len(distances) >= 4
+        #         print len(distances)
+        #         print range(2,len(distances)-1)
+        #
+        #
+        #         for ii in range(2,len(distances)):
+        #         # for ii in range(len(distances)-1,3,-1):
+        #             # offset = -4
+        #
+        #             mean=numpy.mean(distances[:ii])
+        #             var=numpy.var(distances[:ii],ddof=1)
+        #
+        #             # ii = len(distances)+offset
+        #
+        #             if var >= (mean*(1-mean)):
+        #                 print "skipping " + str(ii)
+        #                 continue
+        #                 # ii -= 1
+        #                 # mean=numpy.mean(distances[:ii])
+        #                 # var=numpy.var(distances[:ii],ddof=1)
+        #
+        #             # print ii
+        #             alpha1=mean*(mean*(1-mean)/var-1)
+        #             beta1=alpha1*(1-mean)/mean
+        #             # print ii,len(distances)
+        #             # for d in sorted(distances):
+        #             print ii, beta.cdf(distances[ii],alpha1,beta1)
+        #             # if beta.cdf(distances[ii],alpha1,beta1) == 1.:
+        #
+        #         print
+        #         args_l = [[[center[0],pts[-1][0]],[center[1],pts[-1][1]]]]
+        #         self.project_api.__display_image__(subject_id,args_l,[{"color":"blue"}])
+        #         # # assert var<mean*(1-mean)
+        # # print self.max
         return (cluster_centers, end_clusters,end_users),end-start
 
     def __check__(self):

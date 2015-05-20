@@ -441,6 +441,9 @@ class Cluster:
         # start by calling the api to get the annotations along with the list of who made each marking
         # so for this function, we know that annotations = markings
         users, markings = self.project_api.__get_markings__(subject_id,gold_standard)
+        # if gold_standard:
+        #     print users,markings
+            # assert False
         # if there are any markings - cluster
 
         # otherwise, just set to empty
