@@ -3,12 +3,15 @@ from ouroboros_api import MarkingProject
 from agglomerative import Agglomerative
 from classification import MajorityVote,IBCC
 import numpy
+from expert_classification import ExpertClassification
 import matplotlib.pyplot as plt
 import cPickle as pickle
 import os
 
+#db.plankton_users.find({},{name:1,classification_count:1}).sort({classification_count:-1}).limit(10)
+
 class PlanktonPortal(MarkingProject):
-    def __init__(self,date="2015-05-08"):
+    def __init__(self,date="2015-05-06"):
         MarkingProject.__init__(self, "plankton", date,experts=["yshish"])
 
     def __classification_to_annotations__(self,classification,):
@@ -60,22 +63,28 @@ class PlanktonPortal(MarkingProject):
 project = PlanktonPortal()
 # project.__top_users__()
 #project.__set_subjects__([u'APK00011p5', u'APK0001bw9', u'APK0001dj4', u'APK00019zu', u'APK00018ri', u'APK0001dxl', u'APK0001ana', u'APK0000ppu', u'APK0000dvx', u'APK0000pyd', u'APK00019ol', u'APK00072zo', u'APK0000h5h', u'APK00001fk', u'APK0000a69', u'APK0000km2', u'APK000175z', u'APK00019yw', u'APK0000e39', u'APK0000kga'])
-project.__random_gold_sample__(max_subjects=200)
+# project.__random_gold_sample__(max_subjects=50)
+project.__gold_sample__(["yshish"],["ElisabethB","Damon22","MingMing","elizabeth","JasonJason","rlb66xyz","planetari7","fermor332002","artman40","Quia"],max_subjects=200)
 
 clustering = Agglomerative(project)
-classifier = IBCC(project,clustering)
-
+# clustering2 = GoldClustering(project)
+classifier = ExpertClassification(project,clustering)
+#
 for subject_id in project.gold_standard_subjects:
     print subject_id
-    project.__store_annotations__(subject_id,max_users=20)
-    clustering.__fit__(subject_id)
     clustering.__fit__(subject_id,gold_standard=True)
-
-# clustering.__check__()
-
-# candidates,ridings,results = classifier.__classify__(project.gold_standard_subjects,gold_standard=False)
-# errors,percentage = project.__evaluate__(candidates,ridings,results,clustering)
+    print clustering.goldResults[subject_id]
+    classifier.__classify__([subject_id],True)
+    print
+    # project.__store_annotations__(subject_id,max_users=20)
+    # clustering.__fit__(subject_id)
+#     clustering.__fit__(subject_id,gold_standard=True)
 #
+# # # clustering.__check__()
+# #
+# # candidates,ridings,results = classifier.__classify__(project.gold_standard_subjects,gold_standard=False)
+# errors,percentage = project.__evaluate__(candidates,ridings,results,clustering)
+# #
 # sorted_percentage = sorted(list(set(percentage)))
 # c = zip(errors,percentage)
 #
