@@ -26,7 +26,7 @@ class Classification:
         # print self.base_directory
 
         self.species = {"lobate":0,"larvaceanhouse":0,"salp":0,"thalasso":0,"doliolidwithouttail":0,"rocketthimble":1,"rockettriangle":1,"siphocorncob":1,"siphotwocups":1,"doliolidwithtail":1,"cydippid":2,"solmaris":2,"medusafourtentacles":2,"medusamorethanfourtentacles":2,"medusagoblet":2,"beroida":3,"cestida":3,"radiolariancolonies":3,"larvacean":3,"arrowworm":3,"shrimp":4,"polychaeteworm":4,"copepod":4}
-
+        self.candidates = self.species.keys()
 
 
     def __classify__(self,subject_ids,gold_standard=False):
@@ -58,7 +58,7 @@ class MajorityVote(Classification):
 class IBCC(Classification):
     def __init__(self,project,clustering_alg=None):
         Classification.__init__(self,project,clustering_alg)
-        self.candidates = self.species.keys()
+
 
     def create_configfile(self,priors,confusion_matrix):
         """

@@ -10,16 +10,29 @@ class ExpertClassification(Classification):
     def __classify__(self,subject_ids,gold_standard=False):
         assert gold_standard
 
-        cluster_centers,polls = self.project.__get_classifications__(subject_ids[0],cluster_alg=self.cluster_alg,gold_standard=gold_standard)
+        ridings_dict = {}
 
         # print cluster_centers
+        for subject_id in subject_ids:
+            cluster_centers,polls = self.project.__get_classifications__(subject_ids,cluster_alg=self.cluster_alg,gold_standard=gold_standard)
 
-        for p in polls:
-            users,classifications,pts = zip(*p)
-            count = {s:0 for s in self.species}
+            for poll_index,(center,poll) in enumerate(zip(cluster_centers,polls)):
+                # users,classifications,pts = zip(*p)
+                count = {s:0 for s in self.species}
 
-            for c in classifications:
-                assert isinstance(c,unicode)
-                count[c.lower()] +=1
+                if not(subject_id in ridings_dict):
+                    ridings_dict[subject_id] = [center]
+                else:
+                    ridings_dict[subject_id].append(center)
 
-            print {s:count[s] for s in self.species if count[s]>0}
+                for user,vote,pt in poll:
+                    
+
+                for c in classifications:
+                    assert isinstance(c,unicode)
+                    count[c.lower()] +=1
+
+                print {s:count[s] for s in self.species if count[s]>0}
+
+
+        return self.candidates,ridings_dict,results
