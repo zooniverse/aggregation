@@ -10,6 +10,7 @@ import json
 import cassandra
 from cassandra.cluster import Cluster
 import urllib
+import datetime
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -405,6 +406,28 @@ class PanoptesAPI:
         if self.conn is None:
             raise psycopg2.OperationalError()
 
+    def __set_clustering_alg__(self,clustering_alg):
+        self.cluster_alg = clustering_alg(self)
+
+    def __cluster__(self,subject_id):
+        self.cluster_alg.__fit__(subject_id)
+
+    def __store_results__(self,subject_id):
+        try:
+            self.session.execute("drop table aggregations")
+        except cassandra.InvalidRequest:
+            pass
+        # self.session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, annotations text, created_at timestamp, updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, metadata text, subject_id int, workflow_version text, PRIMARY KEY(project_id,subject_id,user_id,user_ip,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, user_id ASC);")
+        self.session.execute("CREATE TABLE aggregations (project_id int, workflow_id int, subject_id int, task text, frame int, tool int, aggregation text, created_at timestamp, updated_at timestamp, PRIMARY KEY(project_id,workflow_id,subject_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC, subject_id ASC);")
+
+        for (task,frame,tool),aggregation in self.cluster_alg.clusterResults[subject_id].items():
+            self.session.execute(
+                """
+                insert into aggregations (project_id, workflow_id, subject_id, task, frame, tool, aggregation, created_at, updated_at)
+                values (%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                """,
+                (int(self.project_id),self.workflow_id,subject_id,task,frame,tool,json.dumps(aggregation),datetime.datetime.now(),datetime.datetime.now()))
+                # (project_id, user_id, workflow_id, json.dumps(annotations), created_at, updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], float(workflow_version),json.dumps(metadata)))
 
 
 
@@ -413,5 +436,7 @@ brooke.__task_setup__()
 # brooke.__get_markings__(3266)
 
 import agglomerative
-a = agglomerative.Agglomerative(brooke)
-a.__fit__(3266)
+brooke.__set_clustering_alg__(agglomerative.Agglomerative)
+# a = agglomerative.Agglomerative(brooke)
+brooke.__cluster__(3266)
+brooke.__store_results__(3266)

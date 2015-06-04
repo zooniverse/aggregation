@@ -431,6 +431,10 @@ class Cluster:
 
         return (cluster_centers , markings_per_cluster, users_per_cluster), time_to_cluster
 
+
+    def __get_cluster__(self,subject_id):
+        return self.clusterResults[subject_id]
+
     def __fit__(self,subject_id,max_users=None,jpeg_file=None,gold_standard=False):
         """
         the function to call from outside to do the clustering
@@ -442,6 +446,8 @@ class Cluster:
         # start by calling the api to get the annotations along with the list of who made each marking
         # so for this function, we know that annotations = markings
         all_markings =  self.project_api.__get_markings__(subject_id,gold_standard)
+
+        self.clusterResults[subject_id] = {}
         for key in all_markings:
             users,markings = zip(*all_markings[key])
 
@@ -452,11 +458,11 @@ class Cluster:
             else:
                 cluster_results,time_to_cluster = self.__inner_fit__(markings,users,gold_standard,subject_id=subject_id)
 
-
             if gold_standard:
-                self.goldResults[(subject_id,key)] = cluster_results
+                # self.goldResults[(subject_id,key)] = cluster_results
+                assert False
             else:
-                self.clusterResults[(subject_id,key)] = cluster_results
+                self.clusterResults[subject_id][key] = cluster_results
             self.processed_subjects.add(subject_id)
         # return time_to_cluster
 
