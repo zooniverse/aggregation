@@ -14,6 +14,7 @@ import socket
 import warnings
 import scipy
 from shapely.geometry import Polygon
+# import panoptes_api
 
 cnames = {
 'aliceblue':            '#F0F8FF',
@@ -233,7 +234,7 @@ class Cluster:
         :param min_cluster_size: minimum number of points in a cluster to not be considered noise
         :return:
         """
-        assert isinstance(project_api,ouroboros_api.MarkingProject)
+        # assert isinstance(project_api,panoptes_api.PanoptesAPI)
         self.project_api = project_api
         self.min_cluster_size = min_cluster_size
         self.clusterResults = {}
@@ -440,26 +441,24 @@ class Cluster:
         """
         # start by calling the api to get the annotations along with the list of who made each marking
         # so for this function, we know that annotations = markings
-        users, markings = self.project_api.__get_markings__(subject_id,gold_standard)
-        # if gold_standard:
-        #     print users,markings
-            # assert False
-        # if there are any markings - cluster
+        all_markings =  self.project_api.__get_markings__(subject_id,gold_standard)
+        for key in all_markings:
+            users,markings = zip(*all_markings[key])
 
-        # otherwise, just set to empty
-        if (markings == []) or (markings == [[] for i in users]):
-            cluster_results = [],[],[]
-            time_to_cluster = 0
-        else:
-            cluster_results,time_to_cluster = self.__inner_fit__(markings,users,gold_standard,subject_id=subject_id)
+            # otherwise, just set to empty
+            if (markings == []) or (markings == [[] for i in users]):
+                cluster_results = [],[],[]
+                time_to_cluster = 0
+            else:
+                cluster_results,time_to_cluster = self.__inner_fit__(markings,users,gold_standard,subject_id=subject_id)
 
 
-        if gold_standard:
-            self.goldResults[subject_id] = cluster_results
-        else:
-            self.clusterResults[subject_id] = cluster_results
-        self.processed_subjects.add(subject_id)
-        return time_to_cluster
+            if gold_standard:
+                self.goldResults[(subject_id,key)] = cluster_results
+            else:
+                self.clusterResults[(subject_id,key)] = cluster_results
+            self.processed_subjects.add(subject_id)
+        # return time_to_cluster
 
     def __get_densities__(self,subject_id):
         """

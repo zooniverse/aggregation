@@ -30,25 +30,41 @@ class Agglomerative(clustering.Cluster):
         return cluster_centers,end_clusters,end_users
 
     def __inner_fit__(self,markings,user_ids,jpeg_file=None,debug=False,gold_standard=False,subject_id=None):
+        """
+        the actual clustering algorithm
+        markings and user_ids should be the same length - a one to one mapping
+        :param markings:
+        :param user_ids:
+        :param jpeg_file:
+        :param debug:
+        :param gold_standard:
+        :param subject_id:
+        :return:
+        """
+        assert len(markings) == len(user_ids)
         start = time.time()
 
         cluster_centers = []
         end_clusters = []
         end_users = []
 
-        l = [[(u,m[0],m[1]) for m in marking] for u,marking in zip(user_ids,markings)]
-        try:
-            user_list,pts_list,text_list = zip(*[item for sublist in l for item in sublist])
-        except ValueError:
-            print markings
-            print l
-            raise
-        labels = [str(i) for i in pts_list]
-        df = pd.DataFrame(np.array(pts_list), columns=["X","Y"], index=labels)
+        # l = [[(u,m[0],m[1]) for m in marking] for u,marking in zip(user_ids,markings)]
+        # try:
+        #     user_list,pts_list,text_list = zip(*[item for sublist in l for item in sublist])
+        # except ValueError:
+        #     print markings
+        #     print l
+        #     raise
+
+        # this converts stuff into panda format - probably a better way to do this but the labels do seem
+        # necessary
+        labels = [str(i) for i in markings]
+        param_labels = [str(i) for i in range(len(markings[0]))]
+        df = pd.DataFrame(np.array(markings), columns=param_labels, index=labels)
         row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
 
         row_clusters = linkage(row_dist, method='ward')
-        nodes = [automatic_optics.LeafNode(pt,ii,user=user) for ii,(user,pt) in enumerate(zip(user_list,pts_list))]
+        nodes = [automatic_optics.LeafNode(pt,ii,user=user) for ii,(user,pt) in enumerate(zip(user_ids,markings))]
 
         max_height = 0
 
@@ -78,11 +94,11 @@ class Agglomerative(clustering.Cluster):
 
                 intersection = [u for u in rnode.users if u in lnode.users]
                 pts1 = [rnode.pts[rnode.users.index(i)] for i in intersection]
-                text1 = [text_list[pts_list.index(p)] for p in pts1]
+                # text1 = [text_list[pts_list.index(p)] for p in pts1]
                 # print text1
 
                 pts2 = [lnode.pts[lnode.users.index(i)] for i in intersection]
-                text2 = [text_list[pts_list.index(p)] for p in pts2]
+                # text2 = [text_list[pts_list.index(p)] for p in pts2]
                 # print text2
                 # print [lnode.]
 
