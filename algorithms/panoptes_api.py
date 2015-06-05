@@ -62,7 +62,7 @@ class PanoptesAPI:
         except IOError:
             database_file = open(base_directory+"/Databases/database.yml")
         database_details = yaml.load(database_file)
-        self.conn = None
+        self.postgres_session = None
         self.__postgres_connect(database_details)
 
         # and to the cassandra db as well
@@ -82,13 +82,21 @@ class PanoptesAPI:
         details = "dbname='"+database+"' user='"+ username+ "' host='"+ host + "' password='"+password+"'"
         for i in range(20):
             try:
-                self.conn = psycopg2.connect(details)
+                self.postgres_session = psycopg2.connect(details)
+                self.postgres_cursor = self.postgres_session.cursor()
                 break
             except psycopg2.OperationalError as e:
                 pass
 
-        if self.conn is None:
+        if self.postgres_session is None:
             raise psycopg2.OperationalError()
+
+        # select = "SELECT * from project_contents where title='Galaxy Zoo Bar Lengths'"
+        # cur = self.postgres_session.cursor()
+        # cur.execute(select)
+        # for row in cur.fetchall():
+        #     print row
+
 
     def __cassandra_connect(self):
         """
@@ -98,7 +106,7 @@ class PanoptesAPI:
         for i in range(10):
             try:
                 self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
-                self.session = self.cluster.connect('demo')
+                self.cassandra_session = self.cluster.connect('zooniverse')
                 return
             except cassandra.cluster.NoHostAvailable:
                 pass
@@ -107,7 +115,7 @@ class PanoptesAPI:
 
     def __subject_set_details__(self):
         select = "SELECT * from media"
-        cur = self.conn.cursor()
+        cur = self.postgres_session.cursor()
         cur.execute(select)
         subject_set = cur.fetchone()
         print subject_set
@@ -121,9 +129,9 @@ class PanoptesAPI:
         :return:
         """
         select = "SELECT * from workflows where project_id = " + str(self.project_id)
-        cur = self.conn.cursor()
-        cur.execute(select)
-        tasks = cur.fetchone()[2]
+        # cur = self.postgres_session.cursor()
+        self.postgres_cursor.execute(select)
+        tasks = self.postgres_cursor.fetchone()[2]
         print tasks
         for task_id in tasks:
 
@@ -155,7 +163,7 @@ class PanoptesAPI:
         drawings = {}
 
         # go through each of the classifications for the given subject
-        for classification in self.session.execute("select user_id,annotations from classifications where project_id = " + str(self.project_id) + " and subject_id = " + str(subject_id)):
+        for classification in self.cassandra_session.execute("select user_id,annotations from classifications where project_id = " + str(self.project_id) + " and subject_id = " + str(subject_id)):
             # convert from string into json
             annotations = json.loads(classification.annotations)
 
@@ -183,20 +191,21 @@ class PanoptesAPI:
 
     def __migrate__(self):
         try:
-            self.session.execute("drop table classifications")
+            self.cassandra_session.execute("drop table classifications")
         except cassandra.InvalidRequest:
             pass
         # self.session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, annotations text, created_at timestamp, updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, metadata text, subject_id int, workflow_version text, PRIMARY KEY(project_id,subject_id,user_id,user_ip,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, user_id ASC);")
-        self.session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, annotations text, created_at timestamp, updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version float,metadata text, PRIMARY KEY(project_id,subject_id,user_id,user_ip,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, user_id ASC);")
+        self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, annotations text, created_at timestamp, updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version float,metadata text, PRIMARY KEY(project_id,subject_id,user_id,user_ip,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, user_id ASC);")
         # self.session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int,user_ip inet,subject_id int,annotations text,  PRIMARY KEY(project_id,subject_id,user_id,user_ip) ) WITH CLUSTERING ORDER BY (subject_id ASC, user_id ASC);")
 
         select = "SELECT * from classifications where project_id="+str(self.project_id)+" and workflow_id=" + str(self.workflow_id)
-        cur = self.conn.cursor()
+        cur = self.postgres_session.cursor()
         cur.execute(select)
 
         for ii,t in enumerate(cur.fetchall()):
             print ii
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
+
             if gold_standard != True:
                 gold_standard = False
 
@@ -206,7 +215,7 @@ class PanoptesAPI:
             if not isinstance(user_id,int):
                 user_id = -1
 
-            self.session.execute(
+            self.cassandra_session.execute(
                 """
                 insert into classifications (project_id, user_id, workflow_id, annotations, created_at, updated_at, user_group_id, user_ip,  completed, gold_standard, subject_id, workflow_version,metadata)
                 values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
@@ -375,37 +384,6 @@ class PanoptesAPI:
                 print "trying to connect/init again again"
                 pass
 
-
-    def __postgres_connect__(self):
-        # print "workflow id is " + str(workflow_id)
-        print "connecting to Panoptes database"
-        # now load in the details for accessing the database
-        try:
-            database_file = open("config/database.yml")
-        except IOError:
-            database_file = open(base_directory+"/Databases/database.yml")
-        database_details = yaml.load(database_file)
-
-        #environment = "staging"
-
-        database = database_details[self.environment]["database"]
-        username = database_details[self.environment]["username"]
-        password = database_details[self.environment]["password"]
-        host = database_details[self.environment]["host"]
-
-        # try connecting to the db
-        self.conn = None
-        details = "dbname='"+database+"' user='"+ username+ "' host='"+ host + "' password='"+password+"'"
-        for i in range(20):
-            try:
-                self.conn = psycopg2.connect(details)
-                break
-            except psycopg2.OperationalError as e:
-                pass
-
-        if self.conn is None:
-            raise psycopg2.OperationalError()
-
     def __set_clustering_alg__(self,clustering_alg):
         self.cluster_alg = clustering_alg(self)
 
@@ -413,30 +391,42 @@ class PanoptesAPI:
         self.cluster_alg.__fit__(subject_id)
 
     def __store_results__(self,subject_id):
-        try:
-            self.session.execute("drop table aggregations")
-        except cassandra.InvalidRequest:
-            pass
-        # self.session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, annotations text, created_at timestamp, updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, metadata text, subject_id int, workflow_version text, PRIMARY KEY(project_id,subject_id,user_id,user_ip,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, user_id ASC);")
-        self.session.execute("CREATE TABLE aggregations (project_id int, workflow_id int, subject_id int, task text, frame int, tool int, aggregation text, created_at timestamp, updated_at timestamp, PRIMARY KEY(project_id,workflow_id,subject_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC, subject_id ASC);")
+        # there have been requests for the aggregation to also contain the metadata
+        select = "SELECT metadata from subjects where id="+str(subject_id)
+        cur = self.postgres_session.cursor()
+        cur.execute(select)
+        metadata = cur.fetchone()
 
-        for (task,frame,tool),aggregation in self.cluster_alg.clusterResults[subject_id].items():
-            self.session.execute(
-                """
-                insert into aggregations (project_id, workflow_id, subject_id, task, frame, tool, aggregation, created_at, updated_at)
-                values (%s,%s,%s,%s,%s,%s,%s,%s,%s)
-                """,
-                (int(self.project_id),self.workflow_id,subject_id,task,frame,tool,json.dumps(aggregation),datetime.datetime.now(),datetime.datetime.now()))
-                # (project_id, user_id, workflow_id, json.dumps(annotations), created_at, updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], float(workflow_version),json.dumps(metadata)))
+        aggregation = self.cluster_alg.clusterResults[subject_id]
 
+        # check to see if an aggregation already exists, if so, use that created_at time
+        old_aggregation = self.cassandra_session.execute("select created_at from aggregations where subject_id = 1" + str(subject_id) + " and workflow_id = " + str(self.workflow_id))
+        if old_aggregation == []:
+            created_at = datetime.datetime.now()
+        else:
+            created_at = old_aggregation.created_at
 
+        updated_at = datetime.datetime.now()
 
-brooke = PanoptesAPI("bar_lengths")
-brooke.__task_setup__()
-# brooke.__get_markings__(3266)
+        # insert into cassandra
+        self.cassandra_session.execute(
+            """
+            insert into aggregations (subject_id,workflow_id, aggregation, created_at, updated_at,metadata)
+            values (%s,%s,%s,%s,%s,%s)
+            """,
+            (subject_id,self.workflow_id,json.dumps(aggregation),created_at,updated_at,json.dumps(metadata)))
 
-import agglomerative
-brooke.__set_clustering_alg__(agglomerative.Agglomerative)
-# a = agglomerative.Agglomerative(brooke)
-brooke.__cluster__(3266)
-brooke.__store_results__(3266)
+        # now insert into postgres as well
+        self.postgres_cursor.execute("INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES (%s,%s,%s,%s,%s);",
+                                     (self.workflow_id,subject_id,json.dumps(aggregation),created_at,updated_at))
+
+if __name__ == "__main__":
+    brooke = PanoptesAPI("bar_lengths")
+    brooke.__task_setup__()
+    # # brooke.__get_markings__(3266)
+    #
+    import agglomerative
+    brooke.__set_clustering_alg__(agglomerative.Agglomerative)
+    # # a = agglomerative.Agglomerative(brooke)
+    brooke.__cluster__(3266)
+    brooke.__store_results__(3266)

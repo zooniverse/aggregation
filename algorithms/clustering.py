@@ -447,8 +447,9 @@ class Cluster:
         # so for this function, we know that annotations = markings
         all_markings =  self.project_api.__get_markings__(subject_id,gold_standard)
 
-        self.clusterResults[subject_id] = {}
+        self.clusterResults[subject_id] = {"param":"task"}
         for key in all_markings:
+            task,frame,tool = key
             users,markings = zip(*all_markings[key])
 
             # otherwise, just set to empty
@@ -462,7 +463,14 @@ class Cluster:
                 # self.goldResults[(subject_id,key)] = cluster_results
                 assert False
             else:
-                self.clusterResults[subject_id][key] = cluster_results
+                if task not in self.clusterResults[subject_id]:
+                    self.clusterResults[subject_id][task] = {"param":"frame"}
+                if frame not in self.clusterResults[subject_id][task]:
+                    self.clusterResults[subject_id][task][frame] = {"param":"tool"}
+                if tool not in self.clusterResults[subject_id][task][frame]:
+                    self.clusterResults[subject_id][task][frame][tool] = {}
+
+                self.clusterResults[subject_id][task][frame][tool] = cluster_results
             self.processed_subjects.add(subject_id)
         # return time_to_cluster
 

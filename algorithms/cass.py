@@ -2,7 +2,8 @@
 __author__ = 'greg'
 import cassandra
 from cassandra.cluster import Cluster
-
+import json
+import panoptes_api
 
 # connect to the cassandra node
 cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
@@ -28,12 +29,14 @@ except cassandra.AlreadyExists:
 # create the aggregation table
 try:
     session.execute("drop table aggregations")
-except cassandra.InvalidRequest:
+except cassandra.InvalidRequest as e:
+    print e
     pass
 
 try:
-    session.execute("CREATE TABLE aggregations (project_id int, workflow_id int, subject_id int, task text, frame int, tool int, aggregation text, created_at timestamp, updated_at timestamp, PRIMARY KEY(project_id,workflow_id,subject_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC, subject_id ASC);")
-except cassandra.InvalidRequest:
+    session.execute("CREATE TABLE aggregations (subject_id int, workflow_id int, task text, aggregation text, created_at timestamp, updated_at timestamp, metadata text, PRIMARY KEY(subject_id,workflow_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC);")
+except cassandra.InvalidRequest as e:
+    print e
     pass
 # # self.session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, annotations text, created_at timestamp, updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, metadata text, subject_id int, workflow_version text, PRIMARY KEY(project_id,subject_id,user_id,user_ip,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, user_id ASC);")
 #
@@ -42,16 +45,18 @@ except cassandra.InvalidRequest:
 #
 #
 #
+p = panoptes_api.PanoptesAPI("bar_lengths")
+p.__migrate__()
+
 # def __load__():
-#     p = PanoptesAPI("bar_lengths")
-#     p.__postgres_connect__()
+#
 #
 #     project_id = p.project_id
 #     workflow_version = p.workflow_version
 #     workflow_id = p.workflow_id
 #
-#     session.execute("drop table classifications")
-#     session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, annotations text, created_at timestamp, updated_at timestamp, user_group_id int, user_ip inet,  completed bool, gold_standard bool, metadata text, subject_id int, workflow_version int PRIMARY KEY(project_id,subject_id,user_id,user_ip,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, user_id ASC);")
+#     # session.execute("drop table classifications")
+#     # session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, annotations text, created_at timestamp, updated_at timestamp, user_group_id int, user_ip inet,  completed bool, gold_standard bool, metadata text, subject_id int, workflow_version int PRIMARY KEY(project_id,subject_id,user_id,user_ip,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, user_id ASC);")
 #
 #     for ii,t in enumerate(p.__yield_classifications__(limit=100000)):
 #         #"SELECT user_id,created_at,user_ip,annotations,subject_ids from classifications
@@ -68,6 +73,8 @@ except cassandra.InvalidRequest:
 #         # session.execute("INSERT INTO classifications (project_id, subject_ids, user_id, annotations, created_at, user_ip, workflow_version, workflow_id,  uid) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",classification)
 #         session.execute("INSERT INTO classifications (project_id, subject_id, user_id, annotations, created_at, user_ip) VALUES (%s,%s,%s,%s,%s,%s)",classification)
 #
+# __load__()
+
 # def __analyze__():
 #     rows = session.execute("SELECT * from classifications")
 #     for r in rows:
