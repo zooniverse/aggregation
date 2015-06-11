@@ -13,6 +13,8 @@ import urllib
 import datetime
 import classification
 from copy import deepcopy
+import matplotlib.pyplot as plt
+import matplotlib.cbook as cbook
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -84,7 +86,11 @@ class PanoptesAPI:
             self.__cassandra_connect()
 
             self.task_type = {}
+            # used to extract the relevant parameters from a marking
             self.marking_params_per_task = {}
+            # used to store the shapes per tool - useful for when we want to plot out results
+            # not strictly necessary but should make things a lot easier to understand/follow
+            self.shapes_per_tool = {}
 
             # cluster algorithm to be used, if any
             self.cluster_alg = None
@@ -208,6 +214,7 @@ class PanoptesAPI:
             if tasks[task_id]["type"] == "drawing":
                 self.classification_tasks[task_id] = {}
                 self.marking_params_per_task[task_id] = []
+                self.shapes_per_tool[task_id] = []
                 # manage marking tools by the marking type and not the index
                 # so all ellipses will be clustered together
                 for tool in tasks[task_id]["tools"]:
@@ -259,12 +266,16 @@ class PanoptesAPI:
                     # #     print tool["details"]
                     print "tool is " + tool["type"]
                     if tool["type"] == "line":
+                        self.shapes_per_tool[task_id].append("line")
                         self.marking_params_per_task[task_id].append(("x1","x2","y1","y2"))
                     elif tool["type"] == "ellipse":
+                        self.shapes_per_tool[task_id].append("ellipse")
                         self.marking_params_per_task[task_id].append(("angle","rx","ry","x","y"))
                     elif tool["type"] == "point":
+                        self.shapes_per_tool[task_id].append("point")
                         self.marking_params_per_task[task_id].append(("x","y"))
                     elif tool["type"] == "circle":
+                        self.shapes_per_tool[task_id].append("circle")
                         self.marking_params_per_task[task_id].append(("x","y","r"))
                     else:
                         print tool
@@ -326,7 +337,9 @@ class PanoptesAPI:
                             print drawing
                             raise
 
-                        id_ = (task_id,tool)
+                        shape = self.shapes_per_tool[task_id][tool]
+
+                        id_ = (task_id,shape)
                         print user_id
                         if id_ not in drawings:
                             drawings[id_] = [(user_id,relevant_params)]
@@ -401,6 +414,39 @@ class PanoptesAPI:
         self.postgres_cursor.execute(stmt)
         for r in self.postgres_cursor.fetchall():
             print r
+
+    def __get_subject_url_and_fname__(self,subject_id):
+        """
+        returns the url of the subject image and the file name which you can use to check if the file locally exists
+        :param subject_id:
+        :return:
+        """
+        request = urllib2.Request(self.host_api+"subjects/"+str(subject_id))
+        request.add_header("Accept","application/vnd.api+json; version=1")
+        request.add_header("Authorization","Bearer "+self.token)
+        # request
+        try:
+            response = urllib2.urlopen(request)
+        except urllib2.HTTPError as e:
+            print self.host_api+"subjects/"+str(subject_id)
+            print 'The server couldn\'t fulfill the request.'
+            print 'Error code: ', e.code
+            print 'Error response body: ', e.read()
+        except urllib2.URLError as e:
+            print 'We failed to reach a server.'
+            print 'Reason: ', e.reason
+        else:
+            # everything is fine
+            body = response.read()
+
+        data = json.loads(body)
+        url = str(data["subjects"][0]["locations"][0]["image/jpeg"])
+        
+        slash_index = url.rfind("/")
+        fname = url[slash_index+1:]
+
+        return url,fname
+
 
     def __get_project_id(self):
         """
@@ -583,12 +629,34 @@ class PanoptesAPI:
     def __plot_cluster_results__(self):
         print "====="
         for subject_id in self.subjects:
-            # print subject_id
-            for tasks in self.cluster_alg.clusterResults[subject_id]:
+            print subject_id
+
+            url,fname = self.__get_subject_url_and_fname__(subject_id)
+
+            image_path = base_directory+"/Databases/images/"+fname
+
+            if not(os.path.isfile(image_path)):
+                urllib.urlretrieve(url, image_path)
+
+            image_file = cbook.get_sample_data(image_path)
+            image = plt.imread(image_file)
+            fig, ax = plt.subplots()
+            im = ax.imshow(image)
+
+            for task in self.cluster_alg.clusterResults[subject_id]:
                 # not really a task - just there to make things easier to understand
-                if tasks == "param":
+                if task == "param":
                     continue
-            print self.cluster_alg.clusterResults[subject_id]
+                for shape in self.cluster_alg.clusterResults[subject_id][task]:
+                    print shape
+                    for cluster in self.cluster_alg.clusterResults[subject_id][task][shape]:
+                        center = cluster["center"]
+                        if shape == "line":
+                            plt.plot([center[0],center[1]],[center[2],center[3]])
+
+
+
+            plt.show()
 
     def __store_results__(self):
         aggregate_results = {}
