@@ -7,13 +7,14 @@ import matplotlib.pyplot as plt
 import networkx as nx
 import itertools
 import ibcc
+import abc
 
 def findsubsets(S,m):
     return set(itertools.combinations(S, m))
 
 class Classification:
     def __init__(self,project,clustering_alg=None):
-        assert isinstance(project,ouroboros_api.OuroborosAPI)
+        # assert isinstance(project,ouroboros_api.OuroborosAPI)
         self.project = project
 
         if clustering_alg is not None:
@@ -27,32 +28,145 @@ class Classification:
 
         self.species = {"lobate":0,"larvaceanhouse":0,"salp":0,"thalasso":0,"doliolidwithouttail":0,"rocketthimble":1,"rockettriangle":1,"siphocorncob":1,"siphotwocups":1,"doliolidwithtail":1,"cydippid":2,"solmaris":2,"medusafourtentacles":2,"medusamorethanfourtentacles":2,"medusagoblet":2,"beroida":3,"cestida":3,"radiolariancolonies":3,"larvacean":3,"arrowworm":3,"shrimp":4,"polychaeteworm":4,"copepod":4}
         self.candidates = self.species.keys()
+        self.results = {}
 
-
-    def __classify__(self,subject_ids,gold_standard=False):
+    @abc.abstractmethod
+    def __task_aggregation__(self,classifications,gold_standard=False):
         pass
 
-class MajorityVote(Classification):
+    def __aggregate__(self,raw_classifications,workflow):
+        # use the first subject_id to find out which tasks we are aggregating the classifications for
+        self.results = {}
+        classification_tasks,marking_tasks = workflow
+
+        for task_id in classification_tasks:
+            # print task_id
+            if isinstance(classification_tasks[task_id],bool):
+                # filtered_classifications = {subject_id:classifications[subject_id][task_id] for subject_id in classifications if task_id in classifications[subject_id]}
+                task_results = self.__task_aggregation__(raw_classifications[task_id])
+                assert isinstance(task_results,dict)
+                for subject_id in task_results:
+                    if subject_id not in self.results:
+                        self.results[subject_id] = {"param":"task_id"}
+                    self.results[subject_id][task_id] = task_results[subject_id]
+            else:
+                continue
+                # we have markings
+                for shape in classification_tasks[task_id]:
+                    # are we uncertain about the shape?
+                    # did multiple tools make the same shape - if so, we need to figure out which tool
+                    # is the most likely
+                    if (task_id in uncertain_shapes) and (shape in uncertain_shapes[task_id]):
+                        assert False
+
+                    for follow_up_question_index in classification_tasks[task_id][shape]:
+                        for subject_id in classifications:
+                            # did anyone mark this shape for this task?
+                            if task_id in classifications[subject_id]:
+                                for cluster_index in classifications[subject_id][task_id][shape]:
+                                    if cluster_index == "param":
+                                        continue
+                                    details = classifications[subject_id][task_id][shape][cluster_index]["details"]
+                                    for user_id in details:
+                                        print details[user_id]
+                                        print [d["value"] for d in details[user_id] if d["value"] is not None]
+                                        print
+                                    tools = classifications[subject_id][task_id][shape][cluster_index]["tool"]
+
+                    assert False
+                # print classifications[temp_subject_id][task_id]
+
+        # for subject_id in classifications:
+        #     for task_id in classifications[subject_id]:
+        #         if isinstance(classifications[subject_id][task_id],list):
+        #             print classifications[subject_id][task_id]
+        #             assert False
+        #
+        #             # we have a simple classification - #todo I think
+        #             vote_counts = {}
+        #             users,votes = zip(*classifications[subject_id][task_id])
+        #             for vote in votes:
+        #                 if vote in vote_counts:
+        #                     vote_counts[vote] += 1
+        #                 else:
+        #                     vote_counts[vote] = 1
+        #             print vote_counts
+        #
+        #             if subject_id not in self.results:
+        #                 self.results[subject_id] = {"type":"task_id"}
+        #
+        #             most_votes = max(vote_counts,key=lambda x:vote_counts[x])
+        #             percentage = vote_counts[most_votes]/float(sum(vote_counts.values()))
+        #             self.results[subject_id][task_id] = most_votes,percentage
+        #         else:
+        #             print classifications[subject_id][task_id]
+        #             assert False
+
+class VoteCount(Classification):
     def __init__(self,project,clustering_alg=None):
         Classification.__init__(self,project,clustering_alg)
 
-    def __classify__(self,subject_ids,gold_standard=False):
-        self.results = {}
-        for subject_id in subject_ids:
-            self.results[subject_id] = []
-            for poll in self.project.__get_classifications__(subject_id,self.cluster_alg):
-                vote_counts = {}
-                for user,vote in poll:
+    def __task_aggregation__(self,raw_classifications,gold_standard=False):
+        """
+        question_id is not None if and only if the classification relates to a marking
+        :param subject_ids:
+        :param task_id:
+        :param question_id:
+        :param gold_standard:
+        :return:
+        """
+        results = {}
+
+        for subject_id in raw_classifications:
+            vote_counts = {}
+            for user,ballot in raw_classifications[subject_id]:
+                for vote in ballot:
                     if vote in vote_counts:
                         vote_counts[vote] += 1
                     else:
                         vote_counts[vote] = 1
+            # convert to percentages
+            percentages = {}
+            for vote in vote_counts:
+                percentages[vote] = vote_counts[vote]/float(sum(vote_counts.values()))
 
-                most_votes = max(vote_counts,key=lambda x:vote_counts[x])
-                percentage = vote_counts[most_votes]/float(sum(vote_counts.values()))
-                self.results[subject_id].append((most_votes,percentage))
+            results[subject_id] = percentages,sum(vote_counts.values())
 
-        return self.results
+        return results
+
+
+
+
+        # for subject_id in subject_ids:
+        #     if subject_id not in self.results:
+        #         self.results[subject_id] = {"type":"task_id"}
+        #
+        #     vote_counts = {}
+        #     for user,vote in self.project.__get_classifications__(subject_id,task_id,question_id):
+        #         print user,vote
+        #         if vote in vote_counts:
+        #             vote_counts[vote] += 1
+        #         else:
+        #             vote_counts[vote] = 1
+        #
+        #     most_votes = max(vote_counts,key=lambda x:vote_counts[x])
+        #     percentage = vote_counts[most_votes]/float(sum(vote_counts.values()))
+        #
+        #     if question_id is None:
+        #         self.results[subject_id][task_id] = most_votes,percentage
+        #     else:
+        #         if task_id not in self.results[subject_id]:
+        #             self.results[subject_id][task_id] = {"type":"marking_id"}
+        #         if tool_id not in  self.results[subject_id][task_id]:
+        #             self.results[subject_id][task_id][tool_id] = {"type":"question_id"}
+        #
+        #         self.results[subject_id][task_id][tool_id]["q"+str(question_id)] =  most_votes,percentage
+        #
+        #
+        #
+        # print self.results
+        # # print self.results
+        # # return self.results
 
 
 class IBCC(Classification):

@@ -11,8 +11,8 @@ import math
 import numpy
 
 class Agglomerative(clustering.Cluster):
-    def __init__(self,project_api,min_cluster_size=1):
-        clustering.Cluster.__init__(self,project_api,min_cluster_size)
+    def __init__(self,project_api,min_cluster_size=1,mapping =None):
+        clustering.Cluster.__init__(self,project_api,min_cluster_size,mapping)
         self.algorithm_name = "agglomerative"
         self.all_distances = []
         self.max = 0
@@ -50,23 +50,36 @@ class Agglomerative(clustering.Cluster):
         :return:
         """
         assert len(markings) == len(user_ids)
+        assert isinstance(user_ids,tuple)
+        user_ids = list(user_ids)
         start = time.time()
+
+        if self.mapping is not None:
+            mapped_markings = []
+            for i,m in enumerate(markings):
+                try:
+                    mapped_markings.append(self.mapping(m))
+                except ZeroDivisionError:
+                    user_ids.pop(i)
+            # mapped_markings = [self.mapping(m) for m in markings]
+        else:
+            mapped_markings = markings
+        assert len(mapped_markings) == len(user_ids)
+
 
         # cluster_centers = []
         # end_clusters = []
         # end_users = []
-
         results = []
-
         # this converts stuff into panda format - probably a better way to do this but the labels do seem
         # necessary
-        labels = [str(i) for i in markings]
-        param_labels = [str(i) for i in range(len(markings[0]))]
-        df = pd.DataFrame(np.array(markings), columns=param_labels, index=labels)
+        labels = [str(i) for i in mapped_markings]
+        param_labels = [str(i) for i in range(len(mapped_markings[0]))]
+        df = pd.DataFrame(np.array(mapped_markings), columns=param_labels, index=labels)
         row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
-
         # use ward metric to do the actual clustering
         row_clusters = linkage(row_dist, method='ward')
+
 
         # use the results to build a tree representation
         nodes = [automatic_optics.LeafNode(pt,ii,user=user) for ii,(user,pt) in enumerate(zip(user_ids,markings))]
@@ -117,6 +130,7 @@ class Agglomerative(clustering.Cluster):
             results.append(self.__results_to_json__(nodes[-1]))
 
         end = time.time()
+        print results
         return results,end-start
 
     def __check__(self):

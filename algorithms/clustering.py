@@ -228,7 +228,7 @@ def onpick(clustering_alg):
 class Cluster:
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, project_api,min_cluster_size=1):
+    def __init__(self, project_api,min_cluster_size=1,mapping=None):
         """
         :param project_api: how to talk to whatever project we are clustering for (Panoptes/Ouroboros shouldn't matter)
         :param min_cluster_size: minimum number of points in a cluster to not be considered noise
@@ -267,6 +267,8 @@ class Cluster:
         self.y_roc = None
 
         self.algorithm_name = None
+
+        self.mapping = mapping
 
     def __compare_against__(self,other_clustering,subject_id):
         assert isinstance(other_clustering,Cluster)
@@ -435,7 +437,7 @@ class Cluster:
     def __get_cluster__(self,subject_id):
         return self.clusterResults[subject_id]
 
-    def __fit__(self,subject_id,max_users=None,jpeg_file=None,gold_standard=False):
+    def __aggregate__(self,raw_markings):
         """
         the function to call from outside to do the clustering
         override but call if you want to add additional functionality
@@ -443,36 +445,35 @@ class Cluster:
         :param jpeg_file: for debugging - to show step by step what is happening
         :return:
         """
+        self.clusterResults = {}
         # start by calling the api to get the annotations along with the list of who made each marking
         # so for this function, we know that annotations = markings
-        all_markings =  self.project_api.__get_markings__(subject_id,gold_standard)
+        # all_markings =  self.project_api.__get_markings__(subject_id,gold_standard)
+        # print all_markings
+        # self.clusterResults[subject_id] = {"param":"task_id"}
+        for task_id in raw_markings:
+            for shape in raw_markings[task_id]:
+                for subject_id in raw_markings[task_id][shape]:
+                    users,markings = zip(*raw_markings[task_id][shape][subject_id])
 
-        self.clusterResults[subject_id] = {"param":"task"}
-        for key in all_markings:
-            task,frame,tool = key
-            users,markings = zip(*all_markings[key])
+                    # otherwise, just set to empty
+                    if (markings == []) or (markings == [[] for i in users]):
+                        cluster_results = [],[],[]
+                        time_to_cluster = 0
+                    else:
+                        cluster_results,time_to_cluster = self.__inner_fit__(markings,users)
 
-            # otherwise, just set to empty
-            if (markings == []) or (markings == [[] for i in users]):
-                cluster_results = [],[],[]
-                time_to_cluster = 0
-            else:
-                cluster_results,time_to_cluster = self.__inner_fit__(markings,users,gold_standard,subject_id=subject_id)
+                        if task_id not in self.clusterResults:
+                            self.clusterResults[task_id] = {}
 
-            if gold_standard:
-                # self.goldResults[(subject_id,key)] = cluster_results
-                assert False
-            else:
-                if task not in self.clusterResults[subject_id]:
-                    self.clusterResults[subject_id][task] = {"param":"frame"}
-                if frame not in self.clusterResults[subject_id][task]:
-                    self.clusterResults[subject_id][task][frame] = {"param":"tool"}
-                if tool not in self.clusterResults[subject_id][task][frame]:
-                    self.clusterResults[subject_id][task][frame][tool] = {}
+                        if shape not in self.clusterResults[task_id]:
+                            self.clusterResults[task_id][shape] = {}
 
-                self.clusterResults[subject_id][task][frame][tool] = cluster_results
-            self.processed_subjects.add(subject_id)
-        # return time_to_cluster
+                        # if subject_id not in self.clusterResults[task_id][shape][subject_id]:
+                        #     self.clusterResults[subject_id] = []
+
+                        self.clusterResults[task_id][shape][subject_id] = cluster_results
+
 
     def __get_densities__(self,subject_id):
         """

@@ -41,6 +41,12 @@ def line_mapping(marking):
     else:
         return x2,x1,y2,y1
 
+def point_mapping(marking):
+    x = marking["x"]
+    y = marking["y"]
+
+    return x,y
+
 class PanoptesAPI:
     #@profile
     def __init__(self,project=None):#,user_threshold= None, score_threshold= None): #Supernovae
@@ -152,24 +158,25 @@ class PanoptesAPI:
         self.classifications = None
         self.aggregations = {}
         #
-        # self.marking_params_per_shape = dict()
-        # self.marking_params_per_shape["line"] = line_mapping
+        self.marking_params_per_shape = dict()
+        self.marking_params_per_shape["line"] = line_mapping
+        self.marking_params_per_shape["point"] = point_mapping
 
 
-    def __set_workflow__(self,workflow_id):
-        """
-        set the workflow id - must be an actual workflow associated with this project
-        :param workflow_id:
-        :return:
-        """
-        assert workflow_id in self.workflows
-        self.workflow_id = workflow_id
-
-        # load in the subjects specific to that workflow
-        self.__get_subject_ids__()
-
-        # load the tasks associated with this workflow
-        self.__task_setup__()
+    # def __set_workflow__(self,workflow_id):
+    #     """
+    #     set the workflow id - must be an actual workflow associated with this project
+    #     :param workflow_id:
+    #     :return:
+    #     """
+    #     assert workflow_id in self.workflows
+    #     self.workflow_id = workflow_id
+    #
+    #     # load in the subjects specific to that workflow
+    #     self.__get_subject_ids__()
+    #
+    #     # load the tasks associated with this workflow
+    #     self.__task_setup__()
 
     def __postgres_connect(self,database_details):
 
@@ -251,7 +258,7 @@ class PanoptesAPI:
         # which of these tasks have classifications associated with them?
         classification_tasks = {}
         # which have drawings associated with them
-        shapes_per_task = {}
+        marking_tasks = {}
 
         for task_id in tasks:
             # print tasks[task_id]
@@ -259,7 +266,7 @@ class PanoptesAPI:
 
             # if the task is a drawing one, get the necessary details for clustering
             if tasks[task_id]["type"] == "drawing":
-                shapes_per_task[task_id] = []
+                marking_tasks[task_id] = []
                 # manage marking tools by the marking type and not the index
                 # so all ellipses will be clustered together
 
@@ -285,19 +292,19 @@ class PanoptesAPI:
 
                     print "tool is " + tool["type"]
                     if tool["type"] == "line":
-                        shapes_per_task[task_id].append("line")
+                        marking_tasks[task_id].append("line")
                         # self.marking_params_per_task[task_id].append(line_mapping)
                     elif tool["type"] == "ellipse":
-                        shapes_per_task[task_id].append("ellipse")
+                        marking_tasks[task_id].append("ellipse")
                         # self.marking_params_per_task[task_id].append(("angle","rx","ry","x","y"))
                     elif tool["type"] == "point":
-                        shapes_per_task[task_id].append("point")
+                        marking_tasks[task_id].append("point")
                         # self.marking_params_per_task[task_id].append(("x","y"))
                     elif tool["type"] == "circle":
-                        shapes_per_task[task_id].append("circle")
+                        marking_tasks[task_id].append("circle")
                         # self.marking_params_per_task[task_id].append(("x","y","r"))
                     elif tool["type"] == "rectangle":
-                        shapes_per_task[task_id].append("rectangle")
+                        marking_tasks[task_id].append("rectangle")
                         # self.marking_params_per_task[task_id].append(("x","y","width","height"))
                     else:
                         print tool
@@ -307,97 +314,141 @@ class PanoptesAPI:
                 # self.marking_params_per_task[task_id] = []
                 classification_tasks[task_id] = True
 
-        return classification_tasks,shapes_per_task
+        return classification_tasks,marking_tasks
 
-    def __get_markings__(self,subjects=None,gold_standard=False):
-        # current_subject_id = None
-        # project_id
-        # users_per_drawing_task = {}
-        # for each drawing task, we can
-        # get all of the drawing task ids
-        # drawing_task_ids = [task_id for task_id in self.task_type if self.task_type[task_id] == "drawing"]
-        # create a list for each tool and task pair
-        # drawing_tasks = {task_id:[[] for tool in self.cluster_params_per_task[task_id] ] for task_id in drawing_task_ids}
-        # print drawing_tasks
-        assert self.workflow_id is not None
-        markings = {}
-        total = 0
-        if subjects is None:
-            subjects = self.subjects
+    def __sort_markings__(self,workflow_id):
+        classification_tasks,marking_tasks = self.workflows[workflow_id]
+        if marking_tasks == {}:
+            return {}
 
-        for subject_id in subjects:
-            t_markings = {}
-            # print subject_id
-            total += 1
-            print total
+        raw_markings = {}
 
-            # use to track non-logged in users
-            non_logged_in_users = 0
+        for s in self.chunks(self.subject_sets[workflow_id],15):
+            statements_and_params = []
+            select_statement = self.cassandra_session.prepare("select user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
 
-            # go through each of the classifications for the given subject
-            # select_stmt = "select user_id,annotations,workflow_version from classifications where project_id = " + str(self.project_id) + " and subject_id = " + str(subject_id) + " and workflow_id = " + str(self.workflow_id)
-            select_stmt = "select user_id,annotations from classifications where project_id = " + str(self.project_id) + " and subject_id = " + str(subject_id)
+            for subject_id in s:
+                params = (int(self.project_id),subject_id,int(workflow_id))
+                statements_and_params.append((select_statement, params))
+            results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
+            for subject_id,(success,record_list) in zip(s,results):
+                assert success
 
-            for classification in self.cassandra_session.execute(select_stmt):
-                # print classification.workflow_version
-                user_id = classification.user_id
+                non_logged_in_users = 0
+                for record in record_list:
+                    user_id = record.user_id
+                    if user_id == -1:
+                        non_logged_in_users += -1
+                        user_id = non_logged_in_users
 
-                # if the user is not logged in, use counter to help differiniate between users
-                # todo - if someone views the same image twice, this approach will count both of those
-                # todo classifications which is probably not what we want
-                if user_id == -1:
-                    non_logged_in_users += -1
-                    user_id = non_logged_in_users
+                    annotations = json.loads(record.annotations)
 
-                # convert from string into json
-                annotations = json.loads(classification.annotations)
+                    # go through each annotation and get the associated task
+                    for task in annotations:
+                        task_id = task["task"]
 
-                # go through each annotation, looking for markings
-                for task in annotations:
-                    task_id = task["task"]
-                    print annotations
-                    # print task
-                    # print self.task_type
-                    assert task_id in self.task_type
+                        if task_id in marking_tasks:
+                            for marking in task["value"]:
 
-                    # if we have found a list of markings, associated each one with the tool that made it
-                    if self.task_type[task_id] == "drawing":
-                        if task["value"] is None:
-                            continue
+                                # what kind of tool made this marking and what was the shape of that tool?
+                                try:
+                                    tool = marking["tool"]
+                                    shape = marking_tasks[task_id][tool]
+                                except KeyError:
+                                    print marking
+                                    print marking_tasks
+                                    tool = None
+                                    shape = marking["type"]
 
-                        for marking in task["value"]:
-                            # get the index of the tool that made the marking
+                                if shape ==  "image":
+                                    # todo - treat image like a rectangle
+                                    continue
 
-                            # different markings can use the same tool - so this may have the affect of clustering
-                            # across different marking types
-                            # see https://github.com/zooniverse/Panoptes-Front-End/issues/525
-                            # for discussion
-                            try:
-                                tool = marking["tool"]
-                                shape = self.shapes_per_tool[task_id][tool]
-                            except KeyError:
-                                tool = None
-                                shape = marking["type"]
+                                if task_id not in raw_markings:
+                                    raw_markings[task_id] = {}
+                                if shape not in raw_markings[task_id]:
+                                    raw_markings[task_id][shape] = {}
+                                if subject_id not in raw_markings[task_id][shape]:
+                                    raw_markings[task_id][shape][subject_id] = []
 
-                            if shape ==  "image":
-                                # todo - treat image like a rectangle
-                                continue
-
-                            # drawing_params = self.marking_params_per_task[task_id][drawing["tool"]]
-                            # extract the params that are relevant to the marking
-                            try:
                                 relevant_params = self.marking_params_per_shape[shape](marking)
-                            except KeyError:
-                                continue
 
-                            id_ = (task_id,shape)
+                                raw_markings[task_id][shape][subject_id].append((user_id,relevant_params))
+        return raw_markings
 
-                            if id_ not in t_markings:
-                                t_markings[id_] = [(user_id,relevant_params)]
-                            else:
-                                t_markings[id_].append((user_id,relevant_params))
-            markings[subject_id] = deepcopy(t_markings)
-        return markings
+        # for subject_id in subjects:
+        #     t_markings = {}
+        #     # print subject_id
+        #     total += 1
+        #     print total
+        #
+        #     # use to track non-logged in users
+        #     non_logged_in_users = 0
+        #
+        #     # go through each of the classifications for the given subject
+        #     # select_stmt = "select user_id,annotations,workflow_version from classifications where project_id = " + str(self.project_id) + " and subject_id = " + str(subject_id) + " and workflow_id = " + str(self.workflow_id)
+        #     select_stmt = "select user_id,annotations from classifications where project_id = " + str(self.project_id) + " and subject_id = " + str(subject_id)
+        #
+        #     for classification in self.cassandra_session.execute(select_stmt):
+        #         # print classification.workflow_version
+        #         user_id = classification.user_id
+        #
+        #         # if the user is not logged in, use counter to help differiniate between users
+        #         # todo - if someone views the same image twice, this approach will count both of those
+        #         # todo classifications which is probably not what we want
+        #         if user_id == -1:
+        #             non_logged_in_users += -1
+        #             user_id = non_logged_in_users
+        #
+        #         # convert from string into json
+        #         annotations = json.loads(classification.annotations)
+        #
+        #         # go through each annotation, looking for markings
+        #         for task in annotations:
+        #             task_id = task["task"]
+        #             print annotations
+        #             # print task
+        #             # print self.task_type
+        #             assert task_id in self.task_type
+        #
+        #             # if we have found a list of markings, associated each one with the tool that made it
+        #             if self.task_type[task_id] == "drawing":
+        #                 if task["value"] is None:
+        #                     continue
+        #
+        #                 for marking in task["value"]:
+        #                     # get the index of the tool that made the marking
+        #
+        #                     # different markings can use the same tool - so this may have the affect of clustering
+        #                     # across different marking types
+        #                     # see https://github.com/zooniverse/Panoptes-Front-End/issues/525
+        #                     # for discussion
+        #                     try:
+        #                         tool = marking["tool"]
+        #                         shape = self.shapes_per_tool[task_id][tool]
+        #                     except KeyError:
+        #                         tool = None
+        #                         shape = marking["type"]
+        #
+        #                     if shape ==  "image":
+        #                         # todo - treat image like a rectangle
+        #                         continue
+        #
+        #                     # drawing_params = self.marking_params_per_task[task_id][drawing["tool"]]
+        #                     # extract the params that are relevant to the marking
+        #                     try:
+        #                         relevant_params = self.marking_params_per_shape[shape](marking)
+        #                     except KeyError:
+        #                         continue
+        #
+        #                     id_ = (task_id,shape)
+        #
+        #                     if id_ not in t_markings:
+        #                         t_markings[id_] = [(user_id,relevant_params)]
+        #                     else:
+        #                         t_markings[id_].append((user_id,relevant_params))
+        #     markings[subject_id] = deepcopy(t_markings)
+        # return markings
 
     def __migrate__(self):
         # try:
@@ -683,7 +734,7 @@ class PanoptesAPI:
                 pass
 
     def __set_clustering_alg__(self,clustering_alg):
-        self.cluster_alg = clustering_alg(self,mapping=mapping)
+        self.cluster_alg = clustering_alg(self)
     #
     # def __load_workflows__(self):
     #     select = "SELECT id,display_name from workflows where project_id="+str(self.project_id)
@@ -714,13 +765,28 @@ class PanoptesAPI:
             print record
 
     def __cluster__(self):
-        return
         print "clustering"
-        markings = self.__get_markings__()
-        # print markings
-        self.cluster_alg.__aggregate__(markings)
+        # go through each workflow
+        for workflow_id in self.workflows:
+            print "workflow id is " + str(workflow_id)
+            # get the raw classifications for the given workflow
+            raw_markings = self.__sort_markings__(workflow_id)
 
-        self.aggregations = self.cluster_alg.clusterResults
+            self.cluster_alg.__aggregate__(raw_markings)
+
+            self.aggregations[workflow_id] = {}
+
+            # need to reverse order - current order is good for calculations, bad for output
+            for task_id in self.cluster_alg.clusterResults:
+                for shape in self.cluster_alg.clusterResults[task_id]:
+                    for subject_id in self.cluster_alg.clusterResults[task_id][shape]:
+                        if subject_id not in self.aggregations[workflow_id]:
+                            self.aggregations[workflow_id][subject_id] = {}
+                        if task_id not in self.aggregations[workflow_id][subject_id]:
+                            self.aggregations[workflow_id][subject_id][task_id] = {}
+
+                        self.aggregations[workflow_id][subject_id][task_id][shape] = self.cluster_alg.clusterResults[task_id][shape][subject_id]
+
 
     def __plot_image__(self,subject_id):
         url,fname = self.__get_subject_url_and_fname__(subject_id)
@@ -797,8 +863,8 @@ class PanoptesAPI:
 
         # plt.show()
 
-    def __plot__(self,task):
-        for subject_id in self.subjects:
+    def __plot__(self,workflow_id,task):
+        for subject_id in self.subject_sets[workflow_id]:
             all_users = set()
             for shape in self.cluster_alg.clusterResults[subject_id][task]:
                 for cluster in self.cluster_alg.clusterResults[subject_id][task][shape]:
@@ -882,7 +948,7 @@ class PanoptesAPI:
         classification_tasks,marking_tasks = self.workflows[workflow_id]
         raw_classifications = {}
 
-        for s in self.chunks(self.subject_sets[workflow_id],5):
+        for s in self.chunks(self.subject_sets[workflow_id],15):
             statements_and_params = []
             select_statement = self.cassandra_session.prepare("select user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
 
@@ -920,7 +986,6 @@ class PanoptesAPI:
                                     raw_classifications[task_id] = {}
                                 if subject_id not in raw_classifications[task_id]:
                                     raw_classifications[task_id][subject_id] = []
-
                                 raw_classifications[task_id][subject_id].append((user_id,task["value"]))
         return raw_classifications
 
@@ -1120,7 +1185,7 @@ class PanoptesAPI:
         #         for tool_id in self.votes[subject_ids[0]][task_id].keys():
         #             for question_id in self.votes[subject_ids[0]][task_id][tool_id].keys():
         #                 self.classification_alg.__classify__(subject_ids,task_id,tool_id,question_id)
-        print self.aggregations
+
     def __set_subjects__(self,subjects):
         self.subjects = subjects
 
@@ -1164,7 +1229,7 @@ def mapping(pt):
 if __name__ == "__main__":
     print sys.argv[1]
     project = PanoptesAPI(sys.argv[1])
-    project.__migrate__()
+    # project.__migrate__()
 
     # project.__get_subjects__()
     # # # brooke.__get_markings__(3266)
@@ -1172,12 +1237,12 @@ if __name__ == "__main__":
     # project.__set_subjects__([458813])
 
     import agglomerative
-    # project.__set_clustering_alg__(agglomerative.Agglomerative)
+    project.__set_clustering_alg__(agglomerative.Agglomerative)
     # # # # a = agglomerative.Agglomerative(brooke)
-    # project.__cluster__()
-    # project.__plot__("T3")
+    project.__cluster__()
+    # project.__plot__(15,"T1")
     # project.__plot_cluster_results__()
     #
-    project.__set_classification_alg__(classification.MajorityVote)
+    project.__set_classification_alg__(classification.VoteCount)
     project.__classify__()
     # # project.__store_results__()
