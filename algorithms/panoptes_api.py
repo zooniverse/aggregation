@@ -78,8 +78,6 @@ class PanoptesAPI:
         # the http api for connecting to Panoptes
         self.http_api = None
         print "connecting to Panoptes http api"
-        print self.http_api
-        print self.environment
         # set the http_api and basic project details
         self.__panoptes_connect__()
 
@@ -355,8 +353,6 @@ class PanoptesAPI:
                                     tool = marking["tool"]
                                     shape = marking_tasks[task_id][tool]
                                 except KeyError:
-                                    print marking
-                                    print marking_tasks
                                     tool = None
                                     shape = marking["type"]
 
@@ -451,15 +447,13 @@ class PanoptesAPI:
         # return markings
 
     def __migrate__(self):
-        # try:
-        #     self.cassandra_session.execute("drop table classifications")
-        #     print "table dropped"
-        # except cassandra.InvalidRequest:
-        #     print "table did not exist"
-        #     pass
-        # self.session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, annotations text, created_at timestamp, updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, metadata text, subject_id int, workflow_version text, PRIMARY KEY(project_id,subject_id,user_id,user_ip,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, user_id ASC);")
-        # self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version float,metadata text, PRIMARY KEY(project_id,subject_id,workflow_id,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, workflow_id ASC,created_at ASC);")
-        # self.session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int,user_ip inet,subject_id int,annotations text,  PRIMARY KEY(project_id,subject_id,user_id,user_ip) ) WITH CLUSTERING ORDER BY (subject_id ASC, user_id ASC);")
+        try:
+            self.cassandra_session.execute("drop table classifications")
+            print "table dropped"
+        except cassandra.InvalidRequest:
+            print "table did not exist"
+            pass
+        self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version float,metadata text, PRIMARY KEY(project_id,subject_id,workflow_id,workflow_version,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, workflow_id ASC,workflow_version ASC, created_at ASC);")
 
         select = "SELECT * from classifications where project_id="+str(self.project_id)
         cur = self.postgres_session.cursor()
@@ -543,10 +537,13 @@ class PanoptesAPI:
         self.workflows = {}
         self.subject_sets = {}
         for workflows in data["workflows"]:
-            id_ = workflows["id"]
+            id_ = int(workflows["id"])
             # self.workflows.append(id_)
             self.workflows[id_] = self.__readin_tasks__(id_)
             self.subject_sets[id_] = self.__get_subject_ids__(id_)
+
+        # read in the most current version of each of the workflows
+        self.versions = self.__get_workflow_versions__()
 
     # def __list_projects__(self):
     #     stmt = "select * from projects"
@@ -621,11 +618,10 @@ class PanoptesAPI:
 
         data = json.loads(body)
         # put it in json structure and extract id
-        print data
         return data["projects"][0]["id"]
         # return None
 
-    def __get_workflow_version(self):#,project_id):
+    def __get_workflow_versions__(self):#,project_id):
         request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
         request.add_header("Accept","application/vnd.api+json; version=1")
         request.add_header("Authorization","Bearer "+self.token)
@@ -648,7 +644,12 @@ class PanoptesAPI:
 
         # put it in json structure and extract id
         data = json.loads(body)
-        return data["workflows"][0]['version']
+        versions = {}
+
+        for w in data["workflows"]:
+            versions[int(w["id"])] = float(w["version"])
+
+        return versions
 
     def __panoptes_connect__(self):
         """
@@ -764,10 +765,16 @@ class PanoptesAPI:
         for record in cur.fetchall():
             print record
 
-    def __cluster__(self):
+    def __cluster__(self,workflow=None):
         print "clustering"
         # go through each workflow
-        for workflow_id in self.workflows:
+        if workflow is None:
+            workflows = self.workflows
+        else:
+            assert isinstance(workflow,int)
+            workflows = [workflow,]
+
+        for workflow_id in workflows:
             print "workflow id is " + str(workflow_id)
             # get the raw classifications for the given workflow
             raw_markings = self.__sort_markings__(workflow_id)
@@ -864,17 +871,13 @@ class PanoptesAPI:
         # plt.show()
 
     def __plot__(self,workflow_id,task):
-        for subject_id in self.subject_sets[workflow_id]:
-            all_users = set()
-            for shape in self.cluster_alg.clusterResults[subject_id][task]:
-                for cluster in self.cluster_alg.clusterResults[subject_id][task][shape]:
-                    all_users.update(cluster["users"])
-
-            self.__plot_image__(subject_id)
-            # self.__plot_individual_points__(subject_id,task)
-            self.__plot_cluster_results__(subject_id,task)
-            plt.title("number of users: " + str(len(all_users)))
-            plt.show()
+        for shape in self.cluster_alg.clusterResults[task]:
+            for subject_id in self.cluster_alg.clusterResults[task][shape]:
+                self.__plot_image__(subject_id)
+                # self.__plot_individual_points__(subject_id,task)
+                self.__plot_cluster_results__(subject_id,task)
+                plt.title("number of users: " + str(len(all_users)))
+                plt.show()
 
     def __store_results__(self):
         aggregate_results = {}
@@ -950,10 +953,10 @@ class PanoptesAPI:
 
         for s in self.chunks(self.subject_sets[workflow_id],15):
             statements_and_params = []
-            select_statement = self.cassandra_session.prepare("select user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
+            select_statement = self.cassandra_session.prepare("select user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
 
             for subject_id in s:
-                params = (int(self.project_id),subject_id,int(workflow_id))
+                params = (int(self.project_id),subject_id,int(workflow_id),self.versions[workflow_id])
                 statements_and_params.append((select_statement, params))
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
             for subject_id,(success,record_list) in zip(s,results):
@@ -1236,13 +1239,13 @@ if __name__ == "__main__":
     # #
     # project.__set_subjects__([458813])
 
-    import agglomerative
-    project.__set_clustering_alg__(agglomerative.Agglomerative)
-    # # # # a = agglomerative.Agglomerative(brooke)
-    project.__cluster__()
-    # project.__plot__(15,"T1")
-    # project.__plot_cluster_results__()
-    #
+    # import agglomerative
+    # project.__set_clustering_alg__(agglomerative.Agglomerative)
+    # # # # # a = agglomerative.Agglomerative(brooke)
+    # project.__cluster__(workflow=6)
+    # project.__plot__(6,"T1")
+    # # project.__plot_cluster_results__()
+    # #
     project.__set_classification_alg__(classification.VoteCount)
     project.__classify__()
-    # # project.__store_results__()
+    # # # project.__store_results__()
