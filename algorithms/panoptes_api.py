@@ -365,6 +365,8 @@ class PanoptesAPI:
         im=Image.open(fname)
         width,height= im.size
 
+        self.users_per_task = {}
+
         for s in self.chunks(self.subject_sets[workflow_id],15):
             statements_and_params = []
             # select_statement = self.cassandra_session.prepare("select id,user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
@@ -643,6 +645,7 @@ class PanoptesAPI:
         image_path = base_directory+"/Databases/images/"+fname
 
         if not(os.path.isfile(image_path)):
+            print "downloading"
             urllib.urlretrieve(url, image_path)
 
         return image_path
@@ -891,12 +894,20 @@ class PanoptesAPI:
     def __plot_image__(self,subject_id):
         fname = self.__image_setup__(subject_id)
 
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1)
-        image_file = cbook.get_sample_data(fname)
-        image = plt.imread(image_file)
-        # fig, ax = plt.subplots()
-        im = ax.imshow(image)
+        for i in range(10):
+            try:
+                fig = plt.figure()
+                ax = fig.add_subplot(1, 1, 1)
+                image_file = cbook.get_sample_data(fname)
+                image = plt.imread(image_file)
+                # fig, ax = plt.subplots()
+                im = ax.imshow(image)
+
+                return
+            except IOError:
+                # try downloading that image again
+                os.remove(fname)
+                self.__image_setup__(subject_id)
 
     def __plot_individual_points__(self,subject_id,task_id,shape):
         for cluster in self.cluster_alg.clusterResults[task_id][shape][subject_id]:
@@ -949,6 +960,8 @@ class PanoptesAPI:
     def __plot__(self,workflow_id,task):
         for shape in self.cluster_alg.clusterResults[task]:
             for subject_id in self.cluster_alg.clusterResults[task][shape]:
+                print subject_id
+                # if self.cluster_alg.clusterResults[task][shape][subject_id]["users"]
                 self.__plot_image__(subject_id)
                 self.__plot_individual_points__(subject_id,task,shape)
                 self.__plot_cluster_results__(subject_id,task,shape)
