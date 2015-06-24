@@ -120,11 +120,19 @@ class VoteCount(Classification):
         for subject_id in raw_classifications:
             vote_counts = {}
             for user,ballot in raw_classifications[subject_id]:
-                for vote in ballot:
-                    if vote in vote_counts:
-                        vote_counts[vote] += 1
+                # in which case only one vote is allowed
+                if isinstance(ballot,int):
+                    if ballot in vote_counts:
+                        vote_counts[ballot] += 1
                     else:
-                        vote_counts[vote] = 1
+                        vote_counts[ballot] = 1
+                # in which case multiple votes are allowed
+                else:
+                    for vote in ballot:
+                        if vote in vote_counts:
+                            vote_counts[vote] += 1
+                        else:
+                            vote_counts[vote] = 1
             # convert to percentages
             percentages = {}
             for vote in vote_counts:
