@@ -57,6 +57,9 @@ def point_mapping(marking,image_dimensions):
 
     return x,y
 
+def ellipse_mapping(marking,image_dimensions):
+    return marking["x"],marking["y"],marking["rx"],marking["ry"],marking["angle"]
+
 class PanoptesAPI:
     #@profile
     def __init__(self,project=None):#,user_threshold= None, score_threshold= None): #Supernovae
@@ -169,6 +172,7 @@ class PanoptesAPI:
         self.marking_params_per_shape = dict()
         self.marking_params_per_shape["line"] = line_mapping
         self.marking_params_per_shape["point"] = point_mapping
+        self.marking_params_per_shape["ellipse"] = ellipse_mapping
 
 
     # def __set_workflow__(self,workflow_id):
@@ -323,7 +327,9 @@ class PanoptesAPI:
                             classification_tasks[task_id] = {}
                         # if tool_id not in self.classification_tasks[task_id]:
                         #     self.classification_tasks[task_id][tool_id] = {}
-                        classification_tasks[task_id][shape]= [i for i in range(len(tool["details"]))]
+                        classification_tasks[task_id][tool_id]= [i for i in range(len(tool["details"]))]
+                        # todo - fix this
+                        assert False
 
                     # print "tool is " + tool["type"]
                     if tool["type"] == "line":
@@ -349,7 +355,19 @@ class PanoptesAPI:
                 # self.marking_params_per_task[task_id] = []
                 classification_tasks[task_id] = True
 
-        print "==---"
+        # find out if any of the shapes for a given task are "confusing"
+        # that is more, there is more than 1 tool which can create that shape
+        for task_id in marking_tasks:
+            for shape in ["line","ellipse","point","circle","rectangle"]:
+                if sum([1 for s in marking_tasks[task_id] if s == shape]) > 0:
+                    # this shape is confusing
+                    if task_id not in classification_tasks:
+                        classification_tasks[task_id] = {}
+                    if "shapes" not in classification_tasks[task_id]:
+                        classification_tasks[task_id]["shapes"] = []
+
+                    classification_tasks[task_id]["shapes"].append(shape)
+
         return classification_tasks,marking_tasks
 
     def __sort_markings__(self,workflow_id):
@@ -365,7 +383,7 @@ class PanoptesAPI:
         im=Image.open(fname)
         width,height= im.size
 
-        self.users_per_task = {}
+        self.users_per_subject={}
 
         for s in self.chunks(self.subject_sets[workflow_id],15):
             statements_and_params = []
@@ -377,14 +395,31 @@ class PanoptesAPI:
                 statements_and_params.append((select_statement, params))
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
             for subject_id,(success,record_list) in zip(s,results):
-                assert success
-
                 non_logged_in_users = 0
                 for record in record_list:
                     user_id = record.user_id
                     if user_id == -1:
                         non_logged_in_users += -1
                         user_id = non_logged_in_users
+
+                    # for counting the number of users who have seen this subject
+                    # set => in case someone has seen this image twice
+                    if subject_id not in self.users_per_subject:
+                        self.users_per_subject[subject_id] = set()
+
+                    # # todo - how to handle cases where someone has seen an image more than once?
+                    # if user_id in self.users_per_subject[subject_id]:
+                    #     select = "SELECT * from users where id="+str(user_id)
+                    #     cur = self.postgres_session.cursor()
+                    #     cur.execute(select)
+                    #
+                    #     print cur.fetchone()
+
+
+
+                    self.users_per_subject[subject_id].add(user_id)
+
+
 
                     annotations = json.loads(record.annotations)
 
@@ -861,34 +896,30 @@ class PanoptesAPI:
         for record in cur.fetchall():
             print record
 
-    def __cluster__(self,workflow=None):
-        print "clustering"
-        # go through each workflow
-        if workflow is None:
-            workflows = self.workflows
-        else:
-            assert isinstance(workflow,int)
-            workflows = [workflow,]
+    def __cluster__(self,workflow_id):
+        """
+        run the clustering algorithm for a given workflow
+        need to have already checked that the workflow requires clustering
+        :param workflow_id:
+        :return:
+        """
+        # get the raw classifications for the given workflow
+        raw_markings = self.__sort_markings__(workflow_id)
 
-        for workflow_id in workflows:
-            print "workflow id is " + str(workflow_id)
-            # get the raw classifications for the given workflow
-            raw_markings = self.__sort_markings__(workflow_id)
+        self.cluster_alg.__aggregate__(raw_markings)
 
-            self.cluster_alg.__aggregate__(raw_markings)
+        self.aggregations[workflow_id] = {}
 
-            self.aggregations[workflow_id] = {}
+        # need to reverse order - current order is good for calculations, bad for output
+        for task_id in self.cluster_alg.clusterResults:
+            for shape in self.cluster_alg.clusterResults[task_id]:
+                for subject_id in self.cluster_alg.clusterResults[task_id][shape]:
+                    if subject_id not in self.aggregations[workflow_id]:
+                        self.aggregations[workflow_id][subject_id] = {}
+                    if task_id not in self.aggregations[workflow_id][subject_id]:
+                        self.aggregations[workflow_id][subject_id][task_id] = {}
 
-            # need to reverse order - current order is good for calculations, bad for output
-            for task_id in self.cluster_alg.clusterResults:
-                for shape in self.cluster_alg.clusterResults[task_id]:
-                    for subject_id in self.cluster_alg.clusterResults[task_id][shape]:
-                        if subject_id not in self.aggregations[workflow_id]:
-                            self.aggregations[workflow_id][subject_id] = {}
-                        if task_id not in self.aggregations[workflow_id][subject_id]:
-                            self.aggregations[workflow_id][subject_id][task_id] = {}
-
-                        self.aggregations[workflow_id][subject_id][task_id][shape] = self.cluster_alg.clusterResults[task_id][shape][subject_id]
+                    self.aggregations[workflow_id][subject_id][task_id][shape] = self.cluster_alg.clusterResults[task_id][shape][subject_id]
 
 
     def __plot_image__(self,subject_id):
@@ -915,7 +946,7 @@ class PanoptesAPI:
                 if shape == "line":
                     plt.plot([pt[0],pt[1]],[pt[2],pt[3]],color="red")
                 elif shape == "point":
-                    plt.plot([pt[0]],[pt[1]],"o",color="red")
+                    plt.plot([pt[0]],[pt[1]],".",color="red")
                 elif shape == "circle":
                     print (pt[0],pt[1]),pt[2]
                     e = Ellipse((pt[0],pt[1]),width = pt[2],height=pt[2],fill=False,color="red")
@@ -961,13 +992,14 @@ class PanoptesAPI:
         for shape in self.cluster_alg.clusterResults[task]:
             for subject_id in self.cluster_alg.clusterResults[task][shape]:
                 print subject_id
-                # if self.cluster_alg.clusterResults[task][shape][subject_id]["users"]
-                self.__plot_image__(subject_id)
-                self.__plot_individual_points__(subject_id,task,shape)
-                self.__plot_cluster_results__(subject_id,task,shape)
-                # plt.title("number of users: " + str(len(all_users)))
-                plt.savefig("/home/greg/Databases/wildebeest/markings"+str(subject_id)+".jpg")
-                plt.close()
+                if len(self.users_per_subject[subject_id]) >= 5:
+                    # if self.cluster_alg.clusterResults[task][shape][subject_id]["users"]
+                    self.__plot_image__(subject_id)
+                    self.__plot_individual_points__(subject_id,task,shape)
+                    self.__plot_cluster_results__(subject_id,task,shape)
+                    # plt.title("number of users: " + str(len(all_users)))
+                    plt.savefig("/home/greg/Databases/wildebeest/markings/"+str(subject_id)+".jpg")
+                    plt.close()
 
     def __store_results__(self):
         aggregate_results = {}
@@ -1041,8 +1073,6 @@ class PanoptesAPI:
         if version is None:
             version = self.versions[workflow_id]
 
-        version = "27.44"
-
         classification_tasks,marking_tasks = self.workflows[workflow_id]
         raw_classifications = {}
 
@@ -1052,7 +1082,6 @@ class PanoptesAPI:
         for s in self.chunks(self.subject_sets[workflow_id],15):
             statements_and_params = []
             select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from classifications where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
-
             for subject_id in s:
                 params = (int(self.project_id),subject_id,int(workflow_id),version)
                 statements_and_params.append((select_statement, params))
@@ -1069,7 +1098,6 @@ class PanoptesAPI:
                 non_logged_in_users = 0
                 # print "==++ " + str(subject_id)
                 for record in record_list:
-                    # print record.workflow_version
                     total += 1
                     user_id = record.user_id
                     if user_id == -1:
@@ -1086,8 +1114,32 @@ class PanoptesAPI:
                         if task_id in classification_tasks:
                             # is this classification task associated with a marking task?
                             # i.e. a sub task?
-                            if task_id in marking_tasks:
-                                pass
+                            if isinstance(classification_tasks[task_id],dict):
+                                # does this correspond to a confusing shape?
+                                print classification_tasks[task_id]
+                                for marking in task["value"]:
+                                    tool = marking["tool"]
+                                    shape = marking_tasks[task_id][tool]
+
+                                    # is this shape confusing?
+                                    if ("shapes" in classification_tasks[task_id]) and (shape in classification_tasks[task_id]["shapes"]):
+                                        print marking
+
+                                        if task_id not in raw_classifications:
+                                            raw_classifications[task_id] = {}
+                                        if shape not in raw_classifications[task_id]:
+                                            raw_classifications[task_id][shape] = {}
+                                        if subject_id not in raw_classifications[task_id][shape]:
+                                            raw_classifications[task_id][shape][subject_id] = []
+
+                                        # todo - FIX!!!
+                                        relevant_params = self.marking_params_per_shape[shape](marking,(10000,10000))
+                                        raw_classifications[task_id][shape][subject_id].append((user_id,relevant_params,tool))
+                                print raw_classifications
+                                assert False
+                                # print marking_tasks[task_id]
+                                # print classification_tasks[task_id]
+                                # assert False
                             else:
                                 if task_id not in raw_classifications:
                                     raw_classifications[task_id] = {}
@@ -1244,37 +1296,39 @@ class PanoptesAPI:
     #
     #     return classifications
 
-    def __classify__(self,workflow=None):
-        if workflow is None:
-            workflows = self.workflows
-        else:
-            workflows = [workflow]
+    def __aggregate__(self):
+        for workflow_id in self.workflows:
+            classification_tasks,marking_tasks = self.workflows[workflow_id]
 
-        # go through each workflow
-        for workflow_id in workflows:
-            print "workflow id is " + str(workflow_id)
-            # get the raw classifications for the given workflow
-            raw_classifications = self.__sort_classifications__(workflow_id)
-            self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id])
+            if marking_tasks != {}:
+                self.__cluster__(workflow_id)
+            if classification_tasks != {}:
+                self.__classify__(workflow_id)
 
-            # set up the final aggregations - which made involve combining the classification aggregations with
-            # the marking aggregations - i.e. we get to aggregate the aggregations :)
-            if workflow_id not in self.aggregations:
-                self.aggregations[workflow_id] = self.classification_alg.results
-            else:
-                assert False
-                # we must merge clustering and classification results
 
-                for subject_id in self.classification_alg.results:
-                    if subject_id not in self.aggregations:
-                        self.aggregations[subject_id] = self.classification_alg.results[subject_id]
-                    else:
-                        for task_id in self.classification_alg.results[subject_id]:
-                            if task_id not in self.aggregations[subject_id]:
-                                self.aggregations[subject_id][task_id] = self.classification_alg.results[subject_id][task_id]
-                            else:
-                                # todo - fill this in
-                                assert False
+    def __classify__(self,workflow_id):
+        # get the raw classifications for the given workflow
+        raw_classifications = self.__sort_classifications__(workflow_id)
+        self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],self.cluster_alg.clusterResults)
+
+        # # set up the final aggregations - which made involve combining the classification aggregations with
+        # # the marking aggregations - i.e. we get to aggregate the aggregations :)
+        # if workflow_id not in self.aggregations:
+        #     self.aggregations[workflow_id] = self.classification_alg.results
+        # else:
+        #     assert False
+        #     # we must merge clustering and classification results
+        #
+        #         for subject_id in self.classification_alg.results:
+        #             if subject_id not in self.aggregations:
+        #                 self.aggregations[subject_id] = self.classification_alg.results[subject_id]
+        #             else:
+        #                 for task_id in self.classification_alg.results[subject_id]:
+        #                     if task_id not in self.aggregations[subject_id]:
+        #                         self.aggregations[subject_id][task_id] = self.classification_alg.results[subject_id][task_id]
+        #                     else:
+        #                         # todo - fill this in
+        #                         assert False
 
         # print json.dumps(self.aggregations, indent=4, sort_keys=True)
         # print self.aggregations
@@ -1354,10 +1408,12 @@ if __name__ == "__main__":
     import agglomerative
     project.__set_clustering_alg__(agglomerative.Agglomerative)
     # # # # # a = agglomerative.Agglomerative(brooke)
-    project.__cluster__(workflow=6)
-    project.__plot__(6,"T1")
+    # project.__cluster__()
+    # project.__plot__(6,"T1")
     # # project.__plot_cluster_results__()
     # #
-    # project.__set_classification_alg__(classification.VoteCount)
+    project.__set_classification_alg__(classification.VoteCount)
+    project.__aggregate__()
+
     # project.__classify__()
     # # # project.__store_results__()
