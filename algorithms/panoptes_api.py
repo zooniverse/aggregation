@@ -18,15 +18,22 @@ import matplotlib.pyplot as plt
 import matplotlib.cbook as cbook
 import math
 from matplotlib.patches import Ellipse
-from clustering import  cnames
-import numpy
-import datetime
+# from clustering import  cnames
+# import numpy
+# import datetime
 import sys
+from PIL import Image
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
 else:
     base_directory = "/home/greg"
+
+class InvalidMarking(Exception):
+    def __init__(self,pt):
+        self.pt = pt
+    def __str__(self):
+        return "invalid marking: " + str(self.pt)
 
 def line_mapping(marking):
     # want to extract the params x1,x2,y1,y2 but
@@ -41,9 +48,12 @@ def line_mapping(marking):
     else:
         return x2,x1,y2,y1
 
-def point_mapping(marking):
+def point_mapping(marking,image_dimensions):
     x = marking["x"]
     y = marking["y"]
+
+    if (x<0)or(y<0)or(x > image_dimensions[0]) or(y>image_dimensions[1]):
+        raise InvalidMarking(marking)
 
     return x,y
 
@@ -349,9 +359,16 @@ class PanoptesAPI:
 
         raw_markings = {}
 
+        # use one image from the workflow to determine the size of all images
+        # todo - BAD ASSUMPTION, think of something better
+        fname = self.__image_setup__(self.subject_sets[workflow_id][0])
+        im=Image.open(fname)
+        width,height= im.size
+
         for s in self.chunks(self.subject_sets[workflow_id],15):
             statements_and_params = []
-            select_statement = self.cassandra_session.prepare("select user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
+            # select_statement = self.cassandra_session.prepare("select id,user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
+            select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
 
             for subject_id in s:
                 params = (int(self.project_id),subject_id,int(workflow_id))
@@ -388,16 +405,22 @@ class PanoptesAPI:
                                     # todo - treat image like a rectangle
                                     continue
 
-                                if task_id not in raw_markings:
-                                    raw_markings[task_id] = {}
-                                if shape not in raw_markings[task_id]:
-                                    raw_markings[task_id][shape] = {}
-                                if subject_id not in raw_markings[task_id][shape]:
-                                    raw_markings[task_id][shape][subject_id] = []
+                                try:
+                                    # extract the params specifically relevant to the given shape
+                                    relevant_params = self.marking_params_per_shape[shape](marking,(width,height))
 
-                                relevant_params = self.marking_params_per_shape[shape](marking)
+                                    # only create these if we have a valid marking
+                                    if task_id not in raw_markings:
+                                        raw_markings[task_id] = {}
+                                    if shape not in raw_markings[task_id]:
+                                        raw_markings[task_id][shape] = {}
+                                    if subject_id not in raw_markings[task_id][shape]:
+                                        raw_markings[task_id][shape][subject_id] = []
 
-                                raw_markings[task_id][shape][subject_id].append((user_id,relevant_params))
+                                    raw_markings[task_id][shape][subject_id].append((user_id,relevant_params))
+                                except InvalidMarking as e:
+                                    print e
+
         return raw_markings
 
         # for subject_id in subjects:
@@ -586,9 +609,9 @@ class PanoptesAPI:
     #     for r in self.postgres_cursor.fetchall():
     #         print r[0],r[2]
 
-    def __get_subject_url_and_fname__(self,subject_id):
+    def __image_setup__(self,subject_id):
         """
-        returns the url of the subject image and the file name which you can use to check if the file locally exists
+        get the local file name for a given subject id and downloads that image if necessary
         :param subject_id:
         :return:
         """
@@ -598,25 +621,31 @@ class PanoptesAPI:
         # request
         try:
             response = urllib2.urlopen(request)
+            body = response.read()
         except urllib2.HTTPError as e:
             print self.host_api+"subjects/"+str(subject_id)
             print 'The server couldn\'t fulfill the request.'
             print 'Error code: ', e.code
             print 'Error response body: ', e.read()
+            raise
         except urllib2.URLError as e:
             print 'We failed to reach a server.'
             print 'Reason: ', e.reason
-        else:
-            # everything is fine
-            body = response.read()
+            raise
 
         data = json.loads(body)
+
         url = str(data["subjects"][0]["locations"][0]["image/jpeg"])
         
         slash_index = url.rfind("/")
         fname = url[slash_index+1:]
 
-        return url,fname
+        image_path = base_directory+"/Databases/images/"+fname
+
+        if not(os.path.isfile(image_path)):
+            urllib.urlretrieve(url, image_path)
+
+        return image_path
 
 
     def __get_project_id(self):
@@ -860,31 +889,18 @@ class PanoptesAPI:
 
 
     def __plot_image__(self,subject_id):
-        url,fname = self.__get_subject_url_and_fname__(subject_id)
-        image_path = base_directory+"/Databases/images/"+fname
-
-        if not(os.path.isfile(image_path)):
-            urllib.urlretrieve(url, image_path)
+        fname = self.__image_setup__(subject_id)
 
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
-        image_file = cbook.get_sample_data(image_path)
+        image_file = cbook.get_sample_data(fname)
         image = plt.imread(image_file)
         # fig, ax = plt.subplots()
         im = ax.imshow(image)
 
-    def __plot_individual_points__(self,subject_id,task):
-        markings = self.__get_markings__([subject_id])[subject_id]
-        users = []
-        print markings
-        for task_2,shape in markings:
-            if task != task_2:
-                continue
-
-            for user_id,pt in markings[(task,shape)]:
-                if user_id not in users:
-                    users.append(user_id)
-
+    def __plot_individual_points__(self,subject_id,task_id,shape):
+        for cluster in self.cluster_alg.clusterResults[task_id][shape][subject_id]:
+            for pt in cluster["points"]:
                 if shape == "line":
                     plt.plot([pt[0],pt[1]],[pt[2],pt[3]],color="red")
                 elif shape == "point":
@@ -907,17 +923,8 @@ class PanoptesAPI:
                 else:
                     print shape
                     assert False
-        # e = numpy.e
-        # circ = plt.Circle((5, 5), radius=2, color='g')
-        # ax.add_patch(circ)
-        #
-        # X, Y = numpy.meshgrid(numpy.linspace(0, 5, 100), numpy.linspace(0, 5, 100))
-        # F = X ** Y
-        # G = Y ** X
-        # # plt.contour(X, Y, (F - G), [0])
+
         plt.axis('scaled')
-        # print users
-        # plt.show()
 
     def __plot_cluster_results__(self,subject_id,task_id,shape):
         # for task in self.cluster_alg.clusterResults[subject_id]:
@@ -943,10 +950,10 @@ class PanoptesAPI:
         for shape in self.cluster_alg.clusterResults[task]:
             for subject_id in self.cluster_alg.clusterResults[task][shape]:
                 self.__plot_image__(subject_id)
-                # self.__plot_individual_points__(subject_id,task)
+                self.__plot_individual_points__(subject_id,task,shape)
                 self.__plot_cluster_results__(subject_id,task,shape)
                 # plt.title("number of users: " + str(len(all_users)))
-                plt.savefig("/home/greg/Databases/wildebeest/markings"+subject_id+".jpg")
+                plt.savefig("/home/greg/Databases/wildebeest/markings"+str(subject_id)+".jpg")
                 plt.close()
 
     def __store_results__(self):
