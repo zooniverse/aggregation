@@ -23,6 +23,7 @@ from matplotlib.patches import Ellipse
 # import datetime
 import sys
 from PIL import Image
+import agglomerative
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -35,13 +36,19 @@ class InvalidMarking(Exception):
     def __str__(self):
         return "invalid marking: " + str(self.pt)
 
-def line_mapping(marking):
+def line_mapping(marking,image_dimensions):
     # want to extract the params x1,x2,y1,y2 but
     # ALSO make sure that x1 <= x2 and flip if necessary
     x1 = marking["x1"]
     x2 = marking["x2"]
     y1 = marking["y1"]
     y2 = marking["y2"]
+
+    if min(x1,x2,y1,y2) < 0:
+        raise InvalidMarking(marking)
+
+    if (max(x1,x2) >= image_dimensions[0]) or (max(y1,y2) >= image_dimensions[1]):
+        raise InvalidMarking(marking)
 
     if x1 <= x2:
         return x1,x2,y1,y2
@@ -62,13 +69,13 @@ def ellipse_mapping(marking,image_dimensions):
 
 class PanoptesAPI:
     #@profile
-    def __init__(self,project=None):#,user_threshold= None, score_threshold= None): #Supernovae
+    def __init__(self,project):#,user_threshold= None, score_threshold= None): #Supernovae
         # # self.user_threshold = user_threshold
         # # first find out which environment we are working with
         # self.environment = os.getenv('ENVIRONMENT', "staging")
         # self.environment = "staging"
 
-
+        self.project_short_name = project
         # get my userID and password
         # purely for testing, if this file does not exist, try opening on Greg's computer
         try:
@@ -265,18 +272,20 @@ class PanoptesAPI:
         for task_id in tasks:
             # print task_id
             self.description[task_id] = []
-            question = tasks[task_id]["question"]
-            self.description[task_id].append(contents[question])
-            # print contents[question]
-            answers = tasks[task_id]["answers"]
-            print answers
-            for ans in answers:
-                print ans
-                label = ans["label"]
-                labels = label.split(".")
-                # question_index = labels[2]
-                self.description[task_id].append(contents[label])
-                print self.description[task_id][-1]
+            # print tasks[task_id]
+            if "question" in tasks[task_id]:
+                question = tasks[task_id]["question"]
+                self.description[task_id].append(contents[question])
+                # print contents[question]
+                answers = tasks[task_id]["answers"]
+                # print answers
+                for ans in answers:
+                    # print ans
+                    label = ans["label"]
+                    labels = label.split(".")
+                    # question_index = labels[2]
+                    self.description[task_id].append(contents[label])
+                    # print self.description[task_id][-1]
         # self. description
 
     def __readin_tasks__(self,workflow_id):
@@ -331,7 +340,7 @@ class PanoptesAPI:
                         # todo - fix this
                         assert False
 
-                    # print "tool is " + tool["type"]
+                    print "tool is " + tool["type"]
                     if tool["type"] == "line":
                         marking_tasks[task_id].append("line")
                         # self.marking_params_per_task[task_id].append(line_mapping)
@@ -359,7 +368,7 @@ class PanoptesAPI:
         # that is more, there is more than 1 tool which can create that shape
         for task_id in marking_tasks:
             for shape in ["line","ellipse","point","circle","rectangle"]:
-                if sum([1 for s in marking_tasks[task_id] if s == shape]) > 0:
+                if sum([1 for s in marking_tasks[task_id] if s == shape]) > 1:
                     # this shape is confusing
                     if task_id not in classification_tasks:
                         classification_tasks[task_id] = {}
@@ -368,6 +377,12 @@ class PanoptesAPI:
 
                     classification_tasks[task_id]["shapes"].append(shape)
 
+        # print workflow_id
+        # print tasks
+        # print classification_tasks
+        # print marking_tasks
+        # assert False
+        # assert False
         return classification_tasks,marking_tasks
 
     def __sort_markings__(self,workflow_id):
@@ -388,10 +403,10 @@ class PanoptesAPI:
         for s in self.chunks(self.subject_sets[workflow_id],15):
             statements_and_params = []
             # select_statement = self.cassandra_session.prepare("select id,user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
-            select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
+            select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
 
             for subject_id in s:
-                params = (int(self.project_id),subject_id,int(workflow_id))
+                params = (int(self.project_id),subject_id,int(workflow_id),self.versions[workflow_id])
                 statements_and_params.append((select_statement, params))
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
             for subject_id,(success,record_list) in zip(s,results):
@@ -429,6 +444,8 @@ class PanoptesAPI:
 
                         if task_id in marking_tasks:
                             for marking in task["value"]:
+                                if marking["frame"] != 0:
+                                    continue
 
                                 # what kind of tool made this marking and what was the shape of that tool?
                                 try:
@@ -535,17 +552,17 @@ class PanoptesAPI:
         # return markings
 
     def __migrate__(self):
-        # try:
-        #     self.cassandra_session.execute("drop table classifications")
-        #     print "table dropped"
-        # except cassandra.InvalidRequest:
-        #     print "table did not exist"
-        #     pass
-        #
-        # try:
-        #     self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version text,metadata text, PRIMARY KEY(project_id,subject_id,workflow_id,workflow_version,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, workflow_id ASC,workflow_version ASC, created_at ASC);")
-        # except cassandra.AlreadyExists:
-        #     pass
+        try:
+            self.cassandra_session.execute("drop table classifications")
+            print "table dropped"
+        except cassandra.InvalidRequest:
+            print "table did not exist"
+            pass
+
+        try:
+            self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,subject_id,workflow_id,workflow_version,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, workflow_id ASC,workflow_version ASC, created_at ASC);")
+        except cassandra.AlreadyExists:
+            pass
 
         select = "SELECT * from classifications where project_id="+str(self.project_id)
         cur = self.postgres_session.cursor()
@@ -569,6 +586,8 @@ class PanoptesAPI:
 
             if not isinstance(user_id,int):
                 user_id = -1
+            # get only the major version of the workflow
+            workflow_version = int(math.floor(float(workflow_version)))
 
             params = (project_id, user_id, workflow_id,created_at, json.dumps(annotations), updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], workflow_version,json.dumps(metadata))
             statements_and_params.append((insert_statement, params))
@@ -778,7 +797,7 @@ class PanoptesAPI:
         versions = {}
 
         for w in data["workflows"]:
-            versions[int(w["id"])] = w["version"]
+            versions[int(w["id"])] = int(math.floor(float(w["version"])))
 
         return versions
 
@@ -989,17 +1008,34 @@ class PanoptesAPI:
         # plt.show()
 
     def __plot__(self,workflow_id,task):
+        print "plotting"
         for shape in self.cluster_alg.clusterResults[task]:
             for subject_id in self.cluster_alg.clusterResults[task][shape]:
                 print subject_id
-                if len(self.users_per_subject[subject_id]) >= 5:
+                if (len(self.users_per_subject[subject_id]) >= 5) and (subject_id in self.classification_alg.results):
                     # if self.cluster_alg.clusterResults[task][shape][subject_id]["users"]
                     self.__plot_image__(subject_id)
                     self.__plot_individual_points__(subject_id,task,shape)
                     self.__plot_cluster_results__(subject_id,task,shape)
+
+                    classification_task = "init"
+                    classifications = self.classification_alg.results[subject_id][classification_task]
+                    # print classifications
+                    votes,total = classifications
+                    title = self.description[classification_task][0]
+                    # print self.description
+                    for answer_index,percentage in votes.items():
+                        if title != "":
+                            title += "\n"
+                        title += self.description[classification_task][answer_index+1] + ": " + str(int(percentage*total))
+                    # print  self.description[classification_task][0]
+                    # print title
+
+                    plt.title(title)
                     # plt.title("number of users: " + str(len(all_users)))
-                    plt.savefig("/home/greg/Databases/wildebeest/markings/"+str(subject_id)+".jpg")
+                    plt.savefig("/home/greg/Databases/"+self.project_short_name+"/markings/"+str(subject_id)+".jpg")
                     plt.close()
+                    # assert False
 
     def __store_results__(self):
         aggregate_results = {}
@@ -1135,8 +1171,8 @@ class PanoptesAPI:
                                         # todo - FIX!!!
                                         relevant_params = self.marking_params_per_shape[shape](marking,(10000,10000))
                                         raw_classifications[task_id][shape][subject_id].append((user_id,relevant_params,tool))
-                                print raw_classifications
-                                assert False
+                                # print raw_classifications
+                                # assert False
                                 # print marking_tasks[task_id]
                                 # print classification_tasks[task_id]
                                 # assert False
@@ -1398,22 +1434,25 @@ def mapping(pt):
 if __name__ == "__main__":
     print sys.argv[1]
     project = PanoptesAPI(sys.argv[1])
-    # project.__migrate__()
+    project.__describe__(3)
+    project.__migrate__()
 
     # project.__get_subjects__()
     # # # brooke.__get_markings__(3266)
     # #
     # project.__set_subjects__([458813])
 
-    import agglomerative
+
     project.__set_clustering_alg__(agglomerative.Agglomerative)
+    project.__set_classification_alg__(classification.VoteCount)
     # # # # # a = agglomerative.Agglomerative(brooke)
     # project.__cluster__()
-    # project.__plot__(6,"T1")
+    project.__aggregate__()
+    project.__plot__(3,"T3")
     # # project.__plot_cluster_results__()
     # #
-    project.__set_classification_alg__(classification.VoteCount)
-    project.__aggregate__()
+
+
 
     # project.__classify__()
     # # # project.__store_results__()
