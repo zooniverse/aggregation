@@ -5,10 +5,18 @@ import matplotlib.pyplot as plt
 import numpy
 import math
 import random
+import csv
+
+# load subject data from CSV
+subjects_index = {}
+with open('subject_species_all.csv', 'rb') as csvfile:
+    reader = csv.reader(csvfile, delimiter=',', quotechar='"')
+    for row in reader:
+        subjects_index[row[1]] = row[2]
 
 # connect to the mongo server
 client = pymongo.MongoClient()
-db = client['serengeti_2015-02-22']
+db = client['serengeti']
 classification_collection = db["serengeti_classifications"]
 subject_collection = db["serengeti_subjects"]
 user_collection = db["serengeti_users"]
@@ -25,7 +33,8 @@ X = []
 # Y - session length
 Y = []
 
-for ii,classification in enumerate(classification_collection.find().skip(3000000).limit(1000000)):
+# scan through *ALL* classifications (add a .skip or .limit to look at subset)
+for ii, classification in enumerate(classification_collection.find()):
     print ii
     # use the ip address to identify the user - that way we track non-logged in users as well
     id =  classification["user_ip"]
@@ -39,8 +48,9 @@ for ii,classification in enumerate(classification_collection.find().skip(3000000
     # get the id for the subject and find out whether it was retired as a blank
     zoonvierse_id= classification["subjects"][0]["zooniverse_id"]
     # you can include blank consensus as well but I found those to be pretty error prone
-    subject = subject_collection.find_one({"zooniverse_id":zoonvierse_id})
-    if subject["metadata"]["retire_reason"] in ["blank"]:
+    #subject = subject_collection.find_one({"zooniverse_id":zoonvierse_id})
+    #if subject["metadata"]["retire_reason"] in ["blank"]:
+    if subjects_index[zoonvierse_id]=="blank":
         try:
             num_blanks[id] += 1
         except KeyError:
@@ -56,7 +66,7 @@ for ii,classification in enumerate(classification_collection.find().skip(3000000
     # if it has been 10 minutes or more, count as a new session
     try:
         time_delta = time - current_sessions[id]
-        if time_delta.seconds >= 60*10:
+        if time_delta.seconds >= 60*60: # note, session length currently set to 60 minutes. Change second number to 10 for a 10 min session
             # store data and reset counters
             X.append(num_blanks[id]/float(session_length[id]))
             Y.append(session_length[id])
@@ -125,4 +135,3 @@ plt.hist(X, 50, normed=1,histtype='step', cumulative=True)
 plt.xlabel("percentage of images per session which are blank")
 plt.ylabel("cumulative distribution")
 plt.show()
-
