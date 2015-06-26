@@ -24,6 +24,7 @@ from matplotlib.patches import Ellipse
 import sys
 from PIL import Image
 import agglomerative
+import cluster_count
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -334,11 +335,16 @@ class PanoptesAPI:
                     if (tool["details"] is not None) and (tool["details"] != []):
                         if task_id not in classification_tasks:
                             classification_tasks[task_id] = {}
+                        if "subtask" not in classification_tasks[task_id]:
+                            classification_tasks[task_id]["subtask"] = {}
+                        if tool_id not in classification_tasks[task_id]["subtask"]:
+                            classification_tasks[task_id]["subtask"][tool_id] = range(len(tool["details"]))
                         # if tool_id not in self.classification_tasks[task_id]:
                         #     self.classification_tasks[task_id][tool_id] = {}
-                        classification_tasks[task_id][tool_id]= [i for i in range(len(tool["details"]))]
+                        # classification_tasks[task_id][tool_id]= [i for i in range(len(tool["details"]))]
                         # todo - fix this
-                        assert False
+
+
 
                     print "tool is " + tool["type"]
                     if tool["type"] == "line":
@@ -444,8 +450,6 @@ class PanoptesAPI:
 
                         if task_id in marking_tasks:
                             for marking in task["value"]:
-                                if marking["frame"] != 0:
-                                    continue
 
                                 # what kind of tool made this marking and what was the shape of that tool?
                                 try:
@@ -471,7 +475,7 @@ class PanoptesAPI:
                                     if subject_id not in raw_markings[task_id][shape]:
                                         raw_markings[task_id][shape][subject_id] = []
 
-                                    raw_markings[task_id][shape][subject_id].append((user_id,relevant_params))
+                                    raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
                                 except InvalidMarking as e:
                                     print e
 
@@ -552,17 +556,17 @@ class PanoptesAPI:
         # return markings
 
     def __migrate__(self):
-        try:
-            self.cassandra_session.execute("drop table classifications")
-            print "table dropped"
-        except cassandra.InvalidRequest:
-            print "table did not exist"
-            pass
-
-        try:
-            self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,subject_id,workflow_id,workflow_version,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, workflow_id ASC,workflow_version ASC, created_at ASC);")
-        except cassandra.AlreadyExists:
-            pass
+        # try:
+        #     self.cassandra_session.execute("drop table classifications")
+        #     print "table dropped"
+        # except cassandra.InvalidRequest:
+        #     print "table did not exist"
+        #     pass
+        #
+        # try:
+        #     self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,subject_id,workflow_id,workflow_version,created_at) ) WITH CLUSTERING ORDER BY (subject_id ASC, workflow_id ASC,workflow_version ASC, created_at ASC);")
+        # except cassandra.AlreadyExists:
+        #     pass
 
         select = "SELECT * from classifications where project_id="+str(self.project_id)
         cur = self.postgres_session.cursor()
@@ -916,6 +920,7 @@ class PanoptesAPI:
             print record
 
     def __cluster__(self,workflow_id):
+        print "workflow id is " + str(workflow_id)
         """
         run the clustering algorithm for a given workflow
         need to have already checked that the workflow requires clustering
@@ -924,6 +929,8 @@ class PanoptesAPI:
         """
         # get the raw classifications for the given workflow
         raw_markings = self.__sort_markings__(workflow_id)
+        print raw_markings
+        # assert False
 
         self.cluster_alg.__aggregate__(raw_markings)
 
@@ -939,7 +946,7 @@ class PanoptesAPI:
                         self.aggregations[workflow_id][subject_id][task_id] = {}
 
                     self.aggregations[workflow_id][subject_id][task_id][shape] = self.cluster_alg.clusterResults[task_id][shape][subject_id]
-
+        print self.aggregations
 
     def __plot_image__(self,subject_id):
         fname = self.__image_setup__(subject_id)
@@ -1009,33 +1016,38 @@ class PanoptesAPI:
 
     def __plot__(self,workflow_id,task):
         print "plotting"
-        for shape in self.cluster_alg.clusterResults[task]:
-            for subject_id in self.cluster_alg.clusterResults[task][shape]:
-                print subject_id
-                if (len(self.users_per_subject[subject_id]) >= 5) and (subject_id in self.classification_alg.results):
-                    # if self.cluster_alg.clusterResults[task][shape][subject_id]["users"]
-                    self.__plot_image__(subject_id)
-                    self.__plot_individual_points__(subject_id,task,shape)
-                    self.__plot_cluster_results__(subject_id,task,shape)
+        try:
+            for shape in self.cluster_alg.clusterResults[task]:
+                for subject_id in self.cluster_alg.clusterResults[task][shape]:
+                    print subject_id
+                    if (len(self.users_per_subject[subject_id]) >= 5):# and (subject_id in self.classification_alg.results):
+                        # if self.cluster_alg.clusterResults[task][shape][subject_id]["users"]
+                        self.__plot_image__(subject_id)
+                        self.__plot_individual_points__(subject_id,task,shape)
+                        self.__plot_cluster_results__(subject_id,task,shape)
 
-                    classification_task = "init"
-                    classifications = self.classification_alg.results[subject_id][classification_task]
-                    # print classifications
-                    votes,total = classifications
-                    title = self.description[classification_task][0]
-                    # print self.description
-                    for answer_index,percentage in votes.items():
-                        if title != "":
-                            title += "\n"
-                        title += self.description[classification_task][answer_index+1] + ": " + str(int(percentage*total))
-                    # print  self.description[classification_task][0]
-                    # print title
+                        if subject_id in self.classification_alg.results:
+                            classification_task = "init"
+                            classifications = self.classification_alg.results[subject_id][classification_task]
+                            # print classifications
+                            votes,total = classifications
+                            title = self.description[classification_task][0]
+                            # print self.description
+                            for answer_index,percentage in votes.items():
+                                if title != "":
+                                    title += "\n"
+                                title += self.description[classification_task][answer_index+1] + ": " + str(int(percentage*total))
+                            # print  self.description[classification_task][0]
+                            # print title
 
-                    plt.title(title)
-                    # plt.title("number of users: " + str(len(all_users)))
-                    plt.savefig("/home/greg/Databases/"+self.project_short_name+"/markings/"+str(subject_id)+".jpg")
-                    plt.close()
-                    # assert False
+                            plt.title(title)
+                        # plt.title("number of users: " + str(len(all_users)))
+                        plt.savefig("/home/greg/Databases/"+self.project_short_name+"/markings/"+str(subject_id)+".jpg")
+                        plt.close()
+                        # assert False
+        except KeyError as e:
+            print self.cluster_alg.clusterResults.keys()
+            raise
 
     def __store_results__(self):
         aggregate_results = {}
@@ -1112,8 +1124,7 @@ class PanoptesAPI:
         classification_tasks,marking_tasks = self.workflows[workflow_id]
         raw_classifications = {}
 
-        print self.versions
-        print "====--////"
+
         total = 0
         for s in self.chunks(self.subject_sets[workflow_id],15):
             statements_and_params = []
@@ -1152,7 +1163,7 @@ class PanoptesAPI:
                             # i.e. a sub task?
                             if isinstance(classification_tasks[task_id],dict):
                                 # does this correspond to a confusing shape?
-                                print classification_tasks[task_id]
+                                # print classification_tasks[task_id]
                                 for marking in task["value"]:
                                     tool = marking["tool"]
                                     shape = marking_tasks[task_id][tool]
@@ -1332,13 +1343,20 @@ class PanoptesAPI:
     #
     #     return classifications
 
-    def __aggregate__(self):
-        for workflow_id in self.workflows:
-            classification_tasks,marking_tasks = self.workflows[workflow_id]
+    def __aggregate__(self,workflow_id=None):
+        if workflow_id is None:
+            workflows = self.workflows
+        else:
+            workflows = [workflow_id]
 
-            if marking_tasks != {}:
+        for workflow_id in workflows:
+            print workflow_id
+            classification_tasks,marking_tasks = self.workflows[workflow_id]
+            project.__describe__(workflow_id)
+
+            if self.cluster_alg is not None:
                 self.__cluster__(workflow_id)
-            if classification_tasks != {}:
+            if self.classification_alg is not None:
                 self.__classify__(workflow_id)
 
 
@@ -1434,25 +1452,22 @@ def mapping(pt):
 if __name__ == "__main__":
     print sys.argv[1]
     project = PanoptesAPI(sys.argv[1])
-    project.__describe__(3)
-    project.__migrate__()
 
+    # project.__migrate__()
+    #
     # project.__get_subjects__()
     # # # brooke.__get_markings__(3266)
     # #
     # project.__set_subjects__([458813])
 
-
-    project.__set_clustering_alg__(agglomerative.Agglomerative)
+    project.__set_clustering_alg__(cluster_count.Counting)
     project.__set_classification_alg__(classification.VoteCount)
     # # # # # a = agglomerative.Agglomerative(brooke)
     # project.__cluster__()
     project.__aggregate__()
-    project.__plot__(3,"T3")
-    # # project.__plot_cluster_results__()
+    # project.__plot__(6,"T1")
+    # project.__plot_cluster_results__(15)
     # #
-
-
 
     # project.__classify__()
     # # # project.__store_results__()

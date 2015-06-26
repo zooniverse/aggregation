@@ -25,7 +25,7 @@ X = []
 # Y - session length
 Y = []
 
-for ii,classification in enumerate(classification_collection.find().skip(3000000).limit(1000000)):
+for ii,classification in enumerate(classification_collection.find().skip(0).limit(1000000)):
     print ii
     # use the ip address to identify the user - that way we track non-logged in users as well
     id =  classification["user_ip"]
@@ -95,6 +95,8 @@ for x,y in XY:
                 bins[(lb,ub)].append(y)
                 break
 
+v = {}
+
 # use an exponential distribution to approximate the values in each bin
 # estimate lambda - the one param for an exponential distribution
 for i in range(len(bins_endpts)-1):
@@ -109,6 +111,8 @@ for i in range(len(bins_endpts)-1):
         print len(values), var >= (mean*(1-mean))
 
         exp_lambda.append(1/mean)
+        v[lb] = mean
+
         X2.append((ub+lb)/2.)
         error.append((1/mean)*1.96/math.sqrt(len(values)))
 
@@ -116,6 +120,7 @@ for i in range(len(bins_endpts)-1):
 plt.errorbar(X2,exp_lambda,yerr=error)
 plt.xlabel("percentage of images per session which are blank")
 plt.ylabel("estimate of lambda param for exponential distribution")
+plt.xscale("log")
 plt.show()
 plt.close()
 
@@ -126,3 +131,19 @@ plt.xlabel("percentage of images per session which are blank")
 plt.ylabel("cumulative distribution")
 plt.show()
 
+X = []
+Y = []
+
+for i in range(len(bins_endpts)-1):
+    lb = bins_endpts[i]
+    ub = bins_endpts[i+1]
+
+    if lb in v:
+
+        for j in range(200):
+            X.append(random.uniform(lb,ub))
+
+            Y.append(numpy.random.exponential(v[lb]))
+
+plt.plot(X,Y,'.')
+plt.show()
