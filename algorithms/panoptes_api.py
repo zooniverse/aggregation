@@ -189,15 +189,62 @@ class PanoptesAPI:
             workflows = [workflow_id]
 
         for workflow_id in workflows:
-            print workflow_id
+            print "aggregating workflow " + str(workflow_id)
             self.__describe__(workflow_id)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
 
-            if self.cluster_alg is not None:
-                print "clustering"
+            if (self.cluster_alg is not None) and (marking_tasks != {}):
                 self.__cluster__(workflow_id)
-            if self.classification_alg is not None:
+            if (self.classification_alg is not None) and (classification_tasks != {}):
                 self.__classify__(workflow_id)
+
+            # if we have both marking and classifications - we need to merge the results
+            if (marking_tasks != {}) and (classification_tasks != {}):
+                self.__merge_clustering_and_classification__()
+
+
+
+
+
+
+
+    # def __set_workflow__(self,workflow_id):
+    #     """
+    #     set the workflow id - must be an actual workflow associated with this project
+    #     :param workflow_id:
+    #     :return:
+    #     """
+    #     assert workflow_id in self.workflows
+    #     self.workflow_id = workflow_id
+    #
+    #     # load in the subjects specific to that workflow
+    #     self.__get_subject_ids__()
+    #
+    #     # load the tasks associated with this workflow
+    #     self.__task_setup__()
+
+
+
+
+    def __cassandra_connect(self):
+        """
+        connect to the AWS instance of Cassandra - try 10 times and raise an error
+        :return:
+        """
+        for i in range(10):
+            try:
+                self.cluster = Cluster()#['panoptes-cassandra.zooniverse.org'],protocol_version = 3)
+                self.cassandra_session = self.cluster.connect('zooniverse')
+                return
+            except cassandra.cluster.NoHostAvailable:
+                pass
+
+        assert False
+
+    def __chunks(self,l, n):
+        """Yield successive n-sized chunks from l."""
+        for i in xrange(0, len(l), n):
+            yield l[i:i+n]
 
     def __classify__(self,workflow_id):
         # get the raw classifications for the given workflow
@@ -248,73 +295,35 @@ class PanoptesAPI:
         #             for question_id in self.votes[subject_ids[0]][task_id][tool_id].keys():
         #                 self.classification_alg.__classify__(subject_ids,task_id,tool_id,question_id)
 
-
     def __cluster__(self,workflow_id):
-        print "workflow id is " + str(workflow_id)
         """
         run the clustering algorithm for a given workflow
         need to have already checked that the workflow requires clustering
         :param workflow_id:
         :return:
         """
+        print "workflow id is " + str(workflow_id)
         # get the raw classifications for the given workflow
         raw_markings = self.__sort_markings__(workflow_id)
-        print raw_markings
         # assert False
 
         self.cluster_alg.__aggregate__(raw_markings)
 
-        self.aggregations[workflow_id] = {}
-
         # need to reverse order - current order is good for calculations, bad for output
+        self.aggregations = {}
         for task_id in self.cluster_alg.clusterResults:
             for shape in self.cluster_alg.clusterResults[task_id]:
                 for subject_id in self.cluster_alg.clusterResults[task_id][shape]:
-                    if subject_id not in self.aggregations[workflow_id]:
-                        self.aggregations[workflow_id][subject_id] = {}
-                    if task_id not in self.aggregations[workflow_id][subject_id]:
-                        self.aggregations[workflow_id][subject_id][task_id] = {}
+                    if subject_id not in self.aggregations:
+                        self.aggregations[subject_id] = {"param":"task_id"}
+                    if task_id not in self.aggregations[subject_id]:
+                        self.aggregations[subject_id][task_id] = {"param":"shape"}
+                    if shape not in self.aggregations[subject_id][task_id]:
+                        self.aggregations[subject_id][task_id][shape] = {"param":"cluster_index"}
 
-                    self.aggregations[workflow_id][subject_id][task_id][shape] = self.cluster_alg.clusterResults[task_id][shape][subject_id]
-        print self.aggregations
-
-    # def __set_workflow__(self,workflow_id):
-    #     """
-    #     set the workflow id - must be an actual workflow associated with this project
-    #     :param workflow_id:
-    #     :return:
-    #     """
-    #     assert workflow_id in self.workflows
-    #     self.workflow_id = workflow_id
-    #
-    #     # load in the subjects specific to that workflow
-    #     self.__get_subject_ids__()
-    #
-    #     # load the tasks associated with this workflow
-    #     self.__task_setup__()
-
-
-
-
-    def __cassandra_connect(self):
-        """
-        connect to the AWS instance of Cassandra - try 10 times and raise an error
-        :return:
-        """
-        for i in range(10):
-            try:
-                self.cluster = Cluster()#['panoptes-cassandra.zooniverse.org'],protocol_version = 3)
-                self.cassandra_session = self.cluster.connect('zooniverse')
-                return
-            except cassandra.cluster.NoHostAvailable:
-                pass
-
-        assert False
-
-    def __chunks(self,l, n):
-        """Yield successive n-sized chunks from l."""
-        for i in xrange(0, len(l), n):
-            yield l[i:i+n]
+                    for cluster_index,cluster in enumerate(self.cluster_alg.clusterResults[task_id][shape][subject_id]):
+                        self.aggregations[subject_id][task_id][shape][cluster_index] = {}
+                        self.aggregations[subject_id][task_id][shape][cluster_index]["cluster"] = {"center":cluster["center"],"points":cluster["points"]}
 
     def __describe__(self,workflow_id):
         select = "SELECT tasks from workflows where id = " + str(workflow_id)
@@ -349,39 +358,6 @@ class PanoptesAPI:
                 assert "tools" in tasks[task_id]
                 print tasks[task_id]["tools"]
         # self. description
-
-    def __get_subjects__(self):
-        rows = self.cassandra_session.execute("select subject_id from classifications where project_id = " + str(self.project_id))
-        subjects = set([r.subject_id for r in rows])
-        print subjects
-
-    def __get_subject_ids__(self,workflow_id):
-        assert isinstance(workflow_id,int)
-        assert isinstance(self.project_id,int)
-        """
-        return the subjects associated with a given workflow (which needs to be specific for the project)
-        :return:
-        """
-        # select = "SELECT subject_set_id from subject_sets_workflows where workflow_id = " + str(workflow_id)
-        # cur = self.postgres_session.cursor()
-        # cur.execute(select)
-        #
-        # subject_set = set()
-
-        # for subject_set_id in cur.fetchall():
-        #     select = "SELECT subject_id FROM set_member_subjects WHERE subject_set_id = " + str(subject_set_id[0])
-        #     cur2 = self.postgres_session.cursor()
-        #     cur2.execute(select)
-        #     subjects = cur2.fetchall()
-        #     subject_set.update([s[0] for s in subjects])
-        #
-        # print list(subject_set)
-        # return list(subject_set)
-        workflow_version = int(math.floor(float(self.versions[workflow_id])))
-
-        stmt = "select distinct subject_id from classifications where project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id) + " and workflow_version = " + str(workflow_version)
-        print stmt
-        print self.cassandra_session.execute(stmt)
 
     def __get_num_clusters_(self,subject_id,task_id):
         return len(self.cluster_alg.clusterResults[subject_id][task_id])
@@ -562,28 +538,82 @@ class PanoptesAPI:
         print data["meta"].keys()
         print data["versions"]
 
+    def __load_subjects__(self,workflow_id):
+        """
+        load the list of subject ids from Cassandra
+        :param workflow_id:
+        :return:
+        """
+        version = int(math.floor(float(self.versions[workflow_id])))
+        stmt = "SELECT subject_id FROM subjects WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id) + " and workflow_version = " + str(version)
+        return [r.subject_id for r in self.cassandra_session.execute(stmt)]
+
+    def __merge_clustering_and_classification__(self):
+        assert self.cluster_alg is not None
+        assert self.classification_alg is not None
+
+        # we should already have results from the clustering half
+        assert self.aggregations != {}
+
+        # start with the clustering results and merge in the classification results
+        class_results = self.classification_alg.results.copy()
+
+        #self.results[subject_id][task_id][shape][cluster_index]["shape_classification"]
+        for subject_id in class_results:
+            if subject_id == "param":
+                # dummy value
+                continue
+            if subject_id not in self.aggregations:
+                self.aggregations[subject_id] = {"param":"task_id"}
+            for task_id in class_results[subject_id]:
+                if task_id == "param":
+                    # dummy value
+                    continue
+
+                # is this a pure classification task - if so, just copy it
+                # else this is a task related to marking (tool classification or follow up question)
+                # and we need to merge
+                task = class_results[subject_id][task_id]
+                if isinstance(task,tuple):
+                    # pure classification task
+                    self.aggregations[subject_id][task_id] = task
+                else:
+                    # need to merge
+                    # there should already be the clustering results
+                    assert task_id in self.aggregations[subject_id]
+
+                    for shape in class_results[subject_id][task_id]:
+                        if shape == "param":
+                            continue
+
+                        assert shape in self.aggregations[subject_id][task_id]
+                        for cluster_index in class_results[subject_id][task_id][shape]:
+                            if cluster_index == "param":
+                                continue
+                            assert cluster_index in self.aggregations[subject_id][task_id][shape]
+                            s = class_results[subject_id][task_id][shape][cluster_index]["shape_classification"]
+                            self.aggregations[subject_id][task_id][shape][cluster_index]["shape_classification"] = s
 
     def __migrate__(self):
-        tt = set([465026, 465003, 493062, 492809, 465034, 465172, 493205, 465048, 465177, 493211, 464965, 492960, 465057, 465058, 492707, 492836, 465121, 492975, 464951, 464952, 464953, 464954, 464955, 464956, 464957, 464958, 464959, 464960, 464961, 492611, 492741, 492615, 465100, 492623, 492728, 492626, 492886, 464975, 464988, 492897, 464998, 492776, 492907, 492914, 465019, 492669])
+        # tt = set([465026, 465003, 493062, 492809, 465034, 465172, 493205, 465048, 465177, 493211, 464965, 492960, 465057, 465058, 492707, 492836, 465121, 492975, 464951, 464952, 464953, 464954, 464955, 464956, 464957, 464958, 464959, 464960, 464961, 492611, 492741, 492615, 465100, 492623, 492728, 492626, 492886, 464975, 464988, 492897, 464998, 492776, 492907, 492914, 465019, 492669])
         # print self.versions
         # assert False
-        try:
-            self.cassandra_session.execute("drop table classifications")
-            print "table dropped"
-        except cassandra.InvalidRequest:
-            print "table did not exist"
-            pass
-
-        try:
-            self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,workflow_version,subject_id));")
-        except cassandra.AlreadyExists:
-            pass
-
-        try:
-            self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,workflow_version,subject_id,created_at) ) WITH CLUSTERING ORDER BY (workflow_id ASC,workflow_version ASC,subject_id ASC,  created_at ASC);")
-        except cassandra.AlreadyExists:
-            pass
-
+        # try:
+        #     self.cassandra_session.execute("drop table classifications")
+        #     print "table dropped"
+        # except cassandra.InvalidRequest:
+        #     print "table did not exist"
+        #     pass
+        #
+        # try:
+        #     self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,workflow_version,subject_id));")
+        # except cassandra.AlreadyExists:
+        #     pass
+        #
+        # try:
+        #     self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,workflow_version,subject_id,created_at) ) WITH CLUSTERING ORDER BY (workflow_id ASC,workflow_version ASC,subject_id ASC,  created_at ASC);")
+        # except cassandra.AlreadyExists:
+        #     pass
 
         not_found = set()
 
@@ -606,8 +636,6 @@ class PanoptesAPI:
 
             # print ii
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
-            if subject_ids[0] not in tt:
-                not_found.add(subject_ids[0])
             # print t
             # assert False
 
@@ -770,19 +798,6 @@ class PanoptesAPI:
                 pass
 
 
-    def __print_annotations__(self):
-        """
-        for debugging - print out the annotations/classifications
-        :return:
-        """
-        select = "SELECT * from classifications where project_id="+str(self.project_id)
-        cur = self.postgres_session.cursor()
-        cur.execute(select)
-
-        for record in cur.fetchall():
-            print record
-
-
 
     def __plot_image__(self,subject_id):
         fname = self.__image_setup__(subject_id)
@@ -846,23 +861,25 @@ class PanoptesAPI:
                 plt.plot([center[0],],[center[1],],"o",color="blue")
             else:
                 assert False
-            plt.title("number of users: " + str(len(cluster["points"])))
+            # plt.title("number of users: " + str(len(cluster["points"])))
 
         # plt.show()
 
-    def __plot__(self,workflow_id,task):
+    def __plot__(self,workflow_id,task_id):
         print "plotting"
         try:
-            for shape in self.cluster_alg.clusterResults[task]:
-                for subject_id in self.cluster_alg.clusterResults[task][shape]:
+            print "----"
+            print self.cluster_alg.clusterResults
+            for shape in self.cluster_alg.clusterResults[task_id]:
+                for subject_id in self.cluster_alg.clusterResults[task_id][shape]:
                     print subject_id
-                    if (len(self.users_per_subject[subject_id]) >= 5):# and (subject_id in self.classification_alg.results):
+                    if (len(self.users_per_subject[subject_id]) >= 1):# and (subject_id in self.classification_alg.results):
                         # if self.cluster_alg.clusterResults[task][shape][subject_id]["users"]
                         self.__plot_image__(subject_id)
-                        self.__plot_individual_points__(subject_id,task,shape)
-                        self.__plot_cluster_results__(subject_id,task,shape)
+                        self.__plot_individual_points__(subject_id,task_id,shape)
+                        # self.__plot_cluster_results__(subject_id,task,shape)
 
-                        if subject_id in self.classification_alg.results:
+                        if (self.classification_alg is not None) and (subject_id in self.classification_alg.results):
                             classification_task = "init"
                             classifications = self.classification_alg.results[subject_id][classification_task]
                             # print classifications
@@ -877,7 +894,7 @@ class PanoptesAPI:
                             # print title
 
                             plt.title(title)
-                        # plt.title("number of users: " + str(len(all_users)))
+                        plt.title("number of users: " + str(len(self.users_per_subject[subject_id][task_id])))
                         plt.savefig("/home/greg/Databases/"+self.project_short_name+"/markings/"+str(subject_id)+".jpg")
                         plt.close()
                         # assert False
@@ -1009,10 +1026,6 @@ class PanoptesAPI:
         # assert False
         return classification_tasks,marking_tasks
 
-
-    def __set_subjects__(self,subjects):
-        self.subjects = subjects
-
     def __set_classification_alg__(self,alg):
         self.classification_alg = alg(self)
         assert isinstance(self.classification_alg,classification.Classification)
@@ -1064,7 +1077,6 @@ class PanoptesAPI:
 
         # for each workflow, read in the tasks
         self.workflows = {}
-        self.subject_sets = {}
         for workflows in data["workflows"]:
             id_ = int(workflows["id"])
             # self.workflows.append(id_)
@@ -1078,16 +1090,20 @@ class PanoptesAPI:
 
 
 
-    def __sort_classifications__(self,workflow_id,version=None):
-        if version is None:
-            version = self.versions[workflow_id]
+    def __sort_classifications__(self,workflow_id):
+        version = int(math.floor(float(self.versions[workflow_id])))
 
         classification_tasks,marking_tasks = self.workflows[workflow_id]
         raw_classifications = {}
 
+        subject_set = self.__load_subjects__(workflow_id)
+
+        print "--****"
+        print workflow_id
+        print subject_set
 
         total = 0
-        for s in self.__chunks(self.subject_sets[workflow_id],15):
+        for s in self.__chunks(subject_set,15):
             statements_and_params = []
             select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from classifications where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
             for subject_id in s:
@@ -1131,18 +1147,17 @@ class PanoptesAPI:
 
                                     # is this shape confusing?
                                     if ("shapes" in classification_tasks[task_id]) and (shape in classification_tasks[task_id]["shapes"]):
-                                        print marking
-
                                         if task_id not in raw_classifications:
                                             raw_classifications[task_id] = {}
                                         if shape not in raw_classifications[task_id]:
                                             raw_classifications[task_id][shape] = {}
                                         if subject_id not in raw_classifications[task_id][shape]:
-                                            raw_classifications[task_id][shape][subject_id] = []
+                                            raw_classifications[task_id][shape][subject_id] = {}
 
                                         # todo - FIX!!!
                                         relevant_params = self.marking_params_per_shape[shape](marking,(10000,10000))
-                                        raw_classifications[task_id][shape][subject_id].append((user_id,relevant_params,tool))
+                                        assert (relevant_params,user_id) not in raw_classifications[task_id][shape][subject_id]
+                                        raw_classifications[task_id][shape][subject_id][(relevant_params,user_id)] = tool #.append((user_id,relevant_params,tool))
                                 # print raw_classifications
                                 # assert False
                                 # print marking_tasks[task_id]
@@ -1168,36 +1183,32 @@ class PanoptesAPI:
             return {}
 
         raw_markings = {}
+        subject_set = self.__load_subjects__(workflow_id)
 
         # use one image from the workflow to determine the size of all images
         # todo - BAD ASSUMPTION, think of something better
-        fname = self.__image_setup__(self.subject_sets[workflow_id][0])
+        fname = self.__image_setup__(subject_set[0])
         im=Image.open(fname)
         width,height= im.size
 
         self.users_per_subject={}
 
-        # print len(self.subject_sets[workflow_id])
-
         loaded_subjects = set()
         read_in = set()
-        for s in self.__chunks(self.subject_sets[workflow_id],15):
+        for s in self.__chunks(subject_set,15):
             statements_and_params = []
             # select_statement = self.cassandra_session.prepare("select id,user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
-            select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
+            select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and workflow_id = ? and workflow_version = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
             # select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ?")# and workflow_id = ? and workflow_version = ?")
 
             # assert 458701 not in s
             # print s
-
+            version = int(math.floor(float(self.versions[workflow_id])))
             for subject_id in s:
-                params = (int(self.project_id),subject_id,)#int(workflow_id))#,int(math.floor(float(self.versions[workflow_id]))))
+                params = (int(self.project_id),workflow_id,version,subject_id,)#int(workflow_id))#,int(math.floor(float(self.versions[workflow_id]))))
                 # params = (int(self.project_id),)#,int(workflow_id),int(math.floor(float(self.versions[workflow_id]))))
                 statements_and_params.append((select_statement, params))
                 # print params
-            print [1 if subject_id in self.migrated_subjects else 0 for subject_id in s]
-
-
 
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
             for subject_id,(success,record_list) in zip(s,results):
@@ -1206,7 +1217,7 @@ class PanoptesAPI:
                 # print (success,record_list)
                 for record in record_list:
                     # print success,record
-                    print "+",workflow_id,record.workflow_id #in self.subject_sets[workflow_id]
+                    # print "+",subject_id
                     user_id = record.user_id
                     if user_id == -1:
                         non_logged_in_users += -1
@@ -1215,7 +1226,7 @@ class PanoptesAPI:
                     # for counting the number of users who have seen this subject
                     # set => in case someone has seen this image twice
                     if subject_id not in self.users_per_subject:
-                        self.users_per_subject[subject_id] = set()
+                        self.users_per_subject[subject_id] = {}
 
                     # # todo - how to handle cases where someone has seen an image more than once?
                     # if user_id in self.users_per_subject[subject_id]:
@@ -1225,13 +1236,17 @@ class PanoptesAPI:
                     #
                     #     print cur.fetchone()
 
-                    self.users_per_subject[subject_id].add(user_id)
+                    # self.users_per_subject[subject_id].add(user_id)
 
                     annotations = json.loads(record.annotations)
 
                     # go through each annotation and get the associated task
                     for task in annotations:
                         task_id = task["task"]
+
+                        if task_id not in self.users_per_subject[subject_id]:
+                            self.users_per_subject[subject_id][task_id] = set()
+                        self.users_per_subject[subject_id][task_id].add(user_id)
 
                         if task_id in marking_tasks:
                             for marking in task["value"]:
@@ -1269,12 +1284,7 @@ class PanoptesAPI:
                                     raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
                                 except InvalidMarking as e:
                                     print e
-                break
 
-        print [i for i in self.migrated_subjects if not(i in self.subject_sets[workflow_id])]
-        # print loaded_subjects
-        assert False
-        print "raw is " + str(raw_markings)
         return raw_markings
 
         # for subject_id in subjects:
@@ -1581,7 +1591,7 @@ if __name__ == "__main__":
     print sys.argv[1]
     project = PanoptesAPI(sys.argv[1])
     # project.__get_old_workflow__()
-    project.__migrate__()
+    # project.__migrate__()
     # project.__get_subject_ids__(3)
     # assert False
     #
@@ -1590,13 +1600,13 @@ if __name__ == "__main__":
     # #
     # project.__set_subjects__([458813])
 
-    # project.__set_clustering_alg__(agglomerative.Agglomerative)
-    # project.__set_classification_alg__(classification.VoteCount)
+    project.__set_clustering_alg__(agglomerative.Agglomerative)
+    project.__set_classification_alg__(classification.VoteCount)
     # # # # # a = agglomerative.Agglomerative(brooke)
     # project.__cluster__()
-    # project.__aggregate__()
+    project.__aggregate__()
     # project.__plot__(6,"T1")
-    # project.__plot_cluster_results__(15)
+    # project.__plot_cluster_results__(3)
     # #
 
     # project.__classify__()

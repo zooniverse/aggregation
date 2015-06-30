@@ -8,6 +8,7 @@ import networkx as nx
 import itertools
 import ibcc
 import abc
+import json
 
 def findsubsets(S,m):
     return set(itertools.combinations(S, m))
@@ -32,7 +33,7 @@ class Classification:
 
     @abc.abstractmethod
     def __task_aggregation__(self,classifications,gold_standard=False):
-        pass
+        return []
 
     def __aggregate__(self,raw_classifications,workflow,clustering_results=None):
         # use the first subject_id to find out which tasks we are aggregating the classifications for
@@ -52,48 +53,82 @@ class Classification:
             else:
                 # # we have classifications associated with markings
                 # # are these shapes "uncertain" - ie. was there more than one tool that could have made them?
-                # assert isinstance(classification_tasks[task_id],dict)
-                # print "====------"
-                # print classification_tasks[task_id]
-                # print "shapes" in classification_tasks[task_id]
-                # print classification_tasks[task_id]["shapes"]
-                print classification_tasks
+                assert clustering_results is not None
+
                 if "shapes" in classification_tasks[task_id]:
-                    print classification_tasks[task_id]
-                    # for shape in classification_tasks[task_id]["shapes"]:
-                    #     # print shape
-                    #     for subject_id in clustering_results[task_id][shape]:
-                    #         print clustering_results[task_id][shape][subject_id]
-                    #     # print clustering_results[task_id][shape]
-                    #     print shape
-                    #     print "hello"
-                    #     assert False
-                assert False
-                continue
-                # we have markings
-                for shape in classification_tasks[task_id]:
-                    # are we uncertain about the shape?
-                    # did multiple tools make the same shape - if so, we need to figure out which tool
-                    # is the most likely
-                    if (task_id in uncertain_shapes) and (shape in uncertain_shapes[task_id]):
-                        assert False
+                    for shape in classification_tasks[task_id]["shapes"]:
+                        # create a temporary set of classifications
+                        shape_classification = {}
 
-                    for follow_up_question_index in classification_tasks[task_id][shape]:
-                        for subject_id in classifications:
-                            # did anyone mark this shape for this task?
-                            if task_id in classifications[subject_id]:
-                                for cluster_index in classifications[subject_id][task_id][shape]:
-                                    if cluster_index == "param":
-                                        continue
-                                    details = classifications[subject_id][task_id][shape][cluster_index]["details"]
-                                    for user_id in details:
-                                        print details[user_id]
-                                        print [d["value"] for d in details[user_id] if d["value"] is not None]
-                                        print
-                                    tools = classifications[subject_id][task_id][shape][cluster_index]["tool"]
+                        for subject_id in raw_classifications[task_id][shape]:
+                            # print raw_classifications[task_id][shape][subject_id]
+                            # print subject_id
+                            # print raw_classifications[task_id][shape].keys()
+                            # print clustering_results[task_id][shape].keys()
+                            assert subject_id in clustering_results[task_id][shape]
+                            # look at the individual points in the cluster
+                            for cluster_index in range(len(clustering_results[task_id][shape][subject_id])):
+                                pts = clustering_results[task_id][shape][subject_id][cluster_index]["points"]
+                                users = clustering_results[task_id][shape][subject_id][cluster_index]["users"]
 
+                                # in this case, we want to "vote" on the tools
+                                ballots = []
+                                for (p,user) in zip(pts,users):
+                                    tool_index = raw_classifications[task_id][shape][subject_id][(p,user)]
+                                    ballots.append((user,tool_index))
+
+                                shape_classification[(subject_id,cluster_index)] = ballots
+
+                        # classify
+                        task_results = self.__task_aggregation__(shape_classification)
+                        assert isinstance(task_results,dict)
+
+                        # store the shape classification results
+                        for (subject_id,cluster_index) in task_results:
+                            if subject_id not in self.results:
+                                self.results[subject_id] = {"param":"task_id"}
+                            if task_id not in self.results[subject_id]:
+                                self.results[subject_id][task_id] = {"param":"shape"}
+                            if shape not in self.results[subject_id][task_id]:
+                                self.results[subject_id][task_id][shape] = {"param":"cluster_index"}
+
+                            self.results[subject_id][task_id][shape][cluster_index] = {}
+                            self.results[subject_id][task_id][shape][cluster_index]["shape_classification"] = task_results[(subject_id,cluster_index)]
+
+                        # print "--"
+                        # # the raw classifications will tell us what tool made each marking
+                        # print raw_classifications[task_id][shape]
+                        # # the clustering results will tell us which markings are in which cluster
+                        # print clustering_results[task_id][shape]
+                else:
                     assert False
-                # print classifications[temp_subject_id][task_id]
+                # print json.dumps(self.results,sort_keys=True, indent=4)
+                # # assert False
+                # # continue
+                # # # we have markings
+                # for shape in classification_tasks[task_id]:
+                #     # are we uncertain about the shape?
+                #     # did multiple tools make the same shape - if so, we need to figure out which tool
+                #     # is the most likely
+                #     if (task_id in uncertain_shapes) and (shape in uncertain_shapes[task_id]):
+                #         assert False
+                #
+                #     for follow_up_question_index in classification_tasks[task_id][shape]:
+                #         for subject_id in classifications:
+                #             # did anyone mark this shape for this task?
+                #             if task_id in classifications[subject_id]:
+                #                 for cluster_index in classifications[subject_id][task_id][shape]:
+                #                     if cluster_index == "param":
+                #                         continue
+                #                     details = classifications[subject_id][task_id][shape][cluster_index]["details"]
+                #                     for user_id in details:
+                #                         print details[user_id]
+                #                         print [d["value"] for d in details[user_id] if d["value"] is not None]
+                #                         print
+                #                     tools = classifications[subject_id][task_id][shape][cluster_index]["tool"]
+                #
+                #     assert False
+                # # print classifications[temp_subject_id][task_id]
 
         # for subject_id in classifications:
         #     for task_id in classifications[subject_id]:
