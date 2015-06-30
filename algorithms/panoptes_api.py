@@ -201,9 +201,11 @@ class PanoptesAPI:
             if (self.cluster_alg is not None) and (marking_tasks != {}):
                 print "clustering"
                 clustering_aggregations = self.__cluster__(workflow_id)
+                assert clustering_aggregations != {}
             if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
                 classification_aggregations = self.__classify__(workflow_id,clustering_aggregations)
+
 
             # if we have both marking and classifications - we need to merge the results
             if (clustering_aggregations is not None) and (classification_aggregations is not None):
@@ -265,51 +267,10 @@ class PanoptesAPI:
     def __classify__(self,workflow_id,clustering_aggregations):
         # get the raw classifications for the given workflow
         raw_classifications = self.__sort_classifications__(workflow_id)
+        if raw_classifications == {}:
+            return {}
+
         return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations)
-
-        # # set up the final aggregations - which made involve combining the classification aggregations with
-        # # the marking aggregations - i.e. we get to aggregate the aggregations :)
-        # if workflow_id not in self.aggregations:
-        #     self.aggregations[workflow_id] = self.classification_alg.results
-        # else:
-        #     assert False
-        #     # we must merge clustering and classification results
-        #
-        #         for subject_id in self.classification_alg.results:
-        #             if subject_id not in self.aggregations:
-        #                 self.aggregations[subject_id] = self.classification_alg.results[subject_id]
-        #             else:
-        #                 for task_id in self.classification_alg.results[subject_id]:
-        #                     if task_id not in self.aggregations[subject_id]:
-        #                         self.aggregations[subject_id][task_id] = self.classification_alg.results[subject_id][task_id]
-        #                     else:
-        #                         # todo - fill this in
-        #                         assert False
-
-        # print json.dumps(self.aggregations, indent=4, sort_keys=True)
-        # print self.aggregations
-
-        # for task_id in self.classification_tasks:
-        #     # if we have a simple type of classification
-        #     if isinstance(self.classification_tasks[task_id],bool):
-        #         self.classification_alg.__classify__(self.subjects,task_id)
-        #     else:
-        #         assert False
-        #         self.classification_alg.__classify__(self.subjects,task_id)
-
-
-        #     # self.votes[subject_id] = votes_per_subject
-        #     print json.dumps(classifications,indent=4,sort_keys=True)
-        # return
-        # # now that we gone through and extracted the annotations for each subject, go through according
-        # # to question,task and tool index
-        # for task_id in self.votes[subject_ids[0]]:
-        #     if isinstance(self.votes[subject_ids[0]][task_id],list):
-        #         self.classification_alg.__classify__(subject_ids,task_id)
-        #     else:
-        #         for tool_id in self.votes[subject_ids[0]][task_id].keys():
-        #             for question_id in self.votes[subject_ids[0]][task_id][tool_id].keys():
-        #                 self.classification_alg.__classify__(subject_ids,task_id,tool_id,question_id)
 
     def __cluster__(self,workflow_id):
         """
@@ -1038,6 +999,32 @@ class PanoptesAPI:
         # assert False
         return classification_tasks,marking_tasks
 
+    def __remove_user_ids__(self,aggregation):
+        """
+        ids are needed for aggregation but they shouldn't be stored with the results
+        NOTE ids are postgres ids, NOT ip or email addresses
+        """
+        for subject_id in aggregation:
+            if subject_id == "param":
+                continue
+
+            for task_id in aggregation[subject_id]:
+                if task_id == "param":
+                    continue
+                if isinstance(aggregation[subject_id][task_id],dict):
+                    for shape in aggregation[subject_id][task_id]:
+                        if shape == "param":
+                            continue
+
+                        for cluster_index in aggregation[subject_id][task_id][shape]:
+                            if cluster_index == "param":
+                                continue
+
+                            aggregation[subject_id][task_id][shape][cluster_index].pop("users",None)
+
+        return aggregation
+
+
     def __set_classification_alg__(self,alg):
         self.classification_alg = alg(self)
         assert isinstance(self.classification_alg,classification.Classification)
@@ -1199,9 +1186,14 @@ class PanoptesAPI:
 
         # use one image from the workflow to determine the size of all images
         # todo - BAD ASSUMPTION, think of something better
-        fname = self.__image_setup__(subject_set[0])
-        im=Image.open(fname)
-        width,height= im.size
+        try:
+            fname = self.__image_setup__(subject_set[0])
+            im=Image.open(fname)
+            width,height= im.size
+        except IndexError:
+            # todo - fix!!!
+            width = 1000
+            height = 1000
 
         self.users_per_subject={}
 
@@ -1521,6 +1513,8 @@ class PanoptesAPI:
 
 
     def __store_results__(self,workflow_id,aggregations):
+        aggregations = self.__remove_user_ids__(aggregations)
+
         # finally write the results into the postgres db
 
         subject_set = self.__load_subjects__(workflow_id)
