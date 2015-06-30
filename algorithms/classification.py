@@ -29,7 +29,6 @@ class Classification:
 
         self.species = {"lobate":0,"larvaceanhouse":0,"salp":0,"thalasso":0,"doliolidwithouttail":0,"rocketthimble":1,"rockettriangle":1,"siphocorncob":1,"siphotwocups":1,"doliolidwithtail":1,"cydippid":2,"solmaris":2,"medusafourtentacles":2,"medusamorethanfourtentacles":2,"medusagoblet":2,"beroida":3,"cestida":3,"radiolariancolonies":3,"larvacean":3,"arrowworm":3,"shrimp":4,"polychaeteworm":4,"copepod":4}
         self.candidates = self.species.keys()
-        self.results = {}
 
     @abc.abstractmethod
     def __task_aggregation__(self,classifications,gold_standard=False):
@@ -37,7 +36,7 @@ class Classification:
 
     def __aggregate__(self,raw_classifications,workflow,clustering_results=None):
         # use the first subject_id to find out which tasks we are aggregating the classifications for
-        self.results = {}
+        aggregations = {}
         classification_tasks,marking_tasks = workflow
 
         for task_id in classification_tasks:
@@ -47,9 +46,9 @@ class Classification:
                 task_results = self.__task_aggregation__(raw_classifications[task_id])
                 assert isinstance(task_results,dict)
                 for subject_id in task_results:
-                    if subject_id not in self.results:
-                        self.results[subject_id] = {"param":"task_id"}
-                    self.results[subject_id][task_id] = task_results[subject_id]
+                    if subject_id not in aggregations:
+                        aggregations[subject_id] = {"param":"task_id"}
+                    aggregations[subject_id][task_id] = task_results[subject_id]
             else:
                 # # we have classifications associated with markings
                 # # are these shapes "uncertain" - ie. was there more than one tool that could have made them?
@@ -65,11 +64,16 @@ class Classification:
                             # print subject_id
                             # print raw_classifications[task_id][shape].keys()
                             # print clustering_results[task_id][shape].keys()
-                            assert subject_id in clustering_results[task_id][shape]
+                            # assert subject_id in clustering_results[task_id][shape]
                             # look at the individual points in the cluster
-                            for cluster_index in range(len(clustering_results[task_id][shape][subject_id])):
-                                pts = clustering_results[task_id][shape][subject_id][cluster_index]["points"]
-                                users = clustering_results[task_id][shape][subject_id][cluster_index]["users"]
+                            for cluster_index in clustering_results[subject_id][task_id][shape]:
+                                if cluster_index == "param":
+                                    continue
+
+                                cluster = clustering_results[subject_id][task_id][shape][cluster_index]
+                                pts = cluster["points"]
+                                users = cluster["users"]
+                                # users = clustering_results[subject_id][task_id][shape][subject_id]["users"]
 
                                 # in this case, we want to "vote" on the tools
                                 ballots = []
@@ -85,15 +89,15 @@ class Classification:
 
                         # store the shape classification results
                         for (subject_id,cluster_index) in task_results:
-                            if subject_id not in self.results:
-                                self.results[subject_id] = {"param":"task_id"}
-                            if task_id not in self.results[subject_id]:
-                                self.results[subject_id][task_id] = {"param":"shape"}
-                            if shape not in self.results[subject_id][task_id]:
-                                self.results[subject_id][task_id][shape] = {"param":"cluster_index"}
+                            if subject_id not in aggregations:
+                                aggregations[subject_id] = {"param":"task_id"}
+                            if task_id not in aggregations[subject_id]:
+                                aggregations[subject_id][task_id] = {"param":"shape"}
+                            if shape not in aggregations[subject_id][task_id]:
+                                aggregations[subject_id][task_id][shape] = {"param":"cluster_index"}
 
-                            self.results[subject_id][task_id][shape][cluster_index] = {}
-                            self.results[subject_id][task_id][shape][cluster_index]["shape_classification"] = task_results[(subject_id,cluster_index)]
+                            aggregations[subject_id][task_id][shape][cluster_index] = {}
+                            aggregations[subject_id][task_id][shape][cluster_index]["shape_classification"] = task_results[(subject_id,cluster_index)]
 
                         # print "--"
                         # # the raw classifications will tell us what tool made each marking
@@ -102,59 +106,8 @@ class Classification:
                         # print clustering_results[task_id][shape]
                 else:
                     assert False
-                # print json.dumps(self.results,sort_keys=True, indent=4)
-                # # assert False
-                # # continue
-                # # # we have markings
-                # for shape in classification_tasks[task_id]:
-                #     # are we uncertain about the shape?
-                #     # did multiple tools make the same shape - if so, we need to figure out which tool
-                #     # is the most likely
-                #     if (task_id in uncertain_shapes) and (shape in uncertain_shapes[task_id]):
-                #         assert False
-                #
-                #     for follow_up_question_index in classification_tasks[task_id][shape]:
-                #         for subject_id in classifications:
-                #             # did anyone mark this shape for this task?
-                #             if task_id in classifications[subject_id]:
-                #                 for cluster_index in classifications[subject_id][task_id][shape]:
-                #                     if cluster_index == "param":
-                #                         continue
-                #                     details = classifications[subject_id][task_id][shape][cluster_index]["details"]
-                #                     for user_id in details:
-                #                         print details[user_id]
-                #                         print [d["value"] for d in details[user_id] if d["value"] is not None]
-                #                         print
-                #                     tools = classifications[subject_id][task_id][shape][cluster_index]["tool"]
-                #
-                #     assert False
-                # # print classifications[temp_subject_id][task_id]
 
-        # for subject_id in classifications:
-        #     for task_id in classifications[subject_id]:
-        #         if isinstance(classifications[subject_id][task_id],list):
-        #             print classifications[subject_id][task_id]
-        #             assert False
-        #
-        #             # we have a simple classification - #todo I think
-        #             vote_counts = {}
-        #             users,votes = zip(*classifications[subject_id][task_id])
-        #             for vote in votes:
-        #                 if vote in vote_counts:
-        #                     vote_counts[vote] += 1
-        #                 else:
-        #                     vote_counts[vote] = 1
-        #             print vote_counts
-        #
-        #             if subject_id not in self.results:
-        #                 self.results[subject_id] = {"type":"task_id"}
-        #
-        #             most_votes = max(vote_counts,key=lambda x:vote_counts[x])
-        #             percentage = vote_counts[most_votes]/float(sum(vote_counts.values()))
-        #             self.results[subject_id][task_id] = most_votes,percentage
-        #         else:
-        #             print classifications[subject_id][task_id]
-        #             assert False
+        return aggregations
 
 class VoteCount(Classification):
     def __init__(self,project,clustering_alg=None):

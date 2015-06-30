@@ -175,32 +175,48 @@ class PanoptesAPI:
         #     self.__task_setup__()
         #
         self.classifications = None
-        self.aggregations = {}
+        # self.aggregations = {}
         #
         self.marking_params_per_shape = dict()
         self.marking_params_per_shape["line"] = line_mapping
         self.marking_params_per_shape["point"] = point_mapping
         self.marking_params_per_shape["ellipse"] = ellipse_mapping
 
-    def __aggregate__(self,workflow_id=None):
-        if workflow_id is None:
-            workflows = self.workflows
-        else:
-            workflows = [workflow_id]
+    def __aggregate__(self):
+        # if workflow_id is None:
+        #     workflows = self.workflows
+        # else:
+        #     workflows = [workflow_id]
 
-        for workflow_id in workflows:
-            print "aggregating workflow " + str(workflow_id)
+        for workflow_id in self.workflows:
             self.__describe__(workflow_id)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
 
+            clustering_aggregations = None
+            classification_aggregations = None
+
+            # if we have provided a clustering algorithm and there are marking tasks
+            # ideally if there are no marking tasks, then we shouldn't have provided a clustering algorithm
+            # but nice sanity check
             if (self.cluster_alg is not None) and (marking_tasks != {}):
-                self.__cluster__(workflow_id)
+                print "clustering"
+                clustering_aggregations = self.__cluster__(workflow_id)
             if (self.classification_alg is not None) and (classification_tasks != {}):
-                self.__classify__(workflow_id)
+                # we may need the clustering results
+                classification_aggregations = self.__classify__(workflow_id,clustering_aggregations)
 
             # if we have both marking and classifications - we need to merge the results
-            if (marking_tasks != {}) and (classification_tasks != {}):
-                self.__merge_clustering_and_classification__()
+            if (clustering_aggregations is not None) and (classification_aggregations is not None):
+                aggregations = self.__merge_aggregations__(clustering_aggregations,classification_aggregations)
+            elif clustering_aggregations is None:
+                aggregations = classification_aggregations
+            else:
+                aggregations = clustering_aggregations
+
+            assert aggregations is not None
+
+            # finally, store the results
+            self.__store_results__(workflow_id,aggregations)
 
 
 
@@ -246,10 +262,10 @@ class PanoptesAPI:
         for i in xrange(0, len(l), n):
             yield l[i:i+n]
 
-    def __classify__(self,workflow_id):
+    def __classify__(self,workflow_id,clustering_aggregations):
         # get the raw classifications for the given workflow
         raw_classifications = self.__sort_classifications__(workflow_id)
-        self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],self.cluster_alg.clusterResults)
+        return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations)
 
         # # set up the final aggregations - which made involve combining the classification aggregations with
         # # the marking aggregations - i.e. we get to aggregate the aggregations :)
@@ -307,23 +323,24 @@ class PanoptesAPI:
         raw_markings = self.__sort_markings__(workflow_id)
         # assert False
 
-        self.cluster_alg.__aggregate__(raw_markings)
+        aggregations = self.cluster_alg.__aggregate__(raw_markings)
 
-        # need to reverse order - current order is good for calculations, bad for output
-        self.aggregations = {}
-        for task_id in self.cluster_alg.clusterResults:
-            for shape in self.cluster_alg.clusterResults[task_id]:
-                for subject_id in self.cluster_alg.clusterResults[task_id][shape]:
-                    if subject_id not in self.aggregations:
-                        self.aggregations[subject_id] = {"param":"task_id"}
-                    if task_id not in self.aggregations[subject_id]:
-                        self.aggregations[subject_id][task_id] = {"param":"shape"}
-                    if shape not in self.aggregations[subject_id][task_id]:
-                        self.aggregations[subject_id][task_id][shape] = {"param":"cluster_index"}
-
-                    for cluster_index,cluster in enumerate(self.cluster_alg.clusterResults[task_id][shape][subject_id]):
-                        self.aggregations[subject_id][task_id][shape][cluster_index] = {}
-                        self.aggregations[subject_id][task_id][shape][cluster_index]["cluster"] = {"center":cluster["center"],"points":cluster["points"]}
+        # # need to reverse order - current order is good for calculations, bad for output
+        # aggregations = {}
+        # for task_id in self.cluster_alg.clusterResults:
+        #     for shape in self.cluster_alg.clusterResults[task_id]:
+        #         for subject_id in self.cluster_alg.clusterResults[task_id][shape]:
+        #             if subject_id not in aggregations:
+        #                 aggregations[subject_id] = {"param":"task_id"}
+        #             if task_id not in aggregations[subject_id]:
+        #                 aggregations[subject_id][task_id] = {"param":"shape"}
+        #             if shape not in aggregations[subject_id][task_id]:
+        #                 aggregations[subject_id][task_id][shape] = {"param":"cluster_index"}
+        #
+        #             for cluster_index,cluster in enumerate(self.cluster_alg.clusterResults[task_id][shape][subject_id]):
+        #                 aggregations[subject_id][task_id][shape][cluster_index] = {}
+        #                 aggregations[subject_id][task_id][shape][cluster_index]["cluster"] = {"center":cluster["center"],"points":cluster["points"]}
+        return aggregations
 
     def __describe__(self,workflow_id):
         select = "SELECT tasks from workflows where id = " + str(workflow_id)
@@ -548,24 +565,17 @@ class PanoptesAPI:
         stmt = "SELECT subject_id FROM subjects WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id) + " and workflow_version = " + str(version)
         return [r.subject_id for r in self.cassandra_session.execute(stmt)]
 
-    def __merge_clustering_and_classification__(self):
-        assert self.cluster_alg is not None
-        assert self.classification_alg is not None
-
-        # we should already have results from the clustering half
-        assert self.aggregations != {}
-
+    def __merge_aggregations__(self,clust_agg,class_agg):
         # start with the clustering results and merge in the classification results
-        class_results = self.classification_alg.results.copy()
+        aggregate = clust_agg.copy()
 
-        #self.results[subject_id][task_id][shape][cluster_index]["shape_classification"]
-        for subject_id in class_results:
+        for subject_id in class_agg:
             if subject_id == "param":
                 # dummy value
                 continue
-            if subject_id not in self.aggregations:
-                self.aggregations[subject_id] = {"param":"task_id"}
-            for task_id in class_results[subject_id]:
+            if subject_id not in aggregate:
+                aggregate[subject_id] = {"param":"task_id"}
+            for task_id in class_agg[subject_id]:
                 if task_id == "param":
                     # dummy value
                     continue
@@ -573,26 +583,28 @@ class PanoptesAPI:
                 # is this a pure classification task - if so, just copy it
                 # else this is a task related to marking (tool classification or follow up question)
                 # and we need to merge
-                task = class_results[subject_id][task_id]
+                task = class_agg[subject_id][task_id]
                 if isinstance(task,tuple):
                     # pure classification task
-                    self.aggregations[subject_id][task_id] = task
+                    aggregate[subject_id][task_id] = task
                 else:
                     # need to merge
                     # there should already be the clustering results
-                    assert task_id in self.aggregations[subject_id]
+                    assert task_id in aggregate[subject_id]
 
-                    for shape in class_results[subject_id][task_id]:
+                    for shape in class_agg[subject_id][task_id]:
                         if shape == "param":
                             continue
 
-                        assert shape in self.aggregations[subject_id][task_id]
-                        for cluster_index in class_results[subject_id][task_id][shape]:
+                        assert shape in aggregate[subject_id][task_id]
+                        for cluster_index in class_agg[subject_id][task_id][shape]:
                             if cluster_index == "param":
                                 continue
-                            assert cluster_index in self.aggregations[subject_id][task_id][shape]
-                            s = class_results[subject_id][task_id][shape][cluster_index]["shape_classification"]
-                            self.aggregations[subject_id][task_id][shape][cluster_index]["shape_classification"] = s
+                            assert cluster_index in aggregate[subject_id][task_id][shape]
+                            s = class_agg[subject_id][task_id][shape][cluster_index]["shape_classification"]
+                            aggregate[subject_id][task_id][shape][cluster_index]["shape_classification"] = s
+
+        return aggregate
 
     def __migrate__(self):
         # tt = set([465026, 465003, 493062, 492809, 465034, 465172, 493205, 465048, 465177, 493211, 464965, 492960, 465057, 465058, 492707, 492836, 465121, 492975, 464951, 464952, 464953, 464954, 464955, 464956, 464957, 464958, 464959, 464960, 464961, 492611, 492741, 492615, 465100, 492623, 492728, 492626, 492886, 464975, 464988, 492897, 464998, 492776, 492907, 492914, 465019, 492669])
@@ -1508,68 +1520,77 @@ class PanoptesAPI:
     #     return classifications
 
 
-    def __store_results__(self):
-        aggregate_results = {}
+    def __store_results__(self,workflow_id,aggregations):
+        # finally write the results into the postgres db
 
-        for subject_id in self.subjects:
+        subject_set = self.__load_subjects__(workflow_id)
+        # assert sorted(self.aggregations.keys()) == sorted(subject_set)
+
+        for subject_id in subject_set:
             # there have been requests for the aggregation to also contain the metadata
             select = "SELECT metadata from subjects where id="+str(subject_id)
             cur = self.postgres_session.cursor()
             cur.execute(select)
             metadata = cur.fetchone()
 
-            aggregation = {"metadata":metadata,"param":"task_id"}
+            aggregation = aggregations[subject_id]
+            aggregation["metadata"] = metadata
 
-            if self.cluster_alg is not None:
-                cluster_results = self.cluster_alg.clusterResults[subject_id]
+            stmt = "INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES("+str(workflow_id)+","+str(subject_id)+",'"+json.dumps(aggregation)+"','"+str(datetime.datetime.now())+"','"+str(datetime.datetime.now())+"')"
+            cur.execute(stmt)
 
-                # check to see if an aggregation already exists, if so, use that created_at time
-                old_aggregation = self.cassandra_session.execute("select created_at from aggregations where subject_id = 1" + str(subject_id) + " and workflow_id = " + str(self.workflow_id))
-                if old_aggregation == []:
-                    created_at = datetime.datetime.now()
-                else:
-                    created_at = old_aggregation.created_at
-
-                for key in cluster_results:
-                    aggregation[key] = deepcopy(cluster_results[key])
-
-            print aggregation
-
-            # now merge in the classification aggregation results
-            if self.classification_alg is not None:
-                classification_results = self.classification_alg.results[subject_id]
-                for task_id in self.classification_alg.results[subject_id]:
-                    if task_id == "type":
-                        continue
-
-                    if task_id not in aggregation:
-                        aggregation[task_id] = deepcopy(classification_results[task_id])
-                    else:
-                        for tool_id in cluster_results[task_id]:
-                            if tool_id not in aggregation[task_id]:
-                                aggregation[task_id][tool_id] = deepcopy(classification_results[task_id][tool_id])
-                            else:
-                                # if we are here, there should be some clustering results as well - which we
-                                # need to merge with and not simply overwrite
-                                for question_id in cluster_results[task_id][tool_id]:
-                                    aggregation[task_id][tool_id][question_id] = deepcopy(classification_results[task_id][tool_id][question_id])
-
-            print aggregation
-        return
-
-        updated_at = datetime.datetime.now()
-
-        # insert into cassandra
-        self.cassandra_session.execute(
-            """
-            insert into aggregations (subject_id,workflow_id, aggregation, created_at, updated_at,metadata)
-            values (%s,%s,%s,%s,%s,%s)
-            """,
-            (subject_id,self.workflow_id,json.dumps(aggregation),created_at,updated_at,json.dumps(metadata)))
-
-        # now insert into postgres as well
-        self.postgres_cursor.execute("INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES (%s,%s,%s,%s,%s);",
-                                     (self.workflow_id,subject_id,json.dumps(aggregation),created_at,updated_at))
+        #     aggregation = {"metadata":metadata,"param":"task_id"}
+        #
+        #     if self.cluster_alg is not None:
+        #         cluster_results = self.cluster_alg.clusterResults[subject_id]
+        #
+        #         # check to see if an aggregation already exists, if so, use that created_at time
+        #         old_aggregation = self.cassandra_session.execute("select created_at from aggregations where subject_id = 1" + str(subject_id) + " and workflow_id = " + str(self.workflow_id))
+        #         if old_aggregation == []:
+        #             created_at = datetime.datetime.now()
+        #         else:
+        #             created_at = old_aggregation.created_at
+        #
+        #         for key in cluster_results:
+        #             aggregation[key] = deepcopy(cluster_results[key])
+        #
+        #     print aggregation
+        #
+        #     # now merge in the classification aggregation results
+        #     if self.classification_alg is not None:
+        #         classification_results = self.classification_alg.results[subject_id]
+        #         for task_id in self.classification_alg.results[subject_id]:
+        #             if task_id == "type":
+        #                 continue
+        #
+        #             if task_id not in aggregation:
+        #                 aggregation[task_id] = deepcopy(classification_results[task_id])
+        #             else:
+        #                 for tool_id in cluster_results[task_id]:
+        #                     if tool_id not in aggregation[task_id]:
+        #                         aggregation[task_id][tool_id] = deepcopy(classification_results[task_id][tool_id])
+        #                     else:
+        #                         # if we are here, there should be some clustering results as well - which we
+        #                         # need to merge with and not simply overwrite
+        #                         for question_id in cluster_results[task_id][tool_id]:
+        #                             aggregation[task_id][tool_id][question_id] = deepcopy(classification_results[task_id][tool_id][question_id])
+        #
+        #     print aggregation
+        # return
+        #
+        # updated_at = datetime.datetime.now()
+        #
+        # # insert into cassandra
+        # self.cassandra_session.execute(
+        #     """
+        #     insert into aggregations (subject_id,workflow_id, aggregation, created_at, updated_at,metadata)
+        #     values (%s,%s,%s,%s,%s,%s)
+        #     """,
+        #     (subject_id,self.workflow_id,json.dumps(aggregation),created_at,updated_at,json.dumps(metadata)))
+        #
+        # # now insert into postgres as well
+        # self.postgres_cursor.execute("INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES (%s,%s,%s,%s,%s);",
+        #                              (self.workflow_id,subject_id,json.dumps(aggregation),created_at,updated_at))
 
 
 
