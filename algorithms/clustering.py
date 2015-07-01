@@ -227,7 +227,7 @@ def onpick(clustering_alg):
 class Cluster:
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, project_api,min_cluster_size=1,mapping=None):
+    def __init__(self, project_api,shape):
         """
         :param project_api: how to talk to whatever project we are clustering for (Panoptes/Ouroboros shouldn't matter)
         :param min_cluster_size: minimum number of points in a cluster to not be considered noise
@@ -235,7 +235,7 @@ class Cluster:
         """
         # assert isinstance(project_api,panoptes_api.PanoptesAPI)
         self.project_api = project_api
-        self.min_cluster_size = min_cluster_size
+        self.shape = shape
         self.clusterResults = {}
         self.goldResults = {}
 
@@ -266,8 +266,6 @@ class Cluster:
         self.y_roc = None
 
         self.algorithm_name = None
-
-        self.mapping = mapping
 
     def __compare_against__(self,other_clustering,subject_id):
         assert isinstance(other_clustering,Cluster)
@@ -413,7 +411,7 @@ class Cluster:
         self.project_api.__display_image__(subject_id,args_l,kwargs_l,title=self.algorithm_name)
 
     @abc.abstractmethod
-    def __inner_fit__(self,markings,user_ids,tools):
+    def __inner_fit__(self,markings,user_ids,tools,fname=None):
         """
         the main function for clustering
         :param user_ids:
@@ -436,7 +434,7 @@ class Cluster:
     def __get_cluster__(self,subject_id):
         return self.clusterResults[subject_id]
 
-    def __aggregate__(self,raw_markings):
+    def __aggregate__(self,raw_markings,fnames=None):
         """
         the function to call from outside to do the clustering
         override but call if you want to add additional functionality
@@ -444,7 +442,7 @@ class Cluster:
         :param jpeg_file: for debugging - to show step by step what is happening
         :return:
         """
-        self.clusterResults = {}
+        aggregation = {"param":"subject_id"}
 
         # start by calling the api to get the annotations along with the list of who made each marking
         # so for this function, we know that annotations = markings
@@ -454,27 +452,44 @@ class Cluster:
         for task_id in raw_markings:
             print task_id
             for shape in raw_markings[task_id]:
-                for subject_id in raw_markings[task_id][shape]:
-                    users,markings,tools = zip(*raw_markings[task_id][shape][subject_id])
+                # only do the shape we were assigned to do
+                if shape == self.shape:
+                    for subject_id in raw_markings[task_id][shape]:
+                        users,markings,tools = zip(*raw_markings[task_id][shape][subject_id])
 
-                    # otherwise, just set to empty
-                    if (markings == []) or (markings == [[] for i in users]):
-                        cluster_results = [],[],[]
-                        time_to_cluster = 0
-                    else:
-                        cluster_results,time_to_cluster = self.__inner_fit__(markings,users,tools)
+                        # otherwise, just set to empty
+                        if (markings == []) or (markings == [[] for i in users]):
+                            cluster_results = [],[],[]
+                            time_to_cluster = 0
+                        else:
+                            if subject_id in fnames:
+                                fname = fnames[subject_id]
+                            else:
+                                fname = None
 
-                        if task_id not in self.clusterResults:
-                            self.clusterResults[task_id] = {}
+                            cluster_results,time_to_cluster = self.__inner_fit__(markings,users,tools,fname=fname)
 
-                        if shape not in self.clusterResults[task_id]:
-                            self.clusterResults[task_id][shape] = {}
+                            if subject_id not in aggregation:
+                                aggregation[subject_id] = {"param":"task_id"}
+                            if task_id not in aggregation[subject_id]:
+                                aggregation[subject_id][task_id] = {"param":"shape"}
+                            if shape not in aggregation[subject_id][task_id]:
+                                aggregation[subject_id][task_id][shape] = {"param":"cluster_index"}
 
-                        # if subject_id not in self.clusterResults[task_id][shape][subject_id]:
-                        #     self.clusterResults[subject_id] = []
+                            for cluster_index,cluster in enumerate(cluster_results):
+                                aggregation[subject_id][task_id][shape][cluster_index] = cluster
 
-                        self.clusterResults[task_id][shape][subject_id] = cluster_results
+                            # if task_id not in self.clusterResults:
+                            #     self.clusterResults[task_id] = {}
+                            #
+                            # if shape not in self.clusterResults[task_id]:
+                            #     self.clusterResults[task_id][shape] = {}
 
+                            # if subject_id not in self.clusterResults[task_id][shape][subject_id]:
+                            #     self.clusterResults[subject_id] = []
+
+                            # self.clusterResults[[task_id][shape][subject_id] = cluster_results
+        return aggregation
 
     def __get_densities__(self,subject_id):
         """

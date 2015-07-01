@@ -11,8 +11,8 @@ import math
 import numpy
 
 class Agglomerative(clustering.Cluster):
-    def __init__(self,project_api,min_cluster_size=1,mapping =None):
-        clustering.Cluster.__init__(self,project_api,min_cluster_size,mapping)
+    def __init__(self,project_api,shape):
+        clustering.Cluster.__init__(self,project_api,shape)
         self.algorithm_name = "agglomerative"
         self.all_distances = []
         self.max = 0
@@ -37,7 +37,7 @@ class Agglomerative(clustering.Cluster):
 
         return results
 
-    def __inner_fit__(self,markings,user_ids,jpeg_file=None,debug=False,gold_standard=False,subject_id=None):
+    def __inner_fit__(self,markings,user_ids,fnames=None):
         """
         the actual clustering algorithm
         markings and user_ids should be the same length - a one to one mapping

@@ -25,6 +25,7 @@ import sys
 from PIL import Image
 import agglomerative
 import cluster_count
+import blob_clustering
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -36,6 +37,12 @@ class InvalidMarking(Exception):
         self.pt = pt
     def __str__(self):
         return "invalid marking: " + str(self.pt)
+
+class ImageNotDownloaded(Exception):
+    def __init__(self):
+        pass
+    def __str__(self):
+        return 'image not downloaded'
 
 def line_mapping(marking,image_dimensions):
     # want to extract the params x1,x2,y1,y2 but
@@ -64,6 +71,19 @@ def point_mapping(marking,image_dimensions):
         raise InvalidMarking(marking)
 
     return x,y
+
+def rectangle_mapping(marking,image_dimensions):
+    x = marking["x"]
+    y = marking["y"]
+
+    x2 = x + marking["width"]
+    y2 = y + marking["height"]
+
+    if (x<0)or(y<0)or(x2 > image_dimensions[0]) or(y2>image_dimensions[1]):
+        raise InvalidMarking(marking)
+
+    return x,y,x2,y2
+
 
 def ellipse_mapping(marking,image_dimensions):
     return marking["x"],marking["y"],marking["rx"],marking["ry"],marking["angle"]
@@ -144,15 +164,8 @@ class PanoptesAPI:
         self.workflows = {}
         self.__setup_workflows__()
 
-        # # self.task_type = {}
-        # # used to extract the relevant parameters from a marking
-        # self.marking_params_per_task = {}
-        # # used to store the shapes per tool - useful for when we want to plot out results
-        # # not strictly necessary but should make things a lot easier to understand/follow
-        # self.shapes_per_tool = {}
-        #
-        # # cluster algorithm to be used, if any
-        self.cluster_alg = None
+        # can have different clustering algorithms for different shapes
+        self.cluster_algs = None
         self.classification_alg = None
         #
         #
@@ -181,14 +194,13 @@ class PanoptesAPI:
         self.marking_params_per_shape["line"] = line_mapping
         self.marking_params_per_shape["point"] = point_mapping
         self.marking_params_per_shape["ellipse"] = ellipse_mapping
+        self.marking_params_per_shape["rectangle"] = rectangle_mapping
 
-    def __aggregate__(self):
-        # if workflow_id is None:
-        #     workflows = self.workflows
-        # else:
-        #     workflows = [workflow_id]
+    def __aggregate__(self,workflows=None):
+        if workflows is None:
+            workflows = self.workflows
 
-        for workflow_id in self.workflows:
+        for workflow_id in workflows:
             self.__describe__(workflow_id)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
 
@@ -198,7 +210,7 @@ class PanoptesAPI:
             # if we have provided a clustering algorithm and there are marking tasks
             # ideally if there are no marking tasks, then we shouldn't have provided a clustering algorithm
             # but nice sanity check
-            if (self.cluster_alg is not None) and (marking_tasks != {}):
+            if (self.cluster_algs is not None) and (marking_tasks != {}):
                 print "clustering"
                 clustering_aggregations = self.__cluster__(workflow_id)
                 assert clustering_aggregations != {}
@@ -219,30 +231,6 @@ class PanoptesAPI:
 
             # finally, store the results
             self.__store_results__(workflow_id,aggregations)
-
-
-
-
-
-
-
-    # def __set_workflow__(self,workflow_id):
-    #     """
-    #     set the workflow id - must be an actual workflow associated with this project
-    #     :param workflow_id:
-    #     :return:
-    #     """
-    #     assert workflow_id in self.workflows
-    #     self.workflow_id = workflow_id
-    #
-    #     # load in the subjects specific to that workflow
-    #     self.__get_subject_ids__()
-    #
-    #     # load the tasks associated with this workflow
-    #     self.__task_setup__()
-
-
-
 
     def __cassandra_connect(self):
         """
@@ -284,23 +272,23 @@ class PanoptesAPI:
         raw_markings = self.__sort_markings__(workflow_id)
         # assert False
 
-        aggregations = self.cluster_alg.__aggregate__(raw_markings)
+        # will store the aggregations for all clustering
+        cluster_aggregation = None
 
-        # # need to reverse order - current order is good for calculations, bad for output
-        # aggregations = {}
-        # for task_id in self.cluster_alg.clusterResults:
-        #     for shape in self.cluster_alg.clusterResults[task_id]:
-        #         for subject_id in self.cluster_alg.clusterResults[task_id][shape]:
-        #             if subject_id not in aggregations:
-        #                 aggregations[subject_id] = {"param":"task_id"}
-        #             if task_id not in aggregations[subject_id]:
-        #                 aggregations[subject_id][task_id] = {"param":"shape"}
-        #             if shape not in aggregations[subject_id][task_id]:
-        #                 aggregations[subject_id][task_id][shape] = {"param":"cluster_index"}
-        #
-        #             for cluster_index,cluster in enumerate(self.cluster_alg.clusterResults[task_id][shape][subject_id]):
-        #                 aggregations[subject_id][task_id][shape][cluster_index] = {}
-        #                 aggregations[subject_id][task_id][shape][cluster_index]["cluster"] = {"center":cluster["center"],"points":cluster["points"]}
+        subjects = self.__load_subjects__(workflow_id)
+        fnames = {}
+        for s in subjects[0:40]:
+            try:
+                print s
+                fnames[s] = self.__image_setup__(s,download=False)
+            except ImageNotDownloaded:
+                break
+
+        # go through each shape separately and merge the results in
+        for shape in self.cluster_algs:
+            shape_aggregation = self.cluster_algs[shape].__aggregate__(raw_markings,fnames)
+            cluster_aggregation = self.__merge_aggregations__(cluster_aggregation,shape_aggregation)
+
         return aggregations
 
     def __describe__(self,workflow_id):
@@ -386,38 +374,38 @@ class PanoptesAPI:
         return data["projects"][0]["id"]
         # return None
 
-    def __get_old_workflow__(self):
-        version = self.versions[6]
-        print "** " + str(version)
-        # request = urllib2.Request(self.host_api+"workflows/project_id="+str(self.project_id))
-        # print self.host_api+"workflows/6/versions/97"
-        # request = urllib2.Request(self.host_api+"workflows/6/versions/97")
-        print self.host_api+"workflow_contents/6/versions?page_size=100"
-        request = urllib2.Request(self.host_api+"workflow_contents/6/versions?page_size=100")
-        request.add_header("Accept","application/vnd.api+json; version=1")
-        request.add_header("Authorization","Bearer "+self.token)
-
-        # request
-        try:
-            response = urllib2.urlopen(request)
-        except urllib2.HTTPError as e:
-            print 'The server couldn\'t fulfill the request.'
-            print 'Error code: ', e.code
-            print 'Error response body: ', e.read()
-            raise
-        except urllib2.URLError as e:
-            print 'We failed to reach a server.'
-            print 'Reason: ', e.reason
-            raise
-        else:
-            # everything is fine
-            body = response.read()
-
-        # put it in json structure and extract id
-        data = json.loads(body)
-        print data
-
-        return versions
+    # def __get_old_workflow__(self):
+    #     version = self.versions[6]
+    #     print "** " + str(version)
+    #     # request = urllib2.Request(self.host_api+"workflows/project_id="+str(self.project_id))
+    #     # print self.host_api+"workflows/6/versions/97"
+    #     # request = urllib2.Request(self.host_api+"workflows/6/versions/97")
+    #     print self.host_api+"workflow_contents/6/versions?page_size=100"
+    #     request = urllib2.Request(self.host_api+"workflow_contents/6/versions?page_size=100")
+    #     request.add_header("Accept","application/vnd.api+json; version=1")
+    #     request.add_header("Authorization","Bearer "+self.token)
+    #
+    #     # request
+    #     try:
+    #         response = urllib2.urlopen(request)
+    #     except urllib2.HTTPError as e:
+    #         print 'The server couldn\'t fulfill the request.'
+    #         print 'Error code: ', e.code
+    #         print 'Error response body: ', e.read()
+    #         raise
+    #     except urllib2.URLError as e:
+    #         print 'We failed to reach a server.'
+    #         print 'Reason: ', e.reason
+    #         raise
+    #     else:
+    #         # everything is fine
+    #         body = response.read()
+    #
+    #     # put it in json structure and extract id
+    #     data = json.loads(body)
+    #     print data
+    #
+    #     return versions
 
     def __get_workflow_versions__(self):#,project_id):
         request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
@@ -451,7 +439,7 @@ class PanoptesAPI:
 
         return versions
 
-    def __image_setup__(self,subject_id):
+    def __image_setup__(self,subject_id,download=True):
         """
         get the local file name for a given subject id and downloads that image if necessary
         :param subject_id:
@@ -485,8 +473,10 @@ class PanoptesAPI:
         image_path = base_directory+"/Databases/images/"+fname
 
         if not(os.path.isfile(image_path)):
-            print "downloading"
-            urllib.urlretrieve(url, image_path)
+            if download:
+                print "downloading"
+                urllib.urlretrieve(url, image_path)
+            raise ImageNotDownloaded()
 
         return image_path
 
@@ -526,17 +516,29 @@ class PanoptesAPI:
         stmt = "SELECT subject_id FROM subjects WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id) + " and workflow_version = " + str(version)
         return [r.subject_id for r in self.cassandra_session.execute(stmt)]
 
-    def __merge_aggregations__(self,clust_agg,class_agg):
+    def __merge_aggregations__(self,agg1,agg2):
+        """
+        merge aggregations - could be clustering and classification aggregations
+        could be two different clustering aggregations for different shapes
+        :param clust_agg:
+        :param class_agg:
+        :return:
+        """
         # start with the clustering results and merge in the classification results
-        aggregate = clust_agg.copy()
+        if agg1 is None:
+            return agg2
+        elif agg2 is None:
+            return agg1
 
-        for subject_id in class_agg:
+        aggregate = agg1.copy()
+
+        for subject_id in agg2:
             if subject_id == "param":
                 # dummy value
                 continue
             if subject_id not in aggregate:
                 aggregate[subject_id] = {"param":"task_id"}
-            for task_id in class_agg[subject_id]:
+            for task_id in agg2[subject_id]:
                 if task_id == "param":
                     # dummy value
                     continue
@@ -544,7 +546,7 @@ class PanoptesAPI:
                 # is this a pure classification task - if so, just copy it
                 # else this is a task related to marking (tool classification or follow up question)
                 # and we need to merge
-                task = class_agg[subject_id][task_id]
+                task = agg2[subject_id][task_id]
                 if isinstance(task,tuple):
                     # pure classification task
                     aggregate[subject_id][task_id] = task
@@ -553,7 +555,7 @@ class PanoptesAPI:
                     # there should already be the clustering results
                     assert task_id in aggregate[subject_id]
 
-                    for shape in class_agg[subject_id][task_id]:
+                    for shape in agg2[subject_id][task_id]:
                         if shape == "param":
                             continue
 
@@ -639,53 +641,6 @@ class PanoptesAPI:
         stmt = "select count(*) from subjects"
         print "====---"
         print self.cassandra_session.execute(stmt)
-        # print self.subject_sets.keys()
-        # print self.project_id
-        # print [i for i in self.migrated_subjects if not(i in self.subject_sets[3])]
-        # assert False
-        # print not_found
-        # print len(not_found)
-        # assert False
-
-        #     # print annotations
-        #     # print subject_ids
-        #     print ii
-        #
-        #
-        #     if gold_standard != True:
-        #         gold_standard = False
-        #
-        #     if not isinstance(user_group_id,int):
-        #         user_group_id = -1
-        #
-        #     if not isinstance(user_id,int):
-        #         user_id = -1
-        #
-        #     migrated_subjects.add(subject_ids[0])
-        #
-        #     self.cassandra_session.execute(
-        #         # project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id
-        #         """
-        #         insert into classifications (project_id, user_id, workflow_id,  created_at,annotations, updated_at, user_group_id, user_ip, completed, gold_standard, subject_id, workflow_version,metadata)
-        #         values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) IF NOT EXISTS
-        #         """,
-        #         (project_id, user_id, workflow_id,created_at, json.dumps(annotations), updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], float(workflow_version),json.dumps(metadata)))
-        # # print "migrated " + str(ii) + " classifications "
-        # # print sorted(list(migrated_subjects))
-
-    # def __list_projects__(self):
-    #     stmt = "select * from projects"
-    #     self.postgres_cursor.execute(stmt)
-    #     for r in self.postgres_cursor.fetchall():
-    #         print r[0],r[2]
-
-
-
-
-
-
-
-
 
     def __panoptes_connect__(self):
         """
@@ -993,10 +948,8 @@ class PanoptesAPI:
 
         # print workflow_id
         # print tasks
-        # print classification_tasks
-        # print marking_tasks
         # assert False
-        # assert False
+        print marking_tasks
         return classification_tasks,marking_tasks
 
     def __remove_user_ids__(self,aggregation):
@@ -1029,26 +982,10 @@ class PanoptesAPI:
         self.classification_alg = alg(self)
         assert isinstance(self.classification_alg,classification.Classification)
 
-    def __set_clustering_alg__(self,clustering_alg):
-        self.cluster_alg = clustering_alg(self)
-    #
-    # def __load_workflows__(self):
-    #     select = "SELECT id,display_name from workflows where project_id="+str(self.project_id)
-    #     cur = self.postgres_session.cursor()
-    #     cur.execute(select)
-    #
-    #     for record in cur.fetchall():
-    #         self.workflows[record[0]] = record[1]
-    #
-    # def __list_workflows__(self):
-    #     select = "SELECT * from workflows where project_id="+str(self.project_id)
-    #     cur = self.postgres_session.cursor()
-    #     cur.execute(select)
-    #
-    #     for record in cur.fetchall():
-    #         print record
-
-    # def __plot__(self):
+    def __set_clustering_alg__(self,clustering_dict):
+        self.cluster_algs = {}
+        for shape in clustering_dict:
+            self.cluster_algs[shape] = clustering_dict[shape](self,shape)
 
     def __setup_workflows__(self):#,project_id):
         request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
@@ -1154,9 +1091,12 @@ class PanoptesAPI:
                                             raw_classifications[task_id][shape][subject_id] = {}
 
                                         # todo - FIX!!!
-                                        relevant_params = self.marking_params_per_shape[shape](marking,(10000,10000))
-                                        assert (relevant_params,user_id) not in raw_classifications[task_id][shape][subject_id]
-                                        raw_classifications[task_id][shape][subject_id][(relevant_params,user_id)] = tool #.append((user_id,relevant_params,tool))
+                                        try:
+                                            relevant_params = self.marking_params_per_shape[shape](marking,(10000,10000))
+                                            # assert (relevant_params,user_id) not in raw_classifications[task_id][shape][subject_id]
+                                            raw_classifications[task_id][shape][subject_id][(relevant_params,user_id)] = tool #.append((user_id,relevant_params,tool))
+                                        except InvalidMarking as e:
+                                            print e
                                 # print raw_classifications
                                 # assert False
                                 # print marking_tasks[task_id]
@@ -1174,9 +1114,14 @@ class PanoptesAPI:
         return raw_classifications
 
     def __sort_markings__(self,workflow_id):
+        print "getting markings"
         # print self.project_id,workflow_id
         # assert False
         classification_tasks,marking_tasks = self.workflows[workflow_id]
+        print "==--"
+        # print classification_tasks
+        # print marking_tasks
+        # assert False
 
         if marking_tasks == {}:
             return {}
@@ -1199,6 +1144,7 @@ class PanoptesAPI:
 
         loaded_subjects = set()
         read_in = set()
+
         for s in self.__chunks(subject_set,15):
             statements_and_params = []
             # select_statement = self.cassandra_session.prepare("select id,user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
@@ -1216,12 +1162,13 @@ class PanoptesAPI:
 
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
             for subject_id,(success,record_list) in zip(s,results):
+                if not success:
+                    print record_list
+                assert success
                 # print subject_id,(success,record_list)
                 non_logged_in_users = 0
                 # print (success,record_list)
                 for record in record_list:
-                    # print success,record
-                    # print "+",subject_id
                     user_id = record.user_id
                     if user_id == -1:
                         non_logged_in_users += -1
@@ -1288,304 +1235,47 @@ class PanoptesAPI:
                                     raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
                                 except InvalidMarking as e:
                                     print e
-
         return raw_markings
-
-        # for subject_id in subjects:
-        #     t_markings = {}
-        #     # print subject_id
-        #     total += 1
-        #     print total
-        #
-        #     # use to track non-logged in users
-        #     non_logged_in_users = 0
-        #
-        #     # go through each of the classifications for the given subject
-        #     # select_stmt = "select user_id,annotations,workflow_version from classifications where project_id = " + str(self.project_id) + " and subject_id = " + str(subject_id) + " and workflow_id = " + str(self.workflow_id)
-        #     select_stmt = "select user_id,annotations from classifications where project_id = " + str(self.project_id) + " and subject_id = " + str(subject_id)
-        #
-        #     for classification in self.cassandra_session.execute(select_stmt):
-        #         # print classification.workflow_version
-        #         user_id = classification.user_id
-        #
-        #         # if the user is not logged in, use counter to help differiniate between users
-        #         # todo - if someone views the same image twice, this approach will count both of those
-        #         # todo classifications which is probably not what we want
-        #         if user_id == -1:
-        #             non_logged_in_users += -1
-        #             user_id = non_logged_in_users
-        #
-        #         # convert from string into json
-        #         annotations = json.loads(classification.annotations)
-        #
-        #         # go through each annotation, looking for markings
-        #         for task in annotations:
-        #             task_id = task["task"]
-        #             print annotations
-        #             # print task
-        #             # print self.task_type
-        #             assert task_id in self.task_type
-        #
-        #             # if we have found a list of markings, associated each one with the tool that made it
-        #             if self.task_type[task_id] == "drawing":
-        #                 if task["value"] is None:
-        #                     continue
-        #
-        #                 for marking in task["value"]:
-        #                     # get the index of the tool that made the marking
-        #
-        #                     # different markings can use the same tool - so this may have the affect of clustering
-        #                     # across different marking types
-        #                     # see https://github.com/zooniverse/Panoptes-Front-End/issues/525
-        #                     # for discussion
-        #                     try:
-        #                         tool = marking["tool"]
-        #                         shape = self.shapes_per_tool[task_id][tool]
-        #                     except KeyError:
-        #                         tool = None
-        #                         shape = marking["type"]
-        #
-        #                     if shape ==  "image":
-        #                         # todo - treat image like a rectangle
-        #                         continue
-        #
-        #                     # drawing_params = self.marking_params_per_task[task_id][drawing["tool"]]
-        #                     # extract the params that are relevant to the marking
-        #                     try:
-        #                         relevant_params = self.marking_params_per_shape[shape](marking)
-        #                     except KeyError:
-        #                         continue
-        #
-        #                     id_ = (task_id,shape)
-        #
-        #                     if id_ not in t_markings:
-        #                         t_markings[id_] = [(user_id,relevant_params)]
-        #                     else:
-        #                         t_markings[id_].append((user_id,relevant_params))
-        #     markings[subject_id] = deepcopy(t_markings)
-        # return markings
-
-
-    # def __sort_classifications2__(self,workflow_id):
-    #     classification_tasks,marking_tasks = self.workflows[workflow_id]
-    #     print "here here"
-    #     classifications = {}
-    #     for subject_id in self.subject_sets[workflow_id]:
-    #         print subject_id
-    #         t_classifications = {}
-    #         non_logged_in_users = 0
-    #         # todo - take care of workflow version
-    #         # print "select user_id,annotations from classifications where project_id = " + str(self.project_id) + " and subject_id = " + str(subject_id) + " and workflow_id = " + str(workflow_id)
-    #         print "--"
-    #         t=  datetime.datetime.now()
-    #         ii = 0
-    #         for record in self.cassandra_session.execute("select user_id,annotations from classifications where project_id = " + str(self.project_id)):# + " and subject_id = " + str(subject_id) + " and workflow_id = " + str(workflow_id)):
-    #             ii += 1
-    #             # print datetime.datetime.now()-t,len()
-    #             continue
-    #             # convert from string into json
-    #             t = datetime.datetime.now()
-    #             annotations = json.loads(record.annotations)
-    #
-    #             user_id = record.user_id
-    #             # print user_id
-    #             if user_id == -1:
-    #                 non_logged_in_users += -1
-    #                 user_id = non_logged_in_users
-    #
-    #             for task in annotations:
-    #                 task_id = task["task"]
-    #
-    #                 # need to separate "simple" classifications and those based on markings
-    #                 # if based on markings, we need to use the clustering results
-    #                 if task_id in classification_tasks:
-    #                     if task_id in marking_tasks:
-    #                         assert False
-    #                         assert self.cluster_alg is not None
-    #
-    #                         # go through each marking the user made, and see if there is a corresponding
-    #                         # classification, if so, find the appropriate cluster
-    #                         for marking in task["value"]:
-    #                             if marking["details"] == []:
-    #                                 continue
-    #
-    #                             # may result in merging from different markings which use the same tool -
-    #                             # could be problems if those markings
-    #                             # have different classification questions associated with them
-    #                             # again - see https://github.com/zooniverse/Panoptes-Front-End/issues/525
-    #                             # for discussion
-    #                             tool_index = marking["tool"]
-    #
-    #                             shape = self.shapes_per_tool[task_id][tool_index]
-    #
-    #                             # extract the necessary params
-    #                             mapped_marking = [marking[p] for p in self.marking_params_per_task[task_id][tool_index]]
-    #
-    #                             # find which cluster this point belongs to
-    #                             cluster_found = False
-    #                             # go through all of the cluster results for the given shape
-    #                             cluster_results = self.cluster_alg.clusterResults[subject_id][task_id][shape]
-    #                             for cluster_index,cluster in enumerate(cluster_results):
-    #                                 if mapped_marking in cluster["points"]:
-    #                                     cluster_found = True
-    #                                     break
-    #                             assert cluster_found
-    #
-    #                             if task_id not in t_classifications:
-    #                                 t_classifications[task_id] = {"param":"shape"}
-    #
-    #                             if shape not in t_classifications[task_id]:
-    #                                 t_classifications[task_id][shape] = {"param":"cluster_index"}
-    #
-    #                             if cluster_index not in t_classifications[task_id][shape]:
-    #                                 # details_list = {i:None for i in cluster["users"]}
-    #                                 # tools_list = {i:None for i in cluster["users"]}
-    #                                 t_classifications[task_id][shape][cluster_index] = {"details":{},"tool":{}}
-    #                             # # if cluster_index not in t_classifications[task_id]:
-    #                             # #     # markings for the different tools will be stored separately
-    #                             # #     t_classifications[task_id][cluster_index] = {"param":"shape_type"}
-    #                             #
-    #                             #
-    #                             #     details_list = {i:None for i in cluster["users"]}
-    #                             #     tools_list = {i:None for i in cluster["users"]}
-    #                             #     # create an entry for each cluster of this shape
-    #                             #     for cluster in self.cluster_alg.clusterResults[subject_id][task_id][shape]:
-    #                             #         t_classifications[task_id][cluster_index][shape] = []
-    #                             #
-    #                             #         # = {"points":cluster["points"],"users":cluster["users"],"details":details_list,"tool":tools_list}
-    #
-    #                             t_classifications[task_id][shape][cluster_index]["details"][user_id] = marking["details"]
-    #                             t_classifications[task_id][shape][cluster_index]["tool"][user_id] = marking["tool"]
-    #
-    #                             # # is there more than one one type of tool that makes this shape?
-    #                             # # if so, we will need to classify which tool made the marking
-    #                             # shape_count = sum([1 for shape_2 in self.shapes_per_tool[task_id] if shape_2 == shape])
-    #                             #
-    #                             # #if shape_count > 1:
-    #                             #
-    #                             # # print self.classification_tasks[task_id]
-    #                             # # t_classifications[task_id][cluster_index]
-    #                             # assert False
-    #                             #
-    #                             # # are there classification questions associated with this marking tool specifically
-    #                             # if tool not in self.classification_tasks[task_id]:
-    #                             #     print marking
-    #                             #     print "**"
-    #                             #     # if not, continue
-    #                             #     continue
-    #                             #
-    #                             # # extract the necessary params
-    #                             # mapped_marking = [marking[p] for p in self.marking_params_per_task[task_id][tool]]
-    #                             #
-    #                             # # find which cluster this point belongs to
-    #                             # cluster_found = False
-    #                             # for cluster_index,cluster in enumerate(self.cluster_alg.clusterResults[subject_id][task_id]):
-    #                             #     if mapped_marking in cluster["points"]:
-    #                             #         cluster_found = True
-    #                             #         break
-    #                             # assert cluster_found
-    #                             #
-    #                             # if task_id not in t_classifications:
-    #                             #     t_classifications[task_id] = []
-    #                             # # extend the classifications list for this task as necessary
-    #                             # if len(t_classifications[task_id]) <= cluster_index:
-    #                             #     diff = cluster_index - len(t_classifications[task_id])+1
-    #                             #
-    #                             #     # extend the classifications for each question
-    #                             #     question_list = [[] for i in self.classification_tasks[task_id][tool]]
-    #                             #     t_classifications[task_id].extend([question_list for i in range(diff)])
-    #                             #
-    #                             # # finally add the details to the correct cluster
-    #                             # # might be an empty list if the user didn't answer the question
-    #                             # print marking["details"]
-    #                             # for question_id,classification in enumerate(marking["details"]):
-    #                             #     t_classifications[task_id][cluster_index][question_id].append((user_id,classification["value"]))
-    #                     # else we have a simple classification - makes things so much easier :)
-    #                     else:
-    #                         if task_id not in t_classifications:
-    #                             t_classifications[task_id] = []
-    #
-    #                         t_classifications[task_id].append((user_id,task["value"]))
-    #         print "** " + str(datetime.datetime.now() - t) + str(ii)
-    #         classifications[subject_id] = deepcopy(t_classifications)
-    #
-    #     return classifications
 
 
     def __store_results__(self,workflow_id,aggregations):
         aggregations = self.__remove_user_ids__(aggregations)
-
+        cur = self.postgres_session.cursor()
         # finally write the results into the postgres db
 
         subject_set = self.__load_subjects__(workflow_id)
         # assert sorted(self.aggregations.keys()) == sorted(subject_set)
 
+        stmt = "SELECT * from aggregations"
+        cur.execute(stmt)
+        print "===---"
+        print cur.fetchone()
+
         for subject_id in subject_set:
             # there have been requests for the aggregation to also contain the metadata
             select = "SELECT metadata from subjects where id="+str(subject_id)
-            cur = self.postgres_session.cursor()
+
             cur.execute(select)
             metadata = cur.fetchone()
 
             aggregation = aggregations[subject_id]
             aggregation["metadata"] = metadata
 
+
+
+            # stmt = "SELECT created_at from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = " + str(subject_id)
+
+
+
+
             stmt = "INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES("+str(workflow_id)+","+str(subject_id)+",'"+json.dumps(aggregation)+"','"+str(datetime.datetime.now())+"','"+str(datetime.datetime.now())+"')"
             cur.execute(stmt)
 
-        #     aggregation = {"metadata":metadata,"param":"task_id"}
-        #
-        #     if self.cluster_alg is not None:
-        #         cluster_results = self.cluster_alg.clusterResults[subject_id]
-        #
-        #         # check to see if an aggregation already exists, if so, use that created_at time
-        #         old_aggregation = self.cassandra_session.execute("select created_at from aggregations where subject_id = 1" + str(subject_id) + " and workflow_id = " + str(self.workflow_id))
-        #         if old_aggregation == []:
-        #             created_at = datetime.datetime.now()
-        #         else:
-        #             created_at = old_aggregation.created_at
-        #
-        #         for key in cluster_results:
-        #             aggregation[key] = deepcopy(cluster_results[key])
-        #
-        #     print aggregation
-        #
-        #     # now merge in the classification aggregation results
-        #     if self.classification_alg is not None:
-        #         classification_results = self.classification_alg.results[subject_id]
-        #         for task_id in self.classification_alg.results[subject_id]:
-        #             if task_id == "type":
-        #                 continue
-        #
-        #             if task_id not in aggregation:
-        #                 aggregation[task_id] = deepcopy(classification_results[task_id])
-        #             else:
-        #                 for tool_id in cluster_results[task_id]:
-        #                     if tool_id not in aggregation[task_id]:
-        #                         aggregation[task_id][tool_id] = deepcopy(classification_results[task_id][tool_id])
-        #                     else:
-        #                         # if we are here, there should be some clustering results as well - which we
-        #                         # need to merge with and not simply overwrite
-        #                         for question_id in cluster_results[task_id][tool_id]:
-        #                             aggregation[task_id][tool_id][question_id] = deepcopy(classification_results[task_id][tool_id][question_id])
-        #
-        #     print aggregation
-        # return
-        #
-        # updated_at = datetime.datetime.now()
-        #
-        # # insert into cassandra
-        # self.cassandra_session.execute(
-        #     """
-        #     insert into aggregations (subject_id,workflow_id, aggregation, created_at, updated_at,metadata)
-        #     values (%s,%s,%s,%s,%s,%s)
-        #     """,
-        #     (subject_id,self.workflow_id,json.dumps(aggregation),created_at,updated_at,json.dumps(metadata)))
-        #
-        # # now insert into postgres as well
-        # self.postgres_cursor.execute("INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES (%s,%s,%s,%s,%s);",
-        #                              (self.workflow_id,subject_id,json.dumps(aggregation),created_at,updated_at))
-
+        print "^^^^"
+        stmt = "SELECT * from aggregations"
+        print cur
+        cur.execute(stmt)
+        print cur.fetchone()
 
 
 
@@ -1615,11 +1305,12 @@ if __name__ == "__main__":
     # #
     # project.__set_subjects__([458813])
 
-    project.__set_clustering_alg__(agglomerative.Agglomerative)
+    # project.__set_clustering_alg__(agglomerative.Agglomerative)
+    project.__set_clustering_alg__({"points":agglomerative.Agglomerative, "rectangle":blob_clustering.BlobClustering})
     project.__set_classification_alg__(classification.VoteCount)
     # # # # # a = agglomerative.Agglomerative(brooke)
     # project.__cluster__()
-    project.__aggregate__()
+    project.__aggregate__([84])
     # project.__plot__(6,"T1")
     # project.__plot_cluster_results__(3)
     # #
