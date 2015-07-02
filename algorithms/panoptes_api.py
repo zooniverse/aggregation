@@ -82,8 +82,8 @@ def rectangle_mapping(marking,image_dimensions):
     if (x<0)or(y<0)or(x2 > image_dimensions[0]) or(y2>image_dimensions[1]):
         raise InvalidMarking(marking)
 
-    return x,y,x2,y2
-
+    # return x,y,x2,y2
+    return (x,y),(x,y2),(x2,y2),(x2,y)
 
 def ellipse_mapping(marking,image_dimensions):
     return marking["x"],marking["y"],marking["rx"],marking["ry"],marking["angle"]
@@ -277,19 +277,22 @@ class PanoptesAPI:
 
         subjects = self.__load_subjects__(workflow_id)
         fnames = {}
-        for s in subjects[0:40]:
-            try:
-                print s
-                fnames[s] = self.__image_setup__(s,download=False)
-            except ImageNotDownloaded:
-                break
+        # for s in subjects[0:20]:
+        #     try:
+        #         print s
+        #         fnames[s] = self.__image_setup__(s,download=False)
+        #     except ImageNotDownloaded:
+        #         break
 
         # go through each shape separately and merge the results in
         for shape in self.cluster_algs:
+            print shape
             shape_aggregation = self.cluster_algs[shape].__aggregate__(raw_markings,fnames)
+            print "***"
+            print cluster_aggregation
             cluster_aggregation = self.__merge_aggregations__(cluster_aggregation,shape_aggregation)
 
-        return aggregations
+        return cluster_aggregation
 
     def __describe__(self,workflow_id):
         select = "SELECT tasks from workflows where id = " + str(workflow_id)
@@ -525,10 +528,14 @@ class PanoptesAPI:
         :return:
         """
         # start with the clustering results and merge in the classification results
+        assert (agg1 is not None) or (agg2 is not None)
+
         if agg1 is None:
             return agg2
         elif agg2 is None:
             return agg1
+
+
 
         aggregate = agg1.copy()
 
@@ -553,19 +560,30 @@ class PanoptesAPI:
                 else:
                     # need to merge
                     # there should already be the clustering results
-                    assert task_id in aggregate[subject_id]
+                    print "==--"
+                    print task_id
+                    print aggregate[subject_id].keys()
+                    # assert task_id in aggregate[subject_id]
+                    if task_id not in aggregate[subject_id]:
+                        # if we are merging from two different clustering algorithms
+                        # which may have worked with distinct taks
+                        aggregate[subject_id][task_id] = agg2[subject_id][task_id]
+                    else:
 
-                    for shape in agg2[subject_id][task_id]:
-                        if shape == "param":
-                            continue
-
-                        assert shape in aggregate[subject_id][task_id]
-                        for cluster_index in class_agg[subject_id][task_id][shape]:
-                            if cluster_index == "param":
+                        for shape in agg2[subject_id][task_id]:
+                            if shape == "param":
                                 continue
-                            assert cluster_index in aggregate[subject_id][task_id][shape]
-                            s = class_agg[subject_id][task_id][shape][cluster_index]["shape_classification"]
-                            aggregate[subject_id][task_id][shape][cluster_index]["shape_classification"] = s
+                            if shape not in aggregate[subject_id][task_id]:
+                                aggregate[subject_id][task_id][shape] = agg2[subject_id][task_id][shape]
+                            else:
+                                # there are already are results for this shape - so we need to be merging
+                                # clustering and classification results
+                                for cluster_index in agg2[subject_id][task_id][shape]:
+                                    if cluster_index == "param":
+                                        continue
+                                    assert cluster_index in aggregate[subject_id][task_id][shape]
+                                    s = agg2[subject_id][task_id][shape][cluster_index]["shape_classification"]
+                                    aggregate[subject_id][task_id][shape][cluster_index]["shape_classification"] = s
 
         return aggregate
 
@@ -984,8 +1002,8 @@ class PanoptesAPI:
 
     def __set_clustering_alg__(self,clustering_dict):
         self.cluster_algs = {}
-        for shape in clustering_dict:
-            self.cluster_algs[shape] = clustering_dict[shape](self,shape)
+        for shape,(alg,kwargs) in clustering_dict.items():
+            self.cluster_algs[shape] = alg(self,shape,**kwargs)
 
     def __setup_workflows__(self):#,project_id):
         request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
@@ -1279,7 +1297,7 @@ class PanoptesAPI:
 
 
 
-def mapping(pt):
+def twod_linesegment(pt):
     x1,x2,y1,y2 = pt
     print x1,x2,y1,y2
     dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
@@ -1306,7 +1324,7 @@ if __name__ == "__main__":
     # project.__set_subjects__([458813])
 
     # project.__set_clustering_alg__(agglomerative.Agglomerative)
-    project.__set_clustering_alg__({"points":agglomerative.Agglomerative, "rectangle":blob_clustering.BlobClustering})
+    project.__set_clustering_alg__({"point":(agglomerative.Agglomerative,{}), "rectangle":(blob_clustering.BlobClustering,{})})
     project.__set_classification_alg__(classification.VoteCount)
     # # # # # a = agglomerative.Agglomerative(brooke)
     # project.__cluster__()

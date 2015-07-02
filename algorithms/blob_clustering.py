@@ -16,30 +16,19 @@ class BlobClustering(clustering.Cluster):
 
     def __inner_fit__(self,markings,user_ids,tools,fname=None):
 
-        if (len(markings) > 1) and (fname is not None):
-            print user_ids
-            fig = plt.figure()
-            ax = fig.add_subplot(1, 1, 1)
-            image_file = cbook.get_sample_data(fname)
-            image = plt.imread(image_file)
-            # fig, ax = plt.subplots()
-            im = ax.imshow(image)
-
+        results = []
+        if len(markings) > 1:
             blobs = []
             G=nx.Graph()
 
-            for j,(x1,y1,x2,y2) in enumerate(markings):
-                blobs.append(Polygon([(x1,y1),(x2,y1),(x2,y2),(x1,y2)]))
+            for j,pts in enumerate(markings):
+                assert isinstance(pts,list) or isinstance(pts,tuple)
+                blobs.append(Polygon(pts))
                 G.add_node(j)
 
                 for i,old_blob in enumerate(blobs[:-1]):
                     if not blobs[-1].intersection(old_blob).is_empty:
                         G.add_edge(i,j)
-
-                plt.plot([x1,x2],[y1,y1],color="blue")
-                plt.plot([x1,x2],[y2,y2],color="blue")
-                plt.plot([x1,x1],[y1,y2],color="blue")
-                plt.plot([x2,x2],[y1,y2],color="blue")
 
             for c in nx.connected_components(G):
 
@@ -55,31 +44,56 @@ class BlobClustering(clustering.Cluster):
                             # x,y = overlap.exterior.xy
                             # plt.plot(x,y,color="red")
 
-                            print union_blob
-                            print overlap
-                            if union_blob is not None:
-                                print union_blob.union(overlap)
-                            print
                             if union_blob is None:
                                 union_blob = overlap
                             else:
                                 union_blob = union_blob.union(overlap)
                 if isinstance(union_blob,Polygon):
-                    print union_blob.area
                     x,y = union_blob.exterior.xy
-                    plt.plot(x,y,color="red")
+                    x1 = min(x)
+                    x2 = max(x)
+                    y1 = min(y)
+                    y2 = max(y)
+
+                    blob_results = dict()
+                    blob_results["center"] = [(x1,y1),(x1,y2),(x2,y2),(x2,y1)]
+                    blob_results["points"] = []
+                    blob_results["users"] = []
+
+                    # todo: must be a better way to do this
+                    # find which users overlap with this blob
+                    for i in c:
+                        if union_blob.intersects(blobs[i]):
+                            blob_results["users"].append(user_ids[i])
+                            x,y = blobs[i].exterior.xy
+                            blob_results["points"].append(zip(x,y)[:-1])
+
+                    results.append(blob_results)
+
+                    # plt.plot(x,y,color="red")
                 elif isinstance(union_blob,MultiPolygon):
                     for blob in union_blob:
-                        print blob.area
                         x,y = blob.exterior.xy
-                        plt.plot(x,y,color="red")
-            plt.show()
+                        x1 = min(x)
+                        x2 = max(x)
+                        y1 = min(y)
+                        y2 = max(y)
+
+                        blob_results = dict()
+                        blob_results["center"] = [(x1,y1),(x1,y2),(x2,y2),(x2,y1)]
+                        blob_results["points"] = []
+                        blob_results["users"] = []
+
+                        # todo: must be a better way to do this
+                        # find which users overlap with this blob
+                        for i in c:
+                            if union_blob.intersects(blobs[i]):
+                                blob_results["users"].append(user_ids[i])
+                                x,y = blobs[i].exterior.xy
+                                blob_results["points"].append(zip(x,y)[:-1])
+
+                        results.append(blob_results)
+
+        return results,0
 
 
-            #     plt.plot([x1,x2],[y1,y1],color="blue")
-            #     plt.plot([x1,x2],[y2,y2],color="blue")
-            #     plt.plot([x1,x1],[y1,y2],color="blue")
-            #     plt.plot([x2,x2],[y1,y2],color="blue")
-            # plt.show()
-
-        return {},0

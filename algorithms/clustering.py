@@ -227,7 +227,7 @@ def onpick(clustering_alg):
 class Cluster:
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, project_api,shape):
+    def __init__(self, project_api,shape,mapping=None):
         """
         :param project_api: how to talk to whatever project we are clustering for (Panoptes/Ouroboros shouldn't matter)
         :param min_cluster_size: minimum number of points in a cluster to not be considered noise
@@ -235,37 +235,41 @@ class Cluster:
         """
         # assert isinstance(project_api,panoptes_api.PanoptesAPI)
         self.project_api = project_api
+        # we must say what shapes we want
         self.shape = shape
-        self.clusterResults = {}
-        self.goldResults = {}
+        # self.clusterResults = {}
+        # self.goldResults = {}
 
-        self.correct_pts = {}
+        # self.correct_pts = {}
         # for gold points which we have missed
-        self.missed_pts = {}
+        # self.missed_pts = {}
         # for false positives (according to the gold standard)
-        self.false_positives = {}
+        # self.false_positives = {}
         # we also need to map between user points and gold points
-        self.user_gold_mapping = {}
+        # self.user_gold_mapping = {}
 
         # the distance between a user cluster and what we believe to do the corresponding goal standard point
-        self.user_gold_distance = {}
+        # self.user_gold_distance = {}
 
         # the list of every subject we have processed so far - a set just in case we accidentally process the same
         # one twice. Probably should never happen but just in case
-        self.processed_subjects = set([])
+        # self.processed_subjects = set([])
 
         # needed for when we want use ibcc for stuff
-        current_directory = os.getcwd()
-        slash_indices = [m.start() for m in re.finditer('/', current_directory)]
-        self.base_directory = current_directory[:slash_indices[2]+1]
+        # current_directory = os.getcwd()
+        # slash_indices = [m.start() for m in re.finditer('/', current_directory)]
+        # self.base_directory = current_directory[:slash_indices[2]+1]
 
         # for creating names of ibcc output files
-        self.alg = None
+        # self.alg = None
 
         self.x_roc = None
         self.y_roc = None
 
         self.algorithm_name = None
+
+        self.mapping = mapping
+
 
     def __compare_against__(self,other_clustering,subject_id):
         assert isinstance(other_clustering,Cluster)
@@ -443,7 +447,7 @@ class Cluster:
         :return:
         """
         aggregation = {"param":"subject_id"}
-
+        print "hello world"
         # start by calling the api to get the annotations along with the list of who made each marking
         # so for this function, we know that annotations = markings
         # all_markings =  self.project_api.__get_markings__(subject_id,gold_standard)
@@ -452,8 +456,11 @@ class Cluster:
         for task_id in raw_markings:
             print task_id
             for shape in raw_markings[task_id]:
+                print shape,self.shape,shape == self.shape
+                print type(shape),type(self.shape)
                 # only do the shape we were assigned to do
                 if shape == self.shape:
+                    print "doing shape " + str(shape)
                     for subject_id in raw_markings[task_id][shape]:
                         users,markings,tools = zip(*raw_markings[task_id][shape][subject_id])
 
@@ -489,6 +496,8 @@ class Cluster:
                             #     self.clusterResults[subject_id] = []
 
                             # self.clusterResults[[task_id][shape][subject_id] = cluster_results
+        # we should have some results
+        assert aggregation != {"param":"subject_id"}
         return aggregation
 
     def __get_densities__(self,subject_id):
