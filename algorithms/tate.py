@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 __author__ = 'greg'
-from panoptes_api import PanoptesAPI
+from panoptes_api import PanoptesAPI,InvalidMarking
 import agglomerative
 import clustering
 import math
@@ -211,22 +211,6 @@ class TextCluster(clustering.Cluster):
                     cumulative_line += line[:-1]
 
             aligned_text.append(cumulative_line)
-
-        # for a in aligned_text:
-        #     assert isinstance(a,str)
-        #     leftmost_char = -1
-        #     rightmost_char = -1
-        #     for i,c in enumerate(a):
-        #         if c != "-":
-        #             leftmost_char = i
-        #             break
-        #     for i,c in reversed(list(enumerate(a))):
-        #         if c != "-":
-        #             rightmost_char = i
-        #             break
-        #     print leftmost_char,rightmost_char
-        #     print a
-        # print
 
         os.remove(base_directory+"/Databases/transcribe"+id_+".fasta")
         os.remove(base_directory+"/Databases/transcribe"+id_+".out")
@@ -544,19 +528,19 @@ class TextCluster(clustering.Cluster):
         # cluster_centers = [[np.mean(axis) for axis in zip(*c)] for c in clusters]
         # return (cluster_centers,clusters,users_per_cluster),0
 
-def line_mapping(marking):
+def text_mapping(marking,image_dimensions):
     # want to extract the params x1,x2,y1,y2 but
     # ALSO make sure that x1 <= x2 and flip if necessary
-    x1 = marking["x1"]
-    x2 = marking["x2"]
-    y1 = marking["y1"]
-    y2 = marking["y2"]
+
+    x1 = marking["startPoint"]["x"]
+    x2 = marking["endPoint"]["x"]
+    y1 = marking["startPoint"]["y"]
+    y2 = marking["endPoint"]["y"]
 
     try:
         text = marking["text"]
     except KeyError:
-        print marking
-        raise
+        raise InvalidMarking(marking)
 
     if x1 <= x2:
         return x1,x2,y1,y2,text
@@ -568,19 +552,28 @@ class Tate(PanoptesAPI):
         PanoptesAPI.__init__(self,"tate")
 
         self.marking_params_per_shape = dict()
-        self.marking_params_per_shape["text"] = line_mapping
+        self.marking_params_per_shape["text"] = text_mapping
 
-    def __task_setup__(self):
-        self.classification_tasks = {}
-        self.task_type["init"] = "drawing"
-        self.task_type["T1"] = None
-        self.shapes_per_tool["init"] = []
-        self.shapes_per_tool["init"].append("text")
+    def __readin_tasks__(self,workflow_id):
+        marking_tasks = {"T2":["text"]}
+        classification_tasks = {}
+
+        return classification_tasks,marking_tasks
+
+    # def __task_setup__(self):
+    #     self.classification_tasks = {}
+    #     self.task_type["init"] = "drawing"
+    #     self.task_type["T1"] = None
+    #     self.shapes_per_tool["init"] = []
+    #     self.shapes_per_tool["init"].append("text")
 
 bentham = [4150,4151,4152,4153,4154]
 tate = [4127,4129,4130,4131,4132,4133,4136]
 project = Tate()
+project.__set_clustering_alg__({"text":(agglomerative.Agglomerative,{})})
+project.__aggregate__()
 # project.__migrate__()
-project.__set_subjects__([4150])
-project.__set_clustering_alg__(TextCluster)
-project.__cluster__()
+# project.__set_subjects__([4150])
+# project.__set_clustering_alg__(TextCluster)
+# project.__cluster__()
+# project.__postgres_backup__()

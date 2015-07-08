@@ -161,8 +161,8 @@ class PanoptesAPI:
 
         # there may be more than one workflow associated with a project - read them all in
         # and set up the associated tasks
-        self.workflows = {}
-        self.__setup_workflows__()
+        self.workflows = self.__setup_workflows__()
+        self.versions = self.__get_workflow_versions__()
 
         # can have different clustering algorithms for different shapes
         self.cluster_algs = None
@@ -196,11 +196,13 @@ class PanoptesAPI:
         self.marking_params_per_shape["ellipse"] = ellipse_mapping
         self.marking_params_per_shape["rectangle"] = rectangle_mapping
 
-    def __aggregate__(self,workflows=None):
+    def __aggregate__(self,workflows=None,subject_set=None):
         if workflows is None:
             workflows = self.workflows
 
         for workflow_id in workflows:
+            print self.workflows
+            print workflow_id
             self.__describe__(workflow_id)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
 
@@ -210,9 +212,12 @@ class PanoptesAPI:
             # if we have provided a clustering algorithm and there are marking tasks
             # ideally if there are no marking tasks, then we shouldn't have provided a clustering algorithm
             # but nice sanity check
+            print self.cluster_algs
+            print self.workflows
+
             if (self.cluster_algs is not None) and (marking_tasks != {}):
                 print "clustering"
-                clustering_aggregations = self.__cluster__(workflow_id)
+                clustering_aggregations = self.__cluster__(workflow_id,subject_set)
                 assert clustering_aggregations != {}
             if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
@@ -230,7 +235,7 @@ class PanoptesAPI:
             assert aggregations is not None
 
             # finally, store the results
-            self.__store_results__(workflow_id,aggregations)
+            # self.__store_results__(workflow_id,aggregations)
 
     def __cassandra_connect(self):
         """
@@ -260,7 +265,7 @@ class PanoptesAPI:
 
         return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations)
 
-    def __cluster__(self,workflow_id):
+    def __cluster__(self,workflow_id,subject_set=None):
         """
         run the clustering algorithm for a given workflow
         need to have already checked that the workflow requires clustering
@@ -269,13 +274,16 @@ class PanoptesAPI:
         """
         print "workflow id is " + str(workflow_id)
         # get the raw classifications for the given workflow
-        raw_markings = self.__sort_markings__(workflow_id)
+        if subject_set is None:
+            subject_set = self.__load_subjects__(workflow_id)
+
+        raw_markings = self.__sort_markings__(workflow_id,subject_set)
         # assert False
 
         # will store the aggregations for all clustering
         cluster_aggregation = None
 
-        subjects = self.__load_subjects__(workflow_id)
+
         fnames = {}
         # for s in subjects[0:20]:
         #     try:
@@ -468,6 +476,9 @@ class PanoptesAPI:
 
         data = json.loads(body)
 
+        # print data["subjects"]
+        # assert False
+
         url = str(data["subjects"][0]["locations"][0]["image/jpeg"])
 
         slash_index = url.rfind("/")
@@ -517,7 +528,9 @@ class PanoptesAPI:
         """
         version = int(math.floor(float(self.versions[workflow_id])))
         stmt = "SELECT subject_id FROM subjects WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id) + " and workflow_version = " + str(version)
-        return [r.subject_id for r in self.cassandra_session.execute(stmt)]
+        subjects = [r.subject_id for r in self.cassandra_session.execute(stmt)]
+
+        return subjects
 
     def __merge_aggregations__(self,agg1,agg2):
         """
@@ -872,6 +885,33 @@ class PanoptesAPI:
         # cur = self.postgres_session.cursor()
         # cur.execute(select)
 
+    def __postgres_backup__(self):
+        local_session = psycopg2.connect("dbname='tate' user='panoptes' host='localhost' password='apassword'")
+        local_cursor = local_session.cursor()
+
+        # local_cursor.execute("CREATE TABLE annotate_classifications (project_id integer,user_id integer,workflow_id integer,annotations text,created_at timestamp,updated_at timestamp,user_group_id integer, user_ip inet, completed boolean, gold_standard boolean, expert_classifier integer, metadata text, subject_ids integer, workflow_version text);")
+        local_cursor.execute("CREATE TABLE annotate_classifications (annotations json);")
+
+        select = "SELECT * from classifications where project_id="+str(self.project_id)
+        cur = self.postgres_session.cursor()
+        cur.execute(select)
+
+        for ii,t in enumerate(cur.fetchall()):
+            id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
+            print type(json.dumps(annotations))
+            # local_cursor.execute("""
+            #     INSERT INTO annotate_classifications
+            #     (project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id, user_ip, completed, gold_standard, expert_classifier, metadata, subject_id, workflow_version)
+            #     values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            #     (id_,project_id,user_id,workflow_id,json.dumps(annotations),created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,json.dumps(metadata),subject_ids[0],workflow_version))
+            st = json.dumps(annotations)
+            local_cursor.execute("""
+                INSERT INTO annotate_classifications
+                (annotations)
+                values (%s)""",
+                (annotations))
+
+
     def __readin_tasks__(self,workflow_id):
         """
         get the details for each task - for example, what tasks might we want to run clustering algorithms on
@@ -897,6 +937,8 @@ class PanoptesAPI:
             # self.task_type[task_id] = tasks[task_id]["type"]
 
             # if the task is a drawing one, get the necessary details for clustering
+            print tasks[task_id]["type"]
+            print tasks[task_id]
             if tasks[task_id]["type"] == "drawing":
                 marking_tasks[task_id] = []
                 # manage marking tools by the marking type and not the index
@@ -930,19 +972,14 @@ class PanoptesAPI:
                     print "tool is " + tool["type"]
                     if tool["type"] == "line":
                         marking_tasks[task_id].append("line")
-                        # self.marking_params_per_task[task_id].append(line_mapping)
                     elif tool["type"] == "ellipse":
                         marking_tasks[task_id].append("ellipse")
-                        # self.marking_params_per_task[task_id].append(("angle","rx","ry","x","y"))
                     elif tool["type"] == "point":
                         marking_tasks[task_id].append("point")
-                        # self.marking_params_per_task[task_id].append(("x","y"))
                     elif tool["type"] == "circle":
                         marking_tasks[task_id].append("circle")
-                        # self.marking_params_per_task[task_id].append(("x","y","r"))
                     elif tool["type"] == "rectangle":
                         marking_tasks[task_id].append("rectangle")
-                        # self.marking_params_per_task[task_id].append(("x","y","width","height"))
                     else:
                         print tool
                         assert False
@@ -967,7 +1004,6 @@ class PanoptesAPI:
         # print workflow_id
         # print tasks
         # assert False
-        print marking_tasks
         return classification_tasks,marking_tasks
 
     def __remove_user_ids__(self,aggregation):
@@ -994,7 +1030,6 @@ class PanoptesAPI:
                             aggregation[subject_id][task_id][shape][cluster_index].pop("users",None)
 
         return aggregation
-
 
     def __set_classification_alg__(self,alg):
         self.classification_alg = alg(self)
@@ -1030,17 +1065,23 @@ class PanoptesAPI:
         data = json.loads(body)
 
         # for each workflow, read in the tasks
-        self.workflows = {}
-        for workflows in data["workflows"]:
-            id_ = int(workflows["id"])
+        workflows = {}
+
+
+        for individual_work in data["workflows"]:
+            id_ = int(individual_work["id"])
+            print "^^^^"
+            print id_
             # self.workflows.append(id_)
-            self.workflows[id_] = self.__readin_tasks__(id_)
+            workflows[id_] = self.__readin_tasks__(id_)
             # self.subject_sets[id_] = self.__get_subject_ids__(id_)
         # print self.project_id
         # print self.workflows
         # assert False
         # read in the most current version of each of the workflows
-        self.versions = self.__get_workflow_versions__()
+        return workflows
+
+
 
 
 
@@ -1131,7 +1172,7 @@ class PanoptesAPI:
         print total
         return raw_classifications
 
-    def __sort_markings__(self,workflow_id):
+    def __sort_markings__(self,workflow_id,subject_set=None):
         print "getting markings"
         # print self.project_id,workflow_id
         # assert False
@@ -1145,7 +1186,8 @@ class PanoptesAPI:
             return {}
 
         raw_markings = {}
-        subject_set = self.__load_subjects__(workflow_id)
+        if subject_set is None:
+            subject_set = self.__load_subjects__(workflow_id)
 
         # use one image from the workflow to determine the size of all images
         # todo - BAD ASSUMPTION, think of something better
@@ -1153,8 +1195,9 @@ class PanoptesAPI:
             fname = self.__image_setup__(subject_set[0])
             im=Image.open(fname)
             width,height= im.size
-        except IndexError:
+        except (IndexError,ImageNotDownloaded):
             # todo - fix!!!
+            print "image not downloaded"
             width = 1000
             height = 1000
 
@@ -1187,6 +1230,7 @@ class PanoptesAPI:
                 non_logged_in_users = 0
                 # print (success,record_list)
                 for record in record_list:
+                    print record
                     user_id = record.user_id
                     if user_id == -1:
                         non_logged_in_users += -1
@@ -1218,7 +1262,9 @@ class PanoptesAPI:
                         self.users_per_subject[subject_id][task_id].add(user_id)
 
                         if task_id in marking_tasks:
+                            print task_id
                             for marking in task["value"]:
+                                print marking
 
                                 # what kind of tool made this marking and what was the shape of that tool?
                                 try:
@@ -1233,7 +1279,8 @@ class PanoptesAPI:
                                     print task_id
                                     print tool
                                     raise
-
+                                print shape
+                                print self.marking_params_per_shape
                                 if shape ==  "image":
                                     # todo - treat image like a rectangle
                                     continue
@@ -1272,29 +1319,22 @@ class PanoptesAPI:
         for subject_id in subject_set:
             # there have been requests for the aggregation to also contain the metadata
             select = "SELECT metadata from subjects where id="+str(subject_id)
-
+            print "inserting subject id " + str(subject_id)
             cur.execute(select)
             metadata = cur.fetchone()
 
             aggregation = aggregations[subject_id]
             aggregation["metadata"] = metadata
-
-
-
-            # stmt = "SELECT created_at from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = " + str(subject_id)
-
-
-
-
             stmt = "INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES("+str(workflow_id)+","+str(subject_id)+",'"+json.dumps(aggregation)+"','"+str(datetime.datetime.now())+"','"+str(datetime.datetime.now())+"')"
             cur.execute(stmt)
 
         print "^^^^"
+        self.postgres_session.commit()
         stmt = "SELECT * from aggregations"
         print cur
         cur.execute(stmt)
         print cur.fetchone()
-
+        assert False
 
 
 def twod_linesegment(pt):
@@ -1324,11 +1364,11 @@ if __name__ == "__main__":
     # project.__set_subjects__([458813])
 
     # project.__set_clustering_alg__(agglomerative.Agglomerative)
-    project.__set_clustering_alg__({"point":(agglomerative.Agglomerative,{}), "rectangle":(blob_clustering.BlobClustering,{})})
+    project.__set_clustering_alg__({"point":(agglomerative.Agglomerative,{})})#, "rectangle":(blob_clustering.BlobClustering,{})})
     project.__set_classification_alg__(classification.VoteCount)
     # # # # # a = agglomerative.Agglomerative(brooke)
     # project.__cluster__()
-    project.__aggregate__([84])
+    project.__aggregate__()
     # project.__plot__(6,"T1")
     # project.__plot_cluster_results__(3)
     # #
