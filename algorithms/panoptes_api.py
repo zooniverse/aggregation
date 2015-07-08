@@ -203,7 +203,7 @@ class PanoptesAPI:
         for workflow_id in workflows:
             print self.workflows
             print workflow_id
-            self.__describe__(workflow_id)
+            # self.__describe__(workflow_id)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
 
             clustering_aggregations = None
@@ -526,9 +526,11 @@ class PanoptesAPI:
         :param workflow_id:
         :return:
         """
-        version = int(math.floor(float(self.versions[workflow_id])))
-        stmt = "SELECT subject_id FROM subjects WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id) + " and workflow_version = " + str(version)
+        # version = int(math.floor(float(self.versions[workflow_id])))
+        stmt = "SELECT subject_id FROM subjects WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)# + " and workflow_version = " + str(version)
         subjects = [r.subject_id for r in self.cassandra_session.execute(stmt)]
+
+        assert subjects != []
 
         return subjects
 
@@ -604,21 +606,21 @@ class PanoptesAPI:
         # tt = set([465026, 465003, 493062, 492809, 465034, 465172, 493205, 465048, 465177, 493211, 464965, 492960, 465057, 465058, 492707, 492836, 465121, 492975, 464951, 464952, 464953, 464954, 464955, 464956, 464957, 464958, 464959, 464960, 464961, 492611, 492741, 492615, 465100, 492623, 492728, 492626, 492886, 464975, 464988, 492897, 464998, 492776, 492907, 492914, 465019, 492669])
         # print self.versions
         # assert False
-        # try:
-        #     self.cassandra_session.execute("drop table classifications")
-        #     print "table dropped"
-        # except cassandra.InvalidRequest:
+        try:
+            self.cassandra_session.execute("drop table classifications")
+            self.cassandra_session.execute("drop table subjects")
+            print "table dropped"
+        except cassandra.InvalidRequest:
+            print "table did not already exist"
+
+        self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
+        self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
+        # except
         #     print "table did not exist"
         #     pass
-        #
+
         # try:
-        #     self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,workflow_version,subject_id));")
-        # except cassandra.AlreadyExists:
-        #     pass
-        #
-        # try:
-        #     self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,workflow_version,subject_id,created_at) ) WITH CLUSTERING ORDER BY (workflow_id ASC,workflow_version ASC,subject_id ASC,  created_at ASC);")
-        # except cassandra.AlreadyExists:
+        #             # except cassandra.AlreadyExists:
         #     pass
 
         not_found = set()
@@ -631,15 +633,15 @@ class PanoptesAPI:
         print "trying to migrate " + str(self.project_id)
         insert_statement = self.cassandra_session.prepare("""
                 insert into classifications (project_id, user_id, workflow_id,  created_at,annotations, updated_at, user_group_id, user_ip, completed, gold_standard, subject_id, workflow_version,metadata)
-                values (?,?,?,?,?,?,?,?,?,?,?,?,?) IF NOT EXISTS""")
+                values (?,?,?,?,?,?,?,?,?,?,?,?,?)""")
 
         insert_statement2 = self.cassandra_session.prepare("""
                 insert into subjects (project_id,workflow_id,workflow_version,subject_id)
                 values (?,?,?,?)""")
 
         statements_and_params = []
+        migrated = {}
         for ii,t in enumerate(cur.fetchall()):
-
             # print ii
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
             # print t
@@ -657,11 +659,19 @@ class PanoptesAPI:
                 user_id = -1
             # get only the major version of the workflow
             workflow_version = int(math.floor(float(workflow_version)))
-            print self.project_id,workflow_id,workflow_version
+            id = workflow_id,subject_ids[0]
+            # if subject_ids[0] == 4153:
+            #     print workflow_id,user_ip
+
+            if id not in migrated:
+                migrated[id] = 0
+            migrated[id] += 1
+
             params = (project_id, user_id, workflow_id,created_at, json.dumps(annotations), updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], workflow_version,json.dumps(metadata))
             statements_and_params.append((insert_statement, params))
 
             params2 = (project_id,workflow_id,workflow_version,subject_ids[0])
+            print params2
             statements_and_params.append((insert_statement2,params2))
 
             if len(statements_and_params) == 100:
@@ -669,9 +679,12 @@ class PanoptesAPI:
                 statements_and_params = []
                 # print results
 
-        stmt = "select count(*) from subjects"
-        print "====---"
-        print self.cassandra_session.execute(stmt)
+        # insert any "left over" classifications
+        if statements_and_params != []:
+            results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
+        # stmt = "select count(*) from subjects"
+        # print migrated
+        # print self.cassandra_session.execute(stmt)
 
     def __panoptes_connect__(self):
         """
@@ -1075,15 +1088,10 @@ class PanoptesAPI:
             # self.workflows.append(id_)
             workflows[id_] = self.__readin_tasks__(id_)
             # self.subject_sets[id_] = self.__get_subject_ids__(id_)
-        # print self.project_id
-        # print self.workflows
+
         # assert False
         # read in the most current version of each of the workflows
         return workflows
-
-
-
-
 
     def __sort_classifications__(self,workflow_id):
         version = int(math.floor(float(self.versions[workflow_id])))
@@ -1172,7 +1180,14 @@ class PanoptesAPI:
         print total
         return raw_classifications
 
-    def __sort_markings__(self,workflow_id,subject_set=None):
+    def __sort_markings__(self,workflow_id,subject_set=None,ignore_version=False):
+        """
+        :param workflow_id:
+        :param subject_set:
+        :param ignore_version: ONLY set for debugging use
+        :return:
+        """
+        ignore_version=True
         print "getting markings"
         # print self.project_id,workflow_id
         # assert False
@@ -1208,30 +1223,56 @@ class PanoptesAPI:
 
         for s in self.__chunks(subject_set,15):
             statements_and_params = []
+            if ignore_version:
+                select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and workflow_id = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
+            else:
+                select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and workflow_id = ? and subject_id = ? and workflow_version = ?")# and workflow_id = ?")# and workflow_version = ?")
+
             # select_statement = self.cassandra_session.prepare("select id,user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
-            select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and workflow_id = ? and workflow_version = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
+            # select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and workflow_id = ? and workflow_version = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
             # select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ?")# and workflow_id = ? and workflow_version = ?")
 
             # assert 458701 not in s
             # print s
-            version = int(math.floor(float(self.versions[workflow_id])))
+
+            print "==--"
             for subject_id in s:
-                params = (int(self.project_id),workflow_id,version,subject_id,)#int(workflow_id))#,int(math.floor(float(self.versions[workflow_id]))))
+                if ignore_version:
+                    params = (int(self.project_id),workflow_id,subject_id,)#int(workflow_id))#,int(math.floor(float(self.versions[workflow_id]))))
+                    print params
+                else:
+                    version = int(math.floor(float(self.versions[workflow_id])))
+                    params = (int(self.project_id),workflow_id,subject_id,version)#int(workflow_id))#,int(math.floor(float(self.versions[workflow_id]))))
                 # params = (int(self.project_id),)#,int(workflow_id),int(math.floor(float(self.versions[workflow_id]))))
                 statements_and_params.append((select_statement, params))
                 # print params
-
+            print "--=="
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
             for subject_id,(success,record_list) in zip(s,results):
+                # todo - implement error recovery
                 if not success:
                     print record_list
                 assert success
-                # print subject_id,(success,record_list)
+
+                # use this counter to help differentiate non logged in users
                 non_logged_in_users = 0
+
                 # print (success,record_list)
+                print subject_id
+                print "==--"
+
+                ips_per_subject = []
+
                 for record in record_list:
-                    print record
+                    print "i"
                     user_id = record.user_id
+
+                    if record.user_ip in ips_per_subject:
+                        print "duplicate ip address per subject"
+                        continue
+
+                    ips_per_subject.append(record.user_ip)
+
                     if user_id == -1:
                         non_logged_in_users += -1
                         user_id = non_logged_in_users
@@ -1262,10 +1303,7 @@ class PanoptesAPI:
                         self.users_per_subject[subject_id][task_id].add(user_id)
 
                         if task_id in marking_tasks:
-                            print task_id
                             for marking in task["value"]:
-                                print marking
-
                                 # what kind of tool made this marking and what was the shape of that tool?
                                 try:
                                     tool = marking["tool"]
@@ -1279,8 +1317,6 @@ class PanoptesAPI:
                                     print task_id
                                     print tool
                                     raise
-                                print shape
-                                print self.marking_params_per_shape
                                 if shape ==  "image":
                                     # todo - treat image like a rectangle
                                     continue
