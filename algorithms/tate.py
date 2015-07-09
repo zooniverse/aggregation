@@ -171,9 +171,14 @@ class TextCluster(clustering.Cluster):
         clustering.Cluster.__init__(self,project_api,min_cluster_size)
 
     def __get_aggregation_lines__(self,lines):
+        # mafft doesn't deal well with some characters so need to replace them
         rep = {" ":"@","-":"#","(":"{",">":"^"}
         rep = dict((re.escape(k), v) for k, v in rep.iteritems())
         pattern = re.compile("|".join(rep.keys()))
+
+        undo_rep = {"@":" ","#":"-", "{":"(", "^":">"}
+        undo_rep = dict((re.escape(k), v) for k, v in undo_rep.iteritems())
+        undo_pattern = re.compile("|".join(undo_rep.keys()))
 
         id_ = str(random.uniform(0,1))
 
@@ -182,8 +187,6 @@ class TextCluster(clustering.Cluster):
                 if isinstance(line,tuple):
                     # we have a list of text segments which we should join together
                     line = "".join(line)
-
-
 
                 # line = unicodedata.normalize('NFKD', line).encode('ascii','ignore')
                 assert isinstance(line,str)
@@ -215,6 +218,8 @@ class TextCluster(clustering.Cluster):
                 else:
                     cumulative_line += line[:-1]
 
+            # todo - get this to work!!!
+            # cumulative_line = undo_pattern.sub(lambda m: rep[re.escape(m.group(0))], cumulative_line)
             aligned_text.append(cumulative_line)
 
         os.remove(base_directory+"/Databases/transcribe"+id_+".fasta")
@@ -276,38 +281,43 @@ class TextCluster(clustering.Cluster):
         return agreement/float(len(text[0]))
 
     def __inner_fit__(self,markings,user_ids,tools,fname=None):
-        M = []
-        texts = []
-
+        mapped_markings = []
+        # texts = []
+        # convert to Hesse normal form
         for x1,x2,y1,y2,text in markings:
             dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
-            texts.append(text)
+            # texts.append(text)
             try:
                 tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
                 theta = math.atan(tan_theta)
             except ZeroDivisionError:
                 theta = math.pi/2.
 
-            M.append((dist,theta))
+            mapped_markings.append((dist,theta))
             # print str(dist) + "\t" + str(theta) + "\t" + text
 
         # make sure all of the points are distinct
-        if len(M) != len(set(M)):
+        if len(mapped_markings) != len(set(mapped_markings)):
             print user_ids
             print markings
 
-        assert len(M) == len(set(M))
+        assert len(mapped_markings) == len(set(mapped_markings))
 
-        ordering  = self.__fit2__(M,user_ids)
+        ordering  = self.__fit2__(mapped_markings,user_ids)
 
+        # use the below 2 to build up each cluster
         current_lines = {}
+        current_pts = {}
         clusters = []
 
         for a,b in ordering:
             # a - line values - "intercept" and slope
-            i = M.index(a)
-            user = user_ids[i]
-            text = texts[i]
+            user_index = mapped_markings.index(a)
+            user = user_ids[user_index]
+            # text = texts[user_index]
+            text = markings[user_index][4]
+            pt = markings[user_index][0:4]
+            # assert markings[user_index][4] == text
 
             if "\n" in text:
                 print "multiline - skipping"
@@ -332,18 +342,21 @@ class TextCluster(clustering.Cluster):
 
             # if we have an empty cluster, just add the line
             if current_lines == {}:
-                current_lines = {user:text}
+                current_lines[user] = text
+                current_pts[user] = (pt,user)
             else:
                 # need to see if we want to merge
                 # do we already have some text from this user for this current cluster?
                 # if so, should we merge the text or start a new cluster?
-                if user in current_lines:
+                if user in current_pts:
+                    assert user in current_lines
                     # we have three possibilities - go with the current text, new text or a combination of the two
-                    if len(current_lines) > 1:
+                    if len(current_pts) > 1:
                         # current accuracy
                         # ordering is important here
-                        lines_and_users = sorted(current_lines.items(),key = lambda x:x[0])
-                        sorted_users,sorted_lines = zip(*lines_and_users)
+                        users_and_lines = sorted(current_lines.items(),key = lambda x:x[0])
+                        sorted_users,sorted_lines = zip(*users_and_lines)
+                        # sorted_lines = zip(*sorted_pts)[-1]
                         user_index = sorted_users.index(user)
 
                         # start with the base accuracy - i.e. the current one
@@ -352,7 +365,9 @@ class TextCluster(clustering.Cluster):
 
                         # if we do decide to go with the new text in a new cluster
                         text_for_current_cluster = sorted_lines[user_index]
+                        pts_for_current_cluster = current_pts[user]
                         text_for_new_cluster = text
+                        pts_for_new_cluster = (pt,user)
                         max_accuracy = current_accuracy[user_index]
 
                         new_lines = list(sorted_lines)
@@ -364,8 +379,9 @@ class TextCluster(clustering.Cluster):
                         if new_accuracy[user_index] > max_accuracy:
                             text_for_current_cluster = text
                             text_for_new_cluster = sorted_lines[user_index]
+                            pts_for_current_cluster = (pt,user)
+                            pts_for_new_cluster = current_pts[user]
                             max_accuracy = new_accuracy[user_index]
-
 
                         # now try merging the text - we don't know the order we are supposed to concat them in
                         # todo - figure out a better way than just trying all possibilities
@@ -385,17 +401,26 @@ class TextCluster(clustering.Cluster):
                             new_accuracy = self.__agreement__(new_aligned)
                             if new_accuracy[user_index] > max_accuracy:
                                 text_for_current_cluster = l
+                                pts_for_current_cluster = pts_for_current_cluster[user]
+                                pts_for_current_cluster.append(pt)
+
+                                # there is no need for a new cluster (yet)
+                                pts_for_new_cluster = None
                                 text_for_new_cluster = None
                                 max_accuracy = new_accuracy[user_index]
 
                             # todo - figure out how to handle this case
                             # assert current_accuracy[user_index] > new_accuracy[user_index]
 
+                        # update values for the current cluster
                         current_lines[user] = text_for_current_cluster
-                        if text_for_new_cluster is not None:
-                            clusters.append(current_lines.values())
-                            current_lines = {user:text_for_new_cluster}
+                        current_pts[user] = pts_for_current_cluster
 
+                        # do we need to start a new cluster?
+                        if text_for_new_cluster is not None:
+                            clusters.append((current_lines.values(),current_pts.values()))
+                            current_lines = {user:text_for_new_cluster}
+                            current_pts = {user:pts_for_new_cluster}
                     else:
                         # if len(current_lines) == 1, then the current user is the only user with text in the cluster
                         # so far, so really not sure if we should try merging or creating a new cluster
@@ -405,13 +430,16 @@ class TextCluster(clustering.Cluster):
                     # does adding this line to the cluster make sense?
                     # compare against the current accuracy - if we only have 1 line so far,
                     # current accuracy is NA
-                    lines_and_users = sorted(current_lines.items(),key = lambda x:x[0])
-                    sorted_users,sorted_lines = zip(*lines_and_users)
-                    if len(current_lines) > 1:
-                        aligned_text = self.__get_aggregation_lines__(sorted_lines)
-                        current_accuracy = self.__agreement__(aligned_text)
-                    else:
-                        current_accuracy = -1
+                    users_and_lines = sorted(current_lines.items(),key = lambda x:x[0])
+                    sorted_users,sorted_lines = zip(*users_and_lines)
+                    # sorted_lines = zip(*sorted_pts)[-1]
+
+                    # uncomment below if you want to compare the new accuracy against the old
+                    # if len(current_lines) > 1:
+                    #     aligned_text = self.__get_aggregation_lines__(sorted_lines)
+                    #     current_accuracy = self.__agreement__(aligned_text)
+                    # else:
+                    #     current_accuracy = -1
 
                     # what would the accuracy be if we added in this new user's line?
                     new_lines = list(sorted_lines)
@@ -420,43 +448,76 @@ class TextCluster(clustering.Cluster):
 
                     # start by trying straight up replacing
                     new_lines.append(text)
+                    # print sorted_pts
+                    # print new_lines
                     new_aligned = self.__get_aggregation_lines__(new_lines)
                     new_accuracy = self.__agreement__(new_aligned)
 
                     if min(new_accuracy) >= 0.6:
+                        current_pts[user] = (pt,user)
                         current_lines[user] = text
                     else:
-                        clusters.append(current_lines.values())
+                        clusters.append((current_lines.values(),current_pts.values()))
+                        # current_pts = {user:(pt,text)}
                         current_lines = {user:text}
+                        current_pts = {user:(pt,user)}
 
-
-
-        clusters.append(current_lines.values())
+        clusters.append((current_lines.values(),current_pts.values()))
 
         # remove any clusters which have only one user
         for cluster_index in range(len(clusters)-1,-1,-1):
-            if len(clusters[cluster_index]) == 1:
+            if len(clusters[cluster_index][0]) == 1:
+                assert len(clusters[cluster_index][1]) == 1
                 clusters.pop(cluster_index)
 
         # after removing such "error" clusters there may be adjacent clusters which should be merged
         for cluster_index in range(len(clusters)-2,-1,-1):
-            t_cluster = clusters[cluster_index][:]
-            t_cluster.extend(clusters[cluster_index+1])
+            t_lines = clusters[cluster_index][0][:]
+            t_lines.extend(clusters[cluster_index+1][0])
 
-            aligned_text = self.__get_aggregation_lines__(t_cluster)
+            aligned_text = self.__get_aggregation_lines__(t_lines)
 
             accuracy = self.__agreement__(aligned_text)
             if min(accuracy)> 0.6:
-                clusters[cluster_index].extend(clusters.pop(cluster_index+1))
+                to_be_merged_cluster = clusters.pop(cluster_index+1)
+                clusters[cluster_index][0].extend(to_be_merged_cluster[0])
+                clusters[cluster_index][1].extend(to_be_merged_cluster[1])
 
-        for c in clusters:
-            for l in c:
-                print l
+        # now do the actual aggregation (sigh)
+        cluster_centers = []
+        cluster_pts = []
+        cluster_users = []
 
-            print
-        assert False
+        for lines,pts_and_users in clusters:
+            pts,users = zip(*pts_and_users)
+            x1_values,x2_values,y1_values,y2_values = zip(*pts)
 
-        return ((),(),()),0
+            # todo - handle when some of the coordinate values are not numbers -
+            # this corresponds to when there are multiple text segments from the same user
+            x1 = np.median(x1_values)
+            x2 = np.median(x2_values)
+            y1 = np.median(y1_values)
+            y2 = np.median(y2_values)
+            print users
+
+            aligned_text = self.__get_aggregation_lines__(lines)
+            aggregate_text = ""
+            for char_index in range(len(aligned_text[0])):
+                char_set = set(text[char_index] for text in aligned_text)
+                # get the percentage of votes for each character at this position
+                char_vote = {c:sum([1 for text in aligned_text if text[char_index] == c])/float(len(aligned_text)) for c in char_set}
+                most_likely_char,vote_percentage = max(char_vote.items(),key=lambda x:x[1])
+
+                if vote_percentage > 0.75:
+                    aggregate_text += most_likely_char
+                else:
+                    aggregate_text += "-"
+
+            cluster_centers.append((x1,x2,y1,y2,aggregate_text))
+            cluster_pts.append(zip(pts,lines))
+            cluster_users.append(users)
+
+        return (cluster_centers,cluster_pts,cluster_users),0
 
     def __fit2__(self,markings,user_ids,jpeg_file=None,debug=False):
         # l = [[(u,m[0]) for m in marking] for u,marking in zip(user_ids,markings)]
@@ -519,35 +580,6 @@ class TextCluster(clustering.Cluster):
 
         reachability_ordering = nodes[-1].__traversal__()
         return reachability_ordering
-        # assert False
-        # reachability_distance = [float("inf"),]
-        # for ii, leaf in enumerate(reachability_ordering[1:]):
-        #     # print reachability_ordering[ii]
-        #     # print reachability_ordering[ii+1]
-        #     node1 = nodes[reachability_ordering[ii][1]]
-        #     node2 = nodes[reachability_ordering[ii+1][1]]
-        #
-        #     reachability_distance.append(lowest_common_ancestor(node1,node2))
-        #
-        #
-        #
-        # # find the "important" local maxima
-        # important_local_maxima = []
-        # for i in range(1,len(reachability_distance)-1):
-        #     dist = reachability_distance[i]
-        #     other_distances = []
-        #     if i > 0:
-        #         other_distances.append(reachability_distance[i-1])
-        #     if i < (len(reachability_distance)-1):
-        #         other_distances.append(reachability_distance[i+1])
-        #     if dist > max(other_distances):
-        #         if np.mean(other_distances) < 0.8*dist:
-        #             important_local_maxima.append((i,dist))
-        #
-        # clusters = create_clusters(zip(*reachability_ordering)[0],important_local_maxima)
-        # users_per_cluster = [[user_list[pts_list.index(p)] for p in c] for c in clusters]
-        # cluster_centers = [[np.mean(axis) for axis in zip(*c)] for c in clusters]
-        # return (cluster_centers,clusters,users_per_cluster),0
 
 def text_mapping(marking,image_dimensions):
     # want to extract the params x1,x2,y1,y2 but
@@ -599,21 +631,9 @@ class Tate(PanoptesAPI):
 
         return classification_tasks,marking_tasks
 
-    # def __task_setup__(self):
-    #     self.classification_tasks = {}
-    #     self.task_type["init"] = "drawing"
-    #     self.task_type["T1"] = None
-    #     self.shapes_per_tool["init"] = []
-    #     self.shapes_per_tool["init"].append("text")
-
 bentham = [4150,4151,4152,4153,4154]
 tate = [4127,4129,4130,4131,4132,4133,4136]
 project = Tate()
 # project.__migrate__()
 project.__set_clustering_alg__({"text":(TextCluster,{})})
 project.__aggregate__(workflows=[683])
-
-# project.__set_subjects__([4150])
-# project.__set_clustering_alg__(TextCluster)
-# project.__cluster__()
-# project.__postgres_backup__()
