@@ -14,6 +14,7 @@ import random
 import unicodedata
 import os
 from copy import deepcopy
+import itertools
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -176,14 +177,18 @@ class TextCluster(clustering.Cluster):
 
         id_ = str(random.uniform(0,1))
 
-
-
         with open(base_directory+"/Databases/transcribe"+id_+".fasta","wb") as f:
            for line in lines:
+                if isinstance(line,tuple):
+                    # we have a list of text segments which we should join together
+                    line = "".join(line)
+
+
 
                 # line = unicodedata.normalize('NFKD', line).encode('ascii','ignore')
                 assert isinstance(line,str)
                 fasta_line = pattern.sub(lambda m: rep[re.escape(m.group(0))], line)
+
                 # for i in range(max_length-len(line)):
                 #     fasta_line += "-"
 
@@ -296,87 +301,159 @@ class TextCluster(clustering.Cluster):
         ordering  = self.__fit2__(M,user_ids)
 
         current_lines = {}
-        current_direction = {}
-        current_indices = {}
-
         clusters = []
 
         for a,b in ordering:
             # a - line values - "intercept" and slope
-            print a,b
             i = M.index(a)
             user = user_ids[i]
             text = texts[i]
+
+            if "\n" in text:
+                print "multiline - skipping"
+                continue
+
+            if text == "":
+                print "empty line"
+                continue
 
             # convert from unicode to ascii
             assert isinstance(text,unicode)
             text = text.encode('ascii','ignore')
 
-            # do we already have some text from this user for this current cluster?
-            # if so, should we merge the text or start a new cluster?
-            if user in current_lines:
-                # # print a,b
-                # current_direction[user].append(a[1])
-                # current_indices[user].append(i)
-                # 45 degrees
+            #  # todo - can this be done better?
+            text = re.sub("\[deletion\].*\[/deletion\]","",text)
+            text = re.sub(r'\[deletion\].*\[\\deletion\]',"",text)
+            text = re.sub("\[illegible\].*\[/illegible\]","",text)
+            text = re.sub(r'\[deletionhas\]\[/deletion\]',"",text)
+            text = re.sub(r'\[has\]',"",text)
+            text = re.sub(r'\(deleted\)',"",text)
+            text = re.sub(r'\[deletion\]',"",text)
 
-                # what happens if we went with the new text instead of the old
-                if len(current_lines) > 1:
-                    # current accuracy
-                    aligned_text = self.__get_aggregation_lines__(current_lines.values())
-                    current_accuracy = self.__agreement__(aligned_text)
-
-                    # new accuracy if we merged the text
-                    new_lines = deepcopy(current_lines)
-                    new_lines[user] = text
-                    aligned_text = self.__get_aggregation_lines__(new_lines.values())
-                    new_accuracy = self.__agreement__(aligned_text)
-                    print current_accuracy
-                    print new_accuracy
-                    assert False
-                else:
-                    # if len(current_lines) == 1, then the current user is the only user with text in the cluster
-                    # so far, so really not sure if we should try merging or creating a new cluster
-                    assert False
-
+            # if we have an empty cluster, just add the line
+            if current_lines == {}:
+                current_lines = {user:text}
             else:
-                current_lines[user] = text
+                # need to see if we want to merge
+                # do we already have some text from this user for this current cluster?
+                # if so, should we merge the text or start a new cluster?
+                if user in current_lines:
+                    # we have three possibilities - go with the current text, new text or a combination of the two
+                    if len(current_lines) > 1:
+                        # current accuracy
+                        # ordering is important here
+                        lines_and_users = sorted(current_lines.items(),key = lambda x:x[0])
+                        sorted_users,sorted_lines = zip(*lines_and_users)
+                        user_index = sorted_users.index(user)
 
-                if user not in current_direction:
-                    current_direction[user] = [a[1]]
+                        # start with the base accuracy - i.e. the current one
+                        aligned_text = self.__get_aggregation_lines__(sorted_lines)
+                        current_accuracy = self.__agreement__(aligned_text)
+
+                        # if we do decide to go with the new text in a new cluster
+                        text_for_current_cluster = sorted_lines[user_index]
+                        text_for_new_cluster = text
+                        max_accuracy = current_accuracy[user_index]
+
+                        new_lines = list(sorted_lines)
+                        # start by trying straight up replacing
+                        new_lines[user_index] = text
+                        new_aligned = self.__get_aggregation_lines__(new_lines)
+                        new_accuracy = self.__agreement__(new_aligned)
+
+                        if new_accuracy[user_index] > max_accuracy:
+                            text_for_current_cluster = text
+                            text_for_new_cluster = sorted_lines[user_index]
+                            max_accuracy = new_accuracy[user_index]
+
+
+                        # now try merging the text - we don't know the order we are supposed to concat them in
+                        # todo - figure out a better way than just trying all possibilities
+                        # if a list - we are already dealing with text segments
+                        if isinstance(sorted_users[user_index],list):
+                            text_segments = sorted_lines[user_index]
+                        else:
+                            assert isinstance(sorted_lines[user_index],str)
+                            text_segments = [sorted_lines[user_index],]
+
+                        text_segments.append(text)
+                        for l in  itertools.permutations(text_segments):
+                            new_lines = list(sorted_lines)
+                            new_lines[user_index] = l
+                            # print l
+                            new_aligned = self.__get_aggregation_lines__(new_lines)
+                            new_accuracy = self.__agreement__(new_aligned)
+                            if new_accuracy[user_index] > max_accuracy:
+                                text_for_current_cluster = l
+                                text_for_new_cluster = None
+                                max_accuracy = new_accuracy[user_index]
+
+                            # todo - figure out how to handle this case
+                            # assert current_accuracy[user_index] > new_accuracy[user_index]
+
+                        current_lines[user] = text_for_current_cluster
+                        if text_for_new_cluster is not None:
+                            clusters.append(current_lines.values())
+                            current_lines = {user:text_for_new_cluster}
+
+                    else:
+                        # if len(current_lines) == 1, then the current user is the only user with text in the cluster
+                        # so far, so really not sure if we should try merging or creating a new cluster
+                        assert False
+
                 else:
-                    current_direction[user].append(a[1])
+                    # does adding this line to the cluster make sense?
+                    # compare against the current accuracy - if we only have 1 line so far,
+                    # current accuracy is NA
+                    lines_and_users = sorted(current_lines.items(),key = lambda x:x[0])
+                    sorted_users,sorted_lines = zip(*lines_and_users)
+                    if len(current_lines) > 1:
+                        aligned_text = self.__get_aggregation_lines__(sorted_lines)
+                        current_accuracy = self.__agreement__(aligned_text)
+                    else:
+                        current_accuracy = -1
 
-                if user not in current_indices:
-                    current_indices[user] = [i]
-                else:
-                    current_indices[user].append(i)
+                    # what would the accuracy be if we added in this new user's line?
+                    new_lines = list(sorted_lines)
+                    assert isinstance(sorted_users,tuple)
+                    # user_index = sorted_users.index(user)
 
-                if len(current_lines) > 1:
-                    # print current_lines.items()
-                    temp_users,temp_lines = zip(*current_lines.items())
-                    # print temp_user,temp_lines
-                    # print temp_lines
-                    aligned_text = self.__get_aggregation_lines__(temp_lines)
+                    # start by trying straight up replacing
+                    new_lines.append(text)
+                    new_aligned = self.__get_aggregation_lines__(new_lines)
+                    new_accuracy = self.__agreement__(new_aligned)
 
-                    agreement = self.__agreement__(aligned_text)
-                    if min(agreement) <= 0.3:
-                        print "^^^"
+                    if min(new_accuracy) >= 0.6:
+                        current_lines[user] = text
+                    else:
                         clusters.append(current_lines.values())
                         current_lines = {user:text}
-                        current_direction = {user:[a[1]]}
-                        current_indices = {user:[i]}
+
+
 
         clusters.append(current_lines.values())
 
-        # for c in clusters:
-        #     for l in c:
-        #         print l
-        #     print
+        # remove any clusters which have only one user
+        for cluster_index in range(len(clusters)-1,-1,-1):
+            if len(clusters[cluster_index]) == 1:
+                clusters.pop(cluster_index)
 
-        print "*****"
-        print clusters
+        # after removing such "error" clusters there may be adjacent clusters which should be merged
+        for cluster_index in range(len(clusters)-2,-1,-1):
+            t_cluster = clusters[cluster_index][:]
+            t_cluster.extend(clusters[cluster_index+1])
 
+            aligned_text = self.__get_aggregation_lines__(t_cluster)
+
+            accuracy = self.__agreement__(aligned_text)
+            if min(accuracy)> 0.6:
+                clusters[cluster_index].extend(clusters.pop(cluster_index+1))
+
+        for c in clusters:
+            for l in c:
+                print l
+
+            print
         assert False
 
         return ((),(),()),0
