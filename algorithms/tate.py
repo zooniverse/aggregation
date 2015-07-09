@@ -284,7 +284,14 @@ class TextCluster(clustering.Cluster):
         mapped_markings = []
         # texts = []
         # convert to Hesse normal form
+
         for x1,x2,y1,y2,text in markings:
+            x2 += random.uniform(-0.0001,0.0001)
+            x1 += random.uniform(-0.0001,0.0001)
+            # if (x1 == x2) and (y1 == y2):
+            #     print "single point marking - skipping"
+            #     continue
+
             dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
             # texts.append(text)
             try:
@@ -424,7 +431,10 @@ class TextCluster(clustering.Cluster):
                     else:
                         # if len(current_lines) == 1, then the current user is the only user with text in the cluster
                         # so far, so really not sure if we should try merging or creating a new cluster
-                        assert False
+                        # todo - for now just create a new cluster
+                        clusters.append((current_lines.values(),current_pts.values()))
+                        current_lines = {user:text}
+                        current_pts = {user:(pt,user)}
 
                 else:
                     # does adding this line to the cluster make sense?
