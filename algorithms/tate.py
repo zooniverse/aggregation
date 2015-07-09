@@ -270,9 +270,7 @@ class TextCluster(clustering.Cluster):
 
         return agreement/float(len(text[0]))
 
-    def __inner_fit__(self,markings,user_ids,jpeg_file=None,debug=False,gold_standard=False,subject_id=None):
-
-
+    def __inner_fit__(self,markings,user_ids,tools,fname=None):
         M = []
         texts = []
 
@@ -288,6 +286,13 @@ class TextCluster(clustering.Cluster):
             M.append((dist,theta))
             # print str(dist) + "\t" + str(theta) + "\t" + text
 
+        # make sure all of the points are distinct
+        if len(M) != len(set(M)):
+            print user_ids
+            print markings
+
+        assert len(M) == len(set(M))
+
         ordering  = self.__fit2__(M,user_ids)
 
         current_lines = {}
@@ -297,33 +302,31 @@ class TextCluster(clustering.Cluster):
         clusters = []
 
         for a,b in ordering:
+            # a - line values - "intercept" and slope
+            print a,b
             i = M.index(a)
             user = user_ids[i]
-            # print a,user
-            # print current_lines.keys()
             text = texts[i]
-            # print text
+
+            # convert from unicode to ascii
             assert isinstance(text,unicode)
             text = text.encode('ascii','ignore')
-            # text = unicodedata.normalize('NFKD', text).encode('ascii','ignore')
-            # print user
-            # print type(text)
-            # print text
+
+            # do we already have some text from this user for this current cluster?
+            # if so, should we merge the text or start a new cluster?
             if user in current_lines:
-                print "%%"
-                print user
-                print current_lines[user]
-                print text
-                # print a,b
-                current_direction[user].append(a[1])
-                current_indices[user].append(i)
+                # # print a,b
+                # current_direction[user].append(a[1])
+                # current_indices[user].append(i)
                 # 45 degrees
 
                 # what happens if we went with the new text instead of the old
                 if len(current_lines) > 1:
+                    # current accuracy
                     aligned_text = self.__get_aggregation_lines__(current_lines.values())
                     current_accuracy = self.__agreement__(aligned_text)
 
+                    # new accuracy if we merged the text
                     new_lines = deepcopy(current_lines)
                     new_lines[user] = text
                     aligned_text = self.__get_aggregation_lines__(new_lines.values())
@@ -332,72 +335,11 @@ class TextCluster(clustering.Cluster):
                     print new_accuracy
                     assert False
                 else:
+                    # if len(current_lines) == 1, then the current user is the only user with text in the cluster
+                    # so far, so really not sure if we should try merging or creating a new cluster
                     assert False
 
-                # if math.fabs(np.mean(current_direction[user])) <= 0.785:
-                #     s = sorted(current_indices[user],key=lambda x:markings[x][0])
-                #     new_str = ""
-                #     for i in s:
-                #         new_str += markings[i][4]
-                #     new_str = text.encode('ascii','ignore')
-                #     if len(current_lines) > 1:
-                #         # print "*****"
-                #         # print [markings[i][4] for i in s]
-                #         assert "" not in current_lines.values()
-                #         aligned_text = self.__get_aggregation_lines__(current_lines.values())
-                #         assert len(aligned_text) == len(current_lines)
-                #         # print aligned_text
-                #         assert "" not in aligned_text
-                #         old_accuracy =  np.mean([self.__accuracy__(s) for s in aligned_text])
-                #
-                #         new_lines = deepcopy(current_lines)
-                #         new_lines[user] = new_str
-                #         aligned_text = self.__get_aggregation_lines__(new_lines.values())
-                #         new_accuracy = np.mean([self.__accuracy__(s) for s in aligned_text])
-                #
-                #         print "$$"
-                #         for t in aligned_text:
-                #             print t
-                #
-                #         agreement = self.__agreement__(aligned_text)
-                #         print
-                #         # print old_accuracy,new_accuracy,agreement
-                #         # print
-                #         if new_accuracy < old_accuracy:
-                #             print "===---"
-                #             # for user,l in current_lines.items():
-                #             #     # print list(markings)[current_indices[user]]
-                #             #     print list(list(markings)[current_indices[user][0]])[:-1]
-                #             #     print M[current_indices[user][0]]
-                #             #     print user,l
-                #             #
-                #             # print
-                #             clusters.append(current_lines.values())
-                #
-                #             current_lines = {user:text}
-                #             current_direction = {user:[a[1]]}
-                #             current_indices = {user:[i]}
-                #         else:
-                #             # print current_lines
-                #             # print new_lines
-                #             assert False
-                #     else:
-                #         current_lines[user] = new_str
-                #         current_direction[user].append(a[1])
-                #         current_indices[user].append(i)
-                #
-                # else:
-                #     assert False
-                # print
-                # print current_direction[user],a[1]
-                # assert False
             else:
-                # print len(text)
-                # print "==---"
-                # for l in current_lines.values():
-                #     print Levenshtein(text,l)
-                # print
-
                 current_lines[user] = text
 
                 if user not in current_direction:
@@ -416,12 +358,8 @@ class TextCluster(clustering.Cluster):
                     # print temp_user,temp_lines
                     # print temp_lines
                     aligned_text = self.__get_aggregation_lines__(temp_lines)
-                    print "$$"
-                    for t in aligned_text:
-                        print t
 
                     agreement = self.__agreement__(aligned_text)
-                    print
                     if min(agreement) <= 0.3:
                         print "^^^"
                         clusters.append(current_lines.values())
@@ -429,13 +367,19 @@ class TextCluster(clustering.Cluster):
                         current_direction = {user:[a[1]]}
                         current_indices = {user:[i]}
 
-                    # print [self.__accuracy__(s) for s in aligned_text][temp_users.index(user)]
-                    # print accuracy
-                    # assert False
-        for c in clusters:
-            for l in c:
-                print l
-            print
+        clusters.append(current_lines.values())
+
+        # for c in clusters:
+        #     for l in c:
+        #         print l
+        #     print
+
+        print "*****"
+        print clusters
+
+        assert False
+
+        return ((),(),()),0
 
     def __fit2__(self,markings,user_ids,jpeg_file=None,debug=False):
         # l = [[(u,m[0]) for m in marking] for u,marking in zip(user_ids,markings)]
@@ -547,12 +491,30 @@ def text_mapping(marking,image_dimensions):
     else:
         return x2,x1,y2,y1,text
 
+def text_mapping2(marking,image_dimensions):
+    x1 = marking["x1"]
+    x2 = marking["x2"]
+    y2 = marking["y2"]
+    y1 = marking["y1"]
+
+    try:
+        text = marking["text"]
+    except KeyError:
+        raise InvalidMarking(marking)
+
+    if x1 <= x2:
+        return x1,x2,y1,y2,text
+    else:
+        return x2,x1,y2,y1,text
+
 class Tate(PanoptesAPI):
     def __init__(self):
         PanoptesAPI.__init__(self,"tate")
 
         self.marking_params_per_shape = dict()
-        self.marking_params_per_shape["text"] = text_mapping
+        self.marking_params_per_shape["text"] = text_mapping2
+
+        self.workflows[683] = {},{"init":["text"]}
 
     def __readin_tasks__(self,workflow_id):
         marking_tasks = {"T2":["text"]}
@@ -570,9 +532,10 @@ class Tate(PanoptesAPI):
 bentham = [4150,4151,4152,4153,4154]
 tate = [4127,4129,4130,4131,4132,4133,4136]
 project = Tate()
-project.__set_clustering_alg__({"text":(agglomerative.Agglomerative,{})})
-project.__aggregate__()
 # project.__migrate__()
+project.__set_clustering_alg__({"text":(TextCluster,{})})
+project.__aggregate__(workflows=[683])
+
 # project.__set_subjects__([4150])
 # project.__set_clustering_alg__(TextCluster)
 # project.__cluster__()

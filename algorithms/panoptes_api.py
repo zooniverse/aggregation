@@ -278,6 +278,7 @@ class PanoptesAPI:
             subject_set = self.__load_subjects__(workflow_id)
 
         raw_markings = self.__sort_markings__(workflow_id,subject_set)
+        assert raw_markings != {}
         # assert False
 
         # will store the aggregations for all clustering
@@ -1249,6 +1250,7 @@ class PanoptesAPI:
             print "--=="
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
             for subject_id,(success,record_list) in zip(s,results):
+                tt = 0
                 # todo - implement error recovery
                 if not success:
                     print record_list
@@ -1264,7 +1266,7 @@ class PanoptesAPI:
                 ips_per_subject = []
 
                 for record in record_list:
-                    print "i"
+                    tt += 1
                     user_id = record.user_id
 
                     if record.user_ip in ips_per_subject:
@@ -1303,6 +1305,11 @@ class PanoptesAPI:
                         self.users_per_subject[subject_id][task_id].add(user_id)
 
                         if task_id in marking_tasks:
+                            print task
+                            if not isinstance(task["value"],list):
+                                print "not properly formed marking - skipping"
+                                continue
+
                             for marking in task["value"]:
                                 # what kind of tool made this marking and what was the shape of that tool?
                                 try:
@@ -1321,6 +1328,10 @@ class PanoptesAPI:
                                     # todo - treat image like a rectangle
                                     continue
 
+                                if shape not in self.marking_params_per_shape:
+                                    print "unrecognized shape: " + shape
+                                    continue
+
                                 try:
                                     # extract the params specifically relevant to the given shape
                                     relevant_params = self.marking_params_per_shape[shape](marking,(width,height))
@@ -1336,6 +1347,8 @@ class PanoptesAPI:
                                     raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
                                 except InvalidMarking as e:
                                     print e
+
+
         return raw_markings
 
 
