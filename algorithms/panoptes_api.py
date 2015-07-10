@@ -303,9 +303,10 @@ class PanoptesAPI:
         for shape in self.cluster_algs:
             print shape
             shape_aggregation = self.cluster_algs[shape].__aggregate__(raw_markings,fnames)
-            print "***"
-            print cluster_aggregation
-            cluster_aggregation = self.__merge_aggregations__(cluster_aggregation,shape_aggregation)
+
+            # only merge if we have some results
+            if shape_aggregation != {"param":"subject_id"}:
+                cluster_aggregation = self.__merge_aggregations__(cluster_aggregation,shape_aggregation)
 
         return cluster_aggregation
 
