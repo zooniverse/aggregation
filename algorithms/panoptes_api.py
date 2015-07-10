@@ -13,7 +13,7 @@ from cassandra.concurrent import execute_concurrent
 import urllib
 import datetime
 import classification
-from copy import deepcopy
+import clustering_dict
 import matplotlib.pyplot as plt
 import matplotlib.cbook as cbook
 import math
@@ -23,7 +23,7 @@ from matplotlib.patches import Ellipse
 # import datetime
 import sys
 from PIL import Image
-import agglomerative
+# import agglomerative
 import cluster_count
 import blob_clustering
 
@@ -224,7 +224,7 @@ class PanoptesAPI:
             if (self.cluster_algs is not None) and (marking_tasks != {}):
                 print "clustering"
                 clustering_aggregations = self.__cluster__(workflow_id,subject_set)
-                assert clustering_aggregations != {}
+                assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
             if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
                 classification_aggregations = self.__classify__(workflow_id,clustering_aggregations)
@@ -278,6 +278,7 @@ class PanoptesAPI:
         :param workflow_id:
         :return:
         """
+        assert (self.cluster_algs != {}) and (self.cluster_algs is not None)
         print "workflow id is " + str(workflow_id)
         # get the raw classifications for the given workflow
         if subject_set is None:
@@ -289,7 +290,6 @@ class PanoptesAPI:
 
         # will store the aggregations for all clustering
         cluster_aggregation = None
-
 
         fnames = {}
         # for s in subjects[0:20]:
@@ -650,11 +650,11 @@ class PanoptesAPI:
         statements_and_params = []
         migrated = {}
         for ii,t in enumerate(cur.fetchall()):
-            # print ii
+            print ii
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
             # print t
             # assert False
-
+            assert len(subject_ids) == 1
             self.migrated_subjects.add(subject_ids[0])
 
             if gold_standard != True:
@@ -679,7 +679,6 @@ class PanoptesAPI:
             statements_and_params.append((insert_statement, params))
 
             params2 = (project_id,workflow_id,workflow_version,subject_ids[0])
-            print params2
             statements_and_params.append((insert_statement2,params2))
 
             if len(statements_and_params) == 100:
@@ -1002,6 +1001,8 @@ class PanoptesAPI:
                         marking_tasks[task_id].append("circle")
                     elif tool["type"] == "rectangle":
                         marking_tasks[task_id].append("rectangle")
+                    elif tool["type"] == "polygon":
+                        marking_tasks[task_id].append("polygon")
                     else:
                         print tool
                         assert False
@@ -1362,6 +1363,8 @@ class PanoptesAPI:
         return raw_markings
 
     def __store_results__(self,workflow_id,aggregations):
+        print aggregations
+        assert False
         aggregations = self.__remove_user_ids__(aggregations)
         cur = self.postgres_session.cursor()
         # finally write the results into the postgres db
@@ -1371,10 +1374,12 @@ class PanoptesAPI:
 
         stmt = "SELECT * from aggregations"
         cur.execute(stmt)
-        print "===---"
-        print cur.fetchone()
 
         for subject_id in subject_set:
+            # skip if we don't have any aggregation results yet
+            if subject_id not in aggregations:
+                continue
+
             # there have been requests for the aggregation to also contain the metadata
             select = "SELECT metadata from subjects where id="+str(subject_id)
             print "inserting subject id " + str(subject_id)
@@ -1388,11 +1393,6 @@ class PanoptesAPI:
 
         print "^^^^"
         self.postgres_session.commit()
-        stmt = "SELECT * from aggregations"
-        print cur
-        cur.execute(stmt)
-        print cur.fetchone()
-        assert False
 
 
 def twod_linesegment(pt):
@@ -1409,27 +1409,12 @@ def twod_linesegment(pt):
     return dist,theta
 
 if __name__ == "__main__":
-    print sys.argv[1]
-    project = PanoptesAPI(sys.argv[1])
-    # project.__get_old_workflow__()
+    project_name = sys.argv[1]
+    project = PanoptesAPI(project_name)
+
     project.__migrate__()
-    # project.__get_subject_ids__(3)
-    # assert False
-    #
-    # project.__get_subjects__()
-    # # # brooke.__get_markings__(3266)
-    # #
-    # project.__set_subjects__([458813])
 
-    # project.__set_clustering_alg__(agglomerative.Agglomerative)
-    project.__set_clustering_alg__({"point":(agglomerative.Agglomerative,{})})#, "rectangle":(blob_clustering.BlobClustering,{})})
+    project.__set_clustering_alg__(clustering_dict.clustering_dict[project_name])#, "rectangle":(blob_clustering.BlobClustering,{})})
     project.__set_classification_alg__(classification.VoteCount)
-    # # # # # a = agglomerative.Agglomerative(brooke)
-    # project.__cluster__()
-    # project.__aggregate__()
-    # project.__plot__(6,"T1")
-    # project.__plot_cluster_results__(3)
-    # #
 
-    # project.__classify__()
-    # # # project.__store_results__()
+    project.__aggregate__()
