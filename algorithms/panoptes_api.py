@@ -44,6 +44,12 @@ class ImageNotDownloaded(Exception):
     def __str__(self):
         return 'image not downloaded'
 
+class ImproperTool(Exception):
+    def __init__(self,tool):
+        self.tool = tool
+    def __str__(self):
+        return "improper tool: " + str(self.tool)
+
 def line_mapping(marking,image_dimensions):
     # want to extract the params x1,x2,y1,y2 but
     # ALSO make sure that x1 <= x2 and flip if necessary
@@ -235,7 +241,7 @@ class PanoptesAPI:
             assert aggregations is not None
 
             # finally, store the results
-            # self.__store_results__(workflow_id,aggregations)
+            self.__store_results__(workflow_id,aggregations)
 
     def __cassandra_connect(self):
         """
@@ -521,6 +527,7 @@ class PanoptesAPI:
         print data["meta"].keys()
         print data["versions"]
 
+
     def __load_subjects__(self,workflow_id):
         """
         load the list of subject ids from Cassandra
@@ -607,15 +614,15 @@ class PanoptesAPI:
         # tt = set([465026, 465003, 493062, 492809, 465034, 465172, 493205, 465048, 465177, 493211, 464965, 492960, 465057, 465058, 492707, 492836, 465121, 492975, 464951, 464952, 464953, 464954, 464955, 464956, 464957, 464958, 464959, 464960, 464961, 492611, 492741, 492615, 465100, 492623, 492728, 492626, 492886, 464975, 464988, 492897, 464998, 492776, 492907, 492914, 465019, 492669])
         # print self.versions
         # assert False
-        try:
-            self.cassandra_session.execute("drop table classifications")
-            self.cassandra_session.execute("drop table subjects")
-            print "table dropped"
-        except cassandra.InvalidRequest:
-            print "table did not already exist"
-
-        self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
-        self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
+        # try:
+        #     self.cassandra_session.execute("drop table classifications")
+        #     self.cassandra_session.execute("drop table subjects")
+        #     print "table dropped"
+        # except cassandra.InvalidRequest:
+        #     print "table did not already exist"
+        #
+        # self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
+        # self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
         # except
         #     print "table did not exist"
         #     pass
@@ -971,7 +978,8 @@ class PanoptesAPI:
                     tool_id = int(label_words[2])
 
                     # are there any classification questions associated with this marking?
-                    if (tool["details"] is not None) and (tool["details"] != []):
+
+                    if ("details" in tool) and (tool["details"] is not None) and (tool["details"] != []):
                         if task_id not in classification_tasks:
                             classification_tasks[task_id] = {}
                         if "subtask" not in classification_tasks[task_id]:
@@ -1041,7 +1049,10 @@ class PanoptesAPI:
                             if cluster_index == "param":
                                 continue
 
-                            aggregation[subject_id][task_id][shape][cluster_index].pop("users",None)
+                            assert isinstance(aggregation[subject_id][task_id][shape][cluster_index],dict)
+                            #aggregation[subject_id][task_id][shape][cluster_index].pop("users",None)
+
+                            del aggregation[subject_id][task_id][shape][cluster_index]["users"]
 
         return aggregation
 
@@ -1348,9 +1359,7 @@ class PanoptesAPI:
                                 except InvalidMarking as e:
                                     print e
 
-
         return raw_markings
-
 
     def __store_results__(self,workflow_id,aggregations):
         aggregations = self.__remove_user_ids__(aggregations)
@@ -1403,7 +1412,7 @@ if __name__ == "__main__":
     print sys.argv[1]
     project = PanoptesAPI(sys.argv[1])
     # project.__get_old_workflow__()
-    # project.__migrate__()
+    project.__migrate__()
     # project.__get_subject_ids__(3)
     # assert False
     #
@@ -1417,7 +1426,7 @@ if __name__ == "__main__":
     project.__set_classification_alg__(classification.VoteCount)
     # # # # # a = agglomerative.Agglomerative(brooke)
     # project.__cluster__()
-    project.__aggregate__()
+    # project.__aggregate__()
     # project.__plot__(6,"T1")
     # project.__plot_cluster_results__(3)
     # #
