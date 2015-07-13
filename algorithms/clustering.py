@@ -227,14 +227,14 @@ def onpick(clustering_alg):
 class Cluster:
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, project_api,shape,mapping=None):
+    def __init__(self,shape):
         """
         :param project_api: how to talk to whatever project we are clustering for (Panoptes/Ouroboros shouldn't matter)
         :param min_cluster_size: minimum number of points in a cluster to not be considered noise
         :return:
         """
         # assert isinstance(project_api,panoptes_api.PanoptesAPI)
-        self.project_api = project_api
+        # self.project_api = project_api
         # we must say what shapes we want
         self.shape = shape
         # self.clusterResults = {}
@@ -268,7 +268,7 @@ class Cluster:
 
         self.algorithm_name = None
 
-        self.mapping = mapping
+
 
 
     def __compare_against__(self,other_clustering,subject_id):
@@ -447,22 +447,21 @@ class Cluster:
         :return:
         """
         aggregation = {"param":"subject_id"}
-        print self.shape
-        print raw_markings
         # start by calling the api to get the annotations along with the list of who made each marking
         # so for this function, we know that annotations = markings
         # all_markings =  self.project_api.__get_markings__(subject_id,gold_standard)
         # print all_markings
         # self.clusterResults[subject_id] = {"param":"task_id"}
         for task_id in raw_markings:
-            print task_id
-            print "^^^&&&&"
-            print raw_markings[task_id]
             # does this task have any of the relevant markings?
             if self.shape in raw_markings[task_id]:
                 # ust make the following code a bit easier to read
                 shape = self.shape
                 for subject_id in raw_markings[task_id][shape]:
+                    # should only happen because of a bad annotation (hopefully)
+                    if raw_markings[task_id][shape][subject_id] == []:
+                        continue
+
                     users,markings,tools = zip(*raw_markings[task_id][shape][subject_id])
 
                     # otherwise, just set to empty
@@ -470,7 +469,7 @@ class Cluster:
                         cluster_results = [],[],[]
                         time_to_cluster = 0
                     else:
-                        if subject_id in fnames:
+                        if (fnames is not None) and (subject_id in fnames):
                             fname = fnames[subject_id]
                         else:
                             fname = None
