@@ -14,9 +14,8 @@ def findsubsets(S,m):
     return set(itertools.combinations(S, m))
 
 class Classification:
-    def __init__(self,project,clustering_alg=None):
+    def __init__(self,clustering_alg=None):
         # assert isinstance(project,ouroboros_api.OuroborosAPI)
-        self.project = project
 
         if clustering_alg is not None:
             assert isinstance(clustering_alg,clustering.Cluster)
@@ -34,7 +33,7 @@ class Classification:
     def __task_aggregation__(self,classifications,gold_standard=False):
         return []
 
-    def __aggregate__(self,raw_classifications,workflow,clustering_results=None):
+    def __aggregate__(self,raw_classifications,workflow,clustering_results=None,users_per_subject = None):
         # use the first subject_id to find out which tasks we are aggregating the classifications for
         aggregations = {}
         classification_tasks,marking_tasks = workflow
@@ -50,22 +49,44 @@ class Classification:
                         aggregations[subject_id] = {"param":"task_id"}
                     aggregations[subject_id][task_id] = task_results[subject_id]
             else:
-                # # we have classifications associated with markings
-                # # are these shapes "uncertain" - ie. was there more than one tool that could have made them?
+                # we have classifications associated with markings
+                # make sure we have clustering results associated with these classifications
                 assert clustering_results is not None
+                assert users_per_subject is not None
 
+                # we have to first decide which cluster is a "true positive" and which is a "false positive"
+                # so a question of whether or not people marked it - regardless of whether they marked it as the
+                # correct "type"
+                for subject_id in clustering_results:
+                    if subject_id == "param":
+                        continue
+                    for shape in clustering_results[subject_id][task_id]:
+                        if shape == "param":
+                            continue
+                        for cluster_index in clustering_results[subject_id][task_id][shape]:#.items():
+                            if cluster_index == "param":
+                                continue
+                            users = clustering_results[subject_id][task_id][shape][cluster_index]["users"]
+                            all_users = users_per_subject[subject_id]
+                            print len(users)/float(len(all_users))
+
+
+
+                # print users_per_subject[subject_id]
+                assert False
+
+                # # are these shapes "uncertain" - ie. was there more than one tool that could have made them?
                 if "shapes" in classification_tasks[task_id]:
                     for shape in classification_tasks[task_id]["shapes"]:
                         # create a temporary set of classifications
                         shape_classification = {}
 
                         for subject_id in raw_classifications[task_id][shape]:
-                            # print raw_classifications[task_id][shape][subject_id]
-                            # print subject_id
-                            # print raw_classifications[task_id][shape].keys()
-                            # print clustering_results[task_id][shape].keys()
-                            # assert subject_id in clustering_results[task_id][shape]
                             # look at the individual points in the cluster
+
+                            # this should only happen if there were badly formed markings
+                            if raw_classifications[task_id][shape][subject_id] == {}:
+                                continue
                             for cluster_index in clustering_results[subject_id][task_id][shape]:
                                 if cluster_index == "param":
                                     continue
@@ -78,7 +99,15 @@ class Classification:
                                 # in this case, we want to "vote" on the tools
                                 ballots = []
                                 for (p,user) in zip(pts,users):
-                                    tool_index = raw_classifications[task_id][shape][subject_id][(p,user)]
+                                    try:
+                                        tool_index = raw_classifications[task_id][shape][subject_id][(tuple(p),user)]
+                                    except KeyError:
+                                        print "===----"
+                                        print cluster
+                                        print raw_classifications[task_id][shape][subject_id].keys()
+                                        print (tuple(p),user)
+                                        raise
+
                                     ballots.append((user,tool_index))
 
                                 shape_classification[(subject_id,cluster_index)] = ballots
@@ -104,14 +133,42 @@ class Classification:
                         # print raw_classifications[task_id][shape]
                         # # the clustering results will tell us which markings are in which cluster
                         # print clustering_results[task_id][shape]
-                else:
+
+                if "subtask" in classification_tasks[task_id]:
+                    # we are dealing with tasks
+                    # is shape uncertain - if so - only accept markings from some users - who used the "correct" tool
+                    if "shapes" in classification_tasks[task_id]:
+                        assert False
+                    else:
+                        for shape in classification_tasks[task_id]["shapes"]:
+                            # create a temporary set of classifications
+                            shape_classification = {}
+
+                            for subject_id in raw_classifications[task_id][shape]:
+                                # print raw_classifications[task_id][shape][subject_id]
+                                # print subject_id
+                                # print raw_classifications[task_id][shape].keys()
+                                # print clustering_results[task_id][shape].keys()
+                                # assert subject_id in clustering_results[task_id][shape]
+                                # look at the individual points in the cluster
+                                for cluster_index in clustering_results[subject_id][task_id][shape]:
+                                    if cluster_index == "param":
+                                        continue
+
+
+
                     assert False
+                # else:
+                #     print classification_tasks
+                #     print classification_tasks[task_id]
+                #     assert False
 
         return aggregations
 
+
 class VoteCount(Classification):
-    def __init__(self,project,clustering_alg=None):
-        Classification.__init__(self,project,clustering_alg)
+    def __init__(self,clustering_alg=None):
+        Classification.__init__(self,clustering_alg)
 
     def __task_aggregation__(self,raw_classifications,gold_standard=False):
         """
@@ -185,8 +242,8 @@ class VoteCount(Classification):
 
 
 class IBCC(Classification):
-    def __init__(self,project,clustering_alg=None):
-        Classification.__init__(self,project,clustering_alg)
+    def __init__(self,clustering_alg=None):
+        Classification.__init__(self,clustering_alg)
 
 
     def create_configfile(self,priors,confusion_matrix):

@@ -11,8 +11,8 @@ import math
 import numpy
 
 class Agglomerative(clustering.Cluster):
-    def __init__(self,project_api,shape):
-        clustering.Cluster.__init__(self,project_api,shape)
+    def __init__(self,shape):
+        clustering.Cluster.__init__(self,shape)
         self.algorithm_name = "agglomerative"
         self.all_distances = []
         self.max = 0
@@ -54,17 +54,17 @@ class Agglomerative(clustering.Cluster):
         user_ids = list(user_ids)
         start = time.time()
 
-        if self.mapping is not None:
-            mapped_markings = []
-            for i,m in enumerate(markings):
-                try:
-                    mapped_markings.append(self.mapping(m))
-                except ZeroDivisionError:
-                    user_ids.pop(i)
-            # mapped_markings = [self.mapping(m) for m in markings]
-        else:
-            mapped_markings = markings
-        assert len(mapped_markings) == len(user_ids)
+        # if self.mapping is not None:
+        #     mapped_markings = []
+        #     for i,m in enumerate(markings):
+        #         try:
+        #             mapped_markings.append(self.mapping(m))
+        #         except ZeroDivisionError:
+        #             user_ids.pop(i)
+        #     # mapped_markings = [self.mapping(m) for m in markings]
+        # else:
+        #     mapped_markings = markings
+        # assert len(mapped_markings) == len(user_ids)
 
 
         # cluster_centers = []
@@ -73,9 +73,9 @@ class Agglomerative(clustering.Cluster):
         results = []
         # this converts stuff into panda format - probably a better way to do this but the labels do seem
         # necessary
-        labels = [str(i) for i in mapped_markings]
-        param_labels = [str(i) for i in range(len(mapped_markings[0]))]
-        df = pd.DataFrame(np.array(mapped_markings), columns=param_labels, index=labels)
+        labels = [str(i) for i in markings]
+        param_labels = [str(i) for i in range(len(markings[0]))]
+        df = pd.DataFrame(np.array(markings), columns=param_labels, index=labels)
         row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
         # use ward metric to do the actual clustering
         row_clusters = linkage(row_dist, method='ward')
