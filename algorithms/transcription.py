@@ -1,7 +1,7 @@
 #!/usr/bin/env python
-import panoptes_api
+import aggregation_api
 
-project = panoptes_api.PanoptesAPI("manuscript-adventure")
+project = aggregation_api.PanoptesAPI("manuscript-adventure")
 # project.__migrate__()
 # project.__list_workflows__()
 # 43,44,45,47
