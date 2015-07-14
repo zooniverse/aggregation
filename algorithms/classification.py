@@ -33,6 +33,29 @@ class Classification:
     def __task_aggregation__(self,classifications,gold_standard=False):
         return []
 
+    def __subtask_classification__(self):
+        # todo: implement this
+        assert False
+        # we are dealing with tasks
+        # is shape uncertain - if so - only accept markings from some users - who used the "correct" tool
+        if "shapes" in classification_tasks[task_id]:
+            assert False
+        else:
+            for shape in classification_tasks[task_id]["shapes"]:
+                # create a temporary set of classifications
+                shape_classification = {}
+
+                for subject_id in raw_classifications[task_id][shape]:
+                    # print raw_classifications[task_id][shape][subject_id]
+                    # print subject_id
+                    # print raw_classifications[task_id][shape].keys()
+                    # print clustering_results[task_id][shape].keys()
+                    # assert subject_id in clustering_results[task_id][shape]
+                    # look at the individual points in the cluster
+                    for cluster_index in clustering_results[subject_id][task_id][shape]:
+                        if cluster_index == "param":
+                            continue
+
     def __existence_classification__(self,task_id,raw_classifications,clustering_results,users_per_subject):
         """
         classify whether clusters are true or false positives
@@ -198,97 +221,37 @@ class Classification:
                 # correct "type"
                 existence_results = self.__existence_classification__(task_id,raw_classifications,clustering_results,users_per_subject)
 
+                # now decide what type each cluster is
+                # note that this step does not care whether a cluster is a false positive or not (i.e. the results
+                # from the previous step are not taken into account)
                 tool_results = self.__tool_classification__(task_id,classification_tasks,raw_classifications,clustering_results)
-                print json.dumps(tool_results, sort_keys=True,indent=4, separators=(',', ': '))
 
-                    # # this should only happen if there were badly formed markings
-                    # if raw_classifications[task_id][shape][subject_id] == {}:
-                    #     continue
-                    #
-                    #
-                    #     cluster = clustering_results[subject_id][task_id][shape][cluster_index]
-                    #     users = cluster["users"]
-                    #     ballots = []
-                    #     # for each user who saw this image, did they also mark this "thing"?
-                    #     for u in users_per_subject[subject_id]:
-                    #         print u,(u in users)
-                    #
-                    #     #     ballots.append((user,tool_index))
-                    #     #
-                    #     # shape_classification[(subject_id,cluster_index)] = ballots
-
-                assert False
-
-                # for subject_id in clustering_results:
-                #     if subject_id == "param":
-                #         continue
-                #     for shape in clustering_results[subject_id][task_id]:
-                #         if shape == "param":
-                #             continue
-                #         for cluster_index in clustering_results[subject_id][task_id][shape]:#.items():
-                #             if cluster_index == "param":
-                #                 continue
-                #             users = clustering_results[subject_id][task_id][shape][cluster_index]["users"]
-                #             all_users = users_per_subject[subject_id]
-                #             print len(users)/float(len(all_users))
-
-
-                 # store the shape classification results
-                for (subject_id,cluster_index) in task_results:
-                    if subject_id not in aggregations:
-                        aggregations[subject_id] = {"param":"task_id"}
-                    if task_id not in aggregations[subject_id]:
-                        aggregations[subject_id][task_id] = {"param":"shape"}
-                    if shape not in aggregations[subject_id][task_id]:
-                        aggregations[subject_id][task_id][shape] = {"param":"cluster_index"}
-
-                    aggregations[subject_id][task_id][shape][cluster_index] = {}
-
-
-
-                # print users_per_subject[subject_id]
-                assert False
-
-                # # are these shapes "uncertain" - ie. was there more than one tool that could have made them?
-                if "shapes" in classification_tasks[task_id]:
-                    pass
-
-                        # print "--"
-                        # # the raw classifications will tell us what tool made each marking
-                        # print raw_classifications[task_id][shape]
-                        # # the clustering results will tell us which markings are in which cluster
-                        # print clustering_results[task_id][shape]
-
+                # are there any subtasks associated with this task/marking?
                 if "subtask" in classification_tasks[task_id]:
-                    # we are dealing with tasks
-                    # is shape uncertain - if so - only accept markings from some users - who used the "correct" tool
-                    if "shapes" in classification_tasks[task_id]:
-                        assert False
-                    else:
-                        for shape in classification_tasks[task_id]["shapes"]:
-                            # create a temporary set of classifications
-                            shape_classification = {}
+                    self.__subtask_classification__()
 
-                            for subject_id in raw_classifications[task_id][shape]:
-                                # print raw_classifications[task_id][shape][subject_id]
-                                # print subject_id
-                                # print raw_classifications[task_id][shape].keys()
-                                # print clustering_results[task_id][shape].keys()
-                                # assert subject_id in clustering_results[task_id][shape]
-                                # look at the individual points in the cluster
-                                for cluster_index in clustering_results[subject_id][task_id][shape]:
-                                    if cluster_index == "param":
-                                        continue
-
-
-
-                    assert False
-                # else:
-                #     print classification_tasks
-                #     print classification_tasks[task_id]
-                #     assert False
+                results = self.__merge_results__(existence_results,tool_results)
+                print json.dumps(results, sort_keys=True,indent=4, separators=(',', ': '))
+                assert False
 
         return aggregations
+
+    def __merge_results__(self,r1,r2):
+        """
+        if we have json results from two different steps of the aggregation process - merge them
+        :param r1:
+        :param r2:
+        :return:
+        """
+        for kw in r2:
+            if kw not in r1:
+                r1[kw] = r2[kw]
+            else:
+                self.__merge_results__(r1[kw],r2[kw])
+
+        return r1
+
+
 
 
 class VoteCount(Classification):
