@@ -8,7 +8,7 @@ if os.path.exists("/home/ggdhines"):
 else:
     base_directory = "/home/greg"
 
-environment = "production"
+environment = "staging"
 
 try:
     database_file = open("config/database.yml")

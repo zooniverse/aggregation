@@ -94,7 +94,8 @@ def rectangle_mapping(marking,image_dimensions):
 def ellipse_mapping(marking,image_dimensions):
     return marking["x"],marking["y"],marking["rx"],marking["ry"],marking["angle"]
 
-class PanoptesAPI:
+
+class AggregationAPI:
     #@profile
     def __init__(self,project=None):#,user_threshold= None, score_threshold= None): #Supernovae
         self.cluster_alg = None
@@ -107,6 +108,8 @@ class PanoptesAPI:
         self.project_short_name = project
         if project is None:
             return
+
+        self.classification_table = "classifications"
 
         # get my userID and password
         # purely for testing, if this file does not exist, try opening on Greg's computer
@@ -168,7 +171,7 @@ class PanoptesAPI:
         self.__postgres_connect(database_details)
 
         # and to the cassandra db as well
-        self.__cassandra_connect()
+        self.__cassandra_connect__()
 
         # there may be more than one workflow associated with a project - read them all in
         # and set up the associated tasks
@@ -227,11 +230,12 @@ class PanoptesAPI:
                 assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
             if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
+                print "classifying"
                 classification_aggregations = self.__classify__(workflow_id,clustering_aggregations)
 
-
-            # if we have both marking and classifications - we need to merge the results
+            # if we have both markings and classifications - we need to merge the results
             if (clustering_aggregations is not None) and (classification_aggregations is not None):
+                print "===---"
                 aggregations = self.__merge_aggregations__(clustering_aggregations,classification_aggregations)
             elif clustering_aggregations is None:
                 aggregations = classification_aggregations
@@ -243,7 +247,7 @@ class PanoptesAPI:
             # finally, store the results
             self.__store_results__(workflow_id,aggregations)
 
-    def __cassandra_connect(self):
+    def __cassandra_connect__(self):
         """
         connect to the AWS instance of Cassandra - try 10 times and raise an error
         :return:
@@ -528,7 +532,6 @@ class PanoptesAPI:
         print data["meta"].keys()
         print data["versions"]
 
-
     def __load_subjects__(self,workflow_id):
         """
         load the list of subject ids from Cassandra
@@ -559,57 +562,68 @@ class PanoptesAPI:
         elif agg2 is None:
             return agg1
 
+        for kw in agg2:
+            if kw not in agg1:
+                agg1[kw] = agg2[kw]
+            elif agg1[kw] != agg2[kw]:
+                try:
+                    agg1[kw] = self.__merge_aggregations__(agg1[kw],agg2[kw])
+                except TypeError:
+                    print "====-----"
+                    print type(agg1)
+                    print type(agg2)
+                    print agg1
+                    print agg2
+                    print kw
+                    assert False
+        return agg1
 
-
-        aggregate = agg1.copy()
-
-        for subject_id in agg2:
-            if subject_id == "param":
-                # dummy value
-                continue
-            if subject_id not in aggregate:
-                aggregate[subject_id] = {"param":"task_id"}
-            for task_id in agg2[subject_id]:
-                if task_id == "param":
-                    # dummy value
-                    continue
-
-                # is this a pure classification task - if so, just copy it
-                # else this is a task related to marking (tool classification or follow up question)
-                # and we need to merge
-                task = agg2[subject_id][task_id]
-                if isinstance(task,tuple):
-                    # pure classification task
-                    aggregate[subject_id][task_id] = task
-                else:
-                    # need to merge
-                    # there should already be the clustering results
-                    print "==--"
-                    print task_id
-                    print aggregate[subject_id].keys()
-                    # assert task_id in aggregate[subject_id]
-                    if task_id not in aggregate[subject_id]:
-                        # if we are merging from two different clustering algorithms
-                        # which may have worked with distinct taks
-                        aggregate[subject_id][task_id] = agg2[subject_id][task_id]
-                    else:
-
-                        for shape in agg2[subject_id][task_id]:
-                            if shape == "param":
-                                continue
-                            if shape not in aggregate[subject_id][task_id]:
-                                aggregate[subject_id][task_id][shape] = agg2[subject_id][task_id][shape]
-                            else:
-                                # there are already are results for this shape - so we need to be merging
-                                # clustering and classification results
-                                for cluster_index in agg2[subject_id][task_id][shape]:
-                                    if cluster_index == "param":
-                                        continue
-                                    assert cluster_index in aggregate[subject_id][task_id][shape]
-                                    s = agg2[subject_id][task_id][shape][cluster_index]["shape_classification"]
-                                    aggregate[subject_id][task_id][shape][cluster_index]["shape_classification"] = s
-
-        return aggregate
+        # aggregate = agg1.copy()
+        #
+        # for subject_id in agg2:
+        #     if subject_id == "param":
+        #         # dummy value
+        #         continue
+        #     if subject_id not in aggregate:
+        #         aggregate[subject_id] = {"param":"task_id"}
+        #     for task_id in agg2[subject_id]:
+        #         if task_id == "param":
+        #             # dummy value
+        #             continue
+        #
+        #         # is this a pure classification task - if so, just copy it
+        #         # else this is a task related to marking (tool classification or follow up question)
+        #         # and we need to merge
+        #         task = agg2[subject_id][task_id]
+        #         if isinstance(task,tuple):
+        #             # pure classification task
+        #             aggregate[subject_id][task_id] = task
+        #         else:
+        #             # need to merge
+        #             # there should already be the clustering results
+        #             # assert task_id in aggregate[subject_id]
+        #             if task_id not in aggregate[subject_id]:
+        #                 # if we are merging from two different clustering algorithms
+        #                 # which may have worked with distinct taks
+        #                 aggregate[subject_id][task_id] = agg2[subject_id][task_id]
+        #             else:
+        #
+        #                 for shape in agg2[subject_id][task_id]:
+        #                     if shape == "param":
+        #                         continue
+        #                     if shape not in aggregate[subject_id][task_id]:
+        #                         aggregate[subject_id][task_id][shape] = agg2[subject_id][task_id][shape]
+        #                     else:
+        #                         # there are already are results for this shape - so we need to be merging
+        #                         # clustering and classification results
+        #                         for cluster_index in agg2[subject_id][task_id][shape]:
+        #                             if cluster_index == "param":
+        #                                 continue
+        #                             assert cluster_index in aggregate[subject_id][task_id][shape]
+        #                             s = agg2[subject_id][task_id][shape][cluster_index]["shape_classification"]
+        #                             aggregate[subject_id][task_id][shape][cluster_index]["shape_classification"] = s
+        #
+        # return aggregate
 
     def __migrate__(self):
         # tt = set([465026, 465003, 493062, 492809, 465034, 465172, 493205, 465048, 465177, 493211, 464965, 492960, 465057, 465058, 492707, 492836, 465121, 492975, 464951, 464952, 464953, 464954, 464955, 464956, 464957, 464958, 464959, 464960, 464961, 492611, 492741, 492615, 465100, 492623, 492728, 492626, 492886, 464975, 464988, 492897, 464998, 492776, 492907, 492914, 465019, 492669])
@@ -1119,10 +1133,6 @@ class PanoptesAPI:
 
         subject_set = self.__load_subjects__(workflow_id)
 
-        print "--****"
-        print workflow_id
-        print subject_set
-
         total = 0
         for s in self.__chunks(subject_set,15):
             statements_and_params = []
@@ -1182,11 +1192,7 @@ class PanoptesAPI:
                                             raw_classifications[task_id][shape][subject_id][(relevant_params,user_id)] = tool #.append((user_id,relevant_params,tool))
                                         except InvalidMarking as e:
                                             print e
-                                # print raw_classifications
-                                # assert False
-                                # print marking_tasks[task_id]
-                                # print classification_tasks[task_id]
-                                # assert False
+
                             else:
                                 if task_id not in raw_classifications:
                                     raw_classifications[task_id] = {}
@@ -1195,7 +1201,7 @@ class PanoptesAPI:
                                 # if task_id == "init":
                                 #     print task_id,task["value"]
                                 raw_classifications[task_id][subject_id].append((user_id,task["value"]))
-        print total
+
         return raw_classifications
 
     def __sort_markings__(self,workflow_id,subject_set=None,ignore_version=False):
@@ -1206,14 +1212,8 @@ class PanoptesAPI:
         :return:
         """
         ignore_version=True
-        print "getting markings"
-        # print self.project_id,workflow_id
-        # assert False
+
         classification_tasks,marking_tasks = self.workflows[workflow_id]
-        print "==--"
-        # print classification_tasks
-        # print marking_tasks
-        # assert False
 
         if marking_tasks == {}:
             return {}
@@ -1228,7 +1228,7 @@ class PanoptesAPI:
             fname = self.__image_setup__(subject_set[0])
             im=Image.open(fname)
             width,height= im.size
-        except (IndexError,ImageNotDownloaded):
+        except (IndexError,ImageNotDownloaded,AttributeError):
             # todo - fix!!!
             print "image not downloaded"
             width = 1000
@@ -1242,10 +1242,10 @@ class PanoptesAPI:
         for s in self.__chunks(subject_set,15):
             statements_and_params = []
             if ignore_version:
-                select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and workflow_id = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
+                select_statement = self.cassandra_session.prepare("select * from " + self.classification_table + " where project_id = ? and workflow_id = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
             else:
-                select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and workflow_id = ? and subject_id = ? and workflow_version = ?")# and workflow_id = ?")# and workflow_version = ?")
-
+                select_statement = self.cassandra_session.prepare("select * from " + self.classification_table + " where project_id = ? and workflow_id = ? and subject_id = ? and workflow_version = ?")# and workflow_id = ?")# and workflow_version = ?")
+            print select_statement
             # select_statement = self.cassandra_session.prepare("select id,user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
             # select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and workflow_id = ? and workflow_version = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
             # select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ?")# and workflow_id = ? and workflow_version = ?")
@@ -1257,7 +1257,6 @@ class PanoptesAPI:
             for subject_id in s:
                 if ignore_version:
                     params = (int(self.project_id),workflow_id,subject_id,)#int(workflow_id))#,int(math.floor(float(self.versions[workflow_id]))))
-                    print params
                 else:
                     version = int(math.floor(float(self.versions[workflow_id])))
                     params = (int(self.project_id),workflow_id,subject_id,version)#int(workflow_id))#,int(math.floor(float(self.versions[workflow_id]))))
@@ -1271,7 +1270,9 @@ class PanoptesAPI:
                 # todo - implement error recovery
                 if not success:
                     print record_list
-                assert success
+                    continue
+
+                assert False
 
                 # use this counter to help differentiate non logged in users
                 non_logged_in_users = 0
@@ -1368,9 +1369,7 @@ class PanoptesAPI:
         return raw_markings
 
     def __store_results__(self,workflow_id,aggregations):
-        print aggregations
-        assert False
-        aggregations = self.__remove_user_ids__(aggregations)
+        # aggregations = self.__remove_user_ids__(aggregations)
         cur = self.postgres_session.cursor()
         # finally write the results into the postgres db
 

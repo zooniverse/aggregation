@@ -3,12 +3,13 @@ import clustering
 import numpy as np
 
 class Counting(clustering.Cluster):
-    def __init__(self,project_api,min_cluster_size=1,mapping =None):
-        clustering.Cluster.__init__(self,project_api,min_cluster_size,mapping)
+    def __init__(self,min_cluster_size=1):
+        clustering.Cluster.__init__(self,min_cluster_size)
         self.algorithm_name = "counting"
 
     def __inner_fit__(self,markings,user_ids,tools):
         counts= {}
+
         for tool_id in set(tools):
             values = []
             for user in set(user_ids):

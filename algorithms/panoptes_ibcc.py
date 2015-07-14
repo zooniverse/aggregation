@@ -129,8 +129,8 @@ class IBCC(classification.Classification):
                         row.append(1)
                 confusion_matrix.append(row[:])
             else:
-                # todo - implement this
-                assert False
+                confusion_matrix.append([1 for i in range(highest_class+1)])
+
         # extract the estimate count
         prior_counts = zip(*sorted(prior_estimates.items(), key = lambda x:x[0]))[1]
         # scale the counts so that they add up to 100-ish
@@ -140,6 +140,7 @@ class IBCC(classification.Classification):
         print prior_counts
         print confusion_matrix
         print confusion_estimate
+        prior_counts = [1,100]
         self.__create_config__(prior_counts,confusion_matrix)
 
     def __create_config__(self,priors,confusion_matrix):
