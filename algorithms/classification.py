@@ -33,6 +33,74 @@ class Classification:
     def __task_aggregation__(self,classifications,gold_standard=False):
         return []
 
+    def __existence_classification__(self,task_id,raw_classifications,clustering_results,users_per_subject):
+        """
+        classify whether clusters are true or false positives
+        i.e. whether each cluster corresponds to something which actually exists
+
+        return in json format so we can merge with other results
+        :return:
+        """
+        aggregations = {}
+
+        # raw_classifications and clustering_results have different hierarchy orderings- raw_classifications
+        # is better for processing data and clustering_results is better for showing the end result
+        # technically we only need to look at the data from clustering_results right now but its
+        # hierarchy is really inefficient so use raw_classifications to help
+
+        # each shape is done independently
+        for shape in raw_classifications[task_id]:
+            # pretentious name but basically whether each person who has seen a subject thinks it is a true
+            # positive or not
+            existence_classification = {}
+
+            global_cluster_index = 0
+            clusters_per_subject = []
+
+            # look at the individual points in the cluster
+            for subject_id in raw_classifications[task_id][shape]:
+                if subject_id not in clustering_results:
+                    continue
+                clusters_per_subject.append([])
+
+                for local_cluster_index in clustering_results[subject_id][task_id][shape]:
+                    if local_cluster_index == "param":
+                        continue
+
+                    # extract the users who marked this cluster
+                    cluster = clustering_results[subject_id][task_id][shape][local_cluster_index]
+                    users = cluster["users"]
+
+                    ballots = []
+
+                    for u in users_per_subject[subject_id]:
+                        if u in users:
+                            ballots.append((u,1))
+                        else:
+                            ballots.append((u,0))
+
+                    existence_classification[(subject_id,local_cluster_index)] = ballots
+                    clusters_per_subject[-1].append(global_cluster_index)
+                    global_cluster_index += 1
+
+            existence_results = self.__task_aggregation__(existence_classification)
+            assert isinstance(existence_results,dict)
+
+            for subject_id,cluster_index in existence_results:
+                if subject_id not in aggregations:
+                    aggregations[subject_id] = {}
+                if task_id not in aggregations[subject_id]:
+                    aggregations[subject_id][task_id] = {}
+                if shape not in aggregations[subject_id][task_id]:
+                    aggregations[subject_id][task_id][shape] = {}
+                # this part is probably redundant
+                if cluster_index not in aggregations[subject_id][task_id][shape]:
+                    aggregations[subject_id][task_id][shape][cluster_index] = {}
+
+                aggregations[subject_id][task_id][shape][cluster_index]["existence"] = existence_results[(subject_id,cluster_index)]
+
+        return aggregations
+
     def __aggregate__(self,raw_classifications,workflow,clustering_results=None,users_per_subject = None):
         # use the first subject_id to find out which tasks we are aggregating the classifications for
         aggregations = {}
@@ -57,18 +125,53 @@ class Classification:
                 # we have to first decide which cluster is a "true positive" and which is a "false positive"
                 # so a question of whether or not people marked it - regardless of whether they marked it as the
                 # correct "type"
-                for subject_id in clustering_results:
-                    if subject_id == "param":
-                        continue
-                    for shape in clustering_results[subject_id][task_id]:
-                        if shape == "param":
-                            continue
-                        for cluster_index in clustering_results[subject_id][task_id][shape]:#.items():
-                            if cluster_index == "param":
-                                continue
-                            users = clustering_results[subject_id][task_id][shape][cluster_index]["users"]
-                            all_users = users_per_subject[subject_id]
-                            print len(users)/float(len(all_users))
+                existence_results = self.__existence_classification__(task_id,raw_classifications,clustering_results,users_per_subject)
+
+                print json.dumps(existence_results, sort_keys=True,indent=4, separators=(',', ': '))
+
+
+                    # # this should only happen if there were badly formed markings
+                    # if raw_classifications[task_id][shape][subject_id] == {}:
+                    #     continue
+                    #
+                    #
+                    #     cluster = clustering_results[subject_id][task_id][shape][cluster_index]
+                    #     users = cluster["users"]
+                    #     ballots = []
+                    #     # for each user who saw this image, did they also mark this "thing"?
+                    #     for u in users_per_subject[subject_id]:
+                    #         print u,(u in users)
+                    #
+                    #     #     ballots.append((user,tool_index))
+                    #     #
+                    #     # shape_classification[(subject_id,cluster_index)] = ballots
+
+                assert False
+
+                # for subject_id in clustering_results:
+                #     if subject_id == "param":
+                #         continue
+                #     for shape in clustering_results[subject_id][task_id]:
+                #         if shape == "param":
+                #             continue
+                #         for cluster_index in clustering_results[subject_id][task_id][shape]:#.items():
+                #             if cluster_index == "param":
+                #                 continue
+                #             users = clustering_results[subject_id][task_id][shape][cluster_index]["users"]
+                #             all_users = users_per_subject[subject_id]
+                #             print len(users)/float(len(all_users))
+
+
+                 # store the shape classification results
+                for (subject_id,cluster_index) in task_results:
+                    if subject_id not in aggregations:
+                        aggregations[subject_id] = {"param":"task_id"}
+                    if task_id not in aggregations[subject_id]:
+                        aggregations[subject_id][task_id] = {"param":"shape"}
+                    if shape not in aggregations[subject_id][task_id]:
+                        aggregations[subject_id][task_id][shape] = {"param":"cluster_index"}
+
+                    aggregations[subject_id][task_id][shape][cluster_index] = {}
 
 
 
@@ -116,17 +219,8 @@ class Classification:
                         task_results = self.__task_aggregation__(shape_classification)
                         assert isinstance(task_results,dict)
 
-                        # store the shape classification results
-                        for (subject_id,cluster_index) in task_results:
-                            if subject_id not in aggregations:
-                                aggregations[subject_id] = {"param":"task_id"}
-                            if task_id not in aggregations[subject_id]:
-                                aggregations[subject_id][task_id] = {"param":"shape"}
-                            if shape not in aggregations[subject_id][task_id]:
-                                aggregations[subject_id][task_id][shape] = {"param":"cluster_index"}
 
-                            aggregations[subject_id][task_id][shape][cluster_index] = {}
-                            aggregations[subject_id][task_id][shape][cluster_index]["shape_classification"] = task_results[(subject_id,cluster_index)]
+                        aggregations[subject_id][task_id][shape][cluster_index]["shape_classification"] = task_results[(subject_id,cluster_index)]
 
                         # print "--"
                         # # the raw classifications will tell us what tool made each marking
