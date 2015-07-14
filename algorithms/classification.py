@@ -101,6 +101,77 @@ class Classification:
 
         return aggregations
 
+    def __tool_classification__(self,task_id,classification_tasks,raw_classifications,clustering_results):
+        """
+        if multiple tools can make the same shape - we need to decide which tool actually corresponds to this cluster
+        for example if both the adult penguin and chick penguin make a pt - then for a given point we need to decide
+        if it corresponds to an adult or chick
+        :param task_id:
+        :param classification_tasks:
+        :param raw_classifications:
+        :param clustering_results:
+        :return:
+        """
+
+        aggregations = {}
+        # are there any uncertain shapes associated with this task?
+        # if not, return an empty result
+        if "shapes" not in classification_tasks[task_id]:
+            return {}
+
+        # only go through the "uncertain" shapes
+        for shape in classification_tasks[task_id]["shapes"]:
+            tool_classifications = {}
+            for subject_id in raw_classifications[task_id][shape]:
+                # look at the individual points in the cluster
+
+                # this should only happen if there were badly formed markings
+                if raw_classifications[task_id][shape][subject_id] == {}:
+                    continue
+                for cluster_index in clustering_results[subject_id][task_id][shape]:
+                    if cluster_index == "param":
+                        continue
+
+                    cluster = clustering_results[subject_id][task_id][shape][cluster_index]
+                    pts = cluster["points"]
+                    users = cluster["users"]
+                    # users = clustering_results[subject_id][task_id][shape][subject_id]["users"]
+
+                    # in this case, we want to "vote" on the tools
+                    ballots = []
+                    for (p,user) in zip(pts,users):
+                        try:
+                            tool_index = raw_classifications[task_id][shape][subject_id][(tuple(p),user)]
+                        except KeyError:
+                            print "===----"
+                            print cluster
+                            print raw_classifications[task_id][shape][subject_id].keys()
+                            print (tuple(p),user)
+                            raise
+
+                        ballots.append((user,tool_index))
+
+                    tool_classifications[(subject_id,cluster_index)] = ballots
+
+            # classify
+            tool_results = self.__task_aggregation__(tool_classifications)
+            assert isinstance(tool_results,dict)
+
+            for subject_id,cluster_index in tool_results:
+                if subject_id not in aggregations:
+                    aggregations[subject_id] = {}
+                if task_id not in aggregations[subject_id]:
+                    aggregations[subject_id][task_id] = {}
+                if shape not in aggregations[subject_id][task_id]:
+                    aggregations[subject_id][task_id][shape] = {}
+                # this part is probably redundant
+                if cluster_index not in aggregations[subject_id][task_id][shape]:
+                    aggregations[subject_id][task_id][shape][cluster_index] = {}
+
+                aggregations[subject_id][task_id][shape][cluster_index]["shape_classification"] = tool_results[(subject_id,cluster_index)]
+
+        return aggregations
+
     def __aggregate__(self,raw_classifications,workflow,clustering_results=None,users_per_subject = None):
         # use the first subject_id to find out which tasks we are aggregating the classifications for
         aggregations = {}
@@ -127,8 +198,8 @@ class Classification:
                 # correct "type"
                 existence_results = self.__existence_classification__(task_id,raw_classifications,clustering_results,users_per_subject)
 
-                print json.dumps(existence_results, sort_keys=True,indent=4, separators=(',', ': '))
-
+                tool_results = self.__tool_classification__(task_id,classification_tasks,raw_classifications,clustering_results)
+                print json.dumps(tool_results, sort_keys=True,indent=4, separators=(',', ': '))
 
                     # # this should only happen if there were badly formed markings
                     # if raw_classifications[task_id][shape][subject_id] == {}:
@@ -180,47 +251,7 @@ class Classification:
 
                 # # are these shapes "uncertain" - ie. was there more than one tool that could have made them?
                 if "shapes" in classification_tasks[task_id]:
-                    for shape in classification_tasks[task_id]["shapes"]:
-                        # create a temporary set of classifications
-                        shape_classification = {}
-
-                        for subject_id in raw_classifications[task_id][shape]:
-                            # look at the individual points in the cluster
-
-                            # this should only happen if there were badly formed markings
-                            if raw_classifications[task_id][shape][subject_id] == {}:
-                                continue
-                            for cluster_index in clustering_results[subject_id][task_id][shape]:
-                                if cluster_index == "param":
-                                    continue
-
-                                cluster = clustering_results[subject_id][task_id][shape][cluster_index]
-                                pts = cluster["points"]
-                                users = cluster["users"]
-                                # users = clustering_results[subject_id][task_id][shape][subject_id]["users"]
-
-                                # in this case, we want to "vote" on the tools
-                                ballots = []
-                                for (p,user) in zip(pts,users):
-                                    try:
-                                        tool_index = raw_classifications[task_id][shape][subject_id][(tuple(p),user)]
-                                    except KeyError:
-                                        print "===----"
-                                        print cluster
-                                        print raw_classifications[task_id][shape][subject_id].keys()
-                                        print (tuple(p),user)
-                                        raise
-
-                                    ballots.append((user,tool_index))
-
-                                shape_classification[(subject_id,cluster_index)] = ballots
-
-                        # classify
-                        task_results = self.__task_aggregation__(shape_classification)
-                        assert isinstance(task_results,dict)
-
-
-                        aggregations[subject_id][task_id][shape][cluster_index]["shape_classification"] = task_results[(subject_id,cluster_index)]
+                    pass
 
                         # print "--"
                         # # the raw classifications will tell us what tool made each marking
