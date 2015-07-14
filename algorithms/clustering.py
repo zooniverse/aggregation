@@ -227,7 +227,7 @@ def onpick(clustering_alg):
 class Cluster:
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self,shape):
+    def __init__(self):
         """
         :param project_api: how to talk to whatever project we are clustering for (Panoptes/Ouroboros shouldn't matter)
         :param min_cluster_size: minimum number of points in a cluster to not be considered noise
@@ -236,7 +236,6 @@ class Cluster:
         # assert isinstance(project_api,panoptes_api.PanoptesAPI)
         # self.project_api = project_api
         # we must say what shapes we want
-        self.shape = shape
         # self.clusterResults = {}
         # self.goldResults = {}
 

@@ -11,8 +11,8 @@ import math
 import numpy
 
 class Agglomerative(clustering.Cluster):
-    def __init__(self,shape):
-        clustering.Cluster.__init__(self,shape)
+    def __init__(self):
+        clustering.Cluster.__init__(self)
         self.algorithm_name = "agglomerative"
         self.all_distances = []
         self.max = 0

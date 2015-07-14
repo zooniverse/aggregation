@@ -205,11 +205,7 @@ class Classification:
             if isinstance(classification_tasks[task_id],bool):
                 # filtered_classifications = {subject_id:classifications[subject_id][task_id] for subject_id in classifications if task_id in classifications[subject_id]}
                 task_results = self.__task_aggregation__(raw_classifications[task_id])
-                assert isinstance(task_results,dict)
-                for subject_id in task_results:
-                    if subject_id not in aggregations:
-                        aggregations[subject_id] = {"param":"task_id"}
-                    aggregations[subject_id][task_id] = task_results[subject_id]
+
             else:
                 # we have classifications associated with markings
                 # make sure we have clustering results associated with these classifications
@@ -230,9 +226,14 @@ class Classification:
                 if "subtask" in classification_tasks[task_id]:
                     self.__subtask_classification__()
 
-                results = self.__merge_results__(existence_results,tool_results)
-                print json.dumps(results, sort_keys=True,indent=4, separators=(',', ': '))
-                assert False
+                task_results = self.__merge_results__(existence_results,tool_results)
+
+            assert isinstance(task_results,dict)
+            for subject_id in task_results:
+                if subject_id not in aggregations:
+                    aggregations[subject_id] = {"param":"task_id"}
+                aggregations[subject_id][task_id] = task_results[subject_id]
+
 
         return aggregations
 
@@ -247,7 +248,7 @@ class Classification:
             if kw not in r1:
                 r1[kw] = r2[kw]
             else:
-                self.__merge_results__(r1[kw],r2[kw])
+                r1[kw] = self.__merge_results__(r1[kw],r2[kw])
 
         return r1
 
