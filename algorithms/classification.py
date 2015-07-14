@@ -56,7 +56,7 @@ class Classification:
                         if cluster_index == "param":
                             continue
 
-    def __existence_classification__(self,task_id,raw_classifications,clustering_results,users_per_subject):
+    def __existence_classification__(self,task_id,raw_classifications,clustering_results):
         """
         classify whether clusters are true or false positives
         i.e. whether each cluster corresponds to something which actually exists
@@ -73,21 +73,25 @@ class Classification:
 
         # each shape is done independently
         for shape in raw_classifications[task_id]:
+            if shape == "param":
+                continue
             # pretentious name but basically whether each person who has seen a subject thinks it is a true
             # positive or not
-            existence_classification = {}
+            existence_classification = {"param":"subject_id"}
 
             global_cluster_index = 0
             clusters_per_subject = []
 
             # look at the individual points in the cluster
             for subject_id in raw_classifications[task_id][shape]:
+                if subject_id == "param":
+                    continue
                 if subject_id not in clustering_results:
                     continue
                 clusters_per_subject.append([])
 
                 for local_cluster_index in clustering_results[subject_id][task_id][shape]:
-                    if local_cluster_index == "param":
+                    if (local_cluster_index == "param") or (local_cluster_index == "all_users"):
                         continue
 
                     # extract the users who marked this cluster
@@ -96,7 +100,7 @@ class Classification:
 
                     ballots = []
 
-                    for u in users_per_subject[subject_id]:
+                    for u in clustering_results[subject_id][task_id][shape]["all_users"]:
                         if u in users:
                             ballots.append((u,1))
                         else:
@@ -111,9 +115,9 @@ class Classification:
 
             for subject_id,cluster_index in existence_results:
                 if subject_id not in aggregations:
-                    aggregations[subject_id] = {}
+                    aggregations[subject_id] = {"param":"task_id"}
                 if task_id not in aggregations[subject_id]:
-                    aggregations[subject_id][task_id] = {}
+                    aggregations[subject_id][task_id] = {"param":"shape"}
                 if shape not in aggregations[subject_id][task_id]:
                     aggregations[subject_id][task_id][shape] = {}
                 # this part is probably redundant
@@ -152,7 +156,7 @@ class Classification:
                 if raw_classifications[task_id][shape][subject_id] == {}:
                     continue
                 for cluster_index in clustering_results[subject_id][task_id][shape]:
-                    if cluster_index == "param":
+                    if (cluster_index == "param") or (cluster_index == "all_users"):
                         continue
 
                     cluster = clustering_results[subject_id][task_id][shape][cluster_index]
@@ -182,9 +186,9 @@ class Classification:
 
             for subject_id,cluster_index in tool_results:
                 if subject_id not in aggregations:
-                    aggregations[subject_id] = {}
+                    aggregations[subject_id] = {"param":"task_id"}
                 if task_id not in aggregations[subject_id]:
-                    aggregations[subject_id][task_id] = {}
+                    aggregations[subject_id][task_id] = {"param":"shape"}
                 if shape not in aggregations[subject_id][task_id]:
                     aggregations[subject_id][task_id][shape] = {}
                 # this part is probably redundant
@@ -195,27 +199,25 @@ class Classification:
 
         return aggregations
 
-    def __aggregate__(self,raw_classifications,workflow,clustering_results=None,users_per_subject = None):
+    def __aggregate__(self,raw_classifications,workflow,clustering_results=None):
         # use the first subject_id to find out which tasks we are aggregating the classifications for
-        aggregations = {}
+        aggregations = {"param":"subject_id"}
         classification_tasks,marking_tasks = workflow
 
         for task_id in classification_tasks:
             # print task_id
             if isinstance(classification_tasks[task_id],bool):
-                # filtered_classifications = {subject_id:classifications[subject_id][task_id] for subject_id in classifications if task_id in classifications[subject_id]}
+                # we have a basic classification task
                 task_results = self.__task_aggregation__(raw_classifications[task_id])
-
             else:
                 # we have classifications associated with markings
                 # make sure we have clustering results associated with these classifications
                 assert clustering_results is not None
-                assert users_per_subject is not None
 
                 # we have to first decide which cluster is a "true positive" and which is a "false positive"
                 # so a question of whether or not people marked it - regardless of whether they marked it as the
                 # correct "type"
-                existence_results = self.__existence_classification__(task_id,raw_classifications,clustering_results,users_per_subject)
+                existence_results = self.__existence_classification__(task_id,raw_classifications,clustering_results)
 
                 # now decide what type each cluster is
                 # note that this step does not care whether a cluster is a false positive or not (i.e. the results
@@ -232,8 +234,11 @@ class Classification:
             for subject_id in task_results:
                 if subject_id not in aggregations:
                     aggregations[subject_id] = {"param":"task_id"}
-                aggregations[subject_id][task_id] = task_results[subject_id]
+                # we have results from other tasks, so we need to merge in the results
+                aggregations[subject_id] = self.__merge_results__(aggregations[subject_id],task_results[subject_id])
+                # aggregations[subject_id][task_id] = task_results[subject_id]
 
+                
 
         return aggregations
 
@@ -247,7 +252,7 @@ class Classification:
         for kw in r2:
             if kw not in r1:
                 r1[kw] = r2[kw]
-            else:
+            elif r1[kw] != r2[kw]:
                 r1[kw] = self.__merge_results__(r1[kw],r2[kw])
 
         return r1
@@ -272,6 +277,8 @@ class VoteCount(Classification):
 
         for subject_id in raw_classifications:
             vote_counts = {}
+            if subject_id == "param":
+                continue
             for user,ballot in raw_classifications[subject_id]:
                 # in which case only one vote is allowed
                 if isinstance(ballot,int):

@@ -54,22 +54,8 @@ class Agglomerative(clustering.Cluster):
         user_ids = list(user_ids)
         start = time.time()
 
-        # if self.mapping is not None:
-        #     mapped_markings = []
-        #     for i,m in enumerate(markings):
-        #         try:
-        #             mapped_markings.append(self.mapping(m))
-        #         except ZeroDivisionError:
-        #             user_ids.pop(i)
-        #     # mapped_markings = [self.mapping(m) for m in markings]
-        # else:
-        #     mapped_markings = markings
-        # assert len(mapped_markings) == len(user_ids)
+        all_users = set()
 
-
-        # cluster_centers = []
-        # end_clusters = []
-        # end_users = []
         results = []
         # this converts stuff into panda format - probably a better way to do this but the labels do seem
         # necessary
@@ -80,15 +66,12 @@ class Agglomerative(clustering.Cluster):
         # use ward metric to do the actual clustering
         row_clusters = linkage(row_dist, method='ward')
 
-
         # use the results to build a tree representation
         nodes = [automatic_optics.LeafNode(pt,ii,user=user) for ii,(user,pt) in enumerate(zip(user_ids,markings))]
 
-        max_height = 0
-
         # read through the results
         # each row give a cluster/node to merge
-        # one any two cluters have a user in common - don't merge them - and represent this by a None cluster
+        # if one any two cluters have a user in common - don't merge them - and represent this by a None cluster
         # if trying to merge with a None cluster - this gives a None cluster as well
         for merge in row_clusters:
             rchild_index = int(merge[0])
@@ -101,10 +84,8 @@ class Agglomerative(clustering.Cluster):
             if (rnode is None) or (lnode is None):
                 # if any of these nodes are not None, add them to the end cluster list
                 if rnode is not None:
-                    # cluster_centers,end_clusters,end_users = self.__add_cluster(cluster_centers,end_clusters,end_users,rnode)
                     results.append(self.__results_to_json__(rnode))
                 elif lnode is not None:
-                    # cluster_centers,end_clusters,end_users = self.__add_cluster(cluster_centers,end_clusters,end_users,lnode)
                     results.append(self.__results_to_json__(lnode))
                 nodes.append(None)
             else:
@@ -114,8 +95,6 @@ class Agglomerative(clustering.Cluster):
                 # if there are users in common, add to the end clusters list (which consists of cluster centers
                 # the points in each cluster and the list of users)
                 if intersection != []:
-                    # cluster_centers,end_clusters,end_users = self.__add_cluster(cluster_centers,end_clusters,end_users,rnode)
-                    # cluster_centers,end_clusters,end_users = self.__add_cluster(cluster_centers,end_clusters,end_users,lnode)
                     results.append(self.__results_to_json__(rnode))
                     results.append(self.__results_to_json__(lnode))
 

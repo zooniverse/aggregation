@@ -452,10 +452,8 @@ class Cluster:
         # print all_markings
         # self.clusterResults[subject_id] = {"param":"task_id"}
         for task_id in raw_markings:
-            # does this task have any of the relevant markings?
-            if self.shape in raw_markings[task_id]:
-                # ust make the following code a bit easier to read
-                shape = self.shape
+            # go through each shape independently
+            for shape in raw_markings[task_id].keys():
                 for subject_id in raw_markings[task_id][shape]:
                     # should only happen because of a bad annotation (hopefully)
                     if raw_markings[task_id][shape][subject_id] == []:
@@ -480,7 +478,9 @@ class Cluster:
                         if task_id not in aggregation[subject_id]:
                             aggregation[subject_id][task_id] = {"param":"shape"}
                         if shape not in aggregation[subject_id][task_id]:
-                            aggregation[subject_id][task_id][shape] = {"param":"cluster_index"}
+                            # store the set of all users who have seen this subject/task
+                            # used for determining false vs. true positives
+                            aggregation[subject_id][task_id][shape] = {"param":"cluster_index","all_users":list(set(users))}
 
                         for cluster_index,cluster in enumerate(cluster_results):
                             aggregation[subject_id][task_id][shape][cluster_index] = cluster
