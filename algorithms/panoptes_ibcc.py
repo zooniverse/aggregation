@@ -7,13 +7,41 @@ class IBCC(classification.Classification):
         classification.Classification.__init__(self,clustering_alg)
 
     def __task_aggregation__(self,raw_classifications,gold_standard=False):
-        self.__ibcc_setup__(raw_classifications)
+        # do we actually need to run ibcc - no if there wasn't any confusion
+        # borderline degenerate case but we need to be prepared for it
+        # highest_class is needed for helping the degenerate cases
+        run_ibcc,highest_class =self.__ibcc_setup__(raw_classifications)
 
         # run ibcc
-        ibcc.load_and_run_ibcc("/tmp/config.py")
+        if run_ibcc:
+            ibcc.load_and_run_ibcc("/tmp/config.py")
 
-        # now analyze the results
-        return self.__ibcc_analyze__(raw_classifications)
+            # now analyze the results
+            print "not degenerate"
+            return self.__ibcc_analyze__(raw_classifications)
+        else:
+            print "degenerate case"
+            return self.__degenerate_ibcc__(raw_classifications,highest_class)
+
+    def __degenerate_ibcc__(self,raw_classifications,highest_classes):
+        """
+        handle cases which are borderline degenerate - i.e. everyone agrees on everything
+        :param raw_classifications:
+        :return:
+        """
+        results = {}
+        for subject_id in raw_classifications:
+            if subject_id == "param":
+                    continue
+
+            num_votes = len(raw_classifications[subject_id])
+            users,votes = zip(*raw_classifications[subject_id])
+            assert min(votes) == max(votes)
+            probabilities = [0 for i in range(highest_classes+1)]
+            probabilities[min(votes)] = 1
+            results[subject_id] = probabilities,num_votes
+
+        return results
 
     def __ibcc_analyze__(self,raw_classifications):
         global_cluster_index = 0
@@ -116,6 +144,10 @@ class IBCC(classification.Classification):
         weight = (highest_class+1) * 10
         confusion_matrix = []
 
+        # if there hs been no confusion at all - we don't need to bother running IBCC
+        if max([len(row) for row in confusion_estimate.values()]) == 1:
+            return False,highest_class
+
         for true_class in range(highest_class+1):
             if true_class in confusion_estimate:
                 s = float(sum(confusion_estimate[true_class].values()))
@@ -132,7 +164,6 @@ class IBCC(classification.Classification):
                 confusion_matrix.append([1 for i in range(highest_class+1)])
 
         # extract the estimate count
-        print prior_estimates
         # if there are now counts, give a value of 1
         prior_counts = [prior_estimates[i] if i in prior_estimates else 1 for i in range(highest_class+1)]
         # prior_counts = zip(*sorted(prior_estimates.items(), key = lambda x:x[0]))[1]
@@ -141,6 +172,8 @@ class IBCC(classification.Classification):
 
         # now create the config file
         self.__create_config__(prior_counts,confusion_matrix)
+
+        return True,highest_class
 
     def __create_config__(self,priors,confusion_matrix):
         """
@@ -153,8 +186,6 @@ class IBCC(classification.Classification):
             pass
 
         num_classes = len(priors)
-        print priors
-        print confusion_matrix
         assert len(priors) == len(confusion_matrix)
 
         with open("/tmp/config.py",'wb') as f:

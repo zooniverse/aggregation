@@ -141,6 +141,10 @@ class Classification:
         :return:
         """
 
+        if clustering_results == {"param":"subject_id"}:
+            print "warning - empty classifications"
+            return {}
+
         aggregations = {}
         # are there any uncertain shapes associated with this task?
         # if not, return an empty result
@@ -155,6 +159,8 @@ class Classification:
 
                 # this should only happen if there were badly formed markings
                 if raw_classifications[task_id][shape][subject_id] == {}:
+                    continue
+                if subject_id not in clustering_results:
                     continue
                 for cluster_index in clustering_results[subject_id][task_id][shape]:
                     if (cluster_index == "param") or (cluster_index == "all_users"):

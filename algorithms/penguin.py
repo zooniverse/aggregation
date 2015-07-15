@@ -75,6 +75,8 @@ class Penguins(aggregation_api.AggregationAPI):
             user_name = ""
             if "user_name" in classification:
                 user_name = classification["user_name"]
+            else:
+                user_name = classification["user_ip"]
 
             user_ip = classification["user_ip"]
 
@@ -109,91 +111,6 @@ class Penguins(aggregation_api.AggregationAPI):
             statements_and_params.append((insert_statement,(-1,1,zooniverse_id,json.dumps(mapped_annotations),user_name,user_ip,1)))
 
         execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
-
-    # def __load_subjects__(self,workflow_id):
-    #     subject_set = []
-    #     for subject in self.subject_collection.find().limit(500000):
-    #         subject_set.append(subject["zooniverse_id"])
-    #
-    #     return subject_set
-
-    # def __load_classifcations__(self):
-    #     experts = ["caitlin.black"]
-    #
-    #
-    #
-    #     raw_markings = {"init":{"pt":{}}}
-    #     raw_classifications = {"init":{"pt":{}}}
-    #
-    #     task_id = "init"
-    #     shape = "pt"
-    #
-    #     animals = []
-    #
-    #     users_per_subject = {}
-    #
-    #     # sort markings
-    #     for ii,classification in enumerate(classification_collection.find().limit(5000000)):
-    #         if ii % 25000 == 0:
-    #             print ii
-    #         zooniverse_id = classification["subjects"][0]["zooniverse_id"]
-    #         if zooniverse_id not in raw_markings[task_id][shape]:
-    #             raw_markings[task_id][shape][zooniverse_id] = []
-    #             raw_classifications[task_id][shape][zooniverse_id] = {}
-    #
-    #         user_id = classification["user_ip"]
-    #
-    #         if "user_name" in classification:
-    #             user_name = classification["user_name"]
-    #             # todo - clean this up
-    #             if self.gold_standard :
-    #                 if user_name not in experts:
-    #                     continue
-    #             else:
-    #                 if user_name in experts:
-    #                     continue
-    #         # if the user was not logged in, we assume that it could not be the expert
-    #         elif self.gold_standard:
-    #             continue
-    #
-    #         if zooniverse_id not in users_per_subject:
-    #             users_per_subject[zooniverse_id] = []
-    #
-    #         users_per_subject[zooniverse_id].append(user_id)
-    #
-    #         for annotation in classification["annotations"]:
-    #             assert isinstance(annotation,dict)
-    #             # print annotation.keys()
-    #             if ("key" not in annotation.keys()) or (annotation["key"] != "marking"):
-    #                 continue
-    #             try:
-    #                 for marking in annotation["value"].values():
-    #                     # deal with markings first
-    #                     try:
-    #                         relevant_params = float(marking["x"]),float(marking["y"])
-    #                     except ValueError:
-    #                         continue
-    #
-    #                     assert isinstance(raw_markings[task_id][shape][zooniverse_id],list)
-    #                     raw_markings[task_id][shape][zooniverse_id].append((user_id,relevant_params,None))
-    #
-    #                     # and then the classifications
-    #                     if marking["value"] not in animals:
-    #                         animals.append(marking["value"])
-    #                     animal_index = animals.index(marking["value"])
-    #
-    #                     raw_classifications[task_id][shape][zooniverse_id][(relevant_params,user_id)] = animal_index
-    #             except AttributeError:
-    #                 pass
-    #
-    #
-    #     return raw_markings,raw_classifications
-
-    # def __sort_markings__(self,workflow_id,subject_set=None,ignore_version=False):
-    #     return self.raw_markings
-    #
-    # def __sort_classifications__(self,workflow_id):
-    #     return self.raw_classifications
 
     def __store_results__(self,workflow_id,aggregations):
         if self.gold_standard:
@@ -233,28 +150,31 @@ class SubjectGenerator:
         for subject in self.project.subject_collection.find():
             subject_ids.append(subject["zooniverse_id"])
 
-            if len(subject_ids) == 500:
+            if len(subject_ids) == 50:
                 yield subject_ids
                 subject_ids = []
 
         yield  subject_ids
         raise StopIteration
 
-project = Penguins()
-project.__migrate__()
-# subjects = project.__get_subject_ids__()
+if __name__ == "__main__":
+    project = Penguins()
+    project.__migrate__()
+    # subjects = project.__get_subject_ids__()
 
-# t = 0
-# for s in SubjectGenerator(project):
-#     t += 1
-#     project.__aggregate__(workflows=[1],subject_set=s)
-#
-#     if t == 15:
-#         break
+    t = 0
+    for s in SubjectGenerator(project):
+        t += 1
+        project.__aggregate__(workflows=[1],subject_set=s)
 
-# project.__aggregate__(workflows=[1],subject_set=subjects)
-# clustering_results = clustering.__aggregate__(raw_markings)
-#
-# classificaiton_tasks = {"init":{"shapes":["pt"]}}
-# print classifying.__aggregate__(raw_classifications,(classificaiton_tasks,{}),clustering_results,users_per_subject)
+        break
+
+        # if t == 15:
+        #     break
+
+    # project.__aggregate__(workflows=[1],subject_set=subjects)
+    # clustering_results = clustering.__aggregate__(raw_markings)
+    #
+    # classificaiton_tasks = {"init":{"shapes":["pt"]}}
+    # print classifying.__aggregate__(raw_classifications,(classificaiton_tasks,{}),clustering_results,users_per_subject)
 

@@ -74,8 +74,6 @@ def point_mapping(marking,image_dimensions):
     y = float(marking["y"])
 
     if (x<0)or(y<0)or(x > image_dimensions[0]) or(y>image_dimensions[1]):
-        print type(x),type(y)
-        print image_dimensions
         raise InvalidMarking(marking)
 
     return x,y
@@ -213,7 +211,6 @@ class AggregationAPI:
         # self.aggregations = {}
         #
 
-
     def __aggregate__(self,workflows=None,subject_set=None):
         if workflows is None:
             workflows = self.workflows
@@ -232,15 +229,16 @@ class AggregationAPI:
             if (self.cluster_alg is not None) and (marking_tasks != {}):
                 print "clustering"
                 clustering_aggregations = self.__cluster__(workflow_id,subject_set)
-                assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
+                # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
             if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
                 print "classifying"
                 classification_aggregations = self.__classify__(workflow_id,clustering_aggregations,subject_set)
 
+
+
             # if we have both markings and classifications - we need to merge the results
             if (clustering_aggregations is not None) and (classification_aggregations is not None):
-                print "===---"
                 aggregations = self.__merge_aggregations__(clustering_aggregations,classification_aggregations)
             elif clustering_aggregations is None:
                 aggregations = classification_aggregations
@@ -277,7 +275,9 @@ class AggregationAPI:
         raw_classifications = self.__sort_classifications__(workflow_id,subject_set)
         if raw_classifications == {}:
             print "returning empty"
-            return {}
+            empty_aggregation = {"param":"subject_id"}
+            # for subject_set in empty_aggregation
+            return empty_aggregation
 
         return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations)
 
@@ -295,7 +295,12 @@ class AggregationAPI:
             subject_set = self.__load_subjects__(workflow_id)
 
         raw_markings = self.__sort_markings__(workflow_id,subject_set)
-        assert raw_markings != {}
+
+        if raw_markings == {}:
+            print "warning - empty set of images"
+            print subject_set
+            return {}
+        # assert raw_markings != {}
         # assert False
 
         # will store the aggregations for all clustering
@@ -446,13 +451,13 @@ class AggregationAPI:
         try:
             response = urllib2.urlopen(request)
         except urllib2.HTTPError as e:
-            print 'The server couldn\'t fulfill the request.'
-            print 'Error code: ', e.code
-            print 'Error response body: ', e.read()
+            sys.stderr.write('The server couldn\'t fulfill the request.\n')
+            sys.stderr.write('Error code: ' + str(e.code) + "\n")
+            sys.stderr.write('Error response body: ' + str(e.read()) + "\n")
             raise
         except urllib2.URLError as e:
-            print 'We failed to reach a server.'
-            print 'Reason: ', e.reason
+            sys.stderr.write('We failed to reach a server.\n')
+            sys.stderr.write('Reason: ' + str(e.reason) + "\n")
             raise
         else:
             # everything is fine
@@ -1121,8 +1126,6 @@ class AggregationAPI:
 
         for individual_work in data["workflows"]:
             id_ = int(individual_work["id"])
-            print "^^^^"
-            print id_
             # self.workflows.append(id_)
             workflows[id_] = self.__readin_tasks__(id_)
             # self.subject_sets[id_] = self.__get_subject_ids__(id_)
@@ -1278,7 +1281,7 @@ class AggregationAPI:
                 # todo - implement error recovery
                 if not success:
                     print record_list
-                    continue
+                assert success
 
 
                 # use this counter to help differentiate non logged in users
@@ -1327,7 +1330,6 @@ class AggregationAPI:
                             self.users_per_subject[subject_id][task_id] = set()
                         self.users_per_subject[subject_id][task_id].add(user_id)
 
-
                         if task_id in marking_tasks:
                             if not isinstance(task["value"],list):
                                 print "not properly formed marking - skipping"
@@ -1371,7 +1373,7 @@ class AggregationAPI:
                                 except InvalidMarking as e:
                                     print e
 
-        print raw_markings[1]["point"].keys()
+        # assert raw_markings != {}
         return raw_markings
 
     def __store_results__(self,workflow_id,aggregations):
