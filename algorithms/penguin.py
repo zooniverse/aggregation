@@ -14,7 +14,7 @@ class Penguins(aggregation_api.AggregationAPI):
         self.project_id = -1
         # connect to the mongo server
         client = pymongo.MongoClient()
-        db = client['penguin_2015-06-01']
+        db = client['penguin_2015-05-08']
         self.classification_collection = db["penguin_classifications"]
         self.subject_collection = db["penguin_subjects"]
 
@@ -22,10 +22,11 @@ class Penguins(aggregation_api.AggregationAPI):
         # self.raw_markings,self.raw_classifications = self.__load_classifcations__()
 
         # some stuff to pretend we are a Panoptes project
-        classification_tasks = {"init":{"shapes":["pt"]}}
-        marking_tasks = {1:1}
+        classification_tasks = {1:{"shapes":["point"]}}
+        marking_tasks = {1:{0:"point",1:"point",2:"point",3:"point"}}
 
         self.workflows = {1:(classification_tasks,marking_tasks)}
+        self.versions = {1:1}
 
         self.cluster_alg = agglomerative.Agglomerative()
         self.classification_alg = panoptes_ibcc.IBCC()
@@ -46,17 +47,18 @@ class Penguins(aggregation_api.AggregationAPI):
         except cassandra.InvalidRequest:
             print "table did not already exist"
 
-        self.cassandra_session.execute("CREATE TABLE " + self.classification_table+" (project_id int, workflow_id int, subject_id text, annotations text, user_name text, user_ip inet, PRIMARY KEY(project_id,workflow_id,subject_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC) ;")
+        self.cassandra_session.execute("CREATE TABLE " + self.classification_table+" (project_id int, workflow_id int, subject_id text, annotations text, user_id text, user_ip inet, workflow_version int, PRIMARY KEY(project_id,workflow_id,workflow_version,subject_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,workflow_version ASC,subject_id ASC) ;")
+        # self.cassandra_session.execute("CREATE TABLE " + self.classification_table+" (project_id int, workflow_id int, subject_id text, annotations text, user_name text, user_ip inet, PRIMARY KEY(subject_id,project_id,workflow_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC) ;")
 
         insert_statement = self.cassandra_session.prepare("""
-                insert into penguins_classifications (project_id, workflow_id, subject_id,annotations,user_name,user_ip)
-                values (?,?,?,?,?,?)""")
+                insert into penguins_classifications (project_id, workflow_id, subject_id,annotations,user_id,user_ip,workflow_version)
+                values (?,?,?,?,?,?,?)""")
 
         statements_and_params = []
 
         all_tools = []
 
-        for ii,classification in enumerate(self.classification_collection.find().limit(500000)):
+        for ii,classification in enumerate(self.classification_collection.find()):
             if ii % 25000 == 0:
                 print ii
                 if ii > 0:
@@ -64,7 +66,6 @@ class Penguins(aggregation_api.AggregationAPI):
                     statements_and_params = []
 
             zooniverse_id = classification["subjects"][0]["zooniverse_id"]
-            user_ip = classification["user_ip"]
 
             user_name = ""
             if "user_name" in classification:
@@ -72,34 +73,36 @@ class Penguins(aggregation_api.AggregationAPI):
 
             user_ip = classification["user_ip"]
 
-            mapped_annotations = {}
+            mapped_annotations = [{"task":1,"value":[]}]
 
             for annotation in classification["annotations"]:
                 try:
                     if ("key" not in annotation.keys()) or (annotation["key"] != "marking"):
                         continue
                     for index,marking in enumerate(annotation["value"].values()):
-                        mapped_annotations[index] = marking
+                        # mapped_annotations[index] = marking
                         if marking["value"] not in all_tools:
                             all_tools.append(marking["value"])
 
-                        mapped_annotations[index]["tool"] = all_tools.index(marking["value"])
+                        # mapped_annotations[index]["tool"] = all_tools.index(marking["value"])
+                        mapped_annotations[0]["value"].append(marking)
+                        mapped_annotations[0]["value"][-1]["tool"] = all_tools.index(marking["value"])
 
-                except AttributeError:
+                except (AttributeError,KeyError):
                     pass
 
             if mapped_annotations == {}:
                 continue
-            statements_and_params.append((insert_statement,(-1,1,zooniverse_id,json.dumps(mapped_annotations),user_name,user_ip)))
+            statements_and_params.append((insert_statement,(-1,1,zooniverse_id,json.dumps(mapped_annotations),user_name,user_ip,1)))
 
         execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
 
-    def __load_subjects__(self,workflow_id):
-        subject_set = []
-        for subject in self.subject_collection.find().limit(500000):
-            subject_set.append(subject["zooniverse_id"])
-
-        return subject_set
+    # def __load_subjects__(self,workflow_id):
+    #     subject_set = []
+    #     for subject in self.subject_collection.find().limit(500000):
+    #         subject_set.append(subject["zooniverse_id"])
+    #
+    #     return subject_set
 
     def __load_classifcations__(self):
         experts = ["caitlin.black"]
@@ -201,9 +204,17 @@ class Penguins(aggregation_api.AggregationAPI):
 
         execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
 
+    def __get_subject_ids__(self):
+        subjects = []
+        for subject in self.subject_collection.find({"tutorial":{"$ne":True}}).limit(100):
+            subjects.append(subject["zooniverse_id"])
+
+        return subjects
+
 project = Penguins()
-project.__migrate__()
-project.__aggregate__()
+# project.__migrate__()
+subjects = project.__get_subject_ids__()
+project.__aggregate__(workflows=[1],subject_set=subjects)
 # clustering_results = clustering.__aggregate__(raw_markings)
 #
 # classificaiton_tasks = {"init":{"shapes":["pt"]}}

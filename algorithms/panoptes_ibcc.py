@@ -132,15 +132,14 @@ class IBCC(classification.Classification):
                 confusion_matrix.append([1 for i in range(highest_class+1)])
 
         # extract the estimate count
-        prior_counts = zip(*sorted(prior_estimates.items(), key = lambda x:x[0]))[1]
+        print prior_estimates
+        # if there are now counts, give a value of 1
+        prior_counts = [prior_estimates[i] if i in prior_estimates else 1 for i in range(highest_class+1)]
+        # prior_counts = zip(*sorted(prior_estimates.items(), key = lambda x:x[0]))[1]
         # scale the counts so that they add up to 100-ish
         prior_counts = [int(max(1,c*100/sum(prior_counts))) for c in prior_counts]
 
         # now create the config file
-        print prior_counts
-        print confusion_matrix
-        print confusion_estimate
-        prior_counts = [1,100]
         self.__create_config__(prior_counts,confusion_matrix)
 
     def __create_config__(self,priors,confusion_matrix):
@@ -154,6 +153,9 @@ class IBCC(classification.Classification):
             pass
 
         num_classes = len(priors)
+        print priors
+        print confusion_matrix
+        assert len(priors) == len(confusion_matrix)
 
         with open("/tmp/config.py",'wb') as f:
             f.write("import numpy as np\n")

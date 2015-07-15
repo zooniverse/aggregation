@@ -70,10 +70,12 @@ def line_mapping(marking,image_dimensions):
         return x2,x1,y2,y1
 
 def point_mapping(marking,image_dimensions):
-    x = marking["x"]
-    y = marking["y"]
+    x = float(marking["x"])
+    y = float(marking["y"])
 
     if (x<0)or(y<0)or(x > image_dimensions[0]) or(y>image_dimensions[1]):
+        print type(x),type(y)
+        print image_dimensions
         raise InvalidMarking(marking)
 
     return x,y
@@ -104,8 +106,15 @@ class AggregationAPI:
         self.versions = None
         self.classifications = None
 
+        self.marking_params_per_shape = dict()
+        self.marking_params_per_shape["line"] = line_mapping
+        self.marking_params_per_shape["point"] = point_mapping
+        self.marking_params_per_shape["ellipse"] = ellipse_mapping
+        self.marking_params_per_shape["rectangle"] = rectangle_mapping
+
         # only continue the set up if the project name is given
         self.project_short_name = project
+
         if project is None:
             return
 
@@ -203,11 +212,7 @@ class AggregationAPI:
 
         # self.aggregations = {}
         #
-        self.marking_params_per_shape = dict()
-        self.marking_params_per_shape["line"] = line_mapping
-        self.marking_params_per_shape["point"] = point_mapping
-        self.marking_params_per_shape["ellipse"] = ellipse_mapping
-        self.marking_params_per_shape["rectangle"] = rectangle_mapping
+
 
     def __aggregate__(self,workflows=None,subject_set=None):
         if workflows is None:
@@ -231,7 +236,7 @@ class AggregationAPI:
             if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
                 print "classifying"
-                classification_aggregations = self.__classify__(workflow_id,clustering_aggregations)
+                classification_aggregations = self.__classify__(workflow_id,clustering_aggregations,subject_set)
 
             # if we have both markings and classifications - we need to merge the results
             if (clustering_aggregations is not None) and (classification_aggregations is not None):
@@ -267,10 +272,11 @@ class AggregationAPI:
         for i in xrange(0, len(l), n):
             yield l[i:i+n]
 
-    def __classify__(self,workflow_id,clustering_aggregations):
+    def __classify__(self,workflow_id,clustering_aggregations,subject_set=None):
         # get the raw classifications for the given workflow
-        raw_classifications = self.__sort_classifications__(workflow_id)
+        raw_classifications = self.__sort_classifications__(workflow_id,subject_set)
         if raw_classifications == {}:
+            print "returning empty"
             return {}
 
         return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations)
@@ -1125,18 +1131,21 @@ class AggregationAPI:
         # read in the most current version of each of the workflows
         return workflows
 
-    def __sort_classifications__(self,workflow_id):
+    def __sort_classifications__(self,workflow_id,subject_set=None):
         version = int(math.floor(float(self.versions[workflow_id])))
 
         classification_tasks,marking_tasks = self.workflows[workflow_id]
         raw_classifications = {}
 
-        subject_set = self.__load_subjects__(workflow_id)
+        if subject_set is None:
+            subject_set = self.__load_subjects__(workflow_id)
 
         total = 0
         for s in self.__chunks(subject_set,15):
             statements_and_params = []
-            select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from classifications where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
+            ignore_version = True
+
+            select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
             for subject_id in s:
                 params = (int(self.project_id),subject_id,int(workflow_id),version)
                 statements_and_params.append((select_statement, params))
@@ -1194,6 +1203,7 @@ class AggregationAPI:
                                             print e
 
                             else:
+                                print "b"
                                 if task_id not in raw_classifications:
                                     raw_classifications[task_id] = {}
                                 if subject_id not in raw_classifications[task_id]:
@@ -1211,7 +1221,7 @@ class AggregationAPI:
         :param ignore_version: ONLY set for debugging use
         :return:
         """
-        ignore_version=True
+        ignore_version=False
 
         classification_tasks,marking_tasks = self.workflows[workflow_id]
 
@@ -1245,7 +1255,7 @@ class AggregationAPI:
                 select_statement = self.cassandra_session.prepare("select * from " + self.classification_table + " where project_id = ? and workflow_id = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
             else:
                 select_statement = self.cassandra_session.prepare("select * from " + self.classification_table + " where project_id = ? and workflow_id = ? and subject_id = ? and workflow_version = ?")# and workflow_id = ?")# and workflow_version = ?")
-            print select_statement
+
             # select_statement = self.cassandra_session.prepare("select id,user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
             # select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and workflow_id = ? and workflow_version = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
             # select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ?")# and workflow_id = ? and workflow_version = ?")
@@ -1253,7 +1263,6 @@ class AggregationAPI:
             # assert 458701 not in s
             # print s
 
-            print "==--"
             for subject_id in s:
                 if ignore_version:
                     params = (int(self.project_id),workflow_id,subject_id,)#int(workflow_id))#,int(math.floor(float(self.versions[workflow_id]))))
@@ -1263,7 +1272,6 @@ class AggregationAPI:
                 # params = (int(self.project_id),)#,int(workflow_id),int(math.floor(float(self.versions[workflow_id]))))
                 statements_and_params.append((select_statement, params))
                 # print params
-            print "--=="
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
             for subject_id,(success,record_list) in zip(s,results):
                 tt = 0
@@ -1272,14 +1280,11 @@ class AggregationAPI:
                     print record_list
                     continue
 
-                assert False
 
                 # use this counter to help differentiate non logged in users
                 non_logged_in_users = 0
 
                 # print (success,record_list)
-                print subject_id
-                print "==--"
 
                 ips_per_subject = []
 
@@ -1322,8 +1327,8 @@ class AggregationAPI:
                             self.users_per_subject[subject_id][task_id] = set()
                         self.users_per_subject[subject_id][task_id].add(user_id)
 
+
                         if task_id in marking_tasks:
-                            print task
                             if not isinstance(task["value"],list):
                                 print "not properly formed marking - skipping"
                                 continue
@@ -1366,6 +1371,7 @@ class AggregationAPI:
                                 except InvalidMarking as e:
                                     print e
 
+        print raw_markings[1]["point"].keys()
         return raw_markings
 
     def __store_results__(self,workflow_id,aggregations):
