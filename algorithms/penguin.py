@@ -48,7 +48,7 @@ class Penguins(aggregation_api.AggregationAPI):
             print e
             print "table did not already exist"
 
-        self.cassandra_session.execute("CREATE TABLE " + self.classification_table+" (project_id int, workflow_id int, subject_id text, annotations text, user_id text, user_ip inet, workflow_version int, PRIMARY KEY(project_id,workflow_id,workflow_version,subject_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,workflow_version ASC,subject_id ASC) ;")
+        self.cassandra_session.execute("CREATE TABLE " + self.classification_table+" (project_id int, workflow_id int, subject_id text, annotations text, user_id text, user_ip inet, workflow_version int, PRIMARY KEY(project_id,workflow_id,workflow_version,subject_id,user_id,user_ip) ) WITH CLUSTERING ORDER BY (workflow_id ASC,workflow_version ASC,subject_id ASC) ;")
         # self.cassandra_session.execute("CREATE TABLE " + self.classification_table+" (project_id int, workflow_id int, subject_id text, annotations text, user_name text, user_ip inet, PRIMARY KEY(subject_id,project_id,workflow_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC) ;")
 
         insert_statement = self.cassandra_session.prepare("""
@@ -63,7 +63,11 @@ class Penguins(aggregation_api.AggregationAPI):
             if ii % 25000 == 0:
                 print ii
                 if ii > 0:
-                    execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
+                    results = execute_concurrent(self.cassandra_session, statements_and_params)
+                    if False in results:
+                        print results
+                        assert False
+
                     statements_and_params = []
 
             zooniverse_id = classification["subjects"][0]["zooniverse_id"]
@@ -83,7 +87,7 @@ class Penguins(aggregation_api.AggregationAPI):
                         continue
                     for marking in annotation["value"].values():
                         if marking["value"] not in ["adult","chick"]:
-                            print marking["value"]
+                            # print marking["value"]
                             continue
 
                         # mapped_annotations[index] = marking
@@ -237,16 +241,16 @@ class SubjectGenerator:
         raise StopIteration
 
 project = Penguins()
-# project.__migrate__()
+project.__migrate__()
 # subjects = project.__get_subject_ids__()
 
-t = 0
-for s in SubjectGenerator(project):
-    t += 1
-    project.__aggregate__(workflows=[1],subject_set=s)
-
-    if t == 3:
-        break
+# t = 0
+# for s in SubjectGenerator(project):
+#     t += 1
+#     project.__aggregate__(workflows=[1],subject_set=s)
+#
+#     if t == 15:
+#         break
 
 # project.__aggregate__(workflows=[1],subject_set=subjects)
 # clustering_results = clustering.__aggregate__(raw_markings)
