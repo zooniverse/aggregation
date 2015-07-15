@@ -44,7 +44,8 @@ class Penguins(aggregation_api.AggregationAPI):
         try:
             self.cassandra_session.execute("drop table " + self.classification_table)
             print "table dropped"
-        except cassandra.InvalidRequest:
+        except (cassandra.InvalidRequest,cassandra.protocol.ServerError) as e:
+            print e
             print "table did not already exist"
 
         self.cassandra_session.execute("CREATE TABLE " + self.classification_table+" (project_id int, workflow_id int, subject_id text, annotations text, user_id text, user_ip inet, workflow_version int, PRIMARY KEY(project_id,workflow_id,workflow_version,subject_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,workflow_version ASC,subject_id ASC) ;")
@@ -76,19 +77,27 @@ class Penguins(aggregation_api.AggregationAPI):
             mapped_annotations = [{"task":1,"value":[]}]
 
             for annotation in classification["annotations"]:
+
                 try:
                     if ("key" not in annotation.keys()) or (annotation["key"] != "marking"):
                         continue
-                    for index,marking in enumerate(annotation["value"].values()):
+                    for marking in annotation["value"].values():
+                        if marking["value"] not in ["adult","chick"]:
+                            print marking["value"]
+                            continue
+
                         # mapped_annotations[index] = marking
                         if marking["value"] not in all_tools:
                             all_tools.append(marking["value"])
+
+
 
                         # mapped_annotations[index]["tool"] = all_tools.index(marking["value"])
                         mapped_annotations[0]["value"].append(marking)
                         mapped_annotations[0]["value"][-1]["tool"] = all_tools.index(marking["value"])
 
-                except (AttributeError,KeyError):
+                except (AttributeError,KeyError) as e:
+                    # print e
                     pass
 
             if mapped_annotations == {}:
@@ -104,77 +113,77 @@ class Penguins(aggregation_api.AggregationAPI):
     #
     #     return subject_set
 
-    def __load_classifcations__(self):
-        experts = ["caitlin.black"]
-
-
-
-        raw_markings = {"init":{"pt":{}}}
-        raw_classifications = {"init":{"pt":{}}}
-
-        task_id = "init"
-        shape = "pt"
-
-        animals = []
-
-        users_per_subject = {}
-
-        # sort markings
-        for ii,classification in enumerate(classification_collection.find().limit(5000000)):
-            if ii % 25000 == 0:
-                print ii
-            zooniverse_id = classification["subjects"][0]["zooniverse_id"]
-            if zooniverse_id not in raw_markings[task_id][shape]:
-                raw_markings[task_id][shape][zooniverse_id] = []
-                raw_classifications[task_id][shape][zooniverse_id] = {}
-
-            user_id = classification["user_ip"]
-
-            if "user_name" in classification:
-                user_name = classification["user_name"]
-                # todo - clean this up
-                if self.gold_standard :
-                    if user_name not in experts:
-                        continue
-                else:
-                    if user_name in experts:
-                        continue
-            # if the user was not logged in, we assume that it could not be the expert
-            elif self.gold_standard:
-                continue
-
-            if zooniverse_id not in users_per_subject:
-                users_per_subject[zooniverse_id] = []
-
-            users_per_subject[zooniverse_id].append(user_id)
-
-            for annotation in classification["annotations"]:
-                assert isinstance(annotation,dict)
-                # print annotation.keys()
-                if ("key" not in annotation.keys()) or (annotation["key"] != "marking"):
-                    continue
-                try:
-                    for marking in annotation["value"].values():
-                        # deal with markings first
-                        try:
-                            relevant_params = float(marking["x"]),float(marking["y"])
-                        except ValueError:
-                            continue
-
-                        assert isinstance(raw_markings[task_id][shape][zooniverse_id],list)
-                        raw_markings[task_id][shape][zooniverse_id].append((user_id,relevant_params,None))
-
-                        # and then the classifications
-                        if marking["value"] not in animals:
-                            animals.append(marking["value"])
-                        animal_index = animals.index(marking["value"])
-
-                        raw_classifications[task_id][shape][zooniverse_id][(relevant_params,user_id)] = animal_index
-                except AttributeError:
-                    pass
-
-
-        return raw_markings,raw_classifications
+    # def __load_classifcations__(self):
+    #     experts = ["caitlin.black"]
+    #
+    #
+    #
+    #     raw_markings = {"init":{"pt":{}}}
+    #     raw_classifications = {"init":{"pt":{}}}
+    #
+    #     task_id = "init"
+    #     shape = "pt"
+    #
+    #     animals = []
+    #
+    #     users_per_subject = {}
+    #
+    #     # sort markings
+    #     for ii,classification in enumerate(classification_collection.find().limit(5000000)):
+    #         if ii % 25000 == 0:
+    #             print ii
+    #         zooniverse_id = classification["subjects"][0]["zooniverse_id"]
+    #         if zooniverse_id not in raw_markings[task_id][shape]:
+    #             raw_markings[task_id][shape][zooniverse_id] = []
+    #             raw_classifications[task_id][shape][zooniverse_id] = {}
+    #
+    #         user_id = classification["user_ip"]
+    #
+    #         if "user_name" in classification:
+    #             user_name = classification["user_name"]
+    #             # todo - clean this up
+    #             if self.gold_standard :
+    #                 if user_name not in experts:
+    #                     continue
+    #             else:
+    #                 if user_name in experts:
+    #                     continue
+    #         # if the user was not logged in, we assume that it could not be the expert
+    #         elif self.gold_standard:
+    #             continue
+    #
+    #         if zooniverse_id not in users_per_subject:
+    #             users_per_subject[zooniverse_id] = []
+    #
+    #         users_per_subject[zooniverse_id].append(user_id)
+    #
+    #         for annotation in classification["annotations"]:
+    #             assert isinstance(annotation,dict)
+    #             # print annotation.keys()
+    #             if ("key" not in annotation.keys()) or (annotation["key"] != "marking"):
+    #                 continue
+    #             try:
+    #                 for marking in annotation["value"].values():
+    #                     # deal with markings first
+    #                     try:
+    #                         relevant_params = float(marking["x"]),float(marking["y"])
+    #                     except ValueError:
+    #                         continue
+    #
+    #                     assert isinstance(raw_markings[task_id][shape][zooniverse_id],list)
+    #                     raw_markings[task_id][shape][zooniverse_id].append((user_id,relevant_params,None))
+    #
+    #                     # and then the classifications
+    #                     if marking["value"] not in animals:
+    #                         animals.append(marking["value"])
+    #                     animal_index = animals.index(marking["value"])
+    #
+    #                     raw_classifications[task_id][shape][zooniverse_id][(relevant_params,user_id)] = animal_index
+    #             except AttributeError:
+    #                 pass
+    #
+    #
+    #     return raw_markings,raw_classifications
 
     # def __sort_markings__(self,workflow_id,subject_set=None,ignore_version=False):
     #     return self.raw_markings
@@ -188,12 +197,12 @@ class Penguins(aggregation_api.AggregationAPI):
         else:
             db = "penguins"
 
-        try:
-            self.cassandra_session.execute("drop table " + db)
-        except cassandra.InvalidRequest:
-            print "table did not already exist"
-
-        self.cassandra_session.execute("CREATE TABLE " + db + " (zooniverse_id text, aggregations text, primary key(zooniverse_id))")
+        # try:
+        #     self.cassandra_session.execute("drop table " + db)
+        # except cassandra.InvalidRequest:
+        #     print "table did not already exist"
+        #
+        # self.cassandra_session.execute("CREATE TABLE " + db + " (zooniverse_id text, aggregations text, primary key(zooniverse_id))")
 
         insert_statement = self.cassandra_session.prepare("""
                 insert into """ + db + """ (zooniverse_id,aggregations)
@@ -206,15 +215,40 @@ class Penguins(aggregation_api.AggregationAPI):
 
     def __get_subject_ids__(self):
         subjects = []
-        for subject in self.subject_collection.find({"tutorial":{"$ne":True}}).limit(100):
+        for subject in self.subject_collection.find({"tutorial":{"$ne":True}}).limit(500):
             subjects.append(subject["zooniverse_id"])
 
         return subjects
 
+class SubjectGenerator:
+    def __init__(self,project):
+        self.project = project
+
+    def __iter__(self):
+        subject_ids = []
+        for subject in self.project.subject_collection.find():
+            subject_ids.append(subject["zooniverse_id"])
+
+            if len(subject_ids) == 500:
+                yield subject_ids
+                subject_ids = []
+
+        yield  subject_ids
+        raise StopIteration
+
 project = Penguins()
 # project.__migrate__()
-subjects = project.__get_subject_ids__()
-project.__aggregate__(workflows=[1],subject_set=subjects)
+# subjects = project.__get_subject_ids__()
+
+t = 0
+for s in SubjectGenerator(project):
+    t += 1
+    project.__aggregate__(workflows=[1],subject_set=s)
+
+    if t == 3:
+        break
+
+# project.__aggregate__(workflows=[1],subject_set=subjects)
 # clustering_results = clustering.__aggregate__(raw_markings)
 #
 # classificaiton_tasks = {"init":{"shapes":["pt"]}}
