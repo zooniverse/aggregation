@@ -90,9 +90,6 @@ def rectangle_mapping(marking,image_dimensions):
     y2 = y + marking["height"]
 
     if (x<0)or(y<0)or(x2 > image_dimensions[0]) or(y2>image_dimensions[1]):
-        print marking
-        print image_dimensions
-        assert False
         raise InvalidMarking(marking)
 
     # return x,y,x2,y2
@@ -223,6 +220,8 @@ class AggregationAPI:
             workflows = self.workflows
 
         for workflow_id in workflows:
+            print self.__get_retired_subjects__(workflow_id)
+            assert False
             # self.__describe__(workflow_id)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
 
@@ -251,9 +250,6 @@ class AggregationAPI:
                 aggregations = classification_aggregations
             else:
                 aggregations = clustering_aggregations
-            print json.dumps(aggregations, sort_keys=True,indent=4, separators=(',', ': '))
-            assert False
-            assert aggregations is not None
 
             # finally, store the results
             self.__store_results__(workflow_id,aggregations)
@@ -289,6 +285,10 @@ class AggregationAPI:
 
         return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations)
 
+    def __info__(self):
+        self.postgres_cursor.execute("select * from subjects where id = 476870")
+        print self.postgres_cursor.fetchone()
+
     def __cluster__(self,workflow_id,subject_set=None):
         """
         run the clustering algorithm for a given workflow
@@ -312,11 +312,13 @@ class AggregationAPI:
         # assert False
 
         # will store the aggregations for all clustering
+        cluster_aggregation = {}
         for shape in self.cluster_algs:
-            cluster_aggregation = self.cluster_algs[shape].__aggregate__(raw_markings)
-
-        print json.dumps(cluster_aggregation, sort_keys=True,indent=4, separators=(',', ': '))
-        assert False
+            shape_aggregation = self.cluster_algs[shape].__aggregate__(raw_markings)
+            if cluster_aggregation is not None:
+                cluster_aggregation = shape_aggregation
+            else:
+                cluster_aggregation = self.__merge_aggregations__(cluster_aggregation,shape_aggregation)
 
         fnames = {}
         # for s in subjects[0:20]:
@@ -371,7 +373,7 @@ class AggregationAPI:
                 print tasks[task_id]["tools"]
         # self. description
 
-    def __get_num_clusters_(self,subject_id,task_id):
+    def __get_num_clusters__(self,subject_id,task_id):
         return len(self.cluster_alg.clusterResults[subject_id][task_id])
 
     def __get_classifications__(self,subject_id,task_id,cluster_index=None,question_id=None):
@@ -452,6 +454,22 @@ class AggregationAPI:
     #     print data
     #
     #     return versions
+
+    def __get_retired_subjects__(self,workflow_id):
+        retired_subjects = []
+
+        stmt = """SELECT * FROM "subjects"
+            INNER JOIN "set_member_subjects" ON "set_member_subjects"."subject_id" = "subjects"."id"
+            INNER JOIN "subject_sets" ON "subject_sets"."id" = "set_member_subjects"."subject_set_id"
+            INNER JOIN "subject_sets_workflows" ON "subject_sets_workflows"."subject_set_id" = "subject_sets"."id"
+            INNER JOIN "workflows" ON "workflows"."id" = "subject_sets_workflows"."workflow_id"
+            WHERE "workflows"."id" = """+str(workflow_id)+ """ AND (""" + str(workflow_id) + """ = ANY("set_member_subjects"."retired_workflow_ids"))"""
+
+        self.postgres_cursor.execute(stmt)
+        for subject in self.postgres_cursor.fetchall():
+            retired_subjects.append(subject[0])
+
+        return retired_subjects
 
     def __get_workflow_versions__(self):#,project_id):
         request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
@@ -563,7 +581,7 @@ class AggregationAPI:
         """
         # version = int(math.floor(float(self.versions[workflow_id])))
         stmt = "SELECT subject_id FROM subjects WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)# + " and workflow_version = " + str(version)
-        subjects = [r.subject_id for r in self.cassandra_session.execute(stmt)]
+        subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt)])
 
         assert subjects != []
 
@@ -669,7 +687,8 @@ class AggregationAPI:
         #             # except cassandra.AlreadyExists:
         #     pass
 
-        not_found = set()
+        subject_listing = set()
+
 
         select = "SELECT * from classifications where project_id="+str(self.project_id)
         cur = self.postgres_session.cursor()
@@ -681,9 +700,7 @@ class AggregationAPI:
                 insert into classifications (project_id, user_id, workflow_id,  created_at,annotations, updated_at, user_group_id, user_ip, completed, gold_standard, subject_id, workflow_version,metadata)
                 values (?,?,?,?,?,?,?,?,?,?,?,?,?)""")
 
-        insert_statement2 = self.cassandra_session.prepare("""
-                insert into subjects (project_id,workflow_id,workflow_version,subject_id)
-                values (?,?,?,?)""")
+
 
         statements_and_params = []
         migrated = {}
@@ -716,8 +733,9 @@ class AggregationAPI:
             params = (project_id, user_id, workflow_id,created_at, json.dumps(annotations), updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], workflow_version,json.dumps(metadata))
             statements_and_params.append((insert_statement, params))
 
-            params2 = (project_id,workflow_id,workflow_version,subject_ids[0])
-            statements_and_params.append((insert_statement2,params2))
+            # params2 = (project_id,workflow_id,workflow_version,subject_ids[0])
+            # statements_and_params.append((insert_statement2,params2))
+            subject_listing.add((project_id,workflow_id,workflow_version,subject_ids[0]))
 
             if len(statements_and_params) == 100:
                 results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
@@ -730,6 +748,20 @@ class AggregationAPI:
         # stmt = "select count(*) from subjects"
         # print migrated
         # print self.cassandra_session.execute(stmt)
+
+        # now update the subject ids
+        statements_and_params = []
+        insert_statement = self.cassandra_session.prepare("""
+                insert into subjects (project_id,workflow_id,workflow_version,subject_id)
+                values (?,?,?,?)""")
+        for s in subject_listing:
+            statements_and_params.append((insert_statement, s))
+
+            if len(statements_and_params) == 100:
+                results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
+                statements_and_params = []
+        if statements_and_params != []:
+            results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
 
     def __panoptes_connect__(self):
         """
@@ -1267,7 +1299,6 @@ class AggregationAPI:
 
         for s in self.__chunks(subject_set,15):
             print s
-            print "==--"
             statements_and_params = []
             if ignore_version:
                 select_statement = self.cassandra_session.prepare("select * from " + self.classification_table + " where project_id = ? and workflow_id = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
@@ -1387,7 +1418,6 @@ class AggregationAPI:
                                 except InvalidMarking as e:
                                     print e
 
-        print raw_markings != {}
         return raw_markings
 
     def __store_results__(self,workflow_id,aggregations):
@@ -1401,9 +1431,12 @@ class AggregationAPI:
         # stmt = "SELECT * from aggregations"
         # cur.execute(stmt)
 
-        for subject_id in aggregations:
+        for ii,subject_id in enumerate(aggregations):
             if subject_id == "param":
                 continue
+            if (ii > 0) and (ii % 10000 == 0):
+                self.postgres_session.commit()
+
             # skip if we don't have any aggregation results yet
 
             # there have been requests for the aggregation to also contain the metadata
@@ -1413,7 +1446,6 @@ class AggregationAPI:
             metadata = self.postgres_cursor.fetchone()
 
             aggregation = aggregations[subject_id]
-            print aggregation
             aggregation["metadata"] = metadata
             stmt = "INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES("+str(workflow_id)+","+str(subject_id)+",'"+json.dumps(aggregation)+"','"+str(datetime.datetime.now())+"','"+str(datetime.datetime.now())+"')"
             self.postgres_cursor.execute(stmt)
@@ -1462,7 +1494,7 @@ if __name__ == "__main__":
 
     # project.__migrate__()
 
-    project.__set_clustering_algs__({"point":agglomerative.Agglomerative})#, "rectangle":(blob_clustering.BlobClustering,{})})
+    project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering})#, "rectangle":(blob_clustering.BlobClustering,{})})
     # project.__set_classification_alg__(classification.VoteCount())
-
+    # project.__info__()
     project.__aggregate__()#subject_set=[460208, 460210, 460212, 460214, 460216])
