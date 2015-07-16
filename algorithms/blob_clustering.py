@@ -5,14 +5,19 @@ from shapely.geometry import Polygon
 from shapely.geometry import MultiPolygon
 import networkx as nx
 import itertools
+import math
 
 def findsubsets(S,m):
     return set(itertools.combinations(S, m))
 
+
+def nCr(n,r):
+    f = math.factorial
+    return f(n) / f(r) / f(n-r)
+
 class BlobClustering(clustering.Cluster):
-    def __init__(self,project_api,shape):
-        clustering.Cluster.__init__(self,project_api,shape)
-        self.algorithm_name = "blob clustering"
+    def __init__(self):
+        clustering.Cluster.__init__(self)
 
     def __inner_fit__(self,markings,user_ids,tools,fname=None):
 
@@ -22,8 +27,15 @@ class BlobClustering(clustering.Cluster):
             G=nx.Graph()
 
             for j,pts in enumerate(markings):
+                if len(pts) <= 2:
+                    # not a real polygon
+                    continue
                 assert isinstance(pts,list) or isinstance(pts,tuple)
-                blobs.append(Polygon(pts))
+                try:
+                    blobs.append(Polygon(pts))
+                except TypeError:
+                    print pts
+                    raise
                 G.add_node(j)
 
                 for i,old_blob in enumerate(blobs[:-1]):
@@ -35,7 +47,15 @@ class BlobClustering(clustering.Cluster):
                 union_blob = None
                 if len(c) >= 3:
                     overlapping_blobs = [blobs[k] for k in c]
-                    for subset in itertools.combinations(overlapping_blobs,3):
+                    num_blobs = 3
+                    while nCr(len(overlapping_blobs),num_blobs) > 20:
+                        print "** " + str(num_blobs)
+                        num_blobs += 1
+
+                    for subset_count, subset in enumerate(itertools.combinations(overlapping_blobs,num_blobs)):
+                        if subset_count >= 100:
+                            print "too many overlapping blobs"
+                            break
                         overlap = subset[0]
                         for b in subset[1:]:
                             overlap = overlap.intersection(b)
