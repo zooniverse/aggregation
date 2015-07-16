@@ -91,6 +91,12 @@ class Classification:
                     continue
                 clusters_per_subject.append([])
 
+                # in either case probably an empty image
+                if subject_id not in clustering_results:
+                    continue
+                if task_id not in clustering_results[subject_id]:
+                    continue
+
                 for local_cluster_index in clustering_results[subject_id][task_id][shape]:
                     if (local_cluster_index == "param") or (local_cluster_index == "all_users"):
                         continue
@@ -160,8 +166,13 @@ class Classification:
                 # this should only happen if there were badly formed markings
                 if raw_classifications[task_id][shape][subject_id] == {}:
                     continue
+
+                # in either case probably an empty image
                 if subject_id not in clustering_results:
                     continue
+                if task_id not in clustering_results[subject_id]:
+                    continue
+
                 for cluster_index in clustering_results[subject_id][task_id][shape]:
                     if (cluster_index == "param") or (cluster_index == "all_users"):
                         continue
@@ -215,7 +226,11 @@ class Classification:
             # print task_id
             if isinstance(classification_tasks[task_id],bool):
                 # we have a basic classification task
-                task_results = self.__task_aggregation__(raw_classifications[task_id])
+                temp_results = self.__task_aggregation__(raw_classifications[task_id])
+                # convert everything into a dict and add the the task id
+                task_results = {}
+                for subject_id in temp_results:
+                    task_results[subject_id] = {task_id:temp_results[subject_id]}
             else:
                 # we have classifications associated with markings
                 # make sure we have clustering results associated with these classifications
@@ -231,17 +246,18 @@ class Classification:
                 # from the previous step are not taken into account)
                 tool_results = self.__tool_classification__(task_id,classification_tasks,raw_classifications,clustering_results)
 
+                task_results = self.__merge_results__(existence_results,tool_results)
+
                 # are there any subtasks associated with this task/marking?
                 if "subtask" in classification_tasks[task_id]:
                     self.__subtask_classification__()
-
-                task_results = self.__merge_results__(existence_results,tool_results)
 
             assert isinstance(task_results,dict)
             for subject_id in task_results:
                 if subject_id not in aggregations:
                     aggregations[subject_id] = {"param":"task_id"}
                 # we have results from other tasks, so we need to merge in the results
+                assert isinstance(task_results[subject_id],dict)
                 aggregations[subject_id] = self.__merge_results__(aggregations[subject_id],task_results[subject_id])
                 # aggregations[subject_id][task_id] = task_results[subject_id]
 
@@ -256,12 +272,21 @@ class Classification:
         :param r2:
         :return:
         """
-        for kw in r2:
-            if kw not in r1:
-                r1[kw] = r2[kw]
-            elif r1[kw] != r2[kw]:
-                r1[kw] = self.__merge_results__(r1[kw],r2[kw])
+        assert isinstance(r1,dict)
+        assert isinstance(r2,dict)
 
+        for kw in r2:
+            try:
+                if kw not in r1:
+                    r1[kw] = r2[kw]
+                elif r1[kw] != r2[kw]:
+                    r1[kw] = self.__merge_results__(r1[kw],r2[kw])
+            except TypeError:
+                print "==--"
+                print r1
+                print r2
+                print kw
+                raise
         return r1
 
 
