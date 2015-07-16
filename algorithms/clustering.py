@@ -227,12 +227,14 @@ def onpick(clustering_alg):
 class Cluster:
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self):
+    def __init__(self,shape):
         """
         :param project_api: how to talk to whatever project we are clustering for (Panoptes/Ouroboros shouldn't matter)
         :param min_cluster_size: minimum number of points in a cluster to not be considered noise
         :return:
         """
+        self.shape = shape
+
         # assert isinstance(project_api,panoptes_api.PanoptesAPI)
         # self.project_api = project_api
         # we must say what shapes we want
@@ -454,6 +456,11 @@ class Cluster:
         for task_id in raw_markings:
             # go through each shape independently
             for shape in raw_markings[task_id].keys():
+                # if is this shape does not correspond to the specific shape this clustering algorithm was
+                # created for - skip
+                if shape != self.shape:
+                    continue
+
                 for subject_id in raw_markings[task_id][shape]:
                     # should only happen because of a bad annotation (hopefully)
                     if raw_markings[task_id][shape][subject_id] == []:

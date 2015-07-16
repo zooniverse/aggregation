@@ -23,9 +23,11 @@ from matplotlib.patches import Ellipse
 # import datetime
 import sys
 from PIL import Image
-# import agglomerative
+import agglomerative
 import cluster_count
+import clustering
 import blob_clustering
+
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -70,6 +72,8 @@ def line_mapping(marking,image_dimensions):
         return x2,x1,y2,y1
 
 def point_mapping(marking,image_dimensions):
+    # todo - this has to be changed
+    image_dimensions = 1000,1000
     x = float(marking["x"])
     y = float(marking["y"])
 
@@ -86,6 +90,9 @@ def rectangle_mapping(marking,image_dimensions):
     y2 = y + marking["height"]
 
     if (x<0)or(y<0)or(x2 > image_dimensions[0]) or(y2>image_dimensions[1]):
+        print marking
+        print image_dimensions
+        assert False
         raise InvalidMarking(marking)
 
     # return x,y,x2,y2
@@ -98,7 +105,7 @@ def ellipse_mapping(marking,image_dimensions):
 class AggregationAPI:
     #@profile
     def __init__(self,project=None):#,user_threshold= None, score_threshold= None): #Supernovae
-        self.cluster_alg = None
+        self.cluster_algs = None
         self.classification_alg = None
         self.workflows = None
         self.versions = None
@@ -226,7 +233,7 @@ class AggregationAPI:
             # ideally if there are no marking tasks, then we shouldn't have provided a clustering algorithm
             # but nice sanity check
 
-            if (self.cluster_alg is not None) and (marking_tasks != {}):
+            if (self.cluster_algs is not None) and (marking_tasks != {}):
                 print "clustering"
                 clustering_aggregations = self.__cluster__(workflow_id,subject_set)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
@@ -244,7 +251,8 @@ class AggregationAPI:
                 aggregations = classification_aggregations
             else:
                 aggregations = clustering_aggregations
-
+            print json.dumps(aggregations, sort_keys=True,indent=4, separators=(',', ': '))
+            assert False
             assert aggregations is not None
 
             # finally, store the results
@@ -304,7 +312,11 @@ class AggregationAPI:
         # assert False
 
         # will store the aggregations for all clustering
-        cluster_aggregation = self.cluster_alg.__aggregate__(raw_markings)
+        for shape in self.cluster_algs:
+            cluster_aggregation = self.cluster_algs[shape].__aggregate__(raw_markings)
+
+        print json.dumps(cluster_aggregation, sort_keys=True,indent=4, separators=(',', ': '))
+        assert False
 
         fnames = {}
         # for s in subjects[0:20]:
@@ -1084,17 +1096,18 @@ class AggregationAPI:
         return aggregation
 
     def __set_classification_alg__(self,alg):
-        self.classification_alg = alg(self)
+        self.classification_alg = alg
         assert isinstance(self.classification_alg,classification.Classification)
 
-    def __set_clustering_alg__(self,clustering_algorithm):
-        # todo - in the future we might want to uncomment this so that different shapes can have different
-        # todo - clustering algorithm. For now seems too complicated - in part because we would also have to
-        # todo - allow different classification algorithms for each shape
-        # self.cluster_algs = {}
-        # for shape,(alg,kwargs) in clustering_dict.items():
-        #     self.cluster_algs[shape] = alg(self,shape,**kwargs)
-        self.cluster_alg = clustering_algorithm
+    def __set_clustering_algs__(self,clustering_algorithms):
+        # the dictionary allows us to give a different clustering algorithm for different shapes
+
+        self.cluster_algs = {}
+        assert isinstance(clustering_algorithms,dict)
+        for kw in clustering_algorithms:
+            assert kw in self.marking_params_per_shape
+            self.cluster_algs[kw] = clustering_algorithms[kw](kw)
+            assert isinstance(self.cluster_algs[kw],clustering.Cluster)
 
     def __setup_workflows__(self):#,project_id):
         request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
@@ -1148,14 +1161,14 @@ class AggregationAPI:
             statements_and_params = []
             ignore_version = True
 
-            select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
+            select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ?")# and workflow_version = ?")
             for subject_id in s:
-                params = (int(self.project_id),subject_id,int(workflow_id),version)
+                params = (int(self.project_id),subject_id,int(workflow_id))#,version)
                 statements_and_params.append((select_statement, params))
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
 
-
             for subject_id,(success,record_list) in zip(s,results):
+                print record_list
                 if not success:
                     print record_list
                     assert success
@@ -1172,7 +1185,7 @@ class AggregationAPI:
                         user_id = non_logged_in_users
 
                     annotations = json.loads(record.annotations)
-
+                    print annotations
                     # go through each annotation and get the associated task
                     for task in annotations:
                         task_id = task["task"]
@@ -1206,7 +1219,6 @@ class AggregationAPI:
                                             print e
 
                             else:
-                                print "b"
                                 if task_id not in raw_classifications:
                                     raw_classifications[task_id] = {}
                                 if subject_id not in raw_classifications[task_id]:
@@ -1215,6 +1227,7 @@ class AggregationAPI:
                                 #     print task_id,task["value"]
                                 raw_classifications[task_id][subject_id].append((user_id,task["value"]))
 
+        print raw_classifications
         return raw_classifications
 
     def __sort_markings__(self,workflow_id,subject_set=None,ignore_version=False):
@@ -1253,6 +1266,8 @@ class AggregationAPI:
         read_in = set()
 
         for s in self.__chunks(subject_set,15):
+            print s
+            print "==--"
             statements_and_params = []
             if ignore_version:
                 select_statement = self.cassandra_session.prepare("select * from " + self.classification_table + " where project_id = ? and workflow_id = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
@@ -1282,7 +1297,6 @@ class AggregationAPI:
                 if not success:
                     print record_list
                 assert success
-
 
                 # use this counter to help differentiate non logged in users
                 non_logged_in_users = 0
@@ -1373,39 +1387,61 @@ class AggregationAPI:
                                 except InvalidMarking as e:
                                     print e
 
-        # assert raw_markings != {}
+        print raw_markings != {}
         return raw_markings
 
     def __store_results__(self,workflow_id,aggregations):
         # aggregations = self.__remove_user_ids__(aggregations)
-        cur = self.postgres_session.cursor()
+        # cur = self.postgres_session.cursor()
         # finally write the results into the postgres db
 
-        subject_set = self.__load_subjects__(workflow_id)
+        # subject_set = self.__load_subjects__(workflow_id)
         # assert sorted(self.aggregations.keys()) == sorted(subject_set)
 
-        stmt = "SELECT * from aggregations"
-        cur.execute(stmt)
+        # stmt = "SELECT * from aggregations"
+        # cur.execute(stmt)
 
-        for subject_id in subject_set:
-            # skip if we don't have any aggregation results yet
-            if subject_id not in aggregations:
+        for subject_id in aggregations:
+            if subject_id == "param":
                 continue
+            # skip if we don't have any aggregation results yet
 
             # there have been requests for the aggregation to also contain the metadata
             select = "SELECT metadata from subjects where id="+str(subject_id)
-            print "inserting subject id " + str(subject_id)
-            cur.execute(select)
-            metadata = cur.fetchone()
+            print "inserting subject id " + str((workflow_id,subject_id))
+            self.postgres_cursor.execute(select)
+            metadata = self.postgres_cursor.fetchone()
 
             aggregation = aggregations[subject_id]
+            print aggregation
             aggregation["metadata"] = metadata
             stmt = "INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES("+str(workflow_id)+","+str(subject_id)+",'"+json.dumps(aggregation)+"','"+str(datetime.datetime.now())+"','"+str(datetime.datetime.now())+"')"
-            cur.execute(stmt)
-
+            self.postgres_cursor.execute(stmt)
         print "^^^^"
         self.postgres_session.commit()
 
+    def __get_results__(self,workflow_id):
+        self.postgres_cursor.execute("select * from aggregations where workflow_id = " + workflow_id)
+        for r in self.postgres_cursor.fetchall():
+            print r
+            break
+
+
+class SubjectGenerator:
+    def __init__(self,project):
+        self.project = project
+
+    def __iter__(self):
+        subject_ids = []
+        for subject in self.project.subject_collection.find():
+            subject_ids.append(subject["zooniverse_id"])
+
+            if len(subject_ids) == 50:
+                yield subject_ids
+                subject_ids = []
+
+        yield  subject_ids
+        raise StopIteration
 
 def twod_linesegment(pt):
     x1,x2,y1,y2 = pt
@@ -1422,11 +1458,11 @@ def twod_linesegment(pt):
 
 if __name__ == "__main__":
     project_name = sys.argv[1]
-    project = PanoptesAPI(project_name)
+    project = AggregationAPI(project_name)
 
-    project.__migrate__()
+    # project.__migrate__()
 
-    project.__set_clustering_alg__(clustering_dict.clustering_dict[project_name])#, "rectangle":(blob_clustering.BlobClustering,{})})
-    project.__set_classification_alg__(classification.VoteCount)
+    project.__set_clustering_algs__({"point":agglomerative.Agglomerative})#, "rectangle":(blob_clustering.BlobClustering,{})})
+    # project.__set_classification_alg__(classification.VoteCount())
 
-    project.__aggregate__()
+    project.__aggregate__()#subject_set=[460208, 460210, 460212, 460214, 460216])

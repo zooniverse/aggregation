@@ -79,9 +79,8 @@ class InnerNode(AbstractNode):
         return retval
 
 class Agglomerative(clustering.Cluster):
-    def __init__(self):
-        clustering.Cluster.__init__(self)
-        self.algorithm_name = "agglomerative"
+    def __init__(self,shape):
+        clustering.Cluster.__init__(self,shape)
         self.all_distances = []
         self.max = 0
 
@@ -133,6 +132,7 @@ class Agglomerative(clustering.Cluster):
         df = pd.DataFrame(np.array(markings), columns=param_labels, index=labels)
         row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
         # use ward metric to do the actual clustering
+        print len(markings)
         row_clusters = linkage(row_dist, method='ward')
 
         # use the results to build a tree representation
@@ -191,7 +191,7 @@ class Agglomerative(clustering.Cluster):
 
 
         end = time.time()
-        print [len(r["users"]) for r in results]
+        # print [len(r["users"]) for r in results]
         # results = self.correction_alg.__fix__(results)
         return results,end-start
 
