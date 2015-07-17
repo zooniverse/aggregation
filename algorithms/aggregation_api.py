@@ -226,7 +226,8 @@ class AggregationAPI:
 
         for workflow_id in workflows:
             if subject_set is None:
-                subject_set = self.__get_retired_subjects__(workflow_id)
+                # subject_set = self.__get_retired_subjects__(workflow_id)
+                subject_set = self.__load_subjects__(workflow_id)
             print "aggregating " + str(len(subject_set)) + " subjects"
             # self.__describe__(workflow_id)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
@@ -345,6 +346,7 @@ class AggregationAPI:
 
         return cluster_aggregation
 
+
     # def __describe__(self,workflow_id):
     #     select = "SELECT tasks from workflows where id = " + str(workflow_id)
     #     self.postgres_cursor.execute(select)
@@ -449,11 +451,15 @@ class AggregationAPI:
         if subject_id is not None:
             stmt += " and subject_id = " + str(subject_id)
         self.postgres_cursor.execute(stmt)
+        all_results = []
         for r in self.postgres_cursor.fetchall():
             # print json.dumps(r[3], sort_keys=True,indent=4, separators=(',', ': '))
             # print r[3].keys()
             assert isinstance(r[3],dict)
-            print json.dumps(r[3], sort_keys=True,indent=4, separators=(',', ': '))
+            results = {r[2]:r[3]}
+            all_results.append(results)
+        with open('/home/greg/data.txt', 'w') as outfile:
+            json.dump(all_results, outfile,sort_keys=True,indent=4, separators=(',', ': '))
 
 
     def __get_workflow_details__(self,workflow_id):
@@ -491,21 +497,32 @@ class AggregationAPI:
                     # print
 
                     instructions[task_id] = {}
-                    instructions[task_id]["instruction"] = task["instruction"]
-                    instructions[task_id]["tools"] = {}
-                    for tool_index,tool in enumerate(task["tools"]):
-                        instructions[task_id]["tools"][tool_index] = {}
-                        instructions[task_id]["tools"][tool_index]["question"] = tool["label"]
-                        if tool["details"] != []:
-                            instructions[task_id]["tools"][tool_index]["followup_questions"] = {}
+                    # classification task
+                    if "question" in task:
+                        instructions[task_id]["instruction"] = task["question"]
+                        instructions[task_id]["answers"] = {}
+                        for answer_id,answer in enumerate(task["answers"]):
+                            label = answer["label"]
+                            label = re.sub("'","",label)
+                            instructions[task_id]["answers"][answer_id] = label
 
-                            for subtask_index,subtask in enumerate(tool["details"]):
-                                instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index] = {}
-                                instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["question"] = subtask["question"]
-                                instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"] = {}
-                                #print subtask["question"]
-                                for answer_index,answers in enumerate(subtask["answers"]):
-                                    instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"][answer_index] = answers
+                    else:
+                        instructions[task_id]["instruction"] = task["instruction"]
+
+                        instructions[task_id]["tools"] = {}
+                        for tool_index,tool in enumerate(task["tools"]):
+                            instructions[task_id]["tools"][tool_index] = {}
+                            instructions[task_id]["tools"][tool_index]["question"] = tool["label"]
+                            if tool["details"] != []:
+                                instructions[task_id]["tools"][tool_index]["followup_questions"] = {}
+
+                                for subtask_index,subtask in enumerate(tool["details"]):
+                                    instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index] = {}
+                                    instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["question"] = subtask["question"]
+                                    instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"] = {}
+                                    #print subtask["question"]
+                                    for answer_index,answers in enumerate(subtask["answers"]):
+                                        instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"][answer_index] = answers
 
                         # print tool["label"]
                     # print task
@@ -629,9 +646,9 @@ class AggregationAPI:
         stmt = "SELECT subject_id FROM subjects WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)# + " and workflow_version = " + str(version)
         subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt)])
 
-        assert subjects != []
+        assert subjects != ()
 
-        return subjects
+        return list(subjects)
 
     def __merge_aggregations__(self,agg1,agg2):
         """
@@ -1203,6 +1220,7 @@ class AggregationAPI:
                     print record_list
                     assert success
 
+
                 # to help us tell apart between different users who are not logged in
                 # todo- a non logged in user might see this subject multiple times - how to protect against that?
                 non_logged_in_users = 0
@@ -1253,7 +1271,6 @@ class AggregationAPI:
                                     # so the below code is slightly different than above
                                     if ("subtask" in classification_tasks[task_id]) and (tool in classification_tasks[task_id]["subtask"]):
                                         for local_subtask_id in classification_tasks[task_id]["subtask"][tool]:
-                                            print classification_tasks[task_id]
                                             global_subtask_id = str(task_id)+"_"+str(tool)+"_"+str(local_subtask_id)
                                             if global_subtask_id not in raw_classifications:
                                                 raw_classifications[global_subtask_id] = {}
@@ -1276,8 +1293,7 @@ class AggregationAPI:
                                 # if task_id == "init":
                                 #     print task_id,task["value"]
                                 raw_classifications[task_id][subject_id].append((user_id,task["value"]))
-        assert False
-        print raw_classifications
+
         return raw_classifications
 
     def __sort_markings__(self,workflow_id,subject_set=None,ignore_version=False):
@@ -1549,6 +1565,6 @@ if __name__ == "__main__":
     project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering})#, "rectangle":(blob_clustering.BlobClustering,{})})
     project.__set_classification_alg__(classification.VoteCount())
     # project.__info__()
-    project.__aggregate__(workflows=[84],subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
-    # project.__get_results__(84,495225)
+    # project.__aggregate__()#workflows=[84],subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+    project.__get_results__(979)
     # project.__get_workflow_details__(84)
