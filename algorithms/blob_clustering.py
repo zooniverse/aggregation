@@ -16,8 +16,9 @@ def nCr(n,r):
     return f(n) / f(r) / f(n-r)
 
 class BlobClustering(clustering.Cluster):
-    def __init__(self):
-        clustering.Cluster.__init__(self)
+    def __init__(self,shape):
+        assert shape != "point"
+        clustering.Cluster.__init__(self,shape)
 
     def __inner_fit__(self,markings,user_ids,tools,fname=None):
 
@@ -26,10 +27,20 @@ class BlobClustering(clustering.Cluster):
             blobs = []
             G=nx.Graph()
 
+            # take markings from only the first 5 users
+            useable_users = list(set(user_ids))[:15]
+            all_combined = [(m,u,t) for m,u,t in zip(markings,user_ids,tools) if u in useable_users]
+            markings,user_ids,tools = zip(*all_combined)
+
+            # check for bad polygons and discard if necessary
+            # do it here so we don't have gaps in the ordering later
+            for i in range(len(markings)-1,-1,-1):
+                if len(markings[i]) <= 2:
+                    markings.pop(i)
+                    user_ids.pop(i)
+                    tools.pop(i)
+
             for j,pts in enumerate(markings):
-                if len(pts) <= 2:
-                    # not a real polygon
-                    continue
                 assert isinstance(pts,list) or isinstance(pts,tuple)
                 try:
                     blobs.append(Polygon(pts))
@@ -48,17 +59,21 @@ class BlobClustering(clustering.Cluster):
                 if len(c) >= 3:
                     overlapping_blobs = [blobs[k] for k in c]
                     num_blobs = 3
-                    while nCr(len(overlapping_blobs),num_blobs) > 20:
-                        print "** " + str(num_blobs)
-                        num_blobs += 1
+                    # while nCr(len(overlapping_blobs),num_blobs) > 20:
+                    #     print "** " + str(num_blobs)
+                    #     num_blobs += 1
 
                     for subset_count, subset in enumerate(itertools.combinations(overlapping_blobs,num_blobs)):
-                        if subset_count >= 100:
-                            print "too many overlapping blobs"
-                            break
+
                         overlap = subset[0]
                         for b in subset[1:]:
                             overlap = overlap.intersection(b)
+
+                        # if isinstance(overlap,MultiPolygon):
+                        #     overlap = overlap.geoms[0]
+                        # print type(overlap)
+                        # assert isinstance(overlap,Polygon)
+
                         if not overlap.is_empty:
                             # # print type(overlap)
                             # x,y = overlap.exterior.xy
@@ -68,6 +83,7 @@ class BlobClustering(clustering.Cluster):
                                 union_blob = overlap
                             else:
                                 union_blob = union_blob.union(overlap)
+
                 if isinstance(union_blob,Polygon):
                     x,y = union_blob.exterior.xy
                     x1 = min(x)
