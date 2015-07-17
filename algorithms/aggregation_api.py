@@ -345,39 +345,39 @@ class AggregationAPI:
 
         return cluster_aggregation
 
-    def __describe__(self,workflow_id):
-        select = "SELECT tasks from workflows where id = " + str(workflow_id)
-        self.postgres_cursor.execute(select)
-        tasks = self.postgres_cursor.fetchone()[0]
-
-        select = "SELECT strings from workflow_contents where id = " + str(workflow_id)
-        self.postgres_cursor.execute(select)
-        contents = self.postgres_cursor.fetchone()[0]
-
-        self.description = {}
-        print "===---"
-        for task_id in tasks:
-            print tasks[task_id].keys()
-            # print task_id
-            self.description[task_id] = []
-            # print tasks[task_id]
-            if "question" in tasks[task_id]:
-                question = tasks[task_id]["question"]
-                self.description[task_id].append(contents[question])
-                # print contents[question]
-                answers = tasks[task_id]["answers"]
-                # print answers
-                for ans in answers:
-                    # print ans
-                    label = ans["label"]
-                    labels = label.split(".")
-                    # question_index = labels[2]
-                    self.description[task_id].append(contents[label])
-                    # print self.description[task_id][-1]
-            else:
-                assert "tools" in tasks[task_id]
-                print tasks[task_id]["tools"]
-        # self. description
+    # def __describe__(self,workflow_id):
+    #     select = "SELECT tasks from workflows where id = " + str(workflow_id)
+    #     self.postgres_cursor.execute(select)
+    #     tasks = self.postgres_cursor.fetchone()[0]
+    #
+    #     select = "SELECT strings from workflow_contents where id = " + str(workflow_id)
+    #     self.postgres_cursor.execute(select)
+    #     contents = self.postgres_cursor.fetchone()[0]
+    #
+    #     self.description = {}
+    #     print "===---"
+    #     for task_id in tasks:
+    #         print tasks[task_id].keys()
+    #         # print task_id
+    #         self.description[task_id] = []
+    #         # print tasks[task_id]
+    #         if "question" in tasks[task_id]:
+    #             question = tasks[task_id]["question"]
+    #             self.description[task_id].append(contents[question])
+    #             # print contents[question]
+    #             answers = tasks[task_id]["answers"]
+    #             # print answers
+    #             for ans in answers:
+    #                 # print ans
+    #                 label = ans["label"]
+    #                 labels = label.split(".")
+    #                 # question_index = labels[2]
+    #                 self.description[task_id].append(contents[label])
+    #                 # print self.description[task_id][-1]
+    #         else:
+    #             assert "tools" in tasks[task_id]
+    #             print tasks[task_id]["tools"]
+    #     # self. description
 
     def __get_num_clusters__(self,subject_id,task_id):
         return len(self.cluster_alg.clusterResults[subject_id][task_id])
@@ -452,7 +452,9 @@ class AggregationAPI:
         for r in self.postgres_cursor.fetchall():
             # print json.dumps(r[3], sort_keys=True,indent=4, separators=(',', ': '))
             # print r[3].keys()
-            print r[4:]
+            assert isinstance(r[3],dict)
+            print json.dumps(r[3], sort_keys=True,indent=4, separators=(',', ': '))
+
 
     def __get_workflow_details__(self,workflow_id):
         request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
@@ -484,11 +486,27 @@ class AggregationAPI:
             if int(workflows["id"]) == workflow_id:
 
                 for task_id,task in workflows["tasks"].items():
+                    # print task
+                    # print task["tools"]["details"]
+                    # print
+
                     instructions[task_id] = {}
                     instructions[task_id]["instruction"] = task["instruction"]
-                    instructions[task_id]["tools"] = []
-                    for tool in task["tools"]:
-                        instructions[task_id]["tools"].append(tool["label"])
+                    instructions[task_id]["tools"] = {}
+                    for tool_index,tool in enumerate(task["tools"]):
+                        instructions[task_id]["tools"][tool_index] = {}
+                        instructions[task_id]["tools"][tool_index]["question"] = tool["label"]
+                        if tool["details"] != []:
+                            instructions[task_id]["tools"][tool_index]["followup_questions"] = {}
+
+                            for subtask_index,subtask in enumerate(tool["details"]):
+                                instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index] = {}
+                                instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["question"] = subtask["question"]
+                                instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"] = {}
+                                #print subtask["question"]
+                                for answer_index,answers in enumerate(subtask["answers"]):
+                                    instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"][answer_index] = answers
+
                         # print tool["label"]
                     # print task
 
@@ -1230,6 +1248,13 @@ class AggregationAPI:
                                         except InvalidMarking as e:
                                             print e
 
+                                    # is there a subtask associated with this marking?
+                                    if "subtask" in classification_tasks[task_id]:
+                                        print "--+++"
+                                        print self.__get_workflow_details__(workflow_id)
+                                        print json.dumps(self.__get_workflow_details__(workflow_id), sort_keys=True,indent=4, separators=(',', ': '))
+                                        assert False
+
                             else:
                                 if task_id not in raw_classifications:
                                     raw_classifications[task_id] = {}
@@ -1461,53 +1486,16 @@ class AggregationAPI:
                 # del aggregation["instructions"]
                 t = json.dumps(aggregation)
                 # t = re.sub("\"","'",t)
-                print t
-                print aggregation
                 # stmt = "UPDATE aggregations SET aggregation = \""+t+"\" WHERE workflow_id = " + str(workflow_id) + " and subject_id = " + str(subject_id)
                 # stmt = "UPDATE aggregations (aggregation,updated_at) VALUES(" + json.dumps(aggregation) + "," + str(datetime.datetime.now()) + ") WHERE workflow_id = " + str(workflow_id) + " and subject_id = " + str(subject_id)
-                stmt = "UPDATE \"aggregations\" SET \"aggregation\" = \'"+t+"\' WHERE \"aggregations\".\"workflow_id\" = 84"
+                stmt = "UPDATE \"aggregations\" SET \"aggregation\" = \'"+t+"\' WHERE \"aggregations\".\"workflow_id\" = " + str(workflow_id) + " and \"aggregations\".\"subject_id\" = " + str(subject_id)
             else:
                 # do an insert
                 stmt = "INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES("+str(workflow_id)+","+str(subject_id)+",'"+json.dumps(aggregation)+"','"+str(datetime.datetime.now())+"','"+str(datetime.datetime.now())+"')"
-            print stmt
+            # print stmt
             self.postgres_cursor.execute(stmt)
 
         self.postgres_session.commit()
-        # see http://stackoverflow.com/questions/17267417/how-do-i-do-an-upsert-merge-insert-on-duplicate-update-in-postgresql
-        # # for the logic behind the following
-        #
-        # self.postgres_cursor.execute("create temporary table newvals(workflow_id_ int, subject_id_ int, aggregation_ jsonb, created_at_ timestamp, updated_at_ timestamp)")
-        # for ii,subject_id in enumerate(aggregations):
-        #     if subject_id == "param":
-        #         continue
-        #
-        #     select = "SELECT metadata from subjects where id="+str(subject_id)
-        #     print "inserting subject id " + str((workflow_id,subject_id))
-        #     self.postgres_cursor.execute(select)
-        #     metadata = self.postgres_cursor.fetchone()
-        #
-        #     # add in the necessary metadata relevant to this subject - probably filename etc.
-        #     # and the instructions - so people can match up the keys with what the actual tasks were
-        #     # slightly redundant since this will not change for a workflow but will be given for every subject
-        #     aggregation = aggregations[subject_id]
-        #     aggregation["metadata"] = metadata
-        #     aggregation["instructions"] = self.__get_workflow_details__(workflow_id)
-        #
-        #     stmt = "INSERT INTO newvals(workflow_id_,subject_id_,aggregation_,created_at_,updated_at_) VALUES("+str(workflow_id)+","+str(subject_id)+",'"+json.dumps(aggregation)+"','"+str(datetime.datetime.now())+"','"+str(datetime.datetime.now())+"')"
-        #     self.postgres_cursor.execute(stmt)
-        #
-        # self.postgres_cursor.execute("LOCK TABLE aggregations IN EXCLUSIVE MODE")
-        # self.postgres_cursor.execute("""UPDATE aggregations
-        # set aggregation = newvals.aggregation_, updated_at = newvals.updated_at_
-        # FROM newvals
-        # WHERE (aggregations.workflow_id = newvals.workflow_id_) and (aggregations.subject_id = newvals.subject_id_)""")
-        # self.postgres_cursor.execute("""INSERT INTO aggregations
-        # SELECT newvals.workflow_id_, newvals.subject_id_, newvals.aggregation_, newvals.created_at_, newvals.updated_at_
-        # FROM newvals
-        # LEFT OUTER JOIN aggregations ON (aggregations.workflow_id = newvals.workflow_id_) and (aggregations.subject_id = newvals.subject_id_)
-        # where (aggregations.workflow_id is NULL) AND (aggregations.subject_id is NULL)""")
-        #
-        # self.postgres_session.commit()
 
 
 class SubjectGenerator:
@@ -1546,8 +1534,8 @@ if __name__ == "__main__":
     # project.__migrate__()
 
     project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering})#, "rectangle":(blob_clustering.BlobClustering,{})})
-    # project.__set_classification_alg__(classification.VoteCount())
+    project.__set_classification_alg__(classification.VoteCount())
     # project.__info__()
     project.__aggregate__(workflows=[84],subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
-    project.__get_results__(84,495160)
+    # project.__get_results__(84,495225)
     # project.__get_workflow_details__(84)
