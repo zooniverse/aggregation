@@ -1215,7 +1215,6 @@ class AggregationAPI:
                         user_id = non_logged_in_users
 
                     annotations = json.loads(record.annotations)
-                    print annotations
                     # go through each annotation and get the associated task
                     for task in annotations:
                         task_id = task["task"]
@@ -1249,11 +1248,25 @@ class AggregationAPI:
                                             print e
 
                                     # is there a subtask associated with this marking?
-                                    if "subtask" in classification_tasks[task_id]:
-                                        print "--+++"
-                                        print self.__get_workflow_details__(workflow_id)
-                                        print json.dumps(self.__get_workflow_details__(workflow_id), sort_keys=True,indent=4, separators=(',', ': '))
-                                        assert False
+                                    # keep in mind that subtasks are by tool type - NOT by shape
+                                    # so different tools with the same shape can have different subtasks
+                                    # so the below code is slightly different than above
+                                    if ("subtask" in classification_tasks[task_id]) and (tool in classification_tasks[task_id]["subtask"]):
+                                        for local_subtask_id in classification_tasks[task_id]["subtask"][tool]:
+                                            print classification_tasks[task_id]
+                                            global_subtask_id = str(task_id)+"_"+str(tool)+"_"+str(local_subtask_id)
+                                            if global_subtask_id not in raw_classifications:
+                                                raw_classifications[global_subtask_id] = {}
+                                            if subject_id not in raw_classifications[global_subtask_id]:
+                                                raw_classifications[global_subtask_id][subject_id] = {}
+
+                                            # we need the coordinates since different markings may have the same subtasks
+                                            shape = marking_tasks[task_id][tool]
+                                            relevant_params = self.marking_params_per_shape[shape](marking,(10000,10000))
+
+                                            subtask_value = marking["details"][local_subtask_id]["value"]
+                                            raw_classifications[global_subtask_id][subject_id][(relevant_params,user_id)] = subtask_value
+
 
                             else:
                                 if task_id not in raw_classifications:
@@ -1263,7 +1276,7 @@ class AggregationAPI:
                                 # if task_id == "init":
                                 #     print task_id,task["value"]
                                 raw_classifications[task_id][subject_id].append((user_id,task["value"]))
-
+        assert False
         print raw_classifications
         return raw_classifications
 
