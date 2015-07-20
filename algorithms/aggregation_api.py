@@ -107,8 +107,7 @@ def ellipse_mapping(marking,image_dimensions):
 
 class AggregationAPI:
     def __init__(self,project=None):#,user_threshold= None, score_threshold= None): #Supernovae
-        # todo - refactor this!
-
+        self.cluster_algs = None
         self.classification_alg = None
         self.workflows = None
         self.versions = None
@@ -119,7 +118,6 @@ class AggregationAPI:
         self.marking_params_per_shape["point"] = point_mapping
         self.marking_params_per_shape["ellipse"] = ellipse_mapping
         self.marking_params_per_shape["rectangle"] = rectangle_mapping
-        self.__set_clustering_algs__({"point":agglomerative.Agglomerative, "rectangle":blob_clustering.BlobClustering})
 
         # only continue the set up if the project name is given
         self.project_short_name = project
@@ -229,7 +227,6 @@ class AggregationAPI:
         for workflow_id in workflows:
             if subject_set is None:
                 subject_set = self.__get_retired_subjects__(workflow_id)
-                # uncomment below if you want all the subjects
                 # subject_set = self.__load_subjects__(workflow_id)
             print "aggregating " + str(len(subject_set)) + " subjects"
             # self.__describe__(workflow_id)
@@ -242,13 +239,16 @@ class AggregationAPI:
             # ideally if there are no marking tasks, then we shouldn't have provided a clustering algorithm
             # but nice sanity check
 
-            if marking_tasks != {}:
+            raw_classifications,raw_markings = self.__sort_annotations__(workflow_id,subject_set)
+
+            if (self.cluster_algs is not None) and (marking_tasks != {}):
                 print "clustering"
-                clustering_aggregations = self.__cluster__(workflow_id,subject_set)
+                clustering_aggregations = self.__cluster__(raw_markings)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
-            if classification_tasks != {}:
+            if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
-                classification_aggregations = self.__classify__(workflow_id,clustering_aggregations,subject_set)
+                print "classifying"
+                classification_aggregations = self.__classify__(raw_classifications,clustering_aggregations,workflow_id)
 
             # if we have both markings and classifications - we need to merge the results
             if (clustering_aggregations is not None) and (classification_aggregations is not None):
@@ -281,53 +281,18 @@ class AggregationAPI:
         for i in xrange(0, len(l), n):
             yield l[i:i+n]
 
-    def __classify__(self,workflow_id,clustering_aggregations,subject_set=None):
+    def __classify__(self,raw_classifications,clustering_aggregations,workflow_id):
         # get the raw classifications for the given workflow
-        raw_classifications = self.__sort_classifications__(workflow_id,subject_set)
-        marking_classifications = self.__sort_markings__(workflow_id,subject_set)
-
-        # for task_id in marking_classifications:
-        #     for shape in marking_classifications[task_id]:
-        #
-        #         for subject_set in marking_classifications[task_id][shape]:
-        #             if "param" in [subject_set,shape,task_id]:
-        #                 continue
-        #
-        #             print
-        #             print sorted(marking_classifications[task_id][shape][subject_set].keys(), key = lambda x:x[0][0])
-        #             for ii,(m,u) in enumerate(sorted(raw_classifications[task_id][shape][subject_set].keys(), key = lambda x:x[0][0])):
-        #                 print u,(sorted(marking_classifications[task_id][shape][subject_set].keys(), key = lambda x:x[0][0])[ii])[1]
-        #                 print m,(sorted(marking_classifications[task_id][shape][subject_set].keys(), key = lambda x:x[0][0])[ii])[0]
-        #                 print
-        #             print
-        #
-        # assert False
-
-        # for task_id in raw_classifications:
-        #     if task_id == "param":
-        #         continue
-        #     for shape in raw_classifications[task_id].keys():
-        #         if shape == "param":
-        #             continue
-        #         if isinstance(raw_classifications[task_id][shape],list):
-        #             continue
-        #         for subject_id in raw_classifications[task_id][shape]:
-        #             if subject_id == "param":
-        #                 continue
-        #             print raw_classifications[task_id][shape][subject_id]
-        #             print clustering_aggregations[task_id][shape][subject_id].keys()
-        #             print
-        # assert False
-
+        # raw_classifications = self.__sort_classifications__(workflow_id,subject_set)
         if raw_classifications == {}:
             print "returning empty"
             empty_aggregation = {"param":"subject_id"}
             # for subject_set in empty_aggregation
             return empty_aggregation
-
+        # assert False
         return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations)
 
-    def __cluster__(self,workflow_id,subject_set=None):
+    def __cluster__(self,raw_markings):
         """
         run the clustering algorithm for a given workflow
         need to have already checked that the workflow requires clustering
@@ -335,16 +300,16 @@ class AggregationAPI:
         :return:
         """
         # assert (self.cluster_algs != {}) and (self.cluster_algs is not None)
-        print "workflow id is " + str(workflow_id)
+        # print "workflow id is " + str(workflow_id)
         # get the raw classifications for the given workflow
-        if subject_set is None:
-            subject_set = self.__load_subjects__(workflow_id)
+        # if subject_set is None:
+        #     subject_set = self.__load_subjects__(workflow_id)
 
-        raw_markings = self.__sort_markings__(workflow_id,subject_set)
+        # raw_markings = self.__sort_markings__(workflow_id,subject_set)
 
         if raw_markings == {}:
             print "warning - empty set of images"
-            print subject_set
+            # print subject_set
             return {}
         # assert raw_markings != {}
         # assert False
@@ -536,7 +501,8 @@ class AggregationAPI:
                     instructions[task_id] = {}
                     # classification task
                     if "question" in task:
-                        instructions[task_id]["instruction"] = task["question"]
+                        question = task["question"]
+                        instructions[task_id]["instruction"] = re.sub("'","",question)
                         instructions[task_id]["answers"] = {}
                         for answer_id,answer in enumerate(task["answers"]):
                             label = answer["label"]
@@ -544,12 +510,14 @@ class AggregationAPI:
                             instructions[task_id]["answers"][answer_id] = label
 
                     else:
-                        instructions[task_id]["instruction"] = task["instruction"]
+                        instruct_string = task["instruction"]
+                        instructions[task_id]["instruction"] = re.sub("'","",instruct_string)
 
                         instructions[task_id]["tools"] = {}
                         for tool_index,tool in enumerate(task["tools"]):
                             instructions[task_id]["tools"][tool_index] = {}
-                            instructions[task_id]["tools"][tool_index]["question"] = tool["label"]
+                            label = tool["label"]
+                            instructions[task_id]["tools"][tool_index]["question"] = re.sub("'","",label)
                             if tool["details"] != []:
                                 instructions[task_id]["tools"][tool_index]["followup_questions"] = {}
 
@@ -1231,11 +1199,16 @@ class AggregationAPI:
         # read in the most current version of each of the workflows
         return workflows
 
-    def __sort_classifications__(self,workflow_id,subject_set=None):
+    def __sort_annotations__(self,workflow_id,subject_set=None):
         version = int(math.floor(float(self.versions[workflow_id])))
+
+        # todo - do this better
+        width = 2000
+        height = 2000
 
         classification_tasks,marking_tasks = self.workflows[workflow_id]
         raw_classifications = {}
+        raw_markings = {}
 
         if subject_set is None:
             subject_set = self.__load_subjects__(workflow_id)
@@ -1256,9 +1229,6 @@ class AggregationAPI:
                     print record_list
                     assert success
 
-
-                # to help us tell apart between different users who are not logged in
-                # todo- a non logged in user might see this subject multiple times - how to protect against that?
                 non_logged_in_users = 0
                 # print "==++ " + str(subject_id)
                 for record in record_list:
@@ -1319,8 +1289,6 @@ class AggregationAPI:
 
                                             subtask_value = marking["details"][local_subtask_id]["value"]
                                             raw_classifications[global_subtask_id][subject_id][(relevant_params,user_id)] = subtask_value
-
-
                             else:
                                 if task_id not in raw_classifications:
                                     raw_classifications[task_id] = {}
@@ -1330,123 +1298,8 @@ class AggregationAPI:
                                 #     print task_id,task["value"]
                                 raw_classifications[task_id][subject_id].append((user_id,task["value"]))
 
-        return raw_classifications
-
-    def __sort_markings__(self,workflow_id,subject_set=None,ignore_version=False):
-        """
-        :param workflow_id:
-        :param subject_set:
-        :param ignore_version: ONLY set for debugging use
-        :return:
-        """
-        ignore_version=False
-
-        # workflow_version = self.__get_workflow_version__(workflow_id)
-
-        classification_tasks,marking_tasks = self.workflows[workflow_id]
-        if marking_tasks == {}:
-            return {}
-
-        raw_markings = {}
-        if subject_set is None:
-            subject_set = self.__load_subjects__(workflow_id)
-
-        # use one image from the workflow to determine the size of all images
-        # todo - BAD ASSUMPTION, think of something better
-        try:
-            fname = self.__image_setup__(subject_set[0])
-            im=Image.open(fname)
-            width,height= im.size
-        except (IndexError,ImageNotDownloaded,AttributeError):
-            # todo - fix!!!
-            print "image not downloaded"
-            width = 1000
-            height = 1000
-
-        self.users_per_subject={}
-
-        # loaded_subjects = set()
-        # read_in = set()
-
-        for s in self.__chunks(subject_set,15):
-            print s
-            statements_and_params = []
-            if ignore_version:
-                select_statement = self.cassandra_session.prepare("select * from " + self.classification_table + " where project_id = ? and workflow_id = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
-            else:
-                select_statement = self.cassandra_session.prepare("select * from " + self.classification_table + " where project_id = ? and workflow_id = ? and subject_id = ? and workflow_version = ?")# and workflow_id = ?")# and workflow_version = ?")
-
-            # select_statement = self.cassandra_session.prepare("select id,user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
-            # select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and workflow_id = ? and workflow_version = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
-            # select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ?")# and workflow_id = ? and workflow_version = ?")
-
-            # assert 458701 not in s
-            # print s
-
-            for subject_id in s:
-                if ignore_version:
-                    params = (int(self.project_id),workflow_id,subject_id,)#int(workflow_id))#,int(math.floor(float(self.versions[workflow_id]))))
-                else:
-                    # version = int(math.floor(float(self.versions[workflow_id])))
-                    params = (int(self.project_id),workflow_id,subject_id,self.versions[workflow_id])#int(workflow_id))#,int(math.floor(float(self.versions[workflow_id]))))
-                # params = (int(self.project_id),)#,int(workflow_id),int(math.floor(float(self.versions[workflow_id]))))
-                statements_and_params.append((select_statement, params))
-                # print params
-            results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
-            for subject_id,(success,record_list) in zip(s,results):
-                tt = 0
-                # todo - implement error recovery
-                if not success:
-                    print record_list
-                assert success
-
-                # use this counter to help differentiate non logged in users
-                non_logged_in_users = 0
-
-                # print (success,record_list)
-
-                ips_per_subject = []
-
-                for record in record_list:
-                    tt += 1
-                    user_id = record.user_id
-
-                    if record.user_ip in ips_per_subject:
-                        # print "duplicate ip address per subject"
-                        continue
-
-                    ips_per_subject.append(record.user_ip)
-
-                    # increment counter so that we keep non logged in users separate
-                    if user_id == -1:
-                        non_logged_in_users += -1
-                        user_id = non_logged_in_users
-                    # loaded_subjects.add(subject_id)
-
-                    # for counting the number of users who have seen this subject
-                    # set => in case someone has seen this image twice
-                    if subject_id not in self.users_per_subject:
-                        self.users_per_subject[subject_id] = {}
-
-                    # # todo - how to handle cases where someone has seen an image more than once?
-                    # if user_id in self.users_per_subject[subject_id]:
-                    #     select = "SELECT * from users where id="+str(user_id)
-                    #     cur = self.postgres_session.cursor()
-                    #     cur.execute(select)
-                    #
-                    #     print cur.fetchone()
-
-                    # self.users_per_subject[subject_id].add(user_id)
-
-                    annotations = json.loads(record.annotations)
-
-                    # go through each annotation and get the associated task
-                    for task in annotations:
-                        task_id = task["task"]
-
-                        if task_id not in self.users_per_subject[subject_id]:
-                            self.users_per_subject[subject_id][task_id] = set()
-                        self.users_per_subject[subject_id][task_id].add(user_id)
+                        # =======-----
+                        # and now on to markings
 
                         if task_id in marking_tasks:
                             if not isinstance(task["value"],list):
@@ -1467,7 +1320,7 @@ class AggregationAPI:
                                     print task_id
                                     print tool
                                     raise
-                                if shape == "image":
+                                if shape ==  "image":
                                     # todo - treat image like a rectangle
                                     continue
 
@@ -1485,14 +1338,261 @@ class AggregationAPI:
                                     if shape not in raw_markings[task_id]:
                                         raw_markings[task_id][shape] = {}
                                     if subject_id not in raw_markings[task_id][shape]:
-                                        raw_markings[task_id][shape][subject_id] = {}
+                                        raw_markings[task_id][shape][subject_id] = []
 
-                                    raw_markings[task_id][shape][subject_id][(relevant_params,user_id)] = tool
+                                    raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
                                 except InvalidMarking as e:
                                     # print e
                                     pass
 
-        return raw_markings
+        return raw_classifications,raw_markings
+
+    # def __sort_classifications__(self,workflow_id,subject_set=None):
+    #     version = int(math.floor(float(self.versions[workflow_id])))
+    #
+    #     classification_tasks,marking_tasks = self.workflows[workflow_id]
+    #     raw_classifications = {}
+    #
+    #     if subject_set is None:
+    #         subject_set = self.__load_subjects__(workflow_id)
+    #
+    #     total = 0
+    #     for s in self.__chunks(subject_set,15):
+    #         statements_and_params = []
+    #         ignore_version = True
+    #
+    #         select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ?")# and workflow_version = ?")
+    #         for subject_id in s:
+    #             params = (int(self.project_id),subject_id,int(workflow_id))#,version)
+    #             statements_and_params.append((select_statement, params))
+    #         results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
+    #
+    #         for subject_id,(success,record_list) in zip(s,results):
+    #             if not success:
+    #                 print record_list
+    #                 assert success
+    #
+    #
+    #             # to help us tell apart between different users who are not logged in
+    #             # todo- a non logged in user might see this subject multiple times - how to protect against that?
+    #             non_logged_in_users = 0
+    #             # print "==++ " + str(subject_id)
+    #             for record in record_list:
+    #                 total += 1
+    #                 user_id = record.user_id
+    #                 if user_id == -1:
+    #                     non_logged_in_users += -1
+    #                     user_id = non_logged_in_users
+    #
+    #                 annotations = json.loads(record.annotations)
+    #                 # go through each annotation and get the associated task
+    #                 for task in annotations:
+    #                     task_id = task["task"]
+    #
+    #                     # is this a classification task
+    #                     if task_id in classification_tasks:
+    #                         # is this classification task associated with a marking task?
+    #                         # i.e. a sub task?
+    #                         if isinstance(classification_tasks[task_id],dict):
+    #                             # does this correspond to a confusing shape?
+    #                             # print classification_tasks[task_id]
+    #                             for marking in task["value"]:
+    #                                 tool = marking["tool"]
+    #                                 shape = marking_tasks[task_id][tool]
+    #
+    #                                 # is this shape confusing?
+    #                                 if ("shapes" in classification_tasks[task_id]) and (shape in classification_tasks[task_id]["shapes"]):
+    #                                     if task_id not in raw_classifications:
+    #                                         raw_classifications[task_id] = {}
+    #                                     if shape not in raw_classifications[task_id]:
+    #                                         raw_classifications[task_id][shape] = {}
+    #                                     if subject_id not in raw_classifications[task_id][shape]:
+    #                                         raw_classifications[task_id][shape][subject_id] = {}
+    #
+    #                                     # todo - FIX!!!
+    #                                     try:
+    #                                         relevant_params = self.marking_params_per_shape[shape](marking,(10000,10000))
+    #                                         # assert (relevant_params,user_id) not in raw_classifications[task_id][shape][subject_id]
+    #                                         raw_classifications[task_id][shape][subject_id][(relevant_params,user_id)] = tool #.append((user_id,relevant_params,tool))
+    #                                     except InvalidMarking as e:
+    #                                         print e
+    #
+    #                                 # is there a subtask associated with this marking?
+    #                                 # keep in mind that subtasks are by tool type - NOT by shape
+    #                                 # so different tools with the same shape can have different subtasks
+    #                                 # so the below code is slightly different than above
+    #                                 if ("subtask" in classification_tasks[task_id]) and (tool in classification_tasks[task_id]["subtask"]):
+    #                                     for local_subtask_id in classification_tasks[task_id]["subtask"][tool]:
+    #                                         global_subtask_id = str(task_id)+"_"+str(tool)+"_"+str(local_subtask_id)
+    #                                         if global_subtask_id not in raw_classifications:
+    #                                             raw_classifications[global_subtask_id] = {}
+    #                                         if subject_id not in raw_classifications[global_subtask_id]:
+    #                                             raw_classifications[global_subtask_id][subject_id] = {}
+    #
+    #                                         # we need the coordinates since different markings may have the same subtasks
+    #                                         shape = marking_tasks[task_id][tool]
+    #                                         relevant_params = self.marking_params_per_shape[shape](marking,(10000,10000))
+    #
+    #                                         subtask_value = marking["details"][local_subtask_id]["value"]
+    #                                         raw_classifications[global_subtask_id][subject_id][(relevant_params,user_id)] = subtask_value
+    #                         else:
+    #                             if task_id not in raw_classifications:
+    #                                 raw_classifications[task_id] = {}
+    #                             if subject_id not in raw_classifications[task_id]:
+    #                                 raw_classifications[task_id][subject_id] = []
+    #                             # if task_id == "init":
+    #                             #     print task_id,task["value"]
+    #                             raw_classifications[task_id][subject_id].append((user_id,task["value"]))
+    #             print subject_id,non_logged_in_users
+    #     return raw_classifications
+
+    # def __sort_markings__(self,workflow_id,subject_set=None,ignore_version=False):
+    #     """
+    #     :param workflow_id:
+    #     :param subject_set:
+    #     :param ignore_version: ONLY set for debugging use
+    #     :return:
+    #     """
+    #     ignore_version=False
+    #
+    #     # workflow_version = self.__get_workflow_version__(workflow_id)
+    #
+    #     classification_tasks,marking_tasks = self.workflows[workflow_id]
+    #     if marking_tasks == {}:
+    #         return {}
+    #
+    #     raw_markings = {}
+    #     if subject_set is None:
+    #         subject_set = self.__load_subjects__(workflow_id)
+    #
+    #     # use one image from the workflow to determine the size of all images
+    #     # todo - BAD ASSUMPTION, think of something better
+    #     try:
+    #         fname = self.__image_setup__(subject_set[0])
+    #         im=Image.open(fname)
+    #         width,height= im.size
+    #     except (IndexError,ImageNotDownloaded,AttributeError):
+    #         # todo - fix!!!
+    #         print "image not downloaded"
+    #         width = 1000
+    #         height = 1000
+    #
+    #     self.users_per_subject={}
+    #
+    #     loaded_subjects = set()
+    #     read_in = set()
+    #
+    #     for s in self.__chunks(subject_set,15):
+    #         statements_and_params = []
+    #         if ignore_version:
+    #             select_statement = self.cassandra_session.prepare("select * from " + self.classification_table + " where project_id = ? and workflow_id = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
+    #         else:
+    #             select_statement = self.cassandra_session.prepare("select * from " + self.classification_table + " where project_id = ? and workflow_id = ? and subject_id = ? and workflow_version = ?")# and workflow_id = ?")# and workflow_version = ?")
+    #
+    #         # select_statement = self.cassandra_session.prepare("select id,user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
+    #         # select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and workflow_id = ? and workflow_version = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
+    #         # select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ?")# and workflow_id = ? and workflow_version = ?")
+    #
+    #         # assert 458701 not in s
+    #         # print s
+    #
+    #         for subject_id in s:
+    #             if ignore_version:
+    #                 params = (int(self.project_id),workflow_id,subject_id,)#int(workflow_id))#,int(math.floor(float(self.versions[workflow_id]))))
+    #             else:
+    #                 # version = int(math.floor(float(self.versions[workflow_id])))
+    #                 params = (int(self.project_id),workflow_id,subject_id,self.versions[workflow_id])#int(workflow_id))#,int(math.floor(float(self.versions[workflow_id]))))
+    #             # params = (int(self.project_id),)#,int(workflow_id),int(math.floor(float(self.versions[workflow_id]))))
+    #             statements_and_params.append((select_statement, params))
+    #             # print params
+    #         results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
+    #         for subject_id,(success,record_list) in zip(s,results):
+    #             tt = 0
+    #             # todo - implement error recovery
+    #             if not success:
+    #                 print record_list
+    #             assert success
+    #
+    #             # use this counter to help differentiate non logged in users
+    #             non_logged_in_users = 0
+    #             for record in record_list:
+    #                 tt += 1
+    #                 user_id = record.user_id
+    #
+    #                 if user_id == -1:
+    #                     non_logged_in_users += -1
+    #                     user_id = non_logged_in_users
+    #                 loaded_subjects.add(subject_id)
+    #                 # for counting the number of users who have seen this subject
+    #                 # set => in case someone has seen this image twice
+    #                 if subject_id not in self.users_per_subject:
+    #                     self.users_per_subject[subject_id] = {}
+    #
+    #                 # # todo - how to handle cases where someone has seen an image more than once?
+    #                 # if user_id in self.users_per_subject[subject_id]:
+    #                 #     select = "SELECT * from users where id="+str(user_id)
+    #                 #     cur = self.postgres_session.cursor()
+    #                 #     cur.execute(select)
+    #                 #
+    #                 #     print cur.fetchone()
+    #
+    #                 # self.users_per_subject[subject_id].add(user_id)
+    #
+    #                 annotations = json.loads(record.annotations)
+    #
+    #                 # go through each annotation and get the associated task
+    #                 for task in annotations:
+    #                     task_id = task["task"]
+    #
+    #                     if task_id not in self.users_per_subject[subject_id]:
+    #                         self.users_per_subject[subject_id][task_id] = set()
+    #                     self.users_per_subject[subject_id][task_id].add(user_id)
+    #
+    #                     if task_id in marking_tasks:
+    #                         if not isinstance(task["value"],list):
+    #                             print "not properly formed marking - skipping"
+    #                             continue
+    #
+    #                         for marking in task["value"]:
+    #                             # what kind of tool made this marking and what was the shape of that tool?
+    #                             try:
+    #                                 tool = marking["tool"]
+    #                                 shape = marking_tasks[task_id][tool]
+    #                             except KeyError:
+    #                                 tool = None
+    #                                 shape = marking["type"]
+    #                             except IndexError as e:
+    #                                 print marking
+    #                                 print marking_tasks
+    #                                 print task_id
+    #                                 print tool
+    #                                 raise
+    #                             if shape ==  "image":
+    #                                 # todo - treat image like a rectangle
+    #                                 continue
+    #
+    #                             if shape not in self.marking_params_per_shape:
+    #                                 print "unrecognized shape: " + shape
+    #                                 continue
+    #
+    #                             try:
+    #                                 # extract the params specifically relevant to the given shape
+    #                                 relevant_params = self.marking_params_per_shape[shape](marking,(width,height))
+    #
+    #                                 # only create these if we have a valid marking
+    #                                 if task_id not in raw_markings:
+    #                                     raw_markings[task_id] = {}
+    #                                 if shape not in raw_markings[task_id]:
+    #                                     raw_markings[task_id][shape] = {}
+    #                                 if subject_id not in raw_markings[task_id][shape]:
+    #                                     raw_markings[task_id][shape][subject_id] = []
+    #
+    #                                 raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
+    #                             except InvalidMarking as e:
+    #                                 # print e
+    #                                 pass
+    #             print ".",subject_id,non_logged_in_users
+    #     return raw_markings
 
     def __store_results__(self,workflow_id,aggregations):
         # aggregations = self.__remove_user_ids__(aggregations)
@@ -1600,10 +1700,9 @@ if __name__ == "__main__":
 
     # project.__migrate__()
 
-    # project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering})#, "rectangle":(blob_clustering.BlobClustering,{})})
-    # project.__set_clustering_algs__({"rectangle":blob_clustering.BlobClustering})#, "rectangle":(blob_clustering.BlobClustering,{})})
+    project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering})#, "rectangle":(blob_clustering.BlobClustering,{})})
     project.__set_classification_alg__(classification.VoteCount())
     # project.__info__()
-    project.__aggregate__()#workflows=[84],subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
-    # project.__get_results__(979)
+    # project.__aggregate__()#workflows=[84],subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+    project.__get_results__(9)
     # project.__get_workflow_details__(84)

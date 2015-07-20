@@ -34,15 +34,9 @@ class Classification:
     def __task_aggregation__(self,classifications,gold_standard=False):
         return []
 
-    def __subtask_classification__(self,global_subtask_id,raw_classifications,tool_classification_results,clustering_results):
+    def __subtask_classification__(self):
         # todo: implement this
-        print "warning - subtask classification not yet done"
-        print global_subtask_id
-        (task_id,tool_id,subtask_id) = global_subtask_id
-        print clustering_results
-
         assert False
-        return {}
         # we are dealing with tasks
         # is shape uncertain - if so - only accept markings from some users - who used the "correct" tool
         if "shapes" in classification_tasks[task_id]:
@@ -87,70 +81,58 @@ class Classification:
             existence_classification = {"param":"subject_id"}
 
             global_cluster_index = 0
-            # clusters_per_subject = []
+            clusters_per_subject = []
 
             # look at the individual points in the cluster
             for subject_id in raw_classifications[task_id][shape]:
-                print subject_id
                 if subject_id == "param":
                     continue
-                if shape not in clustering_results[task_id]:
+                if subject_id not in clustering_results:
                     continue
-                if subject_id not in clustering_results[task_id][shape]:
-                    continue
-                # clusters_per_subject.append([])
+                clusters_per_subject.append([])
 
                 # in either case probably an empty image
-                # if subject_id not in clustering_results:
-                #     continue
-                # if task_id not in clustering_results[subject_id]:
-                #     continue
+                if subject_id not in clustering_results:
+                    continue
+                if task_id not in clustering_results[subject_id]:
+                    continue
 
-                print "made it"
-
-                for local_cluster_index in clustering_results[task_id][shape][subject_id]:
+                for local_cluster_index in clustering_results[subject_id][task_id][shape]:
                     if (local_cluster_index == "param") or (local_cluster_index == "all_users"):
                         continue
-                    print local_cluster_index
 
                     # extract the users who marked this cluster
-                    cluster = clustering_results[task_id][shape][subject_id][local_cluster_index]
+                    cluster = clustering_results[subject_id][task_id][shape][local_cluster_index]
                     users = cluster["users"]
 
                     ballots = []
 
-                    for u in clustering_results[task_id][shape][subject_id]["all_users"]:
+                    for u in clustering_results[subject_id][task_id][shape]["all_users"]:
                         if u in users:
                             ballots.append((u,1))
                         else:
                             ballots.append((u,0))
 
                     existence_classification[(subject_id,local_cluster_index)] = ballots
-                    # clusters_per_subject[-1].append(global_cluster_index)
-                    # global_cluster_index += 1
+                    clusters_per_subject[-1].append(global_cluster_index)
+                    global_cluster_index += 1
 
             existence_results = self.__task_aggregation__(existence_classification)
-            aggregations = self.__merge_results__(aggregations,existence_results)
-            # print existence_results
-            # assert False
-            #
-            # assert isinstance(existence_results,dict)
-            #
-            # for subject_id,cluster_index in existence_results:
-            #     if subject_id not in aggregations:
-            #         aggregations[subject_id] = {"param":"task_id"}
-            #     if task_id not in aggregations[subject_id]:
-            #         aggregations[subject_id][task_id] = {"param":"shape"}
-            #     if shape not in aggregations[subject_id][task_id]:
-            #         aggregations[subject_id][task_id][shape] = {}
-            #     # this part is probably redundant
-            #     if cluster_index not in aggregations[subject_id][task_id][shape]:
-            #         aggregations[subject_id][task_id][shape][cluster_index] = {}
-            #
-            #     aggregations[subject_id][task_id][shape][cluster_index]["existence"] = existence_results[(subject_id,cluster_index)]
+            assert isinstance(existence_results,dict)
 
-        # print aggregations.keys()
-        # print json.dumps(aggregations, sort_keys=True,indent=4, separators=(',', ': '))
+            for subject_id,cluster_index in existence_results:
+                if subject_id not in aggregations:
+                    aggregations[subject_id] = {"param":"task_id"}
+                if task_id not in aggregations[subject_id]:
+                    aggregations[subject_id][task_id] = {"param":"shape"}
+                if shape not in aggregations[subject_id][task_id]:
+                    aggregations[subject_id][task_id][shape] = {}
+                # this part is probably redundant
+                if cluster_index not in aggregations[subject_id][task_id][shape]:
+                    aggregations[subject_id][task_id][shape][cluster_index] = {}
+
+                aggregations[subject_id][task_id][shape][cluster_index]["existence"] = existence_results[(subject_id,cluster_index)]
+
         return aggregations
 
     def __tool_classification__(self,task_id,classification_tasks,raw_classifications,clustering_results):
@@ -164,7 +146,6 @@ class Classification:
         :param clustering_results:
         :return:
         """
-        print task_id
 
         if clustering_results == {"param":"subject_id"}:
             print "warning - empty classifications"
@@ -177,37 +158,26 @@ class Classification:
             return {}
 
         # only go through the "uncertain" shapes
-        if task_id not in clustering_results:
-            # should probably never happen
-            return {}
-
         for shape in classification_tasks[task_id]["shapes"]:
-            print shape
-            if shape == "param":
-                continue
-
-            if shape not in clustering_results[task_id]:
-                continue
             tool_classifications = {}
-
             for subject_id in raw_classifications[task_id][shape]:
-                if subject_id == "param":
-                    continue
                 # look at the individual points in the cluster
 
                 # this should only happen if there were badly formed markings
                 if raw_classifications[task_id][shape][subject_id] == {}:
                     continue
 
-                if subject_id not in clustering_results[task_id][shape]:
+                # in either case probably an empty image
+                if subject_id not in clustering_results:
+                    continue
+                if task_id not in clustering_results[subject_id]:
                     continue
 
-
-                for cluster_index in clustering_results[task_id][shape][subject_id]:
+                for cluster_index in clustering_results[subject_id][task_id][shape]:
                     if (cluster_index == "param") or (cluster_index == "all_users"):
                         continue
 
-                    cluster = clustering_results[task_id][shape][subject_id][cluster_index]
+                    cluster = clustering_results[subject_id][task_id][shape][cluster_index]
                     pts = cluster["points"]
                     users = cluster["users"]
                     # users = clustering_results[subject_id][task_id][shape][subject_id]["users"]
@@ -216,17 +186,11 @@ class Classification:
                     ballots = []
                     for (p,user) in zip(pts,users):
                         try:
-
                             tool_index = raw_classifications[task_id][shape][subject_id][(tuple(p),user)]
                         except KeyError:
                             print "===----"
-                            print "***"
-                            print clustering_results[task_id][shape][subject_id][cluster_index]["points"]
-                            print clustering_results[task_id][shape][subject_id][cluster_index]["users"]
-                            print sorted(raw_classifications[task_id][shape][subject_id].keys(),key = lambda x:x[0][0])
                             print cluster
-
-                            # print raw_classifications[task_id][shape][subject_id].keys()
+                            print raw_classifications[task_id][shape][subject_id].keys()
                             print (tuple(p),user)
                             raise
 
@@ -236,40 +200,41 @@ class Classification:
 
             # classify
             tool_results = self.__task_aggregation__(tool_classifications)
-            aggregations = self.__merge_results__(aggregations,tool_results)
-            # assert isinstance(tool_results,dict)
+            assert isinstance(tool_results,dict)
 
-            # for subject_id,cluster_index in tool_results:
-            #     if subject_id not in aggregations:
-            #         aggregations[subject_id] = {"param":"task_id"}
-            #     if task_id not in aggregations[subject_id]:
-            #         aggregations[subject_id][task_id] = {"param":"shape"}
-            #     if shape not in aggregations[subject_id][task_id]:
-            #         aggregations[subject_id][task_id][shape] = {}
-            #     # this part is probably redundant
-            #     if cluster_index not in aggregations[subject_id][task_id][shape]:
-            #         aggregations[subject_id][task_id][shape][cluster_index] = {}
-            #
-            #     aggregations[subject_id][task_id][shape][cluster_index]["shape_classification"] = tool_results[(subject_id,cluster_index)]
+            for subject_id,cluster_index in tool_results:
+                if subject_id not in aggregations:
+                    aggregations[subject_id] = {"param":"task_id"}
+                if task_id not in aggregations[subject_id]:
+                    aggregations[subject_id][task_id] = {"param":"shape"}
+                if shape not in aggregations[subject_id][task_id]:
+                    aggregations[subject_id][task_id][shape] = {}
+                # this part is probably redundant
+                if cluster_index not in aggregations[subject_id][task_id][shape]:
+                    aggregations[subject_id][task_id][shape][cluster_index] = {}
+
+                aggregations[subject_id][task_id][shape][cluster_index]["shape_classification"] = tool_results[(subject_id,cluster_index)]
 
         return aggregations
 
     def __aggregate__(self,raw_classifications,workflow,clustering_results=None):
         # use the first subject_id to find out which tasks we are aggregating the classifications for
-        aggregations = {"param":"task_id"}
+        aggregations = {"param":"subject_id"}
         classification_tasks,marking_tasks = workflow
 
         for task_id in classification_tasks:
-            print task_id
+            # print task_id
             if isinstance(classification_tasks[task_id],bool):
                 # we have a basic classification task
+                print task_id,classification_tasks[task_id]
+                print
+                print raw_classifications[task_id]
                 temp_results = self.__task_aggregation__(raw_classifications[task_id])
                 # convert everything into a dict and add the the task id
                 task_results = {}
                 for subject_id in temp_results:
                     task_results[subject_id] = {task_id:temp_results[subject_id]}
             else:
-                print "AA"
                 # we have classifications associated with markings
                 # make sure we have clustering results associated with these classifications
                 assert clustering_results is not None
@@ -283,20 +248,12 @@ class Classification:
                 # note that this step does not care whether a cluster is a false positive or not (i.e. the results
                 # from the previous step are not taken into account)
                 tool_results = self.__tool_classification__(task_id,classification_tasks,raw_classifications,clustering_results)
-                print tool_results
 
                 task_results = self.__merge_results__(existence_results,tool_results)
 
                 # are there any subtasks associated with this task/marking?
                 if "subtask" in classification_tasks[task_id]:
-                    print classification_tasks
-                    for tool_id in classification_tasks[task_id]["subtask"].keys():
-                        for subtask_id in classification_tasks[task_id]["subtask"][tool_id]:
-                            global_subtask_id = task_id+"_"+str(tool_id)+"_"+str(subtask_id)
-                            self.__subtask_classification__((task_id,tool_id,subtask_id),raw_classifications,tool_results,clustering_results)
-                    print classification_tasks
-                    assert False
-
+                    self.__subtask_classification__()
 
             assert isinstance(task_results,dict)
             for subject_id in task_results:
@@ -307,9 +264,8 @@ class Classification:
                 aggregations[subject_id] = self.__merge_results__(aggregations[subject_id],task_results[subject_id])
                 # aggregations[subject_id][task_id] = task_results[subject_id]
 
-        print classification_tasks
-        print marking_tasks
-        assert False
+
+
         return aggregations
 
     def __merge_results__(self,r1,r2):
@@ -356,8 +312,8 @@ class VoteCount(Classification):
             vote_counts = {}
             if subject_id == "param":
                 continue
+            # print raw_classifications[subject_id]
             for user,ballot in raw_classifications[subject_id]:
-                # todo - figure out why the below might every happen
                 if ballot is None:
                     continue
                 # in which case only one vote is allowed

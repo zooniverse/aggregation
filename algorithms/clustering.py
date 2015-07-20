@@ -447,37 +447,31 @@ class Cluster:
         :param jpeg_file: for debugging - to show step by step what is happening
         :return:
         """
-        aggregation = {"param":"task_id"}
+        aggregation = {"param":"subject_id"}
         # start by calling the api to get the annotations along with the list of who made each marking
         # so for this function, we know that annotations = markings
         # all_markings =  self.project_api.__get_markings__(subject_id,gold_standard)
         # print all_markings
         # self.clusterResults[subject_id] = {"param":"task_id"}
         for task_id in raw_markings:
-            print task_id
             # go through each shape independently
             for shape in raw_markings[task_id].keys():
-                print shape,self.shape
                 # if is this shape does not correspond to the specific shape this clustering algorithm was
                 # created for - skip
                 if shape != self.shape:
                     continue
 
                 for subject_id in raw_markings[task_id][shape]:
-                    print ":: " + str(subject_id)
                     # should only happen because of a bad annotation (hopefully)
                     if raw_markings[task_id][shape][subject_id] == []:
                         continue
 
-                    markings_and_users = raw_markings[task_id][shape][subject_id].keys()
-                    markings,users = zip(*markings_and_users)
-
+                    users,markings,tools = zip(*raw_markings[task_id][shape][subject_id])
 
                     # otherwise, just set to empty
                     if (markings == []) or (markings == [[] for i in users]):
                         cluster_results = [],[],[]
                         time_to_cluster = 0
-                        assert False
                     else:
                         if (fnames is not None) and (subject_id in fnames):
                             fname = fnames[subject_id]
@@ -486,36 +480,20 @@ class Cluster:
 
                         cluster_results,time_to_cluster = self.__inner_fit__(markings,users,fname=fname)
 
-                        # if subject_id not in aggregation:
-                        #     aggregation[subject_id] = {"param":"task_id"}
-                        # if task_id not in aggregation[subject_id]:
-                        #     aggregation[subject_id][task_id] = {"param":"shape"}
-                        # if shape not in aggregation[subject_id][task_id]:
-                        #     # store the set of all users who have seen this subject/task
-                        #     # used for determining false vs. true positives
-                        #     aggregation[subject_id][task_id][shape] = {"param":"cluster_index","all_users":list(set(users))}
-                        #
-                        # for cluster_index,cluster in enumerate(cluster_results):
-                        #     aggregation[subject_id][task_id][shape][cluster_index] = cluster
-
-                        if task_id not in aggregation:
-                            aggregation[task_id] = {"param":"shape"}
-                        if shape not in aggregation[task_id]:
-                            aggregation[task_id][shape] = {"param":"subject"}
-                        if subject_id not in aggregation[task_id][shape]:
+                        if subject_id not in aggregation:
+                            aggregation[subject_id] = {"param":"task_id"}
+                        if task_id not in aggregation[subject_id]:
+                            aggregation[subject_id][task_id] = {"param":"shape"}
+                        if shape not in aggregation[subject_id][task_id]:
                             # store the set of all users who have seen this subject/task
                             # used for determining false vs. true positives
-                            aggregation[task_id][shape][subject_id] = {"param":"cluster_index","all_users":list(set(users))}
+                            aggregation[subject_id][task_id][shape] = {"param":"cluster_index","all_users":list(set(users))}
 
-                        print users
-                        assert cluster_results != []
                         for cluster_index,cluster in enumerate(cluster_results):
-                            aggregation[task_id][shape][subject_id][cluster_index] = cluster
+                            aggregation[subject_id][task_id][shape][cluster_index] = cluster
 
-                        # if task_id not in aggregation:
-                        #     aggregation[task_id] = {"param":"shape"}
-                        # if shape not in
-
+        # we should have some results
+        # assert aggregation != {"param":"subject_id"}
         return aggregation
 
     def __get_densities__(self,subject_id):
