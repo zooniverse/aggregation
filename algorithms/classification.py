@@ -6,7 +6,7 @@ import re
 import matplotlib.pyplot as plt
 import networkx as nx
 import itertools
-
+from copy import deepcopy
 import abc
 import json
 import csv
@@ -34,28 +34,80 @@ class Classification:
     def __task_aggregation__(self,classifications,gold_standard=False):
         return []
 
-    def __subtask_classification__(self):
+    def __subtask_classification__(self,task_id,classification_tasks,raw_classifications,clustering_results):
         # todo: implement this
-        assert False
-        # we are dealing with tasks
-        # is shape uncertain - if so - only accept markings from some users - who used the "correct" tool
-        if "shapes" in classification_tasks[task_id]:
-            assert False
-        else:
-            for shape in classification_tasks[task_id]["shapes"]:
-                # create a temporary set of classifications
-                shape_classification = {}
+        print task_id
+        assert task_id != "param"
+        assert "subtask" in classification_tasks[task_id]
 
-                for subject_id in raw_classifications[task_id][shape]:
-                    # print raw_classifications[task_id][shape][subject_id]
+        aggregations = {}
+
+        for tool in classification_tasks[task_id]["subtask"]:
+            print "----"
+            print tool
+
+            # not every marking tool will have a follow up question
+            for followup_question_index in classification_tasks[task_id]["subtask"][tool]:
+                global_index = str(task_id)+"_" +str(tool)+"_"+str(followup_question_index)
+
+                followup_classification = {}
+                shapes_per_cluster = {}
+
+                # go through each cluster and find the corresponding raw classifications
+                for subject_id in clustering_results:
                     # print subject_id
-                    # print raw_classifications[task_id][shape].keys()
-                    # print clustering_results[task_id][shape].keys()
-                    # assert subject_id in clustering_results[task_id][shape]
-                    # look at the individual points in the cluster
-                    for cluster_index in clustering_results[subject_id][task_id][shape]:
-                        if cluster_index == "param":
-                            continue
+                    if subject_id == "param":
+                        continue
+
+                    # has anyone done this task for this subject?
+                    if task_id in clustering_results[subject_id]:
+                        # look at all the shape markings used and see if any correspond to the relevant type
+                        # todo - probably a more efficient way to do this
+                        # since we only store the shape associated with each cluster
+                        for shape in clustering_results[subject_id][task_id]:
+                            if shape == "param":
+                                continue
+
+                            # for each cluster, find users who might have a relevant marking - and see if the tool
+                            # type matches
+                            for cluster_index,cluster in clustering_results[subject_id][task_id][shape].items():
+                                if cluster_index in ["param","all_users"]:
+                                    continue
+
+                                user_identifiers = zip([tuple(x) for x in cluster["points"]],cluster["users"])
+                                ballots = []
+                                for user_identifiers,tool_used in zip(user_identifiers,cluster["tools"]):
+                                    # did the user use the relevant tool - doesn't matter if most people
+                                    # used another tool
+                                    if tool_used == tool:
+                                        # print raw_classifications[global_index].keys()
+                                        followup_answer = raw_classifications[global_index][subject_id][user_identifiers]
+                                        u = user_identifiers[1]
+                                        ballots.append((u,followup_answer))
+                                followup_classification[(subject_id,cluster_index)] = deepcopy(ballots)
+                                shapes_per_cluster[(subject_id,cluster_index)] = shape
+
+                print followup_classification
+                followup_results = self.__task_aggregation__(followup_classification)
+                assert isinstance(followup_results,dict)
+
+                for subject_id,cluster_index in followup_results:
+                    shape =  shapes_per_cluster[(subject_id,cluster_index)]
+
+                    if subject_id not in aggregations:
+                        aggregations[subject_id] = {"param":"task_id"}
+                    if task_id not in aggregations[subject_id]:
+                        aggregations[subject_id][task_id] = {"param":"shape"}
+                    if shape not in aggregations[subject_id][task_id]:
+                        aggregations[subject_id][task_id][shape] = {}
+                    # this part is probably redundant
+
+                    if cluster_index not in aggregations[subject_id][task_id][shape]:
+                        aggregations[subject_id][task_id][shape][cluster_index] = {}
+
+                    aggregations[subject_id][task_id][shape][cluster_index]["followup_questions"] = followup_results[(subject_id,cluster_index)]
+
+        return aggregations
 
     def __existence_classification__(self,task_id,raw_classifications,clustering_results):
         """
@@ -224,11 +276,12 @@ class Classification:
 
         for task_id in classification_tasks:
             # print task_id
+            if task_id == "param":
+                continue
+
             if isinstance(classification_tasks[task_id],bool):
                 # we have a basic classification task
-                print task_id,classification_tasks[task_id]
-                print
-                print raw_classifications[task_id]
+
                 temp_results = self.__task_aggregation__(raw_classifications[task_id])
                 # convert everything into a dict and add the the task id
                 task_results = {}
@@ -253,7 +306,8 @@ class Classification:
 
                 # are there any subtasks associated with this task/marking?
                 if "subtask" in classification_tasks[task_id]:
-                    self.__subtask_classification__()
+                    subtask_results = self.__subtask_classification__(task_id,classification_tasks,raw_classifications,clustering_results)
+                    task_results = self.__merge_results__(task_results,subtask_results)
 
             assert isinstance(task_results,dict)
             for subject_id in task_results:

@@ -267,7 +267,7 @@ class AggregationAPI:
                 subject_set = None
 
             # finally, store the results
-            # self.__upsert_results__(workflow_id,aggregations)
+            self.__upsert_results__(workflow_id,aggregations)
 
     def __cassandra_connect__(self):
         """
@@ -1310,6 +1310,7 @@ class AggregationAPI:
 
                                 # are there follow up questions?
                                 if (task_id in classification_tasks) and ("subtask" in classification_tasks[task_id]) and (tool in classification_tasks[task_id]["subtask"]):
+
                                     # there could be multiple follow up questions
                                     for local_subtask_id in classification_tasks[task_id]["subtask"][tool]:
                                         global_subtask_id = str(task_id)+"_"+str(tool)+"_"+str(local_subtask_id)
@@ -1318,9 +1319,12 @@ class AggregationAPI:
                                         if subject_id not in raw_classifications[global_subtask_id]:
                                             raw_classifications[global_subtask_id][subject_id] = {}
 
-
+                                        # # specific tool matters, not just shape
                                         subtask_value = marking["details"][local_subtask_id]["value"]
+                                        # if tool not in raw_classifications[global_subtask_id][subject_id]:
+                                        #     raw_classifications[global_subtask_id][subject_id][tool] = {}
                                         raw_classifications[global_subtask_id][subject_id][(relevant_params,user_id)] = subtask_value
+
                         # we a have a pure classification task
                         else:
                             if task_id not in raw_classifications:
@@ -1331,6 +1335,7 @@ class AggregationAPI:
                             #     print task_id,task["value"]
                             raw_classifications[task_id][subject_id].append((user_id,task["value"]))
 
+        print raw_classifications.keys()
         return raw_classifications,raw_markings
 
     # def __sort_classifications__(self,workflow_id,subject_set=None):
@@ -1689,6 +1694,6 @@ if __name__ == "__main__":
     project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering})#, "rectangle":(blob_clustering.BlobClustering,{})})
     project.__set_classification_alg__(classification.VoteCount())
     # project.__info__()
-    project.__aggregate__()#workflows=[84])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
-    project.__get_results__(9)
+    project.__aggregate__(workflows=[84])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+    project.__get_results__(84)
     # project.__get_workflow_details__(84)

@@ -416,7 +416,7 @@ class Cluster:
         self.project_api.__display_image__(subject_id,args_l,kwargs_l,title=self.algorithm_name)
 
     @abc.abstractmethod
-    def __inner_fit__(self,markings,user_ids,fname=None):
+    def __inner_fit__(self,markings,user_ids,tools):
         """
         the main function for clustering
         :param user_ids:
@@ -478,7 +478,7 @@ class Cluster:
                         else:
                             fname = None
 
-                        cluster_results,time_to_cluster = self.__inner_fit__(markings,users,fname=fname)
+                        cluster_results,time_to_cluster = self.__inner_fit__(markings,users,tools)
 
                         if subject_id not in aggregation:
                             aggregation[subject_id] = {"param":"task_id"}

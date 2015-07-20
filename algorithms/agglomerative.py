@@ -106,7 +106,7 @@ class Agglomerative(clustering.Cluster):
 
         return results
 
-    def __inner_fit__(self,markings,user_ids,fname=None):
+    def __inner_fit__(self,markings,user_ids,tools):
         """
         the actual clustering algorithm
         markings and user_ids should be the same length - a one to one mapping
@@ -125,10 +125,11 @@ class Agglomerative(clustering.Cluster):
 
         markings = markings[:15]
         user_ids = user_ids[:15]
+        tools = tools[:15]
 
         if len(user_ids) == len(set(user_ids)):
             # todo implement
-            result = {"users":user_ids,"points":markings}
+            result = {"users":user_ids,"points":markings,"tools":tools}
             result["center"] = [np.median(axis) for axis in zip(*markings)]
             return [result],0
 
@@ -145,7 +146,7 @@ class Agglomerative(clustering.Cluster):
 
         # use the results to build a tree representation
         # nodes = [LeafNode(pt,ii,user=user) for ii,(user,pt) in enumerate(zip(user_ids,markings))]
-        results = [{"users":[u],"points":[p]} for u,p in zip(user_ids,markings)]
+        results = [{"users":[u],"points":[p],"tools":[t]} for u,p,t in zip(user_ids,markings,tools)]
 
         # read through the results
         # each row gives a cluster/node to merge
@@ -186,11 +187,14 @@ class Agglomerative(clustering.Cluster):
                     results.append(None)
                 else:
                     # else just merge
-                    users = rnode["users"]
-                    points = rnode["points"]
-                    users.extend(lnode["users"])
-                    points.extend(lnode["points"])
-                    results.append({"users":users,"points":points})
+                    merged_users = rnode["users"]
+                    merged_points = rnode["points"]
+                    merged_tools = rnode["tools"]
+                    # add in the values from the second node
+                    merged_users.extend(lnode["users"])
+                    merged_points.extend(lnode["points"])
+                    merged_tools.extend(lnode["tools"])
+                    results.append({"users":merged_users,"points":merged_points,"tools":merged_tools})
 
         # go and remove all non terminal nodes from the results
         for i in range(len(results)-1,-1,-1):

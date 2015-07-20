@@ -20,7 +20,7 @@ class BlobClustering(clustering.Cluster):
         assert shape != "point"
         clustering.Cluster.__init__(self,shape)
 
-    def __inner_fit__(self,markings,user_ids,fname=None):
+    def __inner_fit__(self,markings,user_ids,tools):
 
         results = []
         if len(markings) > 1:
@@ -99,6 +99,7 @@ class BlobClustering(clustering.Cluster):
                     blob_results["center"] = [(x1,y1),(x1,y2),(x2,y2),(x2,y1)]
                     blob_results["points"] = []
                     blob_results["users"] = []
+                    blob_results["tools"] = []
 
                     # todo: must be a better way to do this
                     # find which users overlap with this blob
@@ -107,6 +108,7 @@ class BlobClustering(clustering.Cluster):
                             blob_results["users"].append(user_ids[i])
                             x,y = blobs[i].exterior.xy
                             blob_results["points"].append(zip(x,y)[:-1])
+                            blob_results["tools"].append(tools[i])
 
                     results.append(blob_results)
 
@@ -123,6 +125,7 @@ class BlobClustering(clustering.Cluster):
                         blob_results["center"] = [(x1,y1),(x1,y2),(x2,y2),(x2,y1)]
                         blob_results["points"] = []
                         blob_results["users"] = []
+                        blob_results["tools"] = []
 
                         # todo: must be a better way to do this
                         # find which users overlap with this blob
@@ -131,6 +134,7 @@ class BlobClustering(clustering.Cluster):
                                 blob_results["users"].append(user_ids[i])
                                 x,y = blobs[i].exterior.xy
                                 blob_results["points"].append(zip(x,y)[:-1])
+                                blob_results["tools"].append(tools[i])
 
                         results.append(blob_results)
 
