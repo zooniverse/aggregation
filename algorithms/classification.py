@@ -226,6 +226,9 @@ class Classification:
             # print task_id
             if isinstance(classification_tasks[task_id],bool):
                 # we have a basic classification task
+                print task_id,classification_tasks[task_id]
+                print
+                print raw_classifications[task_id]
                 temp_results = self.__task_aggregation__(raw_classifications[task_id])
                 # convert everything into a dict and add the the task id
                 task_results = {}
@@ -309,7 +312,10 @@ class VoteCount(Classification):
             vote_counts = {}
             if subject_id == "param":
                 continue
+            # print raw_classifications[subject_id]
             for user,ballot in raw_classifications[subject_id]:
+                if ballot is None:
+                    continue
                 # in which case only one vote is allowed
                 if isinstance(ballot,int):
                     if ballot in vote_counts:

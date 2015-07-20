@@ -106,7 +106,7 @@ class Agglomerative(clustering.Cluster):
 
         return results
 
-    def __inner_fit__(self,markings,user_ids,tools,fname=None):
+    def __inner_fit__(self,markings,user_ids,fname=None):
         """
         the actual clustering algorithm
         markings and user_ids should be the same length - a one to one mapping
@@ -123,6 +123,15 @@ class Agglomerative(clustering.Cluster):
         user_ids = list(user_ids)
         start = time.time()
 
+        markings = markings[:15]
+        user_ids = user_ids[:15]
+
+        if len(user_ids) == len(set(user_ids)):
+            # todo implement
+            result = {"users":user_ids,"points":markings}
+            result["center"] = [np.median(axis) for axis in zip(*markings)]
+            return [result],0
+
         all_users = set()
 
         # this converts stuff into panda format - probably a better way to do this but the labels do seem
@@ -132,7 +141,6 @@ class Agglomerative(clustering.Cluster):
         df = pd.DataFrame(np.array(markings), columns=param_labels, index=labels)
         row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
         # use ward metric to do the actual clustering
-        print len(markings)
         row_clusters = linkage(row_dist, method='ward')
 
         # use the results to build a tree representation
