@@ -3,7 +3,7 @@ __author__ = 'greg'
 import cassandra
 from cassandra.cluster import Cluster
 import json
-import panoptes_api
+import aggregation_api
 
 # connect to the cassandra node
 cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
@@ -45,7 +45,7 @@ except cassandra.InvalidRequest as e:
 #
 #
 #
-p = panoptes_api.PanoptesAPI("bar_lengths")
+p = aggregation_api.PanoptesAPI("bar_lengths")
 p.__migrate__()
 
 # def __load__():

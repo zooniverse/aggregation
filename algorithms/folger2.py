@@ -1,25 +1,13 @@
-#!/usr/bin/env python
-import numpy as np
 import cv2
-from matplotlib import pyplot as plt
-import matplotlib.cbook as cbook
-import scipy
-import math
-fname = "/home/greg/Databases/serengeti/images/50c212438a607540b901d4b6_0.jpg"
+import numpy as np
 
-img = cv2.imread(fname)
-edges = cv2.Canny(img,100,200)
+img = cv2.imread('/home/greg/bentham/096_002_003.jpg')
+gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+edges = cv2.Canny(gray,50,150,apertureSize = 3)
+minLineLength = 300
+maxLineGap = 500
+lines = cv2.HoughLinesP(edges,1,np.pi/180,100,minLineLength,maxLineGap)
+for x1,y1,x2,y2 in lines[0]:
+    cv2.line(img,(x1,y1),(x2,y2),(0,255,0),2)
 
-count = 0
-for c in edges:
-    for cell in c:
-        if cell  > 0:
-            count += 1
-print count
-
-plt.subplot(121),plt.imshow(img,cmap = 'gray')
-plt.title('Original Image'), plt.xticks([]), plt.yticks([])
-plt.subplot(122),plt.imshow(edges,cmap = 'gray')
-plt.title('Edge Image'), plt.xticks([]), plt.yticks([])
-
-plt.show()
+cv2.imwrite('/home/greg/1.jpg',img)

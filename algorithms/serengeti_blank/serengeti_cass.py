@@ -10,13 +10,14 @@ from cassandra.concurrent import execute_concurrent
 cluster = Cluster()
 cassandra_session = cluster.connect('serengeti')
 
-try:
-    cassandra_session.execute("drop table classifications")
-    print "table dropped"
-except cassandra.InvalidRequest:
-    print "table did not exist"
-    pass
-cassandra_session.execute("CREATE TABLE classifications(id int, created_at timestamp,zooniverse_id text,annotations text,user_name text, user_ip inet, PRIMARY KEY(id, created_at,user_ip)) WITH CLUSTERING ORDER BY (created_at ASC, user_ip ASC);")
+# try:
+#     cassandra_session.execute("drop table classifications")
+#     print "table dropped"
+# except cassandra.InvalidRequest:
+#     print "table did not exist"
+#     pass
+# cassandra_session.execute("CREATE TABLE classifications(id int, created_at timestamp,zooniverse_id text,annotations text,user_name text, user_ip inet, PRIMARY KEY(id, created_at,user_ip)) WITH CLUSTERING ORDER BY (created_at ASC, user_ip ASC);")
+cassandra_session.execute("CREATE TABLE ip_classifications (id int, created_at timestamp,zooniverse_id text,annotations text,user_name text, user_ip inet, PRIMARY KEY(id, user_ip,created_at)) WITH CLUSTERING ORDER BY (user_ip ASC,created_at ASC);")
 
 # connect to the mongo server
 client = pymongo.MongoClient()
@@ -25,7 +26,7 @@ classification_collection = db["serengeti_classifications"]
 subject_collection = db["serengeti_subjects"]
 user_collection = db["serengeti_users"]
 
-insert_statement = cassandra_session.prepare("""insert into classifications (id,created_at, zooniverse_id,annotations, user_name,user_ip)
+insert_statement = cassandra_session.prepare("""insert into ip_classifications (id,created_at, zooniverse_id,annotations, user_name,user_ip)
                 values (?,?,?,?,?,?)""")
 
 statements_and_params = []

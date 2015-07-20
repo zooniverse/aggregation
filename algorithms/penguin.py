@@ -14,7 +14,7 @@ class Penguins(aggregation_api.AggregationAPI):
         self.project_id = -1
         # connect to the mongo server
         client = pymongo.MongoClient()
-        db = client['penguin_2015-05-08']
+        db = client['penguin_2015-06-01']
         self.classification_collection = db["penguin_classifications"]
         self.subject_collection = db["penguin_subjects"]
 
@@ -141,21 +141,7 @@ class Penguins(aggregation_api.AggregationAPI):
 
         return subjects
 
-class SubjectGenerator:
-    def __init__(self,project):
-        self.project = project
 
-    def __iter__(self):
-        subject_ids = []
-        for subject in self.project.subject_collection.find():
-            subject_ids.append(subject["zooniverse_id"])
-
-            if len(subject_ids) == 50:
-                yield subject_ids
-                subject_ids = []
-
-        yield  subject_ids
-        raise StopIteration
 
 if __name__ == "__main__":
     project = Penguins()

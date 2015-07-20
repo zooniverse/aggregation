@@ -3,8 +3,7 @@ import cv2
 from matplotlib import pyplot as plt
 import matplotlib.cbook as cbook
 import scipy
-import math
-fname = "/home/greg/Databases/images/01a10f4b-e03a-4dee-9a2c-62bcc3da3c09.jpeg"
+fname = "/home/greg/bentham/071_111_002.jpg"
 
 img = cv2.imread(fname)
 gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
@@ -68,8 +67,6 @@ image = plt.imread(image_file)
 fig, ax = plt.subplots()
 im = ax.imshow(image)
 
-Y = []
-X = []
 for k, col in zip(unique_labels, colors):
     if k == -1:
         continue
@@ -94,53 +91,28 @@ for k, col in zip(unique_labels, colors):
 
     xy = X[class_member_mask]
 
-    if len(xy) > 2000:
-        continue
+    # if len(xy) > 2000:
+    #     continue
 
     x,y = zip(*xy)
+    xy = zip(y,x)
+    xy = np.asarray(xy)
+    print xy
+    try:
+        hull = ConvexHull(xy)
+    except scipy.spatial.qhull.QhullError:
+        print x
+        print y
+        print
+        continue
+    X_l,Y_l= xy[hull.vertices,0], xy[hull.vertices,1]
+    X_l = list(X_l)
+    Y_l = list(Y_l)
+    X_l.append(X_l[0])
+    Y_l.append(Y_l[0])
 
-    # if not math.isnan(np.median(y)):
-    Y.append([np.median(y),])
-    X.append([np.median(x),])
-    # else:
-    #     print
-
-    # xy = zip(y,x)
-    # xy = np.asarray(xy)
-    # print xy
-    # try:
-    #     hull = ConvexHull(xy)
-    # except scipy.spatial.qhull.QhullError:
-    #     print x
-    #     print y
-    #     print
-    #     continue
-    # X_l,Y_l= xy[hull.vertices,0], xy[hull.vertices,1]
-    # X_l = list(X_l)
-    # Y_l = list(Y_l)
-    # X_l.append(X_l[0])
-    # Y_l.append(Y_l[0])
-    #
-    # plt.plot(X_l,Y_l, lw=1)
-
-# from sklearn.cluster import KMeans
-# kmeans = KMeans(init='k-means++', n_clusters=20, n_init=10)
-# Y = np.asarray(Y)
-# kmeans.fit(Y)
-
-XY = np.asarray(zip(X,Y))
-db = DBSCAN(eps=3.5, min_samples=1).fit(XY)
-
-core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
-core_samples_mask[db.core_sample_indices_] = True
-labels = db.labels_
-n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
-
-from scipy.spatial import ConvexHull
-
-# Black removed and is used for noise instead.
-unique_labels = set(labels)
+    plt.plot(X_l,Y_l, lw=1)
 
 
-# plt.title('Estimated number of clusters: %d' % n_clusters_)
-# plt.show()
+plt.title('Estimated number of clusters: %d' % n_clusters_)
+plt.show()

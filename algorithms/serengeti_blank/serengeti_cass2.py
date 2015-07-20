@@ -34,7 +34,7 @@ Y = []
 blank_list = []
 #2012,6,11
 #2013,1,11
-for ii,row in enumerate(cassandra_session.execute("select * from classifications where id =1 and created_at>="+str(unix_time_millis(datetime.datetime(2013,6,26))))):
+for ii,row in enumerate(cassandra_session.execute("select * from classifications where id =1 and created_at>="+str(unix_time_millis(datetime.datetime(2013,6,6))))):
     zooniverse_id = row.zooniverse_id
     if row.user_name == "":
         continue

@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
 __author__ = 'greg'
-from panoptes_api import PanoptesAPI
+from aggregation_api import PanoptesAPI
 import classification
 import matplotlib.pyplot as plt
+import cluster_count
 
 workflow_id = 15
 
@@ -37,11 +38,12 @@ class Wildebeest(PanoptesAPI):
 ali = Wildebeest()
 # ali.__list_all_versions__()
 # ali.__migrate__()
-print ali.__describe__(workflow_id)
-ali.__set_classification_alg__(classification.VoteCount)
+# print ali.__describe__(workflow_id)
+# ali.__set_classification_alg__(classification.VoteCount)
 # #
 # #
 # #
-ali.__classify__(workflow_id)
+# ali.__classify__(workflow_id)
 #
+ali.__set_clustering_alg__(cluster_count.Counting)
 ali.__plot__(workflow_id,"init")

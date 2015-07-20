@@ -12,71 +12,71 @@ import numpy
 import multiClickCorrect
 import json
 
-class AbstractNode:
-    def __init__(self):
-        self.value = None
-        self.rchild = None
-        self.lchild = None
-
-        self.parent = None
-        self.depth = None
-        self.height = None
-
-        self.users = None
-
-    def __set_parent__(self,node):
-        assert isinstance(node,InnerNode)
-        self.parent = node
-
-    @abc.abstractmethod
-    def __traversal__(self):
-        return []
-
-    def __set_depth__(self,depth):
-        self.depth = depth
-
-
-class LeafNode(AbstractNode):
-    def __init__(self,value,index,user=None):
-        AbstractNode.__init__(self)
-        self.value = value
-        self.index = index
-        self.users = [user,]
-        self.height = 0
-        self.pts = [value,]
-
-    def __traversal__(self):
-        return [(self.value,self.index),]
-
-class InnerNode(AbstractNode):
-    def __init__(self,rchild,lchild,dist=None):
-        AbstractNode.__init__(self)
-        assert isinstance(rchild,(LeafNode,InnerNode))
-        assert isinstance(lchild,(LeafNode,InnerNode))
-
-        self.rchild = rchild
-        self.lchild = lchild
-
-        rchild.__set_parent__(self)
-        lchild.__set_parent__(self)
-
-        self.dist = dist
-
-        assert (self.lchild.users is None) == (self.rchild.users is None)
-        if self.lchild.users is not None:
-            self.users = self.lchild.users[:]
-            self.users.extend(self.rchild.users)
-
-        self.pts = self.lchild.pts[:]
-        self.pts.extend(self.rchild.pts[:])
-
-        self.height = max(rchild.height,lchild.height)+1
-
-    def __traversal__(self):
-        retval = self.rchild.__traversal__()
-        retval.extend(self.lchild.__traversal__())
-
-        return retval
+# class AbstractNode:
+#     def __init__(self):
+#         self.value = None
+#         self.rchild = None
+#         self.lchild = None
+#
+#         self.parent = None
+#         self.depth = None
+#         self.height = None
+#
+#         self.users = None
+#
+#     def __set_parent__(self,node):
+#         assert isinstance(node,InnerNode)
+#         self.parent = node
+#
+#     @abc.abstractmethod
+#     def __traversal__(self):
+#         return []
+#
+#     def __set_depth__(self,depth):
+#         self.depth = depth
+#
+#
+# class LeafNode(AbstractNode):
+#     def __init__(self,value,index,user=None):
+#         AbstractNode.__init__(self)
+#         self.value = value
+#         self.index = index
+#         self.users = [user,]
+#         self.height = 0
+#         self.pts = [value,]
+#
+#     def __traversal__(self):
+#         return [(self.value,self.index),]
+#
+# class InnerNode(AbstractNode):
+#     def __init__(self,rchild,lchild,dist=None):
+#         AbstractNode.__init__(self)
+#         assert isinstance(rchild,(LeafNode,InnerNode))
+#         assert isinstance(lchild,(LeafNode,InnerNode))
+#
+#         self.rchild = rchild
+#         self.lchild = lchild
+#
+#         rchild.__set_parent__(self)
+#         lchild.__set_parent__(self)
+#
+#         self.dist = dist
+#
+#         assert (self.lchild.users is None) == (self.rchild.users is None)
+#         if self.lchild.users is not None:
+#             self.users = self.lchild.users[:]
+#             self.users.extend(self.rchild.users)
+#
+#         self.pts = self.lchild.pts[:]
+#         self.pts.extend(self.rchild.pts[:])
+#
+#         self.height = max(rchild.height,lchild.height)+1
+#
+#     def __traversal__(self):
+#         retval = self.rchild.__traversal__()
+#         retval.extend(self.lchild.__traversal__())
+#
+#         return retval
 
 class Agglomerative(clustering.Cluster):
     def __init__(self,shape):
@@ -86,27 +86,27 @@ class Agglomerative(clustering.Cluster):
 
         self.correction_alg = multiClickCorrect.MultiClickCorrect(overlap_threshold=1,min_cluster_size=2,dist_threshold=50)
 
-    def __add_cluster(self,cluster_centers,end_clusters,end_users,node):
-        # if len(node.pts) < 4:
-        #     cluster_centers.append(None)
-        #     end_clusters.append(None)
-        #     end_users.append(None)
-        # else:
-        cluster_centers.append([np.median(axis) for axis in zip(*node.pts)])
-        end_clusters.append(node.pts)
-        end_users.append(node.users)
+    # def __add_cluster(self,cluster_centers,end_clusters,end_users,node):
+    #     # if len(node.pts) < 4:
+    #     #     cluster_centers.append(None)
+    #     #     end_clusters.append(None)
+    #     #     end_users.append(None)
+    #     # else:
+    #     cluster_centers.append([np.median(axis) for axis in zip(*node.pts)])
+    #     end_clusters.append(node.pts)
+    #     end_users.append(node.users)
+    #
+    #     return cluster_centers,end_clusters,end_users
 
-        return cluster_centers,end_clusters,end_users
+    # def __results_to_json__(self,node):
+    #     results = {}
+    #     results["center"] = [np.median(axis) for axis in zip(*node.pts)]
+    #     results["points"] = node.pts
+    #     results["users"] = node.users
+    #
+    #     return results
 
-    def __results_to_json__(self,node):
-        results = {}
-        results["center"] = [np.median(axis) for axis in zip(*node.pts)]
-        results["points"] = node.pts
-        results["users"] = node.users
-
-        return results
-
-    def __inner_fit__(self,markings,user_ids,tools,fname=None):
+    def __inner_fit__(self,markings,user_ids,fname=None):
         """
         the actual clustering algorithm
         markings and user_ids should be the same length - a one to one mapping
@@ -118,6 +118,20 @@ class Agglomerative(clustering.Cluster):
         :param subject_id:
         :return:
         """
+        # todo - find if there is a better way than just accepting markings from at most 15 users
+        # useable_users = list(set(user_ids))[:15]
+        # all_combined = [(m,u,t) for m,u,t in zip(markings,user_ids,tools) if u in useable_users]
+        markings = markings[:15]
+        user_ids = user_ids[:15]
+
+        # in this special case, all of the markings are from different users - so we have only one cluster
+        if len(user_ids) == len(set(user_ids)):
+            result = {"users":user_ids,"points":markings}
+            result["center"] = [np.median(axis) for axis in zip(*result["points"])]
+            return [result],0
+
+        # markings,user_ids,tools = zip(*all_combined)
+
         assert len(markings) == len(user_ids)
         assert isinstance(user_ids,tuple)
         user_ids = list(user_ids)
@@ -132,7 +146,6 @@ class Agglomerative(clustering.Cluster):
         df = pd.DataFrame(np.array(markings), columns=param_labels, index=labels)
         row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
         # use ward metric to do the actual clustering
-        print len(markings)
         row_clusters = linkage(row_dist, method='ward')
 
         # use the results to build a tree representation
@@ -185,14 +198,26 @@ class Agglomerative(clustering.Cluster):
                     results.append({"users":users,"points":points})
 
         # go and remove all non terminal nodes from the results
+        print
+        print results[-1]
+        if results[-1] is not None:
+            print sorted(results[-1]["users"])
+            print sorted(user_ids)
+            print len(user_ids),len(set(user_ids))
+        found_cluster = False
         for i in range(len(results)-1,-1,-1):
             if (results[i] is None) or ("center" not in results[i]):
                 results.pop(i)
+            else:
+                found_cluster = True
 
+        assert found_cluster
 
         end = time.time()
         # print [len(r["users"]) for r in results]
         # results = self.correction_alg.__fix__(results)
+
+        print results
         return results,end-start
 
     def __check__(self):

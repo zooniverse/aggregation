@@ -107,7 +107,8 @@ def ellipse_mapping(marking,image_dimensions):
 
 class AggregationAPI:
     def __init__(self,project=None):#,user_threshold= None, score_threshold= None): #Supernovae
-        self.cluster_algs = None
+        # todo - refactor this!
+
         self.classification_alg = None
         self.workflows = None
         self.versions = None
@@ -118,6 +119,7 @@ class AggregationAPI:
         self.marking_params_per_shape["point"] = point_mapping
         self.marking_params_per_shape["ellipse"] = ellipse_mapping
         self.marking_params_per_shape["rectangle"] = rectangle_mapping
+        self.__set_clustering_algs__({"point":agglomerative.Agglomerative, "rectangle":blob_clustering.BlobClustering})
 
         # only continue the set up if the project name is given
         self.project_short_name = project
@@ -226,8 +228,9 @@ class AggregationAPI:
 
         for workflow_id in workflows:
             if subject_set is None:
-                # subject_set = self.__get_retired_subjects__(workflow_id)
-                subject_set = self.__load_subjects__(workflow_id)
+                subject_set = self.__get_retired_subjects__(workflow_id)
+                # uncomment below if you want all the subjects
+                # subject_set = self.__load_subjects__(workflow_id)
             print "aggregating " + str(len(subject_set)) + " subjects"
             # self.__describe__(workflow_id)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
@@ -239,13 +242,12 @@ class AggregationAPI:
             # ideally if there are no marking tasks, then we shouldn't have provided a clustering algorithm
             # but nice sanity check
 
-            if (self.cluster_algs is not None) and (marking_tasks != {}):
+            if marking_tasks != {}:
                 print "clustering"
                 clustering_aggregations = self.__cluster__(workflow_id,subject_set)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
-            if (self.classification_alg is not None) and (classification_tasks != {}):
+            if classification_tasks != {}:
                 # we may need the clustering results
-                print "classifying"
                 classification_aggregations = self.__classify__(workflow_id,clustering_aggregations,subject_set)
 
             # if we have both markings and classifications - we need to merge the results
@@ -282,6 +284,41 @@ class AggregationAPI:
     def __classify__(self,workflow_id,clustering_aggregations,subject_set=None):
         # get the raw classifications for the given workflow
         raw_classifications = self.__sort_classifications__(workflow_id,subject_set)
+        marking_classifications = self.__sort_markings__(workflow_id,subject_set)
+
+        # for task_id in marking_classifications:
+        #     for shape in marking_classifications[task_id]:
+        #
+        #         for subject_set in marking_classifications[task_id][shape]:
+        #             if "param" in [subject_set,shape,task_id]:
+        #                 continue
+        #
+        #             print
+        #             print sorted(marking_classifications[task_id][shape][subject_set].keys(), key = lambda x:x[0][0])
+        #             for ii,(m,u) in enumerate(sorted(raw_classifications[task_id][shape][subject_set].keys(), key = lambda x:x[0][0])):
+        #                 print u,(sorted(marking_classifications[task_id][shape][subject_set].keys(), key = lambda x:x[0][0])[ii])[1]
+        #                 print m,(sorted(marking_classifications[task_id][shape][subject_set].keys(), key = lambda x:x[0][0])[ii])[0]
+        #                 print
+        #             print
+        #
+        # assert False
+
+        # for task_id in raw_classifications:
+        #     if task_id == "param":
+        #         continue
+        #     for shape in raw_classifications[task_id].keys():
+        #         if shape == "param":
+        #             continue
+        #         if isinstance(raw_classifications[task_id][shape],list):
+        #             continue
+        #         for subject_id in raw_classifications[task_id][shape]:
+        #             if subject_id == "param":
+        #                 continue
+        #             print raw_classifications[task_id][shape][subject_id]
+        #             print clustering_aggregations[task_id][shape][subject_id].keys()
+        #             print
+        # assert False
+
         if raw_classifications == {}:
             print "returning empty"
             empty_aggregation = {"param":"subject_id"}
@@ -1215,7 +1252,6 @@ class AggregationAPI:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
 
             for subject_id,(success,record_list) in zip(s,results):
-                print record_list
                 if not success:
                     print record_list
                     assert success
@@ -1329,8 +1365,8 @@ class AggregationAPI:
 
         self.users_per_subject={}
 
-        loaded_subjects = set()
-        read_in = set()
+        # loaded_subjects = set()
+        # read_in = set()
 
         for s in self.__chunks(subject_set,15):
             print s
@@ -1381,10 +1417,12 @@ class AggregationAPI:
 
                     ips_per_subject.append(record.user_ip)
 
+                    # increment counter so that we keep non logged in users separate
                     if user_id == -1:
                         non_logged_in_users += -1
                         user_id = non_logged_in_users
-                    loaded_subjects.add(subject_id)
+                    # loaded_subjects.add(subject_id)
+
                     # for counting the number of users who have seen this subject
                     # set => in case someone has seen this image twice
                     if subject_id not in self.users_per_subject:
@@ -1429,7 +1467,7 @@ class AggregationAPI:
                                     print task_id
                                     print tool
                                     raise
-                                if shape ==  "image":
+                                if shape == "image":
                                     # todo - treat image like a rectangle
                                     continue
 
@@ -1447,9 +1485,9 @@ class AggregationAPI:
                                     if shape not in raw_markings[task_id]:
                                         raw_markings[task_id][shape] = {}
                                     if subject_id not in raw_markings[task_id][shape]:
-                                        raw_markings[task_id][shape][subject_id] = []
+                                        raw_markings[task_id][shape][subject_id] = {}
 
-                                    raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
+                                    raw_markings[task_id][shape][subject_id][(relevant_params,user_id)] = tool
                                 except InvalidMarking as e:
                                     # print e
                                     pass
@@ -1562,9 +1600,10 @@ if __name__ == "__main__":
 
     # project.__migrate__()
 
-    project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering})#, "rectangle":(blob_clustering.BlobClustering,{})})
+    # project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering})#, "rectangle":(blob_clustering.BlobClustering,{})})
+    # project.__set_clustering_algs__({"rectangle":blob_clustering.BlobClustering})#, "rectangle":(blob_clustering.BlobClustering,{})})
     project.__set_classification_alg__(classification.VoteCount())
     # project.__info__()
-    # project.__aggregate__()#workflows=[84],subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
-    project.__get_results__(979)
+    project.__aggregate__()#workflows=[84],subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+    # project.__get_results__(979)
     # project.__get_workflow_details__(84)

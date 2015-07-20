@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 __author__ = 'greg'
-from panoptes_api import PanoptesAPI,InvalidMarking
+from aggregation_api import AggregationAPI,InvalidMarking
 import agglomerative
 import clustering
 import math
@@ -15,6 +15,8 @@ import unicodedata
 import os
 from copy import deepcopy
 import itertools
+import json
+import matplotlib.pyplot as plt
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -166,6 +168,7 @@ def Levenshtein(a,b):
 
     return current[n]
 
+
 class TextCluster(clustering.Cluster):
     def __init__(self,project_api,min_cluster_size=1,mapping=None):
         clustering.Cluster.__init__(self,project_api,min_cluster_size)
@@ -281,27 +284,9 @@ class TextCluster(clustering.Cluster):
         return agreement/float(len(text[0]))
 
     def __inner_fit__(self,markings,user_ids,tools,fname=None):
-        mapped_markings = []
-        # texts = []
-        # convert to Hesse normal form
-
-        for x1,x2,y1,y2,text in markings:
-            x2 += random.uniform(-0.0001,0.0001)
-            x1 += random.uniform(-0.0001,0.0001)
-            # if (x1 == x2) and (y1 == y2):
-            #     print "single point marking - skipping"
-            #     continue
-
-            dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
-            # texts.append(text)
-            try:
-                tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
-                theta = math.atan(tan_theta)
-            except ZeroDivisionError:
-                theta = math.pi/2.
-
-            mapped_markings.append((dist,theta))
-            # print str(dist) + "\t" + str(theta) + "\t" + text
+        # we want to first cluster first just on dist and theta - ignoring the text contents
+        dist_list,theta_list,text_list,raw_pts_list = zip(*markings)
+        mapped_markings = zip(dist_list,theta_list)
 
         # make sure all of the points are distinct
         if len(mapped_markings) != len(set(mapped_markings)):
@@ -321,10 +306,10 @@ class TextCluster(clustering.Cluster):
             # a - line values - "intercept" and slope
             user_index = mapped_markings.index(a)
             user = user_ids[user_index]
-            # text = texts[user_index]
-            text = markings[user_index][4]
-            pt = markings[user_index][0:4]
-            # assert markings[user_index][4] == text
+            # extract the corresponding text and the raw (unmapped) point
+            text = text_list[user_index]
+            raw_pt = raw_pts_list[user_index]
+
 
             if "\n" in text:
                 print "multiline - skipping"
@@ -343,14 +328,21 @@ class TextCluster(clustering.Cluster):
             text = re.sub(r'\[deletion\].*\[\\deletion\]',"",text)
             text = re.sub("\[illegible\].*\[/illegible\]","",text)
             text = re.sub(r'\[deletionhas\]\[/deletion\]',"",text)
+            text = re.sub("\[insertion\].*\[/insertion\]","",text)
             text = re.sub(r'\[has\]',"",text)
             text = re.sub(r'\(deleted\)',"",text)
             text = re.sub(r'\[deletion\]',"",text)
 
+            # todo - find a way to fix this - stupid postgres/json
+            text = re.sub(r'\'',"",text)
+
+
             # if we have an empty cluster, just add the line
             if current_lines == {}:
                 current_lines[user] = text
-                current_pts[user] = (pt,user)
+
+                # adding the user id is slightly redundant but makes doing the actual clustering easier
+                current_pts[user] = (raw_pt,user)
             else:
                 # need to see if we want to merge
                 # do we already have some text from this user for this current cluster?
@@ -374,7 +366,7 @@ class TextCluster(clustering.Cluster):
                         text_for_current_cluster = sorted_lines[user_index]
                         pts_for_current_cluster = current_pts[user]
                         text_for_new_cluster = text
-                        pts_for_new_cluster = (pt,user)
+                        pts_for_new_cluster = (raw_pt,user)
                         max_accuracy = current_accuracy[user_index]
 
                         new_lines = list(sorted_lines)
@@ -386,7 +378,7 @@ class TextCluster(clustering.Cluster):
                         if new_accuracy[user_index] > max_accuracy:
                             text_for_current_cluster = text
                             text_for_new_cluster = sorted_lines[user_index]
-                            pts_for_current_cluster = (pt,user)
+                            pts_for_current_cluster = (raw_pt,user)
                             pts_for_new_cluster = current_pts[user]
                             max_accuracy = new_accuracy[user_index]
 
@@ -400,7 +392,7 @@ class TextCluster(clustering.Cluster):
                             text_segments = [sorted_lines[user_index],]
 
                         text_segments.append(text)
-                        for l in  itertools.permutations(text_segments):
+                        for l in itertools.permutations(text_segments):
                             new_lines = list(sorted_lines)
                             new_lines[user_index] = l
                             # print l
@@ -409,7 +401,7 @@ class TextCluster(clustering.Cluster):
                             if new_accuracy[user_index] > max_accuracy:
                                 text_for_current_cluster = l
                                 pts_for_current_cluster = pts_for_current_cluster[user]
-                                pts_for_current_cluster.append(pt)
+                                pts_for_current_cluster.append(raw_pt)
 
                                 # there is no need for a new cluster (yet)
                                 pts_for_new_cluster = None
@@ -434,7 +426,7 @@ class TextCluster(clustering.Cluster):
                         # todo - for now just create a new cluster
                         clusters.append((current_lines.values(),current_pts.values()))
                         current_lines = {user:text}
-                        current_pts = {user:(pt,user)}
+                        current_pts = {user:(raw_pt,user)}
 
                 else:
                     # does adding this line to the cluster make sense?
@@ -464,35 +456,40 @@ class TextCluster(clustering.Cluster):
                     new_accuracy = self.__agreement__(new_aligned)
 
                     if min(new_accuracy) >= 0.6:
-                        current_pts[user] = (pt,user)
+                        current_pts[user] = (raw_pt,user)
                         current_lines[user] = text
                     else:
                         clusters.append((current_lines.values(),current_pts.values()))
                         # current_pts = {user:(pt,text)}
                         current_lines = {user:text}
-                        current_pts = {user:(pt,user)}
+                        current_pts = {user:(raw_pt,user)}
 
         clusters.append((current_lines.values(),current_pts.values()))
 
         # remove any clusters which have only one user
         for cluster_index in range(len(clusters)-1,-1,-1):
-            if len(clusters[cluster_index][0]) == 1:
-                assert len(clusters[cluster_index][1]) == 1
+            if len(clusters[cluster_index][0]) <= 1: #2
+                # assert len(clusters[cluster_index][1]) == 1
                 clusters.pop(cluster_index)
 
         # after removing such "error" clusters there may be adjacent clusters which should be merged
         for cluster_index in range(len(clusters)-2,-1,-1):
+            print clusters[cluster_index][0]
+            print clusters[cluster_index+1][0]
             t_lines = clusters[cluster_index][0][:]
             t_lines.extend(clusters[cluster_index+1][0])
 
             aligned_text = self.__get_aggregation_lines__(t_lines)
 
             accuracy = self.__agreement__(aligned_text)
-            if min(accuracy)> 0.6:
+            print accuracy
+
+            if min(accuracy)>= 0.5:
+                print "merging"
                 to_be_merged_cluster = clusters.pop(cluster_index+1)
                 clusters[cluster_index][0].extend(to_be_merged_cluster[0])
                 clusters[cluster_index][1].extend(to_be_merged_cluster[1])
-
+            print
         # now do the actual aggregation (sigh)
         cluster_centers = []
         cluster_pts = []
@@ -508,7 +505,6 @@ class TextCluster(clustering.Cluster):
             x2 = np.median(x2_values)
             y1 = np.median(y1_values)
             y2 = np.median(y2_values)
-            print users
 
             aligned_text = self.__get_aggregation_lines__(lines)
             aggregate_text = ""
@@ -522,6 +518,8 @@ class TextCluster(clustering.Cluster):
                     aggregate_text += most_likely_char
                 else:
                     aggregate_text += "-"
+
+            aggregate_text = re.sub(r'@'," ",aggregate_text)
 
             cluster_centers.append((x1,x2,y1,y2,aggregate_text))
             cluster_pts.append(zip(pts,lines))
@@ -621,14 +619,26 @@ def text_mapping2(marking,image_dimensions):
     except KeyError:
         raise InvalidMarking(marking)
 
-    if x1 <= x2:
-        return x1,x2,y1,y2,text
-    else:
-        return x2,x1,y2,y1,text
+    x2 += random.uniform(-0.0001,0.0001)
+    x1 += random.uniform(-0.0001,0.0001)
 
-class Tate(PanoptesAPI):
+    dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
+    # texts.append(text)
+    try:
+        tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
+        theta = math.atan(tan_theta)
+    except ZeroDivisionError:
+        theta = math.pi/2.
+
+    if x1 <= x2:
+        return dist,theta,text,(x1,x2,y1,y2)
+    else:
+        return dist,theta,text,(x2,x1,y2,y1)
+
+
+class Tate(AggregationAPI):
     def __init__(self):
-        PanoptesAPI.__init__(self,"tate")
+        AggregationAPI.__init__(self,"tate")
 
         self.marking_params_per_shape = dict()
         self.marking_params_per_shape["text"] = text_mapping2
@@ -641,9 +651,30 @@ class Tate(PanoptesAPI):
 
         return classification_tasks,marking_tasks
 
+    def __plot_individual_points__(self,subject_id,task_id,shape):
+        print self.cluster_algs["text"]
+
+    def __plot_cluster_results__(self,subject_id,task_id,workflow_id):
+        stmt = "select aggregation from aggregations where subject_id = " + str(subject_id) + " and workflow_id = " + str(workflow_id)
+        self.postgres_cursor.execute(stmt)
+
+        aggregations = self.postgres_cursor.fetchone()[0]
+        clusters = aggregations[task_id]["text"]["0"]
+        for x1,x2,y1,y2,text in clusters:
+            plt.plot([x1,x2],[-y1,-y2],color="blue")
+            print -y1
+            print text
+
+        plt.show()
+
+        # print json.loads(aggregations[0])
+
 bentham = [4150,4151,4152,4153,4154]
 tate = [4127,4129,4130,4131,4132,4133,4136]
 project = Tate()
 # project.__migrate__()
+subject_id = 4154
+# print project.__image_setup__(4129)
 project.__set_clustering_alg__({"text":(TextCluster,{})})
-project.__aggregate__(workflows=[683])
+project.__aggregate__(workflows=[683],subject_set=[subject_id])
+project.__plot_cluster_results__(subject_id,"init",683)
