@@ -225,6 +225,7 @@ class AggregationAPI:
             workflows = self.workflows
 
         for workflow_id in workflows:
+            print workflow_id
             if subject_set is None:
                 subject_set = self.__get_retired_subjects__(workflow_id)
                 # subject_set = self.__load_subjects__(workflow_id)
@@ -1243,65 +1244,9 @@ class AggregationAPI:
                     for task in annotations:
                         task_id = task["task"]
 
-                        # is this a classification task
-                        if task_id in classification_tasks:
-                            # is this classification task associated with a marking task?
-                            # i.e. a sub task?
-                            if isinstance(classification_tasks[task_id],dict):
-                                # does this correspond to a confusing shape?
-                                # print classification_tasks[task_id]
-                                for marking in task["value"]:
-                                    tool = marking["tool"]
-                                    shape = marking_tasks[task_id][tool]
-
-                                    # is this shape confusing?
-                                    if ("shapes" in classification_tasks[task_id]) and (shape in classification_tasks[task_id]["shapes"]):
-                                        if task_id not in raw_classifications:
-                                            raw_classifications[task_id] = {}
-                                        if shape not in raw_classifications[task_id]:
-                                            raw_classifications[task_id][shape] = {}
-                                        if subject_id not in raw_classifications[task_id][shape]:
-                                            raw_classifications[task_id][shape][subject_id] = {}
-
-                                        # todo - FIX!!!
-                                        try:
-                                            relevant_params = self.marking_params_per_shape[shape](marking,(10000,10000))
-                                            # assert (relevant_params,user_id) not in raw_classifications[task_id][shape][subject_id]
-                                            raw_classifications[task_id][shape][subject_id][(relevant_params,user_id)] = tool #.append((user_id,relevant_params,tool))
-                                        except InvalidMarking as e:
-                                            print e
-
-                                    # is there a subtask associated with this marking?
-                                    # keep in mind that subtasks are by tool type - NOT by shape
-                                    # so different tools with the same shape can have different subtasks
-                                    # so the below code is slightly different than above
-                                    if ("subtask" in classification_tasks[task_id]) and (tool in classification_tasks[task_id]["subtask"]):
-                                        for local_subtask_id in classification_tasks[task_id]["subtask"][tool]:
-                                            global_subtask_id = str(task_id)+"_"+str(tool)+"_"+str(local_subtask_id)
-                                            if global_subtask_id not in raw_classifications:
-                                                raw_classifications[global_subtask_id] = {}
-                                            if subject_id not in raw_classifications[global_subtask_id]:
-                                                raw_classifications[global_subtask_id][subject_id] = {}
-
-                                            # we need the coordinates since different markings may have the same subtasks
-                                            shape = marking_tasks[task_id][tool]
-                                            relevant_params = self.marking_params_per_shape[shape](marking,(10000,10000))
-
-                                            subtask_value = marking["details"][local_subtask_id]["value"]
-                                            raw_classifications[global_subtask_id][subject_id][(relevant_params,user_id)] = subtask_value
-                            else:
-                                if task_id not in raw_classifications:
-                                    raw_classifications[task_id] = {}
-                                if subject_id not in raw_classifications[task_id]:
-                                    raw_classifications[task_id][subject_id] = []
-                                # if task_id == "init":
-                                #     print task_id,task["value"]
-                                raw_classifications[task_id][subject_id].append((user_id,task["value"]))
-
-                        # =======-----
-                        # and now on to markings
-
+                        # is this a marking task?
                         if task_id in marking_tasks:
+
                             if not isinstance(task["value"],list):
                                 print "not properly formed marking - skipping"
                                 continue
@@ -1314,36 +1259,65 @@ class AggregationAPI:
                                 except KeyError:
                                     tool = None
                                     shape = marking["type"]
-                                except IndexError as e:
-                                    print marking
-                                    print marking_tasks
-                                    print task_id
-                                    print tool
-                                    raise
+
                                 if shape ==  "image":
                                     # todo - treat image like a rectangle
-                                    continue
+                                    assert False
 
                                 if shape not in self.marking_params_per_shape:
                                     print "unrecognized shape: " + shape
-                                    continue
+                                    assert False
 
                                 try:
                                     # extract the params specifically relevant to the given shape
                                     relevant_params = self.marking_params_per_shape[shape](marking,(width,height))
-
-                                    # only create these if we have a valid marking
-                                    if task_id not in raw_markings:
-                                        raw_markings[task_id] = {}
-                                    if shape not in raw_markings[task_id]:
-                                        raw_markings[task_id][shape] = {}
-                                    if subject_id not in raw_markings[task_id][shape]:
-                                        raw_markings[task_id][shape][subject_id] = []
-
-                                    raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
                                 except InvalidMarking as e:
                                     # print e
-                                    pass
+                                    continue
+
+                                # only create these if we have a valid marking
+                                if task_id not in raw_markings:
+                                    raw_markings[task_id] = {}
+                                if shape not in raw_markings[task_id]:
+                                    raw_markings[task_id][shape] = {}
+                                if subject_id not in raw_markings[task_id][shape]:
+                                    raw_markings[task_id][shape][subject_id] = []
+
+                                raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
+
+                                # is this a confusing shape?
+                                if (task_id in classification_tasks) and ("shapes" in classification_tasks[task_id]) and (shape in classification_tasks[task_id]["shapes"]):
+                                    if task_id not in raw_classifications:
+                                        raw_classifications[task_id] = {}
+                                    if shape not in raw_classifications[task_id]:
+                                        raw_classifications[task_id][shape] = {}
+                                    if subject_id not in raw_classifications[task_id][shape]:
+                                        raw_classifications[task_id][shape][subject_id] = {}
+
+                                    raw_classifications[task_id][shape][subject_id][(relevant_params,user_id)] = tool
+
+                                # are there follow up questions?
+                                if (task_id in classification_tasks) and ("subtask" in classification_tasks[task_id]) and (tool in classification_tasks[task_id]["subtask"]):
+                                    # there could be multiple follow up questions
+                                    for local_subtask_id in classification_tasks[task_id]["subtask"][tool]:
+                                        global_subtask_id = str(task_id)+"_"+str(tool)+"_"+str(local_subtask_id)
+                                        if global_subtask_id not in raw_classifications:
+                                            raw_classifications[global_subtask_id] = {}
+                                        if subject_id not in raw_classifications[global_subtask_id]:
+                                            raw_classifications[global_subtask_id][subject_id] = {}
+
+
+                                        subtask_value = marking["details"][local_subtask_id]["value"]
+                                        raw_classifications[global_subtask_id][subject_id][(relevant_params,user_id)] = subtask_value
+                        # we a have a pure classification task
+                        else:
+                            if task_id not in raw_classifications:
+                                raw_classifications[task_id] = {}
+                            if subject_id not in raw_classifications[task_id]:
+                                raw_classifications[task_id][subject_id] = []
+                            # if task_id == "init":
+                            #     print task_id,task["value"]
+                            raw_classifications[task_id][subject_id].append((user_id,task["value"]))
 
         return raw_classifications,raw_markings
 
@@ -1703,6 +1677,6 @@ if __name__ == "__main__":
     project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering})#, "rectangle":(blob_clustering.BlobClustering,{})})
     project.__set_classification_alg__(classification.VoteCount())
     # project.__info__()
-    # project.__aggregate__()#workflows=[84],subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+    project.__aggregate__()#workflows=[84])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
     project.__get_results__(9)
     # project.__get_workflow_details__(84)
