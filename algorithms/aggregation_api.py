@@ -224,6 +224,8 @@ class AggregationAPI:
         if workflows is None:
             workflows = self.workflows
 
+        given_subject_set = (subject_set != None)
+
         for workflow_id in workflows:
             print workflow_id
             if subject_set is None:
@@ -241,6 +243,7 @@ class AggregationAPI:
             # but nice sanity check
 
             raw_classifications,raw_markings = self.__sort_annotations__(workflow_id,subject_set)
+            # print raw_markings["T1"].keys()
 
             if (self.cluster_algs is not None) and (marking_tasks != {}):
                 print "clustering"
@@ -259,8 +262,12 @@ class AggregationAPI:
             else:
                 aggregations = clustering_aggregations
 
+            # unless we are provided with specific subjects, reset for the extra workflow
+            if not given_subject_set:
+                subject_set = None
+
             # finally, store the results
-            self.__upsert_results__(workflow_id,aggregations)
+            # self.__upsert_results__(workflow_id,aggregations)
 
     def __cassandra_connect__(self):
         """
@@ -318,7 +325,7 @@ class AggregationAPI:
         # will store the aggregations for all clustering
         cluster_aggregation = {}
         for shape in self.cluster_algs:
-            print "shape is " + shape
+            # print "shape is " + shape
             shape_aggregation = self.cluster_algs[shape].__aggregate__(raw_markings)
 
             if cluster_aggregation == {}:
@@ -446,6 +453,8 @@ class AggregationAPI:
         self.postgres_cursor.execute(stmt)
         for subject in self.postgres_cursor.fetchall():
             retired_subjects.append(subject[0])
+
+        print sorted(retired_subjects)
 
         return retired_subjects
 
@@ -1223,12 +1232,15 @@ class AggregationAPI:
             for subject_id in s:
                 params = (int(self.project_id),subject_id,int(workflow_id))#,version)
                 statements_and_params.append((select_statement, params))
+                # print params
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
 
             for subject_id,(success,record_list) in zip(s,results):
                 if not success:
                     print record_list
                     assert success
+
+                # print subject_id,len(record_list)
 
                 non_logged_in_users = 0
                 # print "==++ " + str(subject_id)
