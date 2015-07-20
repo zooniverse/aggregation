@@ -20,7 +20,7 @@ class BlobClustering(clustering.Cluster):
         assert shape != "point"
         clustering.Cluster.__init__(self,shape)
 
-    def __inner_fit__(self,markings,user_ids,tools,fname=None):
+    def __inner_fit__(self,markings,user_ids,fname=None):
 
         results = []
         if len(markings) > 1:
@@ -28,9 +28,13 @@ class BlobClustering(clustering.Cluster):
             G=nx.Graph()
 
             # take markings from only the first 5 users
-            useable_users = list(set(user_ids))[:15]
-            all_combined = [(m,u,t) for m,u,t in zip(markings,user_ids,tools) if u in useable_users]
-            markings,user_ids,tools = zip(*all_combined)
+            # useable_users = list(set(user_ids))[:15]
+            # all_combined = [(m,u,t) for m,u,t in zip(markings,user_ids,tools) if u in useable_users]
+            # markings,user_ids,tools = zip(*all_combined)
+
+            # hard code to a maximum of 15 users
+            markings = markings[:15]
+            user_ids = user_ids[:15]
 
             # check for bad polygons and discard if necessary
             # do it here so we don't have gaps in the ordering later
@@ -38,7 +42,7 @@ class BlobClustering(clustering.Cluster):
                 if len(markings[i]) <= 2:
                     markings.pop(i)
                     user_ids.pop(i)
-                    tools.pop(i)
+
 
             for j,pts in enumerate(markings):
                 assert isinstance(pts,list) or isinstance(pts,tuple)
