@@ -70,7 +70,7 @@ class Classification:
 
                             # for each cluster, find users who might have a relevant marking - and see if the tool
                             # type matches
-                            for cluster_index,cluster in clustering_results[subject_id][task_id][shape].items():
+                            for cluster_index,cluster in clustering_results[subject_id][task_id][shape+ " clusters"].items():
                                 if cluster_index in ["param","all_users"]:
                                     continue
 
@@ -97,15 +97,15 @@ class Classification:
                     if subject_id not in aggregations:
                         aggregations[subject_id] = {"param":"task_id"}
                     if task_id not in aggregations[subject_id]:
-                        aggregations[subject_id][task_id] = {"param":"shape"}
-                    if shape not in aggregations[subject_id][task_id]:
-                        aggregations[subject_id][task_id][shape] = {}
+                        aggregations[subject_id][task_id] = {"param":"clusters"}
+                    if (shape+ " clusters") not in aggregations[subject_id][task_id]:
+                        aggregations[subject_id][task_id][shape+ " clusters"] = {}
                     # this part is probably redundant
 
-                    if cluster_index not in aggregations[subject_id][task_id][shape]:
-                        aggregations[subject_id][task_id][shape][cluster_index] = {}
+                    if cluster_index not in aggregations[subject_id][task_id][shape+ " clusters"]:
+                        aggregations[subject_id][task_id][shape+ " clusters"][cluster_index] = {}
 
-                    aggregations[subject_id][task_id][shape][cluster_index]["followup_questions"] = followup_results[(subject_id,cluster_index)]
+                    aggregations[subject_id][task_id][shape+ " clusters"][cluster_index]["followup_questions"] = followup_results[(subject_id,cluster_index)]
 
         return aggregations
 
@@ -149,17 +149,18 @@ class Classification:
                 if task_id not in clustering_results[subject_id]:
                     continue
 
-                for local_cluster_index in clustering_results[subject_id][task_id][shape]:
+                for local_cluster_index in clustering_results[subject_id][task_id][shape+ " clusters"]:
                     if (local_cluster_index == "param") or (local_cluster_index == "all_users"):
                         continue
 
                     # extract the users who marked this cluster
-                    cluster = clustering_results[subject_id][task_id][shape][local_cluster_index]
+                    cluster = clustering_results[subject_id][task_id][shape+ " clusters"][local_cluster_index]
                     users = cluster["users"]
 
                     ballots = []
 
-                    for u in clustering_results[subject_id][task_id][shape]["all_users"]:
+                    # todo - the 15 hard coded value - might want to change that at some point
+                    for u in clustering_results[subject_id][task_id][shape+ " clusters"]["all_users"]:
                         if u in users:
                             ballots.append((u,1))
                         else:
@@ -176,14 +177,14 @@ class Classification:
                 if subject_id not in aggregations:
                     aggregations[subject_id] = {"param":"task_id"}
                 if task_id not in aggregations[subject_id]:
-                    aggregations[subject_id][task_id] = {"param":"shape"}
-                if shape not in aggregations[subject_id][task_id]:
-                    aggregations[subject_id][task_id][shape] = {}
+                    aggregations[subject_id][task_id] = {"param":"clusters"}
+                if (shape + " clusters") not in aggregations[subject_id][task_id]:
+                    aggregations[subject_id][task_id][shape+ " clusters"] = {}
                 # this part is probably redundant
-                if cluster_index not in aggregations[subject_id][task_id][shape]:
-                    aggregations[subject_id][task_id][shape][cluster_index] = {}
+                if cluster_index not in aggregations[subject_id][task_id][shape+ " clusters"]:
+                    aggregations[subject_id][task_id][shape+ " clusters"][cluster_index] = {}
 
-                aggregations[subject_id][task_id][shape][cluster_index]["existence"] = existence_results[(subject_id,cluster_index)]
+                aggregations[subject_id][task_id][shape+ " clusters"][cluster_index]["existence"] = existence_results[(subject_id,cluster_index)]
 
         return aggregations
 
@@ -225,12 +226,12 @@ class Classification:
                 if task_id not in clustering_results[subject_id]:
                     continue
 
-                for cluster_index in clustering_results[subject_id][task_id][shape]:
+                for cluster_index in clustering_results[subject_id][task_id][shape+ " clusters"]:
                     if (cluster_index == "param") or (cluster_index == "all_users"):
                         continue
 
-                    cluster = clustering_results[subject_id][task_id][shape][cluster_index]
-                    pts = cluster["points"]
+                    cluster = clustering_results[subject_id][task_id][shape+ " clusters"][cluster_index]
+                    pts = cluster["cluster members"]
                     users = cluster["users"]
                     # users = clustering_results[subject_id][task_id][shape][subject_id]["users"]
 
@@ -258,14 +259,14 @@ class Classification:
                 if subject_id not in aggregations:
                     aggregations[subject_id] = {"param":"task_id"}
                 if task_id not in aggregations[subject_id]:
-                    aggregations[subject_id][task_id] = {"param":"shape"}
-                if shape not in aggregations[subject_id][task_id]:
-                    aggregations[subject_id][task_id][shape] = {}
+                    aggregations[subject_id][task_id] = {"param":"clusters"}
+                if (shape+ " clusters") not in aggregations[subject_id][task_id]:
+                    aggregations[subject_id][task_id][shape+ " clusters"] = {}
                 # this part is probably redundant
-                if cluster_index not in aggregations[subject_id][task_id][shape]:
-                    aggregations[subject_id][task_id][shape][cluster_index] = {}
+                if cluster_index not in aggregations[subject_id][task_id][shape+ " clusters"]:
+                    aggregations[subject_id][task_id][shape+ " clusters"][cluster_index] = {}
 
-                aggregations[subject_id][task_id][shape][cluster_index]["shape_classification"] = tool_results[(subject_id,cluster_index)]
+                aggregations[subject_id][task_id][shape+ " clusters"][cluster_index]["tool_classification"] = tool_results[(subject_id,cluster_index)]
 
         return aggregations
 

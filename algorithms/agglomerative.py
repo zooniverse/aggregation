@@ -12,71 +12,14 @@ import numpy
 import multiClickCorrect
 import json
 
-class AbstractNode:
-    def __init__(self):
-        self.value = None
-        self.rchild = None
-        self.lchild = None
 
-        self.parent = None
-        self.depth = None
-        self.height = None
-
-        self.users = None
-
-    def __set_parent__(self,node):
-        assert isinstance(node,InnerNode)
-        self.parent = node
-
-    @abc.abstractmethod
-    def __traversal__(self):
-        return []
-
-    def __set_depth__(self,depth):
-        self.depth = depth
-
-
-class LeafNode(AbstractNode):
-    def __init__(self,value,index,user=None):
-        AbstractNode.__init__(self)
-        self.value = value
-        self.index = index
-        self.users = [user,]
-        self.height = 0
-        self.pts = [value,]
-
-    def __traversal__(self):
-        return [(self.value,self.index),]
-
-class InnerNode(AbstractNode):
-    def __init__(self,rchild,lchild,dist=None):
-        AbstractNode.__init__(self)
-        assert isinstance(rchild,(LeafNode,InnerNode))
-        assert isinstance(lchild,(LeafNode,InnerNode))
-
-        self.rchild = rchild
-        self.lchild = lchild
-
-        rchild.__set_parent__(self)
-        lchild.__set_parent__(self)
-
-        self.dist = dist
-
-        assert (self.lchild.users is None) == (self.rchild.users is None)
-        if self.lchild.users is not None:
-            self.users = self.lchild.users[:]
-            self.users.extend(self.rchild.users)
-
-        self.pts = self.lchild.pts[:]
-        self.pts.extend(self.rchild.pts[:])
-
-        self.height = max(rchild.height,lchild.height)+1
-
-    def __traversal__(self):
-        retval = self.rchild.__traversal__()
-        retval.extend(self.lchild.__traversal__())
-
-        return retval
+def hesse_line_mapping(line_segment):
+    """
+    use if we want to cluster based on Hesse normal form - but want to retain the original values
+    :param line_segment:
+    :return:
+    """
+    pass
 
 class Agglomerative(clustering.Cluster):
     def __init__(self,shape):
@@ -98,13 +41,13 @@ class Agglomerative(clustering.Cluster):
 
         return cluster_centers,end_clusters,end_users
 
-    def __results_to_json__(self,node):
-        results = {}
-        results["center"] = [np.median(axis) for axis in zip(*node.pts)]
-        results["points"] = node.pts
-        results["users"] = node.users
-
-        return results
+    # def __results_to_json__(self,node):
+    #     results = {}
+    #     results["center"] = [np.median(axis) for axis in zip(*node.pts)]
+    #     results["points"] = node.pts
+    #     results["users"] = node.users
+    #
+    #     return results
 
     def __inner_fit__(self,markings,user_ids,tools):
         """
@@ -128,17 +71,23 @@ class Agglomerative(clustering.Cluster):
         tools = tools[:15]
 
         if len(user_ids) == len(set(user_ids)):
+            # all of the markings are from different users => so only one cluster
             # todo implement
-            result = {"users":user_ids,"points":markings,"tools":tools}
+            result = {"users":user_ids,"cluster members":markings,"tools":tools}
             result["center"] = [np.median(axis) for axis in zip(*markings)]
             return [result],0
 
         all_users = set()
 
+        # check if the markings are for line segments - if so, convert to Hesse values
+        # todo - make sure this works, ie. only get line segments
+
+
         # this converts stuff into panda format - probably a better way to do this but the labels do seem
         # necessary
         labels = [str(i) for i in markings]
         param_labels = [str(i) for i in range(len(markings[0]))]
+
         df = pd.DataFrame(np.array(markings), columns=param_labels, index=labels)
         row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
         # use ward metric to do the actual clustering
@@ -146,7 +95,7 @@ class Agglomerative(clustering.Cluster):
 
         # use the results to build a tree representation
         # nodes = [LeafNode(pt,ii,user=user) for ii,(user,pt) in enumerate(zip(user_ids,markings))]
-        results = [{"users":[u],"points":[p],"tools":[t]} for u,p,t in zip(user_ids,markings,tools)]
+        results = [{"users":[u],"cluster members":[p],"tools":[t]} for u,p,t in zip(user_ids,markings,tools)]
 
         # read through the results
         # each row gives a cluster/node to merge
@@ -168,11 +117,11 @@ class Agglomerative(clustering.Cluster):
                 results.append(None)
             # maybe just the rnode was is already done - in which case "finish" the lnode
             elif (rnode is None) or ("center" in rnode):
-                lnode["center"] = [np.median(axis) for axis in zip(*lnode["points"])]
+                lnode["center"] = [np.median(axis) for axis in zip(*lnode["cluster members"])]
                 results.append(None)
             # maybe just the lnode is done:
             elif (lnode is None) or ("center" in lnode):
-                rnode["center"] = [np.median(axis) for axis in zip(*rnode["points"])]
+                rnode["center"] = [np.median(axis) for axis in zip(*rnode["cluster members"])]
                 results.append(None)
             else:
                 # check if we should merge - only if there is no overlap
@@ -182,22 +131,25 @@ class Agglomerative(clustering.Cluster):
                 # if there are users in common, add to the end clusters list (which consists of cluster centers
                 # the points in each cluster and the list of users)
                 if intersection != []:
-                    rnode["center"] = [np.median(axis) for axis in zip(*rnode["points"])]
-                    lnode["center"] = [np.median(axis) for axis in zip(*lnode["points"])]
+                    rnode["center"] = [np.median(axis) for axis in zip(*rnode["cluster members"])]
+                    lnode["center"] = [np.median(axis) for axis in zip(*lnode["cluster members"])]
                     results.append(None)
                 else:
                     # else just merge
                     merged_users = rnode["users"]
-                    merged_points = rnode["points"]
+                    merged_points = rnode["cluster members"]
                     merged_tools = rnode["tools"]
                     # add in the values from the second node
                     merged_users.extend(lnode["users"])
-                    merged_points.extend(lnode["points"])
+                    merged_points.extend(lnode["cluster members"])
                     merged_tools.extend(lnode["tools"])
-                    results.append({"users":merged_users,"points":merged_points,"tools":merged_tools})
+                    results.append({"users":merged_users,"cluster members":merged_points,"tools":merged_tools})
 
         # go and remove all non terminal nodes from the results
         for i in range(len(results)-1,-1,-1):
+            # if None => corresponds to being above a terminal node
+            # or center not in results => corresponds to being beneath a terminal node
+            # in both cases does not mean immediately above or below
             if (results[i] is None) or ("center" not in results[i]):
                 results.pop(i)
 

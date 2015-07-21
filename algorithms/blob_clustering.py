@@ -19,6 +19,7 @@ class BlobClustering(clustering.Cluster):
     def __init__(self,shape):
         assert shape != "point"
         clustering.Cluster.__init__(self,shape)
+        self.rectangle = (shape == "rectangle")
 
     def __inner_fit__(self,markings,user_ids,tools):
 
@@ -89,15 +90,20 @@ class BlobClustering(clustering.Cluster):
                                 union_blob = union_blob.union(overlap)
 
                 if isinstance(union_blob,Polygon):
-                    x,y = union_blob.exterior.xy
-                    x1 = min(x)
-                    x2 = max(x)
-                    y1 = min(y)
-                    y2 = max(y)
-
                     blob_results = dict()
-                    blob_results["center"] = [(x1,y1),(x1,y2),(x2,y2),(x2,y1)]
-                    blob_results["points"] = []
+
+                    if self.rectangle:
+                        x,y = union_blob.exterior.xy
+                        x1 = min(x)
+                        x2 = max(x)
+                        y1 = min(y)
+                        y2 = max(y)
+                        blob_results["center"] = [(x1,y1),(x1,y2),(x2,y2),(x2,y1)]
+                    else:
+                        x,y = union_blob.exterior.xy
+                        blob_results["center"] = zip(x,y)
+
+                    blob_results["cluster members"] = []
                     blob_results["users"] = []
                     blob_results["tools"] = []
 
@@ -107,7 +113,7 @@ class BlobClustering(clustering.Cluster):
                         if union_blob.intersects(blobs[i]):
                             blob_results["users"].append(user_ids[i])
                             x,y = blobs[i].exterior.xy
-                            blob_results["points"].append(zip(x,y)[:-1])
+                            blob_results["cluster members"].append(zip(x,y)[:-1])
                             blob_results["tools"].append(tools[i])
 
                     results.append(blob_results)
@@ -115,15 +121,18 @@ class BlobClustering(clustering.Cluster):
                     # plt.plot(x,y,color="red")
                 elif isinstance(union_blob,MultiPolygon):
                     for blob in union_blob:
-                        x,y = blob.exterior.xy
-                        x1 = min(x)
-                        x2 = max(x)
-                        y1 = min(y)
-                        y2 = max(y)
-
                         blob_results = dict()
-                        blob_results["center"] = [(x1,y1),(x1,y2),(x2,y2),(x2,y1)]
-                        blob_results["points"] = []
+                        x,y = blob.exterior.xy
+                        if self.rectangle:
+                            x1 = min(x)
+                            x2 = max(x)
+                            y1 = min(y)
+                            y2 = max(y)
+                            blob_results["center"] = [(x1,y1),(x1,y2),(x2,y2),(x2,y1)]
+                        else:
+                            blob_results["center"] = zip(x,y)
+
+                        blob_results["cluster members"] = []
                         blob_results["users"] = []
                         blob_results["tools"] = []
 
@@ -133,7 +142,7 @@ class BlobClustering(clustering.Cluster):
                             if union_blob.intersects(blobs[i]):
                                 blob_results["users"].append(user_ids[i])
                                 x,y = blobs[i].exterior.xy
-                                blob_results["points"].append(zip(x,y)[:-1])
+                                blob_results["cluster members"].append(zip(x,y)[:-1])
                                 blob_results["tools"].append(tools[i])
 
                         results.append(blob_results)

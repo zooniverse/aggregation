@@ -27,7 +27,7 @@ import agglomerative
 import cluster_count
 import clustering
 import blob_clustering
-
+from collections import OrderedDict
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -70,9 +70,9 @@ def line_mapping(marking,image_dimensions):
         raise InvalidMarking(marking)
 
     if x1 <= x2:
-        return x1,x2,y1,y2
+        return (x1,y1),(x2,y2)
     else:
-        return x2,x1,y2,y1
+        return (x2,y2),(x1,y1)
 
 
 def point_mapping(marking,image_dimensions):
@@ -458,20 +458,7 @@ class AggregationAPI:
 
         return retired_subjects
 
-    def __get_results__(self,workflow_id,subject_id=None):
-        stmt = "select * from aggregations where workflow_id = " + str(workflow_id)
-        if subject_id is not None:
-            stmt += " and subject_id = " + str(subject_id)
-        self.postgres_cursor.execute(stmt)
-        all_results = []
-        for r in self.postgres_cursor.fetchall():
-            # print json.dumps(r[3], sort_keys=True,indent=4, separators=(',', ': '))
-            # print r[3].keys()
-            assert isinstance(r[3],dict)
-            results = {r[2]:r[3]}
-            all_results.append(results)
-        with open('/home/greg/data.txt', 'w') as outfile:
-            json.dump(all_results, outfile,sort_keys=True,indent=4, separators=(',', ': '))
+
 
 
     def __get_workflow_details__(self,workflow_id):
@@ -527,7 +514,7 @@ class AggregationAPI:
                         for tool_index,tool in enumerate(task["tools"]):
                             instructions[task_id]["tools"][tool_index] = {}
                             label = tool["label"]
-                            instructions[task_id]["tools"][tool_index]["question"] = re.sub("'","",label)
+                            instructions[task_id]["tools"][tool_index]["marking tool"] = re.sub("'","",label)
                             if tool["details"] != []:
                                 instructions[task_id]["tools"][tool_index]["followup_questions"] = {}
 
@@ -1157,6 +1144,37 @@ class AggregationAPI:
 
         return aggregation
 
+    def __results_to_file__(self,workflow_ids=None,subject_id=None):
+        if workflow_ids is None:
+            workflow_ids = self.workflows.keys()
+        elif isinstance(workflow_ids,int):
+            workflow_ids = [workflow_ids]
+
+        assert isinstance(workflow_ids,list)
+
+        for id_ in workflow_ids:
+            print id_
+            stmt = "select * from aggregations where workflow_id = " + str(id_)
+            if subject_id is not None:
+                stmt += " and subject_id = " + str(subject_id)
+            self.postgres_cursor.execute(stmt)
+            all_results = []
+            for r in self.postgres_cursor.fetchall():
+                # print json.dumps(r[3], sort_keys=True,indent=4, separators=(',', ': '))
+                # print r[3].keys()
+                assert isinstance(r[3],dict)
+
+                ordered_aggregations = OrderedDict(sorted(r[3].items(),key = lambda x:x[0]))
+                results = {r[2]:ordered_aggregations}
+                all_results.append(results)
+            with open('/home/greg/workflow'+str(id_)+'.json', 'w') as outfile:
+                # for reasoning see
+                # http://stackoverflow.com/questions/18871217/python-how-to-custom-sort-a-list-of-dict-to-use-in-json-dumps
+                sort_order = ["metadata","init"]
+
+
+                json.dump(all_results, outfile,sort_keys=True,indent=4, separators=(',', ': '))
+
     def __set_classification_alg__(self,alg):
         self.classification_alg = alg
         assert isinstance(self.classification_alg,classification.Classification)
@@ -1585,41 +1603,41 @@ class AggregationAPI:
     #             print ".",subject_id,non_logged_in_users
     #     return raw_markings
 
-    def __store_results__(self,workflow_id,aggregations):
-        # aggregations = self.__remove_user_ids__(aggregations)
-        # cur = self.postgres_session.cursor()
-        # finally write the results into the postgres db
-
-        # subject_set = self.__load_subjects__(workflow_id)
-        # assert sorted(self.aggregations.keys()) == sorted(subject_set)
-
-        # stmt = "SELECT * from aggregations"
-        # cur.execute(stmt)
-
-        for ii,subject_id in enumerate(aggregations):
-            if subject_id == "param":
-                continue
-            if (ii > 0) and (ii % 10000 == 0):
-                self.postgres_session.commit()
-
-            # skip if we don't have any aggregation results yet
-
-            # there have been requests for the aggregation to also contain the metadata
-            select = "SELECT metadata from subjects where id="+str(subject_id)
-            print "inserting subject id " + str((workflow_id,subject_id))
-            self.postgres_cursor.execute(select)
-            metadata = self.postgres_cursor.fetchone()
-
-            # add in the necessary metadata relevant to this subject - probably filename etc.
-            # and the instructions - so people can match up the keys with what the actual tasks were
-            # slightly redundant since this will not change for a workflow but will be given for every subject
-            aggregation = aggregations[subject_id]
-            aggregation["metadata"] = metadata
-            aggregation["instructions"] = self.__get_workflow_details__(workflow_id)
-            stmt = "INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES("+str(workflow_id)+","+str(subject_id)+",'"+json.dumps(aggregation)+"','"+str(datetime.datetime.now())+"','"+str(datetime.datetime.now())+"')"
-            self.postgres_cursor.execute(stmt)
-        print "^^^^"
-        self.postgres_session.commit()
+    # def __store_results__(self,workflow_id,aggregations):
+    #     # aggregations = self.__remove_user_ids__(aggregations)
+    #     # cur = self.postgres_session.cursor()
+    #     # finally write the results into the postgres db
+    #
+    #     # subject_set = self.__load_subjects__(workflow_id)
+    #     # assert sorted(self.aggregations.keys()) == sorted(subject_set)
+    #
+    #     # stmt = "SELECT * from aggregations"
+    #     # cur.execute(stmt)
+    #
+    #     for ii,subject_id in enumerate(aggregations):
+    #         if subject_id == "param":
+    #             continue
+    #         if (ii > 0) and (ii % 10000 == 0):
+    #             self.postgres_session.commit()
+    #
+    #         # skip if we don't have any aggregation results yet
+    #
+    #         # there have been requests for the aggregation to also contain the metadata
+    #         select = "SELECT metadata from subjects where id="+str(subject_id)
+    #         print "inserting subject id " + str((workflow_id,subject_id))
+    #         self.postgres_cursor.execute(select)
+    #         metadata = self.postgres_cursor.fetchone()
+    #
+    #         # add in the necessary metadata relevant to this subject - probably filename etc.
+    #         # and the instructions - so people can match up the keys with what the actual tasks were
+    #         # slightly redundant since this will not change for a workflow but will be given for every subject
+    #         aggregation = aggregations[subject_id]
+    #         aggregation["metadata"] = metadata
+    #         aggregation["_instructions"] = self.__get_workflow_details__(workflow_id)
+    #         stmt = "INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES("+str(workflow_id)+","+str(subject_id)+",'"+json.dumps(aggregation)+"','"+str(datetime.datetime.now())+"','"+str(datetime.datetime.now())+"')"
+    #         self.postgres_cursor.execute(stmt)
+    #     print "^^^^"
+    #     self.postgres_session.commit()
 
     def __upsert_results__(self,workflow_id,aggregations):
         # postgres sucks
@@ -1636,8 +1654,8 @@ class AggregationAPI:
             metadata = self.postgres_cursor.fetchone()
 
             aggregation = aggregations[subject_id]
-            aggregation["metadata"] = metadata
-            aggregation["instructions"] = self.__get_workflow_details__(workflow_id)
+            aggregation[" metadata"] = metadata
+            aggregation[" instructions"] = self.__get_workflow_details__(workflow_id)
 
             if subject_id in r:
                 # do an update
@@ -1691,9 +1709,9 @@ if __name__ == "__main__":
 
     # project.__migrate__()
 
-    project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering})#, "rectangle":(blob_clustering.BlobClustering,{})})
+    project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering,"line":agglomerative.Agglomerative})#, "rectangle":(blob_clustering.BlobClustering,{})})
     project.__set_classification_alg__(classification.VoteCount())
     # project.__info__()
     project.__aggregate__(workflows=[84])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
-    project.__get_results__(84)
+    # project.__results_to_file__(workflow_ids=[9],subject_id=477160)
     # project.__get_workflow_details__(84)
