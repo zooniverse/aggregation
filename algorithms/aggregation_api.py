@@ -1020,6 +1020,30 @@ class AggregationAPI:
                 values (%s)""",
                 (annotations))
 
+    def __prune__(self,aggregations):
+        """
+        remove unnecessary information from the json file to keep things reasonable
+        :param aggregations:
+        :return:
+        """
+        for task_id in aggregations:
+            if task_id == "param":
+                continue
+            if aggregations[task_id]["param"] == "clusters":
+                for cluster_type in aggregations[task_id]:
+                    if cluster_type == "param":
+                        continue
+
+                    del aggregations[task_id][cluster_type]["all_users"]
+                    for cluster_index in aggregations[task_id][cluster_type]:
+                        if cluster_index == "param":
+                            continue
+
+                        del aggregations[task_id][cluster_type][cluster_index]["cluster members"]
+                        del aggregations[task_id][cluster_type][cluster_index]["tools"]
+                        del aggregations[task_id][cluster_type][cluster_index]["users"]
+
+        return aggregations
 
     def __readin_tasks__(self,workflow_id):
         """
@@ -1153,7 +1177,7 @@ class AggregationAPI:
         assert isinstance(workflow_ids,list)
 
         for id_ in workflow_ids:
-            print id_
+            print "storing " + str(id_)
             stmt = "select * from aggregations where workflow_id = " + str(id_)
             if subject_id is not None:
                 stmt += " and subject_id = " + str(subject_id)
@@ -1170,9 +1194,6 @@ class AggregationAPI:
             with open('/home/greg/workflow'+str(id_)+'.json', 'w') as outfile:
                 # for reasoning see
                 # http://stackoverflow.com/questions/18871217/python-how-to-custom-sort-a-list-of-dict-to-use-in-json-dumps
-                sort_order = ["metadata","init"]
-
-
                 json.dump(all_results, outfile,sort_keys=True,indent=4, separators=(',', ': '))
 
     def __set_classification_alg__(self,alg):
@@ -1653,7 +1674,7 @@ class AggregationAPI:
             self.postgres_cursor.execute(select)
             metadata = self.postgres_cursor.fetchone()
 
-            aggregation = aggregations[subject_id]
+            aggregation = self.__prune__(aggregations[subject_id])
             aggregation[" metadata"] = metadata
             aggregation[" instructions"] = self.__get_workflow_details__(workflow_id)
 
@@ -1712,6 +1733,6 @@ if __name__ == "__main__":
     project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering,"line":agglomerative.Agglomerative})#, "rectangle":(blob_clustering.BlobClustering,{})})
     project.__set_classification_alg__(classification.VoteCount())
     # project.__info__()
-    project.__aggregate__(workflows=[84])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
-    project.__results_to_file__()
+    project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+    project.__results_to_file__()#workflow_ids =[84],subject_id=494900)
     # project.__get_workflow_details__(84)
