@@ -64,17 +64,18 @@ class Classification:
                         # look at all the shape markings used and see if any correspond to the relevant type
                         # todo - probably a more efficient way to do this
                         # since we only store the shape associated with each cluster
-                        for shape in clustering_results[subject_id][task_id]:
+                        for shape_clusters in clustering_results[subject_id][task_id]:
+                            shape = shape_clusters.split(" ")[0]
                             if shape == "param":
                                 continue
 
                             # for each cluster, find users who might have a relevant marking - and see if the tool
                             # type matches
-                            for cluster_index,cluster in clustering_results[subject_id][task_id][shape+ " clusters"].items():
+                            for cluster_index,cluster in clustering_results[subject_id][task_id][shape + " clusters"].items():
                                 if cluster_index in ["param","all_users"]:
                                     continue
 
-                                user_identifiers = zip([tuple(x) for x in cluster["points"]],cluster["users"])
+                                user_identifiers = zip([tuple(x) for x in cluster["cluster members"]],cluster["users"])
                                 ballots = []
                                 for user_identifiers,tool_used in zip(user_identifiers,cluster["tools"]):
                                     # did the user use the relevant tool - doesn't matter if most people

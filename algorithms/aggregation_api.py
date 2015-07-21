@@ -1713,5 +1713,5 @@ if __name__ == "__main__":
     project.__set_classification_alg__(classification.VoteCount())
     # project.__info__()
     project.__aggregate__(workflows=[84])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
-    # project.__results_to_file__(workflow_ids=[9],subject_id=477160)
+    project.__results_to_file__()
     # project.__get_workflow_details__(84)

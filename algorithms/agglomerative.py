@@ -11,7 +11,7 @@ import math
 import numpy
 import multiClickCorrect
 import json
-
+import random
 
 def hesse_line_mapping(line_segment):
     """
@@ -19,7 +19,20 @@ def hesse_line_mapping(line_segment):
     :param line_segment:
     :return:
     """
-    pass
+    (x1,y1),(x2,y2) = line_segment
+
+    x2 += random.uniform(-0.0001,0.0001)
+    x1 += random.uniform(-0.0001,0.0001)
+
+    dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
+
+    try:
+        tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
+        theta = math.atan(tan_theta)
+    except ZeroDivisionError:
+        theta = math.pi/2.
+
+    return dist,theta
 
 class Agglomerative(clustering.Cluster):
     def __init__(self,shape):
@@ -80,7 +93,10 @@ class Agglomerative(clustering.Cluster):
         all_users = set()
 
         # check if the markings are for line segments - if so, convert to Hesse values
-        # todo - make sure this works, ie. only get line segments
+        if self.shape == "line":
+            mapped_markings = [hesse_line_mapping(l) for l in markings]
+        else:
+            merged_markings = markings
 
 
         # this converts stuff into panda format - probably a better way to do this but the labels do seem
