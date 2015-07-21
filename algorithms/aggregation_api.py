@@ -1029,7 +1029,8 @@ class AggregationAPI:
         for task_id in aggregations:
             if task_id == "param":
                 continue
-            if aggregations[task_id]["param"] == "clusters":
+            # we have a cluster
+            if isinstance(aggregations[task_id],dict):
                 for cluster_type in aggregations[task_id]:
                     if cluster_type == "param":
                         continue

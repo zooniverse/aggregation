@@ -93,18 +93,18 @@ class Agglomerative(clustering.Cluster):
         all_users = set()
 
         # check if the markings are for line segments - if so, convert to Hesse values
+        # we keep the original values around since we still need those
         if self.shape == "line":
             mapped_markings = [hesse_line_mapping(l) for l in markings]
         else:
-            merged_markings = markings
-
+            mapped_markings = markings
 
         # this converts stuff into panda format - probably a better way to do this but the labels do seem
         # necessary
         labels = [str(i) for i in markings]
         param_labels = [str(i) for i in range(len(markings[0]))]
 
-        df = pd.DataFrame(np.array(markings), columns=param_labels, index=labels)
+        df = pd.DataFrame(np.array(mapped_markings), columns=param_labels, index=labels)
         row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
         # use ward metric to do the actual clustering
         row_clusters = linkage(row_dist, method='ward')
