@@ -229,8 +229,8 @@ class AggregationAPI:
         for workflow_id in workflows:
             print workflow_id
             if subject_set is None:
-                subject_set = self.__get_retired_subjects__(workflow_id)
-                # subject_set = self.__load_subjects__(workflow_id)
+                # subject_set = self.__get_retired_subjects__(workflow_id)
+                subject_set = self.__load_subjects__(workflow_id)
             print "aggregating " + str(len(subject_set)) + " subjects"
             # self.__describe__(workflow_id)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
@@ -267,7 +267,7 @@ class AggregationAPI:
                 subject_set = None
 
             # finally, store the results
-            self.__upsert_results__(workflow_id,aggregations)
+            self.__update_results__(workflow_id,aggregations)
 
     def __cassandra_connect__(self):
         """
@@ -1026,10 +1026,12 @@ class AggregationAPI:
         :param aggregations:
         :return:
         """
+        assert isinstance(aggregations,dict)
         for task_id in aggregations:
             if task_id == "param":
                 continue
             # we have a cluster
+            print aggregations,task_id
             if isinstance(aggregations[task_id],dict):
                 for cluster_type in aggregations[task_id]:
                     if cluster_type == "param":
@@ -1661,15 +1663,19 @@ class AggregationAPI:
     #     print "^^^^"
     #     self.postgres_session.commit()
 
-    def __upsert_results__(self,workflow_id,aggregations):
+    def __upsert_results_old_(self,workflow_id,aggregations):
         # postgres sucks
         self.postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
         r = [i[0] for i in self.postgres_cursor.fetchall()]
         print r
 
+
+
         for subject_id in aggregations:
             if subject_id == "param":
                 continue
+
+
             select = "SELECT metadata from subjects where id="+str(subject_id)
             print "inserting subject id " + str((workflow_id,subject_id))
             self.postgres_cursor.execute(select)
@@ -1695,6 +1701,120 @@ class AggregationAPI:
 
         self.postgres_session.commit()
 
+    def __update_results__(self,workflow_id,aggregations):
+        """
+        see
+        # http://stackoverflow.com/questions/8134602/psycopg2-insert-multiple-rows-with-one-query
+        :param workflow_id:
+        :param aggregations:
+        :return:
+        """
+        # subject_ids = [id_ for id_ in aggregations if id_ != "param"]
+        # cur.executemany("""INSERT INTO bar(first_name,last_name) VALUES (%(first_name)s, %(last_name)s)""", namedict)
+
+        # self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id int, aggregation jsonb, created_at timestamp, updated_at timestamp)")
+        self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id int, aggregation jsonb)")
+
+        self.postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
+        r = [i[0] for i in self.postgres_cursor.fetchall()]
+        print r
+
+        workflow_details = self.__get_workflow_details__(workflow_id)
+
+        update_str = ""
+        insert_str = ""
+
+        update_counter = 0
+        insert_counter = 0
+
+        # todo - sort the subject ids so that searching is faster
+        for subject_id in aggregations:
+            # todo - maybe get rid of param in subject_ids - end users won't see it anyways
+            if subject_id == "param":
+                continue
+
+            aggregation = self.__prune__(aggregations[subject_id])
+            # aggregation[" metadata"] = metadata
+            aggregation[" instructions"] = workflow_details
+
+            if subject_id in r:
+                # we are updating
+                update_str += ","+self.postgres_cursor.mogrify("(%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregation)))
+                update_counter += 1
+            else:
+                # we are inserting a brand new aggregation
+                insert_str += ","+self.postgres_cursor.mogrify("(%s,%s,%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregation),str(datetime.datetime.now()),str(datetime.datetime.now())))
+                insert_counter += 1
+
+        if update_str != "":
+            # are there any updates to actually be done?
+            # todo - the updated and created at dates are not being maintained - I'm happy with that
+            print "updating " + str(update_counter) + " subjects"
+            self.postgres_cursor.execute("INSERT INTO newvals (workflow_id, subject_id, aggregation) VALUES " + update_str[1:])
+            self.postgres_cursor.execute("UPDATE aggregations SET aggregation = newvals.aggregation FROM newvals WHERE newvals.subject_id = aggregations.subject_id and newvals.workflow_id = aggregations.workflow_id")
+        if insert_str != "":
+            print "inserting " + str(insert_counter) + " subjects"
+            self.postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
+        self.postgres_session.commit()
+        # args_str = ""
+        # for subject_id in aggregations:
+        #     if subject_id == "param":
+        #         continue
+        #
+        #     # select = "SELECT metadata from subjects where id="+str(subject_id)
+        #     # print "inserting subject id " + str((workflow_id,subject_id))
+        #     # self.postgres_cursor.execute(select)
+        #     # metadata = self.postgres_cursor.fetchone()
+        #
+        #     aggregation = self.__prune__(aggregations[subject_id])
+        #     # aggregation[" metadata"] = metadata
+        #     aggregation[" instructions"] = workflow_details
+        #
+        #     args_str += ","+self.postgres_cursor.mogrify("(%s,%s,%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregation),str(datetime.datetime.now()),str(datetime.datetime.now())))
+        #
+        # # args_str = ','.join(self.postgres_cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s,%s)", x) for x in tup)
+        # print "going to insert"
+        # # [1:] to skip the first comma
+        # self.postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + args_str[1:])
+        # self.postgres_session.commit()
+
+    # def __upsert_results__(self,workflow_id,aggregations):
+    #     # postgres sucks
+    #     self.postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
+    #     r = [i[0] for i in self.postgres_cursor.fetchall()]
+    #     print r
+    #
+    #     self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(id workflow_id, somedata text)")
+    #
+    #     for subject_id in aggregations:
+    #         if subject_id == "param":
+    #             continue
+    #
+    #
+    #         select = "SELECT metadata from subjects where id="+str(subject_id)
+    #         print "inserting subject id " + str((workflow_id,subject_id))
+    #         self.postgres_cursor.execute(select)
+    #         metadata = self.postgres_cursor.fetchone()
+    #
+    #         aggregation = self.__prune__(aggregations[subject_id])
+    #         aggregation[" metadata"] = metadata
+    #         aggregation[" instructions"] = self.__get_workflow_details__(workflow_id)
+    #
+    #         if subject_id in r:
+    #             # do an update
+    #             # del aggregation["instructions"]
+    #             t = json.dumps(aggregation)
+    #             # t = re.sub("\"","'",t)
+    #             # stmt = "UPDATE aggregations SET aggregation = \""+t+"\" WHERE workflow_id = " + str(workflow_id) + " and subject_id = " + str(subject_id)
+    #             # stmt = "UPDATE aggregations (aggregation,updated_at) VALUES(" + json.dumps(aggregation) + "," + str(datetime.datetime.now()) + ") WHERE workflow_id = " + str(workflow_id) + " and subject_id = " + str(subject_id)
+    #             stmt = "UPDATE \"aggregations\" SET \"aggregation\" = \'"+t+"\' WHERE \"aggregations\".\"workflow_id\" = " + str(workflow_id) + " and \"aggregations\".\"subject_id\" = " + str(subject_id)
+    #         else:
+    #             # do an insert
+    #             stmt = "INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES("+str(workflow_id)+","+str(subject_id)+",'"+json.dumps(aggregation)+"','"+str(datetime.datetime.now())+"','"+str(datetime.datetime.now())+"')"
+    #         # print stmt
+    #         self.postgres_cursor.execute(stmt)
+    #
+    #     self.postgres_session.commit()
 
 class SubjectGenerator:
     def __init__(self,project):
@@ -1731,7 +1851,7 @@ if __name__ == "__main__":
 
     # project.__migrate__()
 
-    project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering,"line":agglomerative.Agglomerative})#, "rectangle":(blob_clustering.BlobClustering,{})})
+    project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"ellipse": agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering,"line":agglomerative.Agglomerative})#, "rectangle":(blob_clustering.BlobClustering,{})})
     project.__set_classification_alg__(classification.VoteCount())
     # project.__info__()
     project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
