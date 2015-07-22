@@ -110,7 +110,7 @@ class Classification:
 
         return aggregations
 
-    def __existence_classification__(self,task_id,raw_classifications,clustering_results):
+    def __existence_classification__(self,task_id,marking_tasks,clustering_results):
         """
         classify whether clusters are true or false positives
         i.e. whether each cluster corresponds to something which actually exists
@@ -118,6 +118,7 @@ class Classification:
         return in json format so we can merge with other results
         :return:
         """
+        assert isinstance(clustering_results,dict)
         aggregations = {}
 
         # raw_classifications and clustering_results have different hierarchy orderings- raw_classifications
@@ -126,7 +127,8 @@ class Classification:
         # hierarchy is really inefficient so use raw_classifications to help
 
         # each shape is done independently
-        for shape in raw_classifications[task_id]:
+
+        for shape in marking_tasks[task_id]:
             if shape == "param":
                 continue
             # pretentious name but basically whether each person who has seen a subject thinks it is a true
@@ -137,17 +139,21 @@ class Classification:
             clusters_per_subject = []
 
             # look at the individual points in the cluster
-            for subject_id in raw_classifications[task_id][shape]:
+            for subject_id in clustering_results.keys():
                 if subject_id == "param":
                     continue
-                if subject_id not in clustering_results:
-                    continue
+
                 clusters_per_subject.append([])
 
                 # in either case probably an empty image
                 if subject_id not in clustering_results:
                     continue
                 if task_id not in clustering_results[subject_id]:
+                    continue
+
+                print clustering_results[subject_id][task_id]
+                if (shape+ " clusters") not in clustering_results[subject_id][task_id]:
+                    # if none of the relevant markings were made on this subject, skip it
                     continue
 
                 for local_cluster_index in clustering_results[subject_id][task_id][shape+ " clusters"]:
@@ -297,7 +303,7 @@ class Classification:
                 # we have to first decide which cluster is a "true positive" and which is a "false positive"
                 # so a question of whether or not people marked it - regardless of whether they marked it as the
                 # correct "type"
-                existence_results = self.__existence_classification__(task_id,raw_classifications,clustering_results)
+                existence_results = self.__existence_classification__(task_id,marking_tasks,clustering_results)
 
                 # now decide what type each cluster is
                 # note that this step does not care whether a cluster is a false positive or not (i.e. the results
