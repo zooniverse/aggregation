@@ -101,6 +101,11 @@ def rectangle_mapping(marking,image_dimensions):
     return (x,y),(x,y2),(x2,y2),(x2,y)
 
 
+def circle_mapping(marking,image_dimensions):
+    return marking["x"],marking["y"],marking["r"]
+
+
+
 def ellipse_mapping(marking,image_dimensions):
     return marking["x"],marking["y"],marking["rx"],marking["ry"],marking["angle"]
 
@@ -119,15 +124,44 @@ class AggregationAPI:
         self.marking_params_per_shape["point"] = point_mapping
         self.marking_params_per_shape["ellipse"] = ellipse_mapping
         self.marking_params_per_shape["rectangle"] = rectangle_mapping
+        self.marking_params_per_shape["circle"] = circle_mapping
+
+        # default value
+        self.environment = "production"
+        self.host_api = None
+        self.subject_id_type = "int"
 
         # only continue the set up if the project name is given
-        self.project_short_name = project
+        # self.project_short_name = project
 
+        # connect to the Panoptes db - postgres
+        # even if we are running an ouroboros project we will want to connect to Postgres
+        try:
+            database_file = open("config/database.yml")
+        except IOError:
+            database_file = open(base_directory+"/Databases/database.yml")
+
+        database_details = yaml.load(database_file)
+        self.postgres_session = None
+
+        # if project is None - then this should be an ouroboros project pretending to be a Panoptes
+        # one - so all of the code after the return will handle things like connecting to the Panoptes API
+        # (which the ouroboros project won't have to do) and the Postgres/Cassandra connections
+        # (which the ouroboros project will have to do specially because of some differences)
         if project is None:
             return
 
-        # will only override this for ourboros instances
+        self.__postgres_connect__(database_details[self.environment])
+
+        # and to the cassandra db as well
+        self.__cassandra_connect__()
+
+        # will only override this for ouroboros instances
         self.classification_table = "classifications"
+
+
+
+
 
         # get my userID and password
         # purely for testing, if this file does not exist, try opening on Greg's computer
@@ -140,7 +174,7 @@ class AggregationAPI:
 
         print "connecting to Panoptes http api"
         # set the http_api and basic project details
-        self.__panoptes_connect__(api_details)
+        self.__panoptes_connect__(api_details[project])
 
         # # details about the project we are going to work with
         try:
@@ -149,19 +183,7 @@ class AggregationAPI:
             self.project_id = self.__get_project_id()
 
 
-        # now connect to the Panoptes db - postgres
-        try:
-            database_file = open("config/database.yml")
-        except IOError:
-            database_file = open(base_directory+"/Databases/database.yml")
 
-        database_details = yaml.load(database_file)
-        self.postgres_session = None
-
-        self.__postgres_connect(database_details)
-
-        # and to the cassandra db as well
-        self.__cassandra_connect__()
 
         # there may be more than one workflow associated with a project - read them all in
         # and set up the associated tasks
@@ -169,7 +191,7 @@ class AggregationAPI:
         self.versions = self.__get_workflow_versions__()
 
         # load the default clustering algorithms
-        default_clustering_algs = {"point":agglomerative.Agglomerative,"ellipse": agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering,"line":agglomerative.Agglomerative}
+        default_clustering_algs = {"point":agglomerative.Agglomerative,"circle":agglomerative.Agglomerative,"ellipse": agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering,"line":agglomerative.Agglomerative}
         self.__set_clustering_algs__(default_clustering_algs)
 
         # load the default classification algorithm
@@ -200,7 +222,7 @@ class AggregationAPI:
             raw_classifications,raw_markings = self.__sort_annotations__(workflow_id,subject_set)
             # print raw_markings["T1"].keys()
 
-            if (self.cluster_algs is not None) and (marking_tasks != {}):
+            if  marking_tasks != {}:
                 print "clustering"
                 clustering_aggregations = self.__cluster__(raw_markings)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
@@ -743,14 +765,14 @@ class AggregationAPI:
         :return:
         """
         # details for connecting to Panoptes
-        self.user_name = api_details[project]["name"]
-        self.password = api_details[project]["password"]
-        self.host = api_details[project]["host"] #"https://panoptes-staging.zooniverse.org/"
+        self.user_name = api_details["name"]
+        self.password = api_details["password"]
+        self.host = api_details["host"] #"https://panoptes-staging.zooniverse.org/"
         self.host_api = self.host+"api/"
-        self.owner = api_details[project]["owner"] #"brian-testing" or zooniverse
-        self.project_name = api_details[project]["project_name"]
-        self.app_client_id = api_details[project]["app_client_id"]
-        self.environment = api_details[project]["environment"]
+        self.owner = api_details["owner"] #"brian-testing" or zooniverse
+        self.project_name = api_details["project_name"]
+        self.app_client_id = api_details["app_client_id"]
+        self.environment = api_details["environment"]
         self.token = None
 
         # the http api for connecting to Panoptes
@@ -939,12 +961,12 @@ class AggregationAPI:
             print self.cluster_alg.clusterResults.keys()
             raise
 
-    def __postgres_connect(self,database_details):
+    def __postgres_connect__(self,database_details):
 
-        database = database_details[self.environment]["database"]
-        username = database_details[self.environment]["username"]
-        password = database_details[self.environment]["password"]
-        host = database_details[self.environment]["host"]
+        database = database_details["database"]
+        username = database_details["username"]
+        password = database_details["password"]
+        host = database_details["host"]
 
         # try connecting to the db
         details = "dbname='"+database+"' user='"+ username+ "' host='"+ host + "' password='"+password+"'"
@@ -1252,7 +1274,7 @@ class AggregationAPI:
                     print record_list
                     assert success
 
-                # print subject_id,len(record_list)
+                print subject_id,len(record_list)
 
                 non_logged_in_users = 0
                 # print "==++ " + str(subject_id)
@@ -1270,7 +1292,6 @@ class AggregationAPI:
 
                         # is this a marking task?
                         if task_id in marking_tasks:
-
                             if not isinstance(task["value"],list):
                                 print "not properly formed marking - skipping"
                                 continue
@@ -1347,7 +1368,6 @@ class AggregationAPI:
                             #     print task_id,task["value"]
                             raw_classifications[task_id][subject_id].append((user_id,task["value"]))
 
-        print raw_classifications.keys()
         return raw_classifications,raw_markings
 
     def __upsert_results__(self,workflow_id,aggregations):
@@ -1362,12 +1382,15 @@ class AggregationAPI:
         # cur.executemany("""INSERT INTO bar(first_name,last_name) VALUES (%(first_name)s, %(last_name)s)""", namedict)
 
         # self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id int, aggregation jsonb, created_at timestamp, updated_at timestamp)")
-        self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id int, aggregation jsonb)")
+        self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation jsonb)")
 
         self.postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
         r = [i[0] for i in self.postgres_cursor.fetchall()]
 
-        workflow_details = self.__get_workflow_details__(workflow_id)
+        if self.host_api is not None:
+            workflow_details = self.__get_workflow_details__(workflow_id)
+        else:
+            workflow_details = ""
 
         update_str = ""
         insert_str = ""
@@ -1422,6 +1445,7 @@ class SubjectGenerator:
         yield  subject_ids
         raise StopIteration
 
+
 def twod_linesegment(pt):
     x1,x2,y1,y2 = pt
     print x1,x2,y1,y2
@@ -1439,8 +1463,8 @@ if __name__ == "__main__":
     project_name = sys.argv[1]
     project = AggregationAPI(project_name)
 
-    # project.__migrate__()
-    
+    project.__migrate__()
+
     # project.__info__()
     project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
     project.__results_to_file__()#workflow_ids =[84],subject_id=494900)

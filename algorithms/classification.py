@@ -88,7 +88,7 @@ class Classification:
                                 followup_classification[(subject_id,cluster_index)] = deepcopy(ballots)
                                 shapes_per_cluster[(subject_id,cluster_index)] = shape
 
-                print followup_classification
+                print "follow up aggregaton"
                 followup_results = self.__task_aggregation__(followup_classification)
                 assert isinstance(followup_results,dict)
 
@@ -128,7 +128,9 @@ class Classification:
 
         # each shape is done independently
 
-        for shape in marking_tasks[task_id]:
+        # set - so if multiple tools create the same shape - we only do that shape once
+        for shape in set(marking_tasks[task_id]):
+
             if shape == "param":
                 continue
             # pretentious name but basically whether each person who has seen a subject thinks it is a true
@@ -151,7 +153,6 @@ class Classification:
                 if task_id not in clustering_results[subject_id]:
                     continue
 
-                print clustering_results[subject_id][task_id]
                 if (shape+ " clusters") not in clustering_results[subject_id][task_id]:
                     # if none of the relevant markings were made on this subject, skip it
                     continue
@@ -177,6 +178,7 @@ class Classification:
                     clusters_per_subject[-1].append(global_cluster_index)
                     global_cluster_index += 1
 
+            print "existence aggregation"
             existence_results = self.__task_aggregation__(existence_classification)
             assert isinstance(existence_results,dict)
 
@@ -217,9 +219,18 @@ class Classification:
         if "shapes" not in classification_tasks[task_id]:
             return {}
 
+        # todo - we should skip such cases but they should also be pretty rare - double check
+        if task_id not in raw_classifications:
+            return {}
+
         # only go through the "uncertain" shapes
         for shape in classification_tasks[task_id]["shapes"]:
             tool_classifications = {}
+
+            # todo - we should skip such cases but they should also be pretty rare - double check
+            if shape not in raw_classifications[task_id]:
+                continue
+
             for subject_id in raw_classifications[task_id][shape]:
                 # look at the individual points in the cluster
 
@@ -259,6 +270,7 @@ class Classification:
                     tool_classifications[(subject_id,cluster_index)] = ballots
 
             # classify
+            print "tool results classification"
             tool_results = self.__task_aggregation__(tool_classifications)
             assert isinstance(tool_results,dict)
 
@@ -287,14 +299,20 @@ class Classification:
             if task_id == "param":
                 continue
 
+            task_results = {}
+
             if isinstance(classification_tasks[task_id],bool):
                 # we have a basic classification task
+                print raw_classifications.keys()
+                print classification_tasks
+                print marking_tasks
+                # todo - double check if this is right
+                if task_id in raw_classifications:
+                    temp_results = self.__task_aggregation__(raw_classifications[task_id])
+                    # convert everything into a dict and add the the task id
 
-                temp_results = self.__task_aggregation__(raw_classifications[task_id])
-                # convert everything into a dict and add the the task id
-                task_results = {}
-                for subject_id in temp_results:
-                    task_results[subject_id] = {task_id:temp_results[subject_id]}
+                    for subject_id in temp_results:
+                        task_results[subject_id] = {task_id:temp_results[subject_id]}
             else:
                 # we have classifications associated with markings
                 # make sure we have clustering results associated with these classifications
