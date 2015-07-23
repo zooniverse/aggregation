@@ -143,6 +143,7 @@ class AggregationAPI:
 
         database_details = yaml.load(database_file)
         self.postgres_session = None
+        self.__postgres_connect__(database_details[self.environment])
 
         # if project is None - then this should be an ouroboros project pretending to be a Panoptes
         # one - so all of the code after the return will handle things like connecting to the Panoptes API
@@ -151,7 +152,7 @@ class AggregationAPI:
         if project is None:
             return
 
-        self.__postgres_connect__(database_details[self.environment])
+
 
         # and to the cassandra db as well
         self.__cassandra_connect__()

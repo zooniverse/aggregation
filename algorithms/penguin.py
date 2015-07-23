@@ -7,6 +7,7 @@ import panoptes_ibcc
 import cassandra
 import json
 from cassandra.concurrent import execute_concurrent
+import psycopg2
 
 class Penguins(aggregation_api.AggregationAPI):
     def __init__(self):
@@ -23,17 +24,26 @@ class Penguins(aggregation_api.AggregationAPI):
 
         # some stuff to pretend we are a Panoptes project
         classification_tasks = {1:{"shapes":["point"]}}
-        marking_tasks = {1:{0:"point",1:"point",2:"point",3:"point"}}
+        marking_tasks = {1:["point","point","point","point"]}
+
+        database = {}
 
         self.workflows = {1:(classification_tasks,marking_tasks)}
         self.versions = {1:1}
 
-        self.cluster_alg = agglomerative.Agglomerative()
+        self.cluster_algs = {"point":agglomerative.Agglomerative("point")}
         self.classification_alg = panoptes_ibcc.IBCC()
 
         self.__cassandra_connect__()
 
         self.classification_table = "penguins_classifications"
+        self.subject_id_type = "text"
+
+        self.postgres_session = psycopg2.connect("dbname='zooniverse' user=greg")
+        self.postgres_cursor = self.postgres_session.cursor()
+
+        # self.postgres_cursor.execute("create table aggregations (workflow_id int, subject_id text, aggregation jsonb, created_at timestamp, updated_at timestamp)")
+
 
     def __aggregate__(self,workflows=None,subject_set=None):
         # if not gold standard
@@ -145,11 +155,11 @@ class Penguins(aggregation_api.AggregationAPI):
 
 if __name__ == "__main__":
     project = Penguins()
-    project.__migrate__()
+    # project.__migrate__()
     # subjects = project.__get_subject_ids__()
 
     t = 0
-    for s in SubjectGenerator(project):
+    for s in aggregation_api.SubjectGenerator(project):
         t += 1
         project.__aggregate__(workflows=[1],subject_set=s)
 
