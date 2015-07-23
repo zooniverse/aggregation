@@ -113,6 +113,7 @@ class AggregationAPI:
         self.versions = None
         self.classifications = None
 
+        # functions for converting json instances into values we can actually cluster on
         self.marking_params_per_shape = dict()
         self.marking_params_per_shape["line"] = line_mapping
         self.marking_params_per_shape["point"] = point_mapping
@@ -125,6 +126,7 @@ class AggregationAPI:
         if project is None:
             return
 
+        # will only override this for ourboros instances
         self.classification_table = "classifications"
 
         # get my userID and password
@@ -135,44 +137,16 @@ class AggregationAPI:
             panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
         api_details = yaml.load(panoptes_file)
 
-        # details for connecting to Panoptes
-        self.user_name = api_details[project]["name"]
-        self.password = api_details[project]["password"]
-        self.host = api_details[project]["host"] #"https://panoptes-staging.zooniverse.org/"
-        self.host_api = self.host+"api/"
-        self.owner = api_details[project]["owner"] #"brian-testing" or zooniverse
-        self.project_name = api_details[project]["project_name"]
-        self.app_client_id = api_details[project]["app_client_id"]
-        self.environment = api_details[project]["environment"]
-        self.token = None
 
-        # the http api for connecting to Panoptes
-        self.http_api = None
         print "connecting to Panoptes http api"
         # set the http_api and basic project details
-        self.__panoptes_connect__()
+        self.__panoptes_connect__(api_details)
 
         # # details about the project we are going to work with
         try:
             self.project_id = api_details[project]["project_id"]
         except KeyError:
             self.project_id = self.__get_project_id()
-
-        # # get the most recent workflow version
-        # # todo - probably need to make sure that we only read in classifications from the most recent workflow version
-        # try:
-        #     self.workflow_version = api_details[project]["workflow_version"]
-        # except KeyError:
-        #     self.workflow_version = self.__get_workflow_version()
-        #
-        # try:
-        #     self.workflow_id = api_details[project]["workflow_id"]
-        # except KeyError:
-        #     self.workflow_id = self.__get_workflow_id()
-        # print self.workflow_id
-        # assert False
-        # assert self.workflow_id is not None
-
 
 
         # now connect to the Panoptes db - postgres
@@ -194,31 +168,12 @@ class AggregationAPI:
         self.workflows = self.__setup_workflows__()
         self.versions = self.__get_workflow_versions__()
 
-        # can have different clustering algorithms for different shapes
+        # load the default clustering algorithms
+        default_clustering_algs = {"point":agglomerative.Agglomerative,"ellipse": agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering,"line":agglomerative.Agglomerative}
+        self.__set_clustering_algs__(default_clustering_algs)
 
-        #
-        #
-        # self.workflows = {}
-        # self.__load_workflows__()
-        # # if there is only one workflow for the project, just use that
-        # # otherwise, we will need to specify which workflow we want to use
-        # # self.workflow_id = None
-        # # subjects don't have to be the same for all workflows for the same project - so only load the subjects
-        # # if there workflow is given (e.g. there is only one workflow)
-        # self.subjects = []
-        # if len(self.workflows) == 1:
-        #     self.workflow_id = self.workflows.keys()[0]
-        #
-
-        # load in the subjects for the project
-        # self.__get_subject_ids__()
-
-        #     # load the tasks associated with this workflow
-        #     self.__task_setup__()
-        #
-
-        # self.aggregations = {}
-        #
+        # load the default classification algorithm
+        self.__set_classification_alg__(classification.VoteCount)
 
     def __aggregate__(self,workflows=None,subject_set=None):
         if workflows is None:
@@ -267,7 +222,7 @@ class AggregationAPI:
                 subject_set = None
 
             # finally, store the results
-            self.__update_results__(workflow_id,aggregations)
+            self.__upsert_results__(workflow_id,aggregations)
 
     def __cassandra_connect__(self):
         """
@@ -782,11 +737,25 @@ class AggregationAPI:
         if statements_and_params != []:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
 
-    def __panoptes_connect__(self):
+    def __panoptes_connect__(self,api_details):
         """
         make the main connection to Panoptes - through http
         :return:
         """
+        # details for connecting to Panoptes
+        self.user_name = api_details[project]["name"]
+        self.password = api_details[project]["password"]
+        self.host = api_details[project]["host"] #"https://panoptes-staging.zooniverse.org/"
+        self.host_api = self.host+"api/"
+        self.owner = api_details[project]["owner"] #"brian-testing" or zooniverse
+        self.project_name = api_details[project]["project_name"]
+        self.app_client_id = api_details[project]["app_client_id"]
+        self.environment = api_details[project]["environment"]
+        self.token = None
+
+        # the http api for connecting to Panoptes
+        self.http_api = None
+
         for i in range(20):
             try:
                 print "connecting to Pantopes, attempt: " + str(i)
@@ -1180,7 +1149,7 @@ class AggregationAPI:
         assert isinstance(workflow_ids,list)
 
         for id_ in workflow_ids:
-            print "storing " + str(id_)
+            print "storing workflow id :: " + str(id_)
             stmt = "select * from aggregations where workflow_id = " + str(id_)
             if subject_id is not None:
                 stmt += " and subject_id = " + str(subject_id)
@@ -1200,10 +1169,11 @@ class AggregationAPI:
                 json.dump(all_results, outfile,sort_keys=True,indent=4, separators=(',', ': '))
 
     def __set_classification_alg__(self,alg):
-        self.classification_alg = alg
+        self.classification_alg = alg()
         assert isinstance(self.classification_alg,classification.Classification)
 
     def __set_clustering_algs__(self,clustering_algorithms):
+
         # the dictionary allows us to give a different clustering algorithm for different shapes
 
         self.cluster_algs = {}
@@ -1270,9 +1240,9 @@ class AggregationAPI:
             statements_and_params = []
             ignore_version = True
 
-            select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ?")# and workflow_version = ?")
+            select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
             for subject_id in s:
-                params = (int(self.project_id),subject_id,int(workflow_id))#,version)
+                params = (int(self.project_id),subject_id,int(workflow_id),version)
                 statements_and_params.append((select_statement, params))
                 # print params
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
@@ -1380,328 +1350,7 @@ class AggregationAPI:
         print raw_classifications.keys()
         return raw_classifications,raw_markings
 
-    # def __sort_classifications__(self,workflow_id,subject_set=None):
-    #     version = int(math.floor(float(self.versions[workflow_id])))
-    #
-    #     classification_tasks,marking_tasks = self.workflows[workflow_id]
-    #     raw_classifications = {}
-    #
-    #     if subject_set is None:
-    #         subject_set = self.__load_subjects__(workflow_id)
-    #
-    #     total = 0
-    #     for s in self.__chunks(subject_set,15):
-    #         statements_and_params = []
-    #         ignore_version = True
-    #
-    #         select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ?")# and workflow_version = ?")
-    #         for subject_id in s:
-    #             params = (int(self.project_id),subject_id,int(workflow_id))#,version)
-    #             statements_and_params.append((select_statement, params))
-    #         results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
-    #
-    #         for subject_id,(success,record_list) in zip(s,results):
-    #             if not success:
-    #                 print record_list
-    #                 assert success
-    #
-    #
-    #             # to help us tell apart between different users who are not logged in
-    #             # todo- a non logged in user might see this subject multiple times - how to protect against that?
-    #             non_logged_in_users = 0
-    #             # print "==++ " + str(subject_id)
-    #             for record in record_list:
-    #                 total += 1
-    #                 user_id = record.user_id
-    #                 if user_id == -1:
-    #                     non_logged_in_users += -1
-    #                     user_id = non_logged_in_users
-    #
-    #                 annotations = json.loads(record.annotations)
-    #                 # go through each annotation and get the associated task
-    #                 for task in annotations:
-    #                     task_id = task["task"]
-    #
-    #                     # is this a classification task
-    #                     if task_id in classification_tasks:
-    #                         # is this classification task associated with a marking task?
-    #                         # i.e. a sub task?
-    #                         if isinstance(classification_tasks[task_id],dict):
-    #                             # does this correspond to a confusing shape?
-    #                             # print classification_tasks[task_id]
-    #                             for marking in task["value"]:
-    #                                 tool = marking["tool"]
-    #                                 shape = marking_tasks[task_id][tool]
-    #
-    #                                 # is this shape confusing?
-    #                                 if ("shapes" in classification_tasks[task_id]) and (shape in classification_tasks[task_id]["shapes"]):
-    #                                     if task_id not in raw_classifications:
-    #                                         raw_classifications[task_id] = {}
-    #                                     if shape not in raw_classifications[task_id]:
-    #                                         raw_classifications[task_id][shape] = {}
-    #                                     if subject_id not in raw_classifications[task_id][shape]:
-    #                                         raw_classifications[task_id][shape][subject_id] = {}
-    #
-    #                                     # todo - FIX!!!
-    #                                     try:
-    #                                         relevant_params = self.marking_params_per_shape[shape](marking,(10000,10000))
-    #                                         # assert (relevant_params,user_id) not in raw_classifications[task_id][shape][subject_id]
-    #                                         raw_classifications[task_id][shape][subject_id][(relevant_params,user_id)] = tool #.append((user_id,relevant_params,tool))
-    #                                     except InvalidMarking as e:
-    #                                         print e
-    #
-    #                                 # is there a subtask associated with this marking?
-    #                                 # keep in mind that subtasks are by tool type - NOT by shape
-    #                                 # so different tools with the same shape can have different subtasks
-    #                                 # so the below code is slightly different than above
-    #                                 if ("subtask" in classification_tasks[task_id]) and (tool in classification_tasks[task_id]["subtask"]):
-    #                                     for local_subtask_id in classification_tasks[task_id]["subtask"][tool]:
-    #                                         global_subtask_id = str(task_id)+"_"+str(tool)+"_"+str(local_subtask_id)
-    #                                         if global_subtask_id not in raw_classifications:
-    #                                             raw_classifications[global_subtask_id] = {}
-    #                                         if subject_id not in raw_classifications[global_subtask_id]:
-    #                                             raw_classifications[global_subtask_id][subject_id] = {}
-    #
-    #                                         # we need the coordinates since different markings may have the same subtasks
-    #                                         shape = marking_tasks[task_id][tool]
-    #                                         relevant_params = self.marking_params_per_shape[shape](marking,(10000,10000))
-    #
-    #                                         subtask_value = marking["details"][local_subtask_id]["value"]
-    #                                         raw_classifications[global_subtask_id][subject_id][(relevant_params,user_id)] = subtask_value
-    #                         else:
-    #                             if task_id not in raw_classifications:
-    #                                 raw_classifications[task_id] = {}
-    #                             if subject_id not in raw_classifications[task_id]:
-    #                                 raw_classifications[task_id][subject_id] = []
-    #                             # if task_id == "init":
-    #                             #     print task_id,task["value"]
-    #                             raw_classifications[task_id][subject_id].append((user_id,task["value"]))
-    #             print subject_id,non_logged_in_users
-    #     return raw_classifications
-
-    # def __sort_markings__(self,workflow_id,subject_set=None,ignore_version=False):
-    #     """
-    #     :param workflow_id:
-    #     :param subject_set:
-    #     :param ignore_version: ONLY set for debugging use
-    #     :return:
-    #     """
-    #     ignore_version=False
-    #
-    #     # workflow_version = self.__get_workflow_version__(workflow_id)
-    #
-    #     classification_tasks,marking_tasks = self.workflows[workflow_id]
-    #     if marking_tasks == {}:
-    #         return {}
-    #
-    #     raw_markings = {}
-    #     if subject_set is None:
-    #         subject_set = self.__load_subjects__(workflow_id)
-    #
-    #     # use one image from the workflow to determine the size of all images
-    #     # todo - BAD ASSUMPTION, think of something better
-    #     try:
-    #         fname = self.__image_setup__(subject_set[0])
-    #         im=Image.open(fname)
-    #         width,height= im.size
-    #     except (IndexError,ImageNotDownloaded,AttributeError):
-    #         # todo - fix!!!
-    #         print "image not downloaded"
-    #         width = 1000
-    #         height = 1000
-    #
-    #     self.users_per_subject={}
-    #
-    #     loaded_subjects = set()
-    #     read_in = set()
-    #
-    #     for s in self.__chunks(subject_set,15):
-    #         statements_and_params = []
-    #         if ignore_version:
-    #             select_statement = self.cassandra_session.prepare("select * from " + self.classification_table + " where project_id = ? and workflow_id = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
-    #         else:
-    #             select_statement = self.cassandra_session.prepare("select * from " + self.classification_table + " where project_id = ? and workflow_id = ? and subject_id = ? and workflow_version = ?")# and workflow_id = ?")# and workflow_version = ?")
-    #
-    #         # select_statement = self.cassandra_session.prepare("select id,user_id,annotations from classifications where project_id = ? and subject_id = ? and workflow_id = ?")
-    #         # select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ? and workflow_id = ? and workflow_version = ? and subject_id = ?")# and workflow_id = ?")# and workflow_version = ?")
-    #         # select_statement = self.cassandra_session.prepare("select * from classifications where project_id = ?")# and workflow_id = ? and workflow_version = ?")
-    #
-    #         # assert 458701 not in s
-    #         # print s
-    #
-    #         for subject_id in s:
-    #             if ignore_version:
-    #                 params = (int(self.project_id),workflow_id,subject_id,)#int(workflow_id))#,int(math.floor(float(self.versions[workflow_id]))))
-    #             else:
-    #                 # version = int(math.floor(float(self.versions[workflow_id])))
-    #                 params = (int(self.project_id),workflow_id,subject_id,self.versions[workflow_id])#int(workflow_id))#,int(math.floor(float(self.versions[workflow_id]))))
-    #             # params = (int(self.project_id),)#,int(workflow_id),int(math.floor(float(self.versions[workflow_id]))))
-    #             statements_and_params.append((select_statement, params))
-    #             # print params
-    #         results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
-    #         for subject_id,(success,record_list) in zip(s,results):
-    #             tt = 0
-    #             # todo - implement error recovery
-    #             if not success:
-    #                 print record_list
-    #             assert success
-    #
-    #             # use this counter to help differentiate non logged in users
-    #             non_logged_in_users = 0
-    #             for record in record_list:
-    #                 tt += 1
-    #                 user_id = record.user_id
-    #
-    #                 if user_id == -1:
-    #                     non_logged_in_users += -1
-    #                     user_id = non_logged_in_users
-    #                 loaded_subjects.add(subject_id)
-    #                 # for counting the number of users who have seen this subject
-    #                 # set => in case someone has seen this image twice
-    #                 if subject_id not in self.users_per_subject:
-    #                     self.users_per_subject[subject_id] = {}
-    #
-    #                 # # todo - how to handle cases where someone has seen an image more than once?
-    #                 # if user_id in self.users_per_subject[subject_id]:
-    #                 #     select = "SELECT * from users where id="+str(user_id)
-    #                 #     cur = self.postgres_session.cursor()
-    #                 #     cur.execute(select)
-    #                 #
-    #                 #     print cur.fetchone()
-    #
-    #                 # self.users_per_subject[subject_id].add(user_id)
-    #
-    #                 annotations = json.loads(record.annotations)
-    #
-    #                 # go through each annotation and get the associated task
-    #                 for task in annotations:
-    #                     task_id = task["task"]
-    #
-    #                     if task_id not in self.users_per_subject[subject_id]:
-    #                         self.users_per_subject[subject_id][task_id] = set()
-    #                     self.users_per_subject[subject_id][task_id].add(user_id)
-    #
-    #                     if task_id in marking_tasks:
-    #                         if not isinstance(task["value"],list):
-    #                             print "not properly formed marking - skipping"
-    #                             continue
-    #
-    #                         for marking in task["value"]:
-    #                             # what kind of tool made this marking and what was the shape of that tool?
-    #                             try:
-    #                                 tool = marking["tool"]
-    #                                 shape = marking_tasks[task_id][tool]
-    #                             except KeyError:
-    #                                 tool = None
-    #                                 shape = marking["type"]
-    #                             except IndexError as e:
-    #                                 print marking
-    #                                 print marking_tasks
-    #                                 print task_id
-    #                                 print tool
-    #                                 raise
-    #                             if shape ==  "image":
-    #                                 # todo - treat image like a rectangle
-    #                                 continue
-    #
-    #                             if shape not in self.marking_params_per_shape:
-    #                                 print "unrecognized shape: " + shape
-    #                                 continue
-    #
-    #                             try:
-    #                                 # extract the params specifically relevant to the given shape
-    #                                 relevant_params = self.marking_params_per_shape[shape](marking,(width,height))
-    #
-    #                                 # only create these if we have a valid marking
-    #                                 if task_id not in raw_markings:
-    #                                     raw_markings[task_id] = {}
-    #                                 if shape not in raw_markings[task_id]:
-    #                                     raw_markings[task_id][shape] = {}
-    #                                 if subject_id not in raw_markings[task_id][shape]:
-    #                                     raw_markings[task_id][shape][subject_id] = []
-    #
-    #                                 raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
-    #                             except InvalidMarking as e:
-    #                                 # print e
-    #                                 pass
-    #             print ".",subject_id,non_logged_in_users
-    #     return raw_markings
-
-    # def __store_results__(self,workflow_id,aggregations):
-    #     # aggregations = self.__remove_user_ids__(aggregations)
-    #     # cur = self.postgres_session.cursor()
-    #     # finally write the results into the postgres db
-    #
-    #     # subject_set = self.__load_subjects__(workflow_id)
-    #     # assert sorted(self.aggregations.keys()) == sorted(subject_set)
-    #
-    #     # stmt = "SELECT * from aggregations"
-    #     # cur.execute(stmt)
-    #
-    #     for ii,subject_id in enumerate(aggregations):
-    #         if subject_id == "param":
-    #             continue
-    #         if (ii > 0) and (ii % 10000 == 0):
-    #             self.postgres_session.commit()
-    #
-    #         # skip if we don't have any aggregation results yet
-    #
-    #         # there have been requests for the aggregation to also contain the metadata
-    #         select = "SELECT metadata from subjects where id="+str(subject_id)
-    #         print "inserting subject id " + str((workflow_id,subject_id))
-    #         self.postgres_cursor.execute(select)
-    #         metadata = self.postgres_cursor.fetchone()
-    #
-    #         # add in the necessary metadata relevant to this subject - probably filename etc.
-    #         # and the instructions - so people can match up the keys with what the actual tasks were
-    #         # slightly redundant since this will not change for a workflow but will be given for every subject
-    #         aggregation = aggregations[subject_id]
-    #         aggregation["metadata"] = metadata
-    #         aggregation["_instructions"] = self.__get_workflow_details__(workflow_id)
-    #         stmt = "INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES("+str(workflow_id)+","+str(subject_id)+",'"+json.dumps(aggregation)+"','"+str(datetime.datetime.now())+"','"+str(datetime.datetime.now())+"')"
-    #         self.postgres_cursor.execute(stmt)
-    #     print "^^^^"
-    #     self.postgres_session.commit()
-
-    def __upsert_results_old_(self,workflow_id,aggregations):
-        # postgres sucks
-        self.postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
-        r = [i[0] for i in self.postgres_cursor.fetchall()]
-        print r
-
-
-
-        for subject_id in aggregations:
-            if subject_id == "param":
-                continue
-
-
-            select = "SELECT metadata from subjects where id="+str(subject_id)
-            print "inserting subject id " + str((workflow_id,subject_id))
-            self.postgres_cursor.execute(select)
-            metadata = self.postgres_cursor.fetchone()
-
-            aggregation = self.__prune__(aggregations[subject_id])
-            aggregation[" metadata"] = metadata
-            aggregation[" instructions"] = self.__get_workflow_details__(workflow_id)
-
-            if subject_id in r:
-                # do an update
-                # del aggregation["instructions"]
-                t = json.dumps(aggregation)
-                # t = re.sub("\"","'",t)
-                # stmt = "UPDATE aggregations SET aggregation = \""+t+"\" WHERE workflow_id = " + str(workflow_id) + " and subject_id = " + str(subject_id)
-                # stmt = "UPDATE aggregations (aggregation,updated_at) VALUES(" + json.dumps(aggregation) + "," + str(datetime.datetime.now()) + ") WHERE workflow_id = " + str(workflow_id) + " and subject_id = " + str(subject_id)
-                stmt = "UPDATE \"aggregations\" SET \"aggregation\" = \'"+t+"\' WHERE \"aggregations\".\"workflow_id\" = " + str(workflow_id) + " and \"aggregations\".\"subject_id\" = " + str(subject_id)
-            else:
-                # do an insert
-                stmt = "INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES("+str(workflow_id)+","+str(subject_id)+",'"+json.dumps(aggregation)+"','"+str(datetime.datetime.now())+"','"+str(datetime.datetime.now())+"')"
-            # print stmt
-            self.postgres_cursor.execute(stmt)
-
-        self.postgres_session.commit()
-
-    def __update_results__(self,workflow_id,aggregations):
+    def __upsert_results__(self,workflow_id,aggregations):
         """
         see
         # http://stackoverflow.com/questions/8134602/psycopg2-insert-multiple-rows-with-one-query
@@ -1717,7 +1366,6 @@ class AggregationAPI:
 
         self.postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
         r = [i[0] for i in self.postgres_cursor.fetchall()]
-        print r
 
         workflow_details = self.__get_workflow_details__(workflow_id)
 
@@ -1756,65 +1404,7 @@ class AggregationAPI:
             print "inserting " + str(insert_counter) + " subjects"
             self.postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
         self.postgres_session.commit()
-        # args_str = ""
-        # for subject_id in aggregations:
-        #     if subject_id == "param":
-        #         continue
-        #
-        #     # select = "SELECT metadata from subjects where id="+str(subject_id)
-        #     # print "inserting subject id " + str((workflow_id,subject_id))
-        #     # self.postgres_cursor.execute(select)
-        #     # metadata = self.postgres_cursor.fetchone()
-        #
-        #     aggregation = self.__prune__(aggregations[subject_id])
-        #     # aggregation[" metadata"] = metadata
-        #     aggregation[" instructions"] = workflow_details
-        #
-        #     args_str += ","+self.postgres_cursor.mogrify("(%s,%s,%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregation),str(datetime.datetime.now()),str(datetime.datetime.now())))
-        #
-        # # args_str = ','.join(self.postgres_cursor.mogrify("(%s,%s,%s,%s,%s,%s,%s,%s,%s)", x) for x in tup)
-        # print "going to insert"
-        # # [1:] to skip the first comma
-        # self.postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + args_str[1:])
-        # self.postgres_session.commit()
 
-    # def __upsert_results__(self,workflow_id,aggregations):
-    #     # postgres sucks
-    #     self.postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
-    #     r = [i[0] for i in self.postgres_cursor.fetchall()]
-    #     print r
-    #
-    #     self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(id workflow_id, somedata text)")
-    #
-    #     for subject_id in aggregations:
-    #         if subject_id == "param":
-    #             continue
-    #
-    #
-    #         select = "SELECT metadata from subjects where id="+str(subject_id)
-    #         print "inserting subject id " + str((workflow_id,subject_id))
-    #         self.postgres_cursor.execute(select)
-    #         metadata = self.postgres_cursor.fetchone()
-    #
-    #         aggregation = self.__prune__(aggregations[subject_id])
-    #         aggregation[" metadata"] = metadata
-    #         aggregation[" instructions"] = self.__get_workflow_details__(workflow_id)
-    #
-    #         if subject_id in r:
-    #             # do an update
-    #             # del aggregation["instructions"]
-    #             t = json.dumps(aggregation)
-    #             # t = re.sub("\"","'",t)
-    #             # stmt = "UPDATE aggregations SET aggregation = \""+t+"\" WHERE workflow_id = " + str(workflow_id) + " and subject_id = " + str(subject_id)
-    #             # stmt = "UPDATE aggregations (aggregation,updated_at) VALUES(" + json.dumps(aggregation) + "," + str(datetime.datetime.now()) + ") WHERE workflow_id = " + str(workflow_id) + " and subject_id = " + str(subject_id)
-    #             stmt = "UPDATE \"aggregations\" SET \"aggregation\" = \'"+t+"\' WHERE \"aggregations\".\"workflow_id\" = " + str(workflow_id) + " and \"aggregations\".\"subject_id\" = " + str(subject_id)
-    #         else:
-    #             # do an insert
-    #             stmt = "INSERT INTO aggregations(workflow_id,subject_id,aggregation,created_at,updated_at) VALUES("+str(workflow_id)+","+str(subject_id)+",'"+json.dumps(aggregation)+"','"+str(datetime.datetime.now())+"','"+str(datetime.datetime.now())+"')"
-    #         # print stmt
-    #         self.postgres_cursor.execute(stmt)
-    #
-    #     self.postgres_session.commit()
 
 class SubjectGenerator:
     def __init__(self,project):
@@ -1850,9 +1440,7 @@ if __name__ == "__main__":
     project = AggregationAPI(project_name)
 
     # project.__migrate__()
-
-    project.__set_clustering_algs__({"point":agglomerative.Agglomerative,"ellipse": agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering,"line":agglomerative.Agglomerative})#, "rectangle":(blob_clustering.BlobClustering,{})})
-    project.__set_classification_alg__(classification.VoteCount())
+    
     # project.__info__()
     project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
     project.__results_to_file__()#workflow_ids =[84],subject_id=494900)
