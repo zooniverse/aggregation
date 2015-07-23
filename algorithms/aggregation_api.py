@@ -1383,10 +1383,14 @@ class AggregationAPI:
         # cur.executemany("""INSERT INTO bar(first_name,last_name) VALUES (%(first_name)s, %(last_name)s)""", namedict)
 
         # self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id int, aggregation jsonb, created_at timestamp, updated_at timestamp)")
-        self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation jsonb)")
+        self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation json)")
 
-        self.postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
-        r = [i[0] for i in self.postgres_cursor.fetchall()]
+        try:
+            self.postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
+            r = [i[0] for i in self.postgres_cursor.fetchall()]
+        except psycopg2.ProgrammingError:
+            self.postgres_cursor.execute("create table aggregations(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation json,created_at timestamp, updated_at timestamp)")
+            r = []
 
         if self.host_api is not None:
             workflow_details = self.__get_workflow_details__(workflow_id)
