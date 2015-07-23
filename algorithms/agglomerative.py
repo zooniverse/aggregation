@@ -79,9 +79,7 @@ class Agglomerative(clustering.Cluster):
         user_ids = list(user_ids)
         start = time.time()
 
-        markings = markings[:15]
-        user_ids = user_ids[:15]
-        tools = tools[:15]
+
 
         if len(user_ids) == len(set(user_ids)):
             # all of the markings are from different users => so only one cluster

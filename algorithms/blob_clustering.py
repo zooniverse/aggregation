@@ -23,6 +23,10 @@ class BlobClustering(clustering.Cluster):
 
     def __inner_fit__(self,markings,user_ids,tools):
 
+        markings = markings[:15]
+        user_ids = user_ids[:15]
+        tools = tools[:15]
+
         results = []
         if len(markings) > 1:
             blobs = []
