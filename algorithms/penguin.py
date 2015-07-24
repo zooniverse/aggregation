@@ -39,6 +39,7 @@ class Penguins(aggregation_api.AggregationAPI):
         self.__cassandra_connect__()
 
         self.classification_table = "penguins_classifications"
+        self.users_table = "penguins_users"
         self.subject_id_type = "text"
 
         self.postgres_session = psycopg2.connect("dbname='zooniverse' user=ggdhines")
@@ -46,6 +47,8 @@ class Penguins(aggregation_api.AggregationAPI):
 
         # self.postgres_cursor.execute("create table aggregations (workflow_id int, subject_id text, aggregation jsonb, created_at timestamp, updated_at timestamp)")
 
+    def __get_retired_subjects__(self,workflow_id,with_expert_classifications=None):
+        pass
 
     def __aggregate__(self,workflows=None,subject_set=None):
         # if not gold standard
@@ -95,17 +98,28 @@ class Penguins(aggregation_api.AggregationAPI):
             self.cassandra_session.execute("drop table " + self.classification_table)
             print "table dropped"
         except (cassandra.InvalidRequest,cassandra.protocol.ServerError) as e:
-            print e
+            print "table did not already exist"
+
+        try:
+            self.cassandra_session.execute("drop table " + self.users_table)
+            print "table dropped"
+        except (cassandra.InvalidRequest,cassandra.protocol.ServerError) as e:
             print "table did not already exist"
 
         self.cassandra_session.execute("CREATE TABLE " + self.classification_table+" (project_id int, workflow_id int, subject_id text, annotations text, user_id text, user_ip inet, workflow_version int, PRIMARY KEY(project_id,workflow_id,workflow_version,subject_id,user_id,user_ip) ) WITH CLUSTERING ORDER BY (workflow_id ASC,workflow_version ASC,subject_id ASC) ;")
-        # self.cassandra_session.execute("CREATE TABLE " + self.classification_table+" (project_id int, workflow_id int, subject_id text, annotations text, user_name text, user_ip inet, PRIMARY KEY(subject_id,project_id,workflow_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC) ;")
+        # for looking up which subjects have been classified by specific users
+        self.cassandra_session.execute("CREATE TABLE " + self.users_table+ " (project_id int, workflow_id int, workflow_version int, user_id text,user_ip inet,subject_id text, PRIMARY KEY(project_id, workflow_id, workflow_version, user_id,user_ip,subject_id)) WITH CLUSTERING ORDER BY (workflow_id ASC, workflow_version ASC, user_id ASC, user_ip ASC,subject_id ASC);")
 
         insert_statement = self.cassandra_session.prepare("""
                 insert into penguins_classifications (project_id, workflow_id, subject_id,annotations,user_id,user_ip,workflow_version)
                 values (?,?,?,?,?,?,?)""")
 
+        user_insert = self.cassandra_session.prepare("""
+                insert into penguins_users (project_id, workflow_id, subject_id,user_id,user_ip,workflow_version)
+                values (?,?,?,?,?,?)""")
+
         statements_and_params = []
+        statements_and_params2 = []
 
         all_tools = []
 
@@ -114,11 +128,13 @@ class Penguins(aggregation_api.AggregationAPI):
                 print ii
                 if ii > 0:
                     results = execute_concurrent(self.cassandra_session, statements_and_params)
+                    results = execute_concurrent(self.cassandra_session, statements_and_params2)
                     if False in results:
                         print results
                         assert False
 
                     statements_and_params = []
+                    statements_and_params2 = []
 
             zooniverse_id = classification["subjects"][0]["zooniverse_id"]
 
@@ -159,6 +175,7 @@ class Penguins(aggregation_api.AggregationAPI):
             if mapped_annotations == {}:
                 continue
             statements_and_params.append((insert_statement,(-1,1,zooniverse_id,json.dumps(mapped_annotations),user_name,user_ip,1)))
+            statements_and_params2.append((user_insert,(-1,1,zooniverse_id,user_name,user_ip,1)))
 
         execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
 
@@ -195,7 +212,7 @@ class Penguins(aggregation_api.AggregationAPI):
 
 if __name__ == "__main__":
     project = Penguins()
-    # project.__migrate__()
+    project.__migrate__()
     # subjects = project.__get_subject_ids__()
 
     t = 0
