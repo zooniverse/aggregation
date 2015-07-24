@@ -8,6 +8,8 @@ import cassandra
 import json
 from cassandra.concurrent import execute_concurrent
 import psycopg2
+import urllib2
+import os
 
 class Penguins(aggregation_api.AggregationAPI):
     def __init__(self):
@@ -15,7 +17,7 @@ class Penguins(aggregation_api.AggregationAPI):
         self.project_id = -1
         # connect to the mongo server
         client = pymongo.MongoClient()
-        db = client['penguin_2015-06-01']
+        db = client['penguin_2015-05-08']
         self.classification_collection = db["penguin_classifications"]
         self.subject_collection = db["penguin_subjects"]
 
@@ -39,7 +41,7 @@ class Penguins(aggregation_api.AggregationAPI):
         self.classification_table = "penguins_classifications"
         self.subject_id_type = "text"
 
-        self.postgres_session = psycopg2.connect("dbname='zooniverse' user=greg")
+        self.postgres_session = psycopg2.connect("dbname='zooniverse' user=ggdhines")
         self.postgres_cursor = self.postgres_session.cursor()
 
         # self.postgres_cursor.execute("create table aggregations (workflow_id int, subject_id text, aggregation jsonb, created_at timestamp, updated_at timestamp)")
@@ -49,6 +51,44 @@ class Penguins(aggregation_api.AggregationAPI):
         # if not gold standard
         if not self.gold_standard:
             aggregation_api.AggregationAPI.__aggregate__(self,workflows,subject_set)
+
+    def __get_aggregated_subjects__(self,workflow_id,num_subjects=20):
+        """
+        return a list of subjects which have aggregation results
+        :param workflow_id:
+        :return:
+        """
+        stmt = "select subject_id from aggregations where workflow_id = " + str(workflow_id)
+        self.postgres_cursor.execute(stmt)
+
+        subjects = []
+
+        for r in self.postgres_cursor.fetchall():
+            subjects.append(r[0])
+
+        return subjects
+
+    def __image_setup__(self,subject_id,download=True):
+        """
+        get the local file name for a given subject id and downloads that image if necessary
+        :param subject_id:
+        :return:
+        """
+        subject = self.subject_collection.find_one({"zooniverse_id":subject_id})
+
+        url = str(subject["location"]["standard"])
+        ii = url.index("www")
+        # url = "http://"+url[ii:]
+
+        image_path = aggregation_api.base_directory+"/Databases/images/"+subject_id+".jpg"
+
+        if not(os.path.isfile(image_path)) and download:
+            # urllib2.urlretrieve(url, image_path)
+            f = open(image_path,"wb")
+            f.write(urllib2.urlopen(url).read())
+            f.close()
+
+        return image_path
 
     def __migrate__(self):
         try:

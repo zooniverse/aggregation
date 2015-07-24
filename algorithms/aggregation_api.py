@@ -28,6 +28,7 @@ import cluster_count
 import clustering
 import blob_clustering
 from collections import OrderedDict
+import numpy
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -369,6 +370,23 @@ class AggregationAPI:
     #             print tasks[task_id]["tools"]
     #     # self. description
 
+    def __get_aggregated_subjects__(self,workflow_id,num_subjects=20):
+        """
+        return a list of subjects which have aggregation results
+        todo: - make sure it for panoptes - not just penguins
+        :param workflow_id:
+        :return:
+        """
+        stmt = "select subject_id from aggregations where workflow_id = " + str(workflow_id)
+        self.postgres_cursor.execute(stmt)
+
+        subjects = []
+
+        for r in self.postgres_cursor.fetchall():
+            subjects.append(r[0])
+
+        return subjects
+
     def __get_num_clusters__(self,subject_id,task_id):
         return len(self.cluster_alg.clusterResults[subject_id][task_id])
 
@@ -436,7 +454,8 @@ class AggregationAPI:
 
         return retired_subjects
 
-
+    def __get_subjects__(self,workflow_id):
+        pass
 
 
     def __get_workflow_details__(self,workflow_id):
@@ -552,6 +571,7 @@ class AggregationAPI:
         :param subject_id:
         :return:
         """
+        print subject_id
         request = urllib2.Request(self.host_api+"subjects/"+str(subject_id))
         request.add_header("Accept","application/vnd.api+json; version=1")
         request.add_header("Authorization","Bearer "+self.token)
@@ -859,17 +879,19 @@ class AggregationAPI:
 
 
 
-    def __plot_image__(self,subject_id):
+    def __plot_image__(self,subject_id,axes):
+        # todo - still learning about Matplotlib and axes
+        # see http://matplotlib.org/users/artists.html
         fname = self.__image_setup__(subject_id)
 
         for i in range(10):
             try:
-                fig = plt.figure()
-                ax = fig.add_subplot(1, 1, 1)
+                # fig = plt.figure()
+                # ax = fig.add_subplot(1, 1, 1)
                 image_file = cbook.get_sample_data(fname)
                 image = plt.imread(image_file)
                 # fig, ax = plt.subplots()
-                im = ax.imshow(image)
+                im = axes.imshow(image)
 
                 return
             except IOError:
@@ -905,25 +927,64 @@ class AggregationAPI:
 
         plt.axis('scaled')
 
-    def __plot_cluster_results__(self,subject_id,task_id,shape):
-        # for task in self.cluster_alg.clusterResults[subject_id]:
-        #     not really a task - just there to make things easier to understand
-            # if task == "param":
-            #     continue
-        for cluster in self.cluster_alg.clusterResults[task_id][shape][subject_id]:
-            center = cluster["center"]
-            points = cluster["points"]
-            if shape == "line":
-                plt.plot([center[0],center[1]],[center[2],center[3]],color="blue")
-            elif shape == "point":
-                for pt in points:
-                    plt.plot([pt[0],],[pt[1],],'.',color="red")
-                plt.plot([center[0],],[center[1],],"o",color="blue")
-            else:
-                assert False
-            # plt.title("number of users: " + str(len(cluster["points"])))
+    def __plot_cluster_results__(self,workflow_id,subject_id,task_id,shape,axes,percentile_threshold=1):
+        """
+        plots the clustering results - also stores the distribution of probabilities of existence
+        so they can be altered later
+        :param workflow_id:
+        :param subject_id:
+        :param task_id:
+        :param axes:
+        :param threshold:
+        :return:
+        """
+        # todo - generalize for panoptes
+        stmt = "select aggregation from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = '" + str(subject_id) + "'"
+        self.postgres_cursor.execute(stmt)
 
-        # plt.show()
+        self.cluster_pts = {}
+
+        self.probabilities = []
+
+        # todo - this should be a dict but doesn't seem to be - hmmmm :/
+        aggregations = json.loads(self.postgres_cursor.fetchone()[0])
+
+        # # task id could be for example, init, so has to be a string
+        # for shapes in aggregations[str(task_id)]:
+        #     if shapes == "param":
+        #         continue
+        #     shape = shapes.split(" ")[0]
+
+        # do two passes - first to get the probabilities
+        for cluster_index,cluster in aggregations[str(task_id)][shape + " clusters"].items():
+            if cluster_index == "param":
+                continue
+            self.probabilities.append(cluster['existence'][0][1])
+
+        prob_threshold = numpy.percentile(self.probabilities,(1-percentile_threshold)*100)
+
+        for cluster_index,cluster in aggregations[str(task_id)][shape + " clusters"].items():
+            if cluster_index == "param":
+                continue
+            center = cluster["center"]
+            prob_existence = cluster['existence'][0][1]
+            if shape == "point":
+                # with whatever alg we used, what do we think the probability is that
+                # this cluster actually exists?
+
+                if prob_existence >= prob_threshold:
+                    self.cluster_pts[cluster_index] = axes.plot(center[0],center[1],".",color="blue"),prob_existence
+                else:
+                    # we think this is a false positive
+                    self.cluster_pts[cluster_index] = axes.plot(center[0],center[1],".",color="red"),prob_existence
+
+    def __update_threshold__(self,new_percentile_threshold):
+        prob_threshold = numpy.percentile(self.probabilities,(1-new_percentile_threshold)*100)
+        for pt,prob_existence in self.cluster_pts.values():
+            if prob_existence >= prob_threshold:
+                pt[0].set_color("blue")
+            else:
+                pt[0].set_color("red")
 
     def __plot__(self,workflow_id,task_id):
         print "plotting"
@@ -1163,6 +1224,12 @@ class AggregationAPI:
 
         return aggregation
 
+    def __get_results__(self,workflow_id):
+        stmt = "select * from aggregations where workflow_id = " + str(workflow_id)
+        self.postgres_cursor.execute(stmt)
+        for r in self.postgres_cursor.fetchall():
+            return r
+
     def __results_to_file__(self,workflow_ids=None,subject_id=None):
         if workflow_ids is None:
             workflow_ids = self.workflows.keys()
@@ -1371,6 +1438,23 @@ class AggregationAPI:
 
         return raw_classifications,raw_markings
 
+    def __threshold_scaling__(self,workflow_id,):
+        """
+        when moving the threshold, we don't want a linear scale - most values will be uninteresting
+        so use a few subjects to create a more interesting scale
+        :return:
+        """
+        stmt = "select subject_id from aggregations where workflow_id = " + str(workflow_id)
+        self.postgres_cursor.execute(stmt)
+
+        subjects = []
+
+        for r in self.postgres_cursor.fetchall():
+            subjects.append(r[0])
+
+        return subjects
+
+
     def __upsert_results__(self,workflow_id,aggregations):
         """
         see
@@ -1389,6 +1473,7 @@ class AggregationAPI:
             self.postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
             r = [i[0] for i in self.postgres_cursor.fetchall()]
         except psycopg2.ProgrammingError:
+            self.postgres_session.rollback()
             self.postgres_cursor.execute("create table aggregations(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation json,created_at timestamp, updated_at timestamp)")
             r = []
 
