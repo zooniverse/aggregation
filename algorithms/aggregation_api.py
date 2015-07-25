@@ -954,7 +954,10 @@ class AggregationAPI:
         self.probabilities = []
 
         # todo - this should be a dict but doesn't seem to be - hmmmm :/
-        aggregations = json.loads(self.postgres_cursor.fetchone()[0])
+        agg = self.postgres_cursor.fetchone()
+        if agg is None:
+            return {}
+        aggregations = json.loads(agg[0])
 
         # # task id could be for example, init, so has to be a string
         # for shapes in aggregations[str(task_id)]:
@@ -1588,7 +1591,7 @@ class AggregationAPI:
                 # todo - implement
                 assert False
 
-        return TP,FP
+        return prob_threshold
 
 class SubjectGenerator:
     def __init__(self,project):

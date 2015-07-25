@@ -29,6 +29,9 @@ class Marmot:
         self.true_probabilities = {}
         self.false_probabilities = {}
 
+        self.percentage_thresholds = {}
+        self.probability_threshold = {}
+        self.weightings = {}
     def __create_thumb__(self,subject_id):
         fname = self.project.__image_setup__(subject_id)
         openImg = Image.open(fname)
@@ -75,8 +78,15 @@ class Marmot:
         # # Tweak spacing to prevent clipping of ylabel
         # plt.subplots_adjust(left=0.15)
         # plt.show()
+
         slash_index = thumb_path.rindex("/")
         subject_id = thumb_path[slash_index+1:-4]
+
+        # if we are looking at a image for the first time
+        if subject_id not in self.percentage_thresholds:
+            self.percentage_thresholds[subject_id] = 0.5
+
+
 
         plt.close()
         fig = plt.figure()
@@ -84,20 +94,25 @@ class Marmot:
 
         self.project.__plot_image__(subject_id,axes)
         correct_pts = self.project.__get_correct_points__(1,subject_id,1,"point")
-        matplotlib_points = self.project.__plot_cluster_results__(1,subject_id,1,"point",axes,0.5,correct_pts)
+        matplotlib_points = self.project.__plot_cluster_results__(1,subject_id,1,"point",axes,self.percentage_thresholds[subject_id],correct_pts)
         plt.subplots_adjust(left=0.25, bottom=0.25)
         # axcolor = 'lightgoldenrodyellow'
         axfreq = plt.axes([0.25, 0.1, 0.65, 0.03])
-        threshold_silder = Slider(axfreq, 'Percentage', 0., 1., valinit=0.5)
+
+
+        self.weightings[subject_id] = len(matplotlib_points)
+
+
+        threshold_silder = Slider(axfreq, 'Percentage', 0., 1., valinit=self.percentage_thresholds[subject_id])
 
         self.project.__get_expert_annotations__(1,subject_id)
 
         # needs to be an inner function - grrrr
         def update(val):
             new_threshold = threshold_silder.val
-            tp_probabilities,fp_probabilities = self.project.__update_threshold__(new_threshold,correct_pts,matplotlib_points)
-            self.true_probabilities[subject_id] = tp_probabilities
-            self.false_probabilities[subject_id] = fp_probabilities
+            self.percentage_thresholds[subject_id] = new_threshold
+            self.probability_threshold[subject_id] = self.project.__update_threshold__(new_threshold,correct_pts,matplotlib_points)
+
 
         threshold_silder.on_changed(update)
 

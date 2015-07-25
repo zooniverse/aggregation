@@ -78,7 +78,10 @@ class Penguins(aggregation_api.AggregationAPI):
         self.postgres_cursor.execute(stmt)
 
         # todo - this should already be a dict but doesn't seem to be - hmmmm :/
-        aggregations = json.loads(self.postgres_cursor.fetchone()[0])
+        agg =self.postgres_cursor.fetchone()
+        if agg is None:
+            return []
+        aggregations = json.loads(agg[0])
 
         # now load the expert's classifications
         # this is from cassandra
