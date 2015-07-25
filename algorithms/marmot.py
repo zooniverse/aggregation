@@ -40,6 +40,8 @@ class Marmot:
         self.subjects = self.project.__get_retired_subjects__(1,True)
         random.shuffle(self.subjects)
         self.page_index = 0
+        self.step_size = 45
+
 
         # see for deleting previous thumbnails when we go to a new page
         self.thumbnails = []
@@ -66,7 +68,6 @@ class Marmot:
         for ii,subject_id in enumerate(self.subjects[9*self.page_index:9+9*self.page_index]):
             # do we already have a thumb for this file?
             thumb_path = DIR_THUMBS+str(subject_id)+".jpg"
-            print subject_id
             if not os.path.exists(thumb_path):
                 self.__create_thumb__(subject_id)
 
@@ -86,7 +87,21 @@ class Marmot:
             # sigh - I hate having to do this
             self.links.append(render_image)
 
-        print
+        # todo - this window is not actually popping up
+        aggregated_subjects = self.project.__get_aggregated_subjects__(1)
+
+        not_aggregated = [s for s in self.subjects[:self.step_size] if s not in aggregated_subjects]
+        print not_aggregated
+        if not_aggregated != []:
+            t = tkinter.Toplevel(self.root)
+            f = ttk.Frame(t)
+            f.grid()
+            ttk.Label(f,text="Aggregating some more subjects for you.").grid(column=1,row=1)
+            ttk.Label(f,text="Please wait until this message automatically disappears.").grid(column=1,row=2)
+            self.project.__aggregate__([1],self.subjects[:self.step_size])
+            t.destroy()
+
+            assert False
 
     def __increment__(self):
         self.page_index += 1
@@ -103,6 +118,7 @@ class Marmot:
 
         ttk.Button(self.root, text="<--", command=self.__decrement__).grid(column=2, row=4)
         ttk.Button(self.root, text="-->", command=self.__increment__).grid(column=2, row=5)
+        ttk.Button(self.root, text="Threshold Plot", command=self.__increment__).grid(column=1, row=5)
 
     def m(self,thumb_path):
 
@@ -123,8 +139,7 @@ class Marmot:
         if subject_id not in self.percentage_thresholds:
             self.percentage_thresholds[subject_id] = 0.5
 
-
-
+        # close any previously open graph
         plt.close()
         fig = plt.figure()
         axes = fig.add_subplot(1, 1, 1)

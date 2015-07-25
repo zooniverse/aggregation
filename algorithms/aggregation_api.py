@@ -376,7 +376,7 @@ class AggregationAPI:
     # def __compare_to_gold__(self):
     #     pass
 
-    def __get_aggregated_subjects__(self,workflow_id,num_subjects=20):
+    def __get_aggregated_subjects__(self,workflow_id):
         """
         return a list of subjects which have aggregation results
         todo: - make sure it for panoptes - not just penguins

@@ -171,7 +171,7 @@ class Penguins(aggregation_api.AggregationAPI):
 
 
 
-    def __get_aggregated_subjects__(self,workflow_id,num_subjects=20):
+    def __get_aggregated_subjects__(self,workflow_id):
         """
         return a list of subjects which have aggregation results
         :param workflow_id:
