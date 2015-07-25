@@ -90,8 +90,9 @@ class Marmot:
             self.links.append(render_image)
 
         # todo - this window is not actually popping up
+        # determine which of the subjects we are interested in have actually been processed
+        # we may need to do some additional aggregation
         aggregated_subjects = self.project.__get_aggregated_subjects__(-1)
-        print aggregated_subjects
 
         not_aggregated = [s for s in self.subjects[:self.step_size] if s not in aggregated_subjects]
         print not_aggregated

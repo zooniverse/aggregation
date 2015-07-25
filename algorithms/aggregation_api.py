@@ -1346,6 +1346,7 @@ class AggregationAPI:
 
                 non_logged_in_users = 0
                 for record in record_list:
+
                     total += 1
                     user_id = record.user_id
                     if user_id == -1:
@@ -1353,6 +1354,7 @@ class AggregationAPI:
                         user_id = non_logged_in_users
 
                     annotations = json.loads(record.annotations)
+
                     # go through each annotation and get the associated task
                     for task in annotations:
                         task_id = task["task"]
@@ -1362,6 +1364,11 @@ class AggregationAPI:
                             if not isinstance(task["value"],list):
                                 print "not properly formed marking - skipping"
                                 continue
+
+                            # kind track of which shapes the user did mark - we need to keep track of any shapes
+                            # for which the user did not make any marks at all of
+                            # because a user not seeing something is important
+                            spotted_shapes = set()
 
                             for marking in task["value"]:
                                 # what kind of tool made this marking and what was the shape of that tool?
@@ -1379,6 +1386,8 @@ class AggregationAPI:
                                 if shape not in self.marking_params_per_shape:
                                     print "unrecognized shape: " + shape
                                     assert False
+
+                                spotted_shapes.add(shape)
 
                                 try:
                                     # extract the params specifically relevant to the given shape
@@ -1417,6 +1426,12 @@ class AggregationAPI:
                                         #     raw_classifications[global_subtask_id][subject_id][tool] = {}
                                         raw_classifications[global_subtask_id][subject_id][(relevant_params,user_id)] = subtask_value
 
+                            # note which shapes the user saw nothing of
+                            # otherwise, it will be as if the user didn't see the subject in the first place
+                            for shape in set(marking_tasks[task_id]):
+                                if shape not in spotted_shapes:
+                                    raw_markings[task_id][shape][subject_id].append((user_id,None,None))
+
                         # we a have a pure classification task
                         else:
                             if task_id not in raw_classifications:
@@ -1428,7 +1443,6 @@ class AggregationAPI:
                             raw_classifications[task_id][subject_id].append((user_id,task["value"]))
 
         assert raw_markings != {}
-
         return raw_classifications,raw_markings
 
     def __threshold_scaling__(self,workflow_id,):

@@ -57,14 +57,13 @@ class Penguins(aggregation_api.AggregationAPI):
 
     def __get_retired_subjects__(self,workflow_id,with_expert_classifications=False):
         # project_id, workflow_id, subject_id,annotations,user_id,user_ip,workflow_version
-        stmt = "select subject_id from penguins_users where project_id = " + str(self.project_id) + " and workflow_id = " + str(global_workflow_id) + " and workflow_version = " + str(global_version)# + " and user_id = '" + str(self.experts[0]) + "'"
+        stmt = "select subject_id from penguins_users where project_id = " + str(self.project_id) + " and workflow_id = " + str(global_workflow_id) + " and workflow_version = " + str(global_version) + " and user_id = '" + str(self.experts[0]) + "'"
 
         subjects = self.cassandra_session.execute(stmt)
         return [r.subject_id for r in subjects]
 
     def __get_expert_annotations__(self,workflow_id,subject_id):
         # todo- for now just use one expert
-        print workflow_id
         version = str(int(math.floor(float(self.versions[workflow_id]))))
         stmt = """select annotations from """+ str(self.classification_table)+""" where project_id = """ + str(self.project_id) + """ and subject_id = '""" + str(subject_id) + """' and workflow_id = """ + str(workflow_id) + """ and workflow_version = """+ version + """ and user_id = '""" + str(self.experts[0]) + "'"
         # print stmt
@@ -80,16 +79,17 @@ class Penguins(aggregation_api.AggregationAPI):
 
 
     def __get_correct_points__(self,workflow_id,subject_id,task_id,shape):
-        stmt = "select aggregation from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = '" + str(subject_id) + "'"
-        self.postgres_cursor.execute(stmt)
+        """
+        determine which markings are correct - as far as the gold standard data is concerned
+        :param workflow_id:
+        :param subject_id:
+        :param task_id:
+        :param shape:
+        :return:
+        """
+        postgres_cursor = self.postgres_session.cursor()
 
-        # todo - this should already be a dict but doesn't seem to be - hmmmm :/
-        agg =self.postgres_cursor.fetchone()
-        if agg is None:
-            return []
-        aggregations = json.loads(agg[0])
-
-        # now load the expert's classifications
+        # the expert's classifications
         # this is from cassandra
         stmt = "select annotations from penguins_classifications where project_id = " + str(self.project_id) + " and subject_id = '" + str(subject_id) + "' and workflow_id = " + str(global_workflow_id) + " and workflow_version = "+str(global_version) + " and user_id = '" + str(self.experts[0]) + "'"
         r = self.cassandra_session.execute(stmt)
@@ -102,7 +102,13 @@ class Penguins(aggregation_api.AggregationAPI):
 
         # get the user markings
         stmt = "select aggregation from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = '" + str(subject_id) + "'"
-        self.postgres_cursor.execute(stmt)
+        postgres_cursor.execute(stmt)
+
+        # todo - this should already be a dict but doesn't seem to be - hmmmm :/
+        agg = postgres_cursor.fetchone()
+        if agg is None:
+            return []
+        aggregations = json.loads(agg[0])
 
         cluster_centers = []
         for cluster_index,cluster in aggregations[str(task_id)][shape + " clusters"].items():
@@ -184,11 +190,12 @@ class Penguins(aggregation_api.AggregationAPI):
         :return:
         """
         stmt = "select subject_id from aggregations where workflow_id = " + str(workflow_id)
-        self.postgres_cursor.execute(stmt)
+        postgres_cursor = self.postgres_session.cursor()
+        postgres_cursor.execute(stmt)
 
         subjects = []
 
-        for r in self.postgres_cursor.fetchall():
+        for r in postgres_cursor.fetchall():
             subjects.append(r[0])
 
         return subjects
@@ -245,7 +252,7 @@ class Penguins(aggregation_api.AggregationAPI):
 
         all_tools = []
 
-        for ii,classification in enumerate(self.classification_collection.find().limit(50000)):
+        for ii,classification in enumerate(self.classification_collection.find()):
             if ii % 25000 == 0:
                 print ii
                 if ii > 0:
@@ -340,7 +347,6 @@ class SubjectGenerator:
 
     def __iter__(self):
         subject_ids = []
-        print "ehllo"
         for subject in self.project.__get_retired_subjects__(1,True):
             subject_ids.append(subject)
 
@@ -356,7 +362,6 @@ if __name__ == "__main__":
     # project.__migrate__()
     # subjects = project.__get_subject_ids__()
 
-    print "dumb"
     # print project.__get_retired_subjects__(1,True)
 
     for s in SubjectGenerator(project):

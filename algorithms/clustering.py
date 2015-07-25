@@ -462,14 +462,18 @@ class Cluster:
                     continue
 
                 for subject_id in raw_markings[task_id][shape]:
+                    # remove any "markings" which correspond to the user not making a marking
+                    # these are still useful for noting that the user saw that image
+                    pruned_markings = [(u,m,t) for u,m,t in raw_markings[task_id][shape][subject_id] if m is not None]
+                    all_users,t1,t2 = zip(*raw_markings[task_id][shape][subject_id])
+                    all_users = list(set(all_users))
+
                     # empty image
-                    if raw_markings[task_id][shape][subject_id] == []:
+                    if pruned_markings == []:
                         # no centers, no points, no users per cluster
                         cluster_results = []
                     else:
-
-                        # extract the users, markings and tools
-                        users,markings,tools = zip(*raw_markings[task_id][shape][subject_id])
+                        users,markings,tools = zip(*pruned_markings)
 
                         # do the actual clustering
                         cluster_results,time_to_cluster = self.__inner_fit__(markings,users,tools)
@@ -482,7 +486,7 @@ class Cluster:
                     if shape not in aggregation[subject_id][task_id]:
                         # store the set of all users who have seen this subject/task
                         # used for determining false vs. true positives
-                        aggregation[subject_id][task_id][str(shape) + " clusters"] = {"param":"cluster_index","all_users":list(set(users))}
+                        aggregation[subject_id][task_id][str(shape) + " clusters"] = {"param":"cluster_index","all_users":all_users}
 
                     for cluster_index,cluster in enumerate(cluster_results):
                         aggregation[subject_id][task_id][shape+ " clusters"][cluster_index] = cluster
