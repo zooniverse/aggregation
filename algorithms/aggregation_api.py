@@ -906,9 +906,10 @@ class AggregationAPI:
         :param threshold:
         :return:
         """
+        postgres_cursor = self.postgres_session.cursor()
         # todo - generalize for panoptes
         stmt = "select aggregation from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = '" + str(subject_id) + "'"
-        self.postgres_cursor.execute(stmt)
+        postgres_cursor.execute(stmt)
 
         # dict for storing results used to update matplotlib graphs
         matplotlib_cluster = {}
@@ -916,7 +917,7 @@ class AggregationAPI:
         self.probabilities = []
 
         # todo - this should be a dict but doesn't seem to be - hmmmm :/
-        agg = self.postgres_cursor.fetchone()
+        agg = postgres_cursor.fetchone()
         if agg is None:
             return {}
         aggregations = json.loads(agg[0])
@@ -1317,6 +1318,16 @@ class AggregationAPI:
             subject_set = self.__load_subjects__(workflow_id)
 
         total = 0
+
+        # create here so even if we have empty images, we will know that we aggregated them
+        for task_id in marking_tasks.keys():
+            raw_markings[task_id] = {}
+            for shape in set(marking_tasks[task_id]):
+                raw_markings[task_id][shape] = {}
+                for subject_id in subject_set:
+                    raw_markings[task_id][shape][subject_id] = []
+
+        # do this in bite sized pieces to avoid overwhelming DB
         for s in self.__chunks(subject_set,15):
             statements_and_params = []
             ignore_version = True
@@ -1332,7 +1343,6 @@ class AggregationAPI:
                 if not success:
                     print record_list
                     assert success
-
 
                 non_logged_in_users = 0
                 for record in record_list:
@@ -1377,14 +1387,6 @@ class AggregationAPI:
                                     # print e
                                     continue
 
-                                # only create these if we have a valid marking
-                                if task_id not in raw_markings:
-                                    raw_markings[task_id] = {}
-                                if shape not in raw_markings[task_id]:
-                                    raw_markings[task_id][shape] = {}
-                                if subject_id not in raw_markings[task_id][shape]:
-                                    raw_markings[task_id][shape][subject_id] = []
-
                                 raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
 
                                 # is this a confusing shape?
@@ -1426,6 +1428,7 @@ class AggregationAPI:
                             raw_classifications[task_id][subject_id].append((user_id,task["value"]))
 
         assert raw_markings != {}
+
         return raw_classifications,raw_markings
 
     def __threshold_scaling__(self,workflow_id,):

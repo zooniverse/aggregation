@@ -462,35 +462,30 @@ class Cluster:
                     continue
 
                 for subject_id in raw_markings[task_id][shape]:
-                    # should only happen because of a bad annotation (hopefully)
+                    # empty image
                     if raw_markings[task_id][shape][subject_id] == []:
-                        continue
-
-                    users,markings,tools = zip(*raw_markings[task_id][shape][subject_id])
-
-                    # otherwise, just set to empty
-                    if (markings == []) or (markings == [[] for i in users]):
-                        cluster_results = [],[],[]
-                        time_to_cluster = 0
+                        # no centers, no points, no users per cluster
+                        cluster_results = []
                     else:
-                        if (fnames is not None) and (subject_id in fnames):
-                            fname = fnames[subject_id]
-                        else:
-                            fname = None
 
+                        # extract the users, markings and tools
+                        users,markings,tools = zip(*raw_markings[task_id][shape][subject_id])
+
+                        # do the actual clustering
                         cluster_results,time_to_cluster = self.__inner_fit__(markings,users,tools)
 
-                        if subject_id not in aggregation:
-                            aggregation[subject_id] = {"param":"task_id"}
-                        if task_id not in aggregation[subject_id]:
-                            aggregation[subject_id][task_id] = {"param":"clusters"}
-                        if shape not in aggregation[subject_id][task_id]:
-                            # store the set of all users who have seen this subject/task
-                            # used for determining false vs. true positives
-                            aggregation[subject_id][task_id][str(shape) + " clusters"] = {"param":"cluster_index","all_users":list(set(users))}
+                    # store the results - note we need to store even for empty images
+                    if subject_id not in aggregation:
+                        aggregation[subject_id] = {"param":"task_id"}
+                    if task_id not in aggregation[subject_id]:
+                        aggregation[subject_id][task_id] = {"param":"clusters"}
+                    if shape not in aggregation[subject_id][task_id]:
+                        # store the set of all users who have seen this subject/task
+                        # used for determining false vs. true positives
+                        aggregation[subject_id][task_id][str(shape) + " clusters"] = {"param":"cluster_index","all_users":list(set(users))}
 
-                        for cluster_index,cluster in enumerate(cluster_results):
-                            aggregation[subject_id][task_id][shape+ " clusters"][cluster_index] = cluster
+                    for cluster_index,cluster in enumerate(cluster_results):
+                        aggregation[subject_id][task_id][shape+ " clusters"][cluster_index] = cluster
 
         # we should have some results
         # assert aggregation != {"param":"subject_id"}

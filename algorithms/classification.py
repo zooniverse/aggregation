@@ -163,6 +163,7 @@ class Classification:
 
                     # extract the users who marked this cluster
                     cluster = clustering_results[subject_id][task_id][shape+ " clusters"][local_cluster_index]
+
                     users = cluster["users"]
 
                     ballots = []
