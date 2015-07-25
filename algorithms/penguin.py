@@ -10,6 +10,7 @@ from cassandra.concurrent import execute_concurrent
 import psycopg2
 import urllib2
 import os
+import math
 
 class Penguins(aggregation_api.AggregationAPI):
     def __init__(self):
@@ -45,15 +46,127 @@ class Penguins(aggregation_api.AggregationAPI):
         self.postgres_session = psycopg2.connect("dbname='zooniverse' user=ggdhines")
         self.postgres_cursor = self.postgres_session.cursor()
 
+        self.experts = ["caitlin.black"]
+
         # self.postgres_cursor.execute("create table aggregations (workflow_id int, subject_id text, aggregation jsonb, created_at timestamp, updated_at timestamp)")
 
-    def __get_retired_subjects__(self,workflow_id,with_expert_classifications=None):
-        pass
+    def __get_retired_subjects__(self,workflow_id,with_expert_classifications=False):
+        # project_id, workflow_id, subject_id,annotations,user_id,user_ip,workflow_version
+        stmt = "select subject_id from penguins_users where project_id = " + str(self.project_id) + " and workflow_id = 1 and workflow_version = 1 and user_id = '" + str(self.experts[0]) + "'"
+
+        subjects = self.cassandra_session.execute(stmt)
+        return [r.subject_id for r in subjects]
+
+    def __get_expert_annotations__(self,workflow_id,subject_id):
+        # todo- for now just use one expert
+        version = str(int(math.floor(float(self.versions[workflow_id]))))
+        stmt = """select annotations from """+ str(self.classification_table)+""" where project_id = """ + str(self.project_id) + """ and subject_id = '""" + str(subject_id) + """' and workflow_id = """ + str(workflow_id) + """ and workflow_version = """+ version + """ and user_id = '""" + str(self.experts[0]) + "'"
+        # print stmt
+        expert_annotations = self.cassandra_session.execute(stmt)
+
+        # print expert_annotations
+
 
     def __aggregate__(self,workflows=None,subject_set=None):
         # if not gold standard
         if not self.gold_standard:
             aggregation_api.AggregationAPI.__aggregate__(self,workflows,subject_set)
+
+
+    def __get_correct_points__(self,workflow_id,subject_id,task_id,shape):
+        stmt = "select aggregation from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = '" + str(subject_id) + "'"
+        self.postgres_cursor.execute(stmt)
+
+        # todo - this should already be a dict but doesn't seem to be - hmmmm :/
+        aggregations = json.loads(self.postgres_cursor.fetchone()[0])
+
+        # now load the expert's classifications
+        # this is from cassandra
+        stmt = "select annotations from penguins_classifications where project_id = " + str(self.project_id) + " and subject_id = '" + str(subject_id) + "' and workflow_id = 1 and workflow_version = 1 and user_id = '" + str(self.experts[0]) + "'"
+        r = self.cassandra_session.execute(stmt)
+        expert_annotations = json.loads(r[0].annotations)
+
+        # get the markings made by the experts
+        gold_pts = []
+        for ann in expert_annotations[0]["value"]:
+            gold_pts.append(aggregation_api.point_mapping(ann,(5000,5000)))
+
+        # get the user markings
+        stmt = "select aggregation from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = '" + str(subject_id) + "'"
+        self.postgres_cursor.execute(stmt)
+
+        cluster_centers = []
+        for cluster_index,cluster in aggregations[str(task_id)][shape + " clusters"].items():
+            if cluster_index == "param":
+                continue
+            cluster_centers.append(cluster["center"])
+
+        # the three things we will want to return
+        correct_pts = []
+        # missed_pts = []
+        # false_positives = []
+
+        # if there are no gold markings, technically everything is a false positive
+        if gold_pts == []:
+            return []
+
+        # if there are no user markings, we have missed everything
+        if cluster_centers == []:
+            return []
+
+        # we know that there are both gold standard points and user clusters - we need to match them up
+        # user to gold - for a gold point X, what are the user points for which X is the closest gold point?
+        users_to_gold = [[] for i in range(len(gold_pts))]
+
+        # find which gold standard pts, the user cluster pts are closest to
+        # this will tell us which gold points we have actually found
+        for local_index, u_pt in enumerate(cluster_centers):
+            # dist = [math.sqrt((float(pt["x"])-x)**2+(float(pt["y"])-y)**2) for g_pt in gold_pts]
+            min_dist = float("inf")
+            closest_gold_index = None
+
+            # find the nearest gold point to the cluster center
+            # doing this in a couple of lines so that things are simpler - need to allow
+            # for an arbitrary number of dimensions
+            for gold_index,g_pt in enumerate(gold_pts):
+                dist = math.sqrt(sum([(u-g)**2 for (u,g) in zip(u_pt,g_pt)]))
+
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_gold_index = gold_index
+
+            if min_dist < 30:
+                users_to_gold[closest_gold_index].append(local_index)
+
+        # and now find out which user clusters are actually correct
+        # that will be the user point which is closest to the gold point
+        distances_l =[]
+        for gold_index,g_pt in enumerate(gold_pts):
+            min_dist = float("inf")
+            closest_user_index = None
+
+            for u_index in users_to_gold[gold_index]:
+                assert isinstance(u_index,int)
+                dist = math.sqrt(sum([(u-g)**2 for (u,g) in zip(cluster_centers[u_index],g_pt)]))
+
+                if dist < min_dist:
+                    min_dist = dist
+                    closest_user_index = u_index
+
+            # if none then we haven't found this point
+            if closest_user_index is not None:
+                assert isinstance(closest_gold_index,int)
+                u_pt = cluster_centers[closest_user_index]
+                correct_pts.append(tuple(u_pt))
+                # todo: probably remove for production - only really useful for papers
+                # self.user_gold_distance[subject_id].append((u_pt,g_pt,min_dist))
+                # distances_l.append(min_dist)
+
+                # self.user_gold_mapping[(subject_id,tuple(u_pt))] = g_pt
+
+        return correct_pts
+
+
 
     def __get_aggregated_subjects__(self,workflow_id,num_subjects=20):
         """
@@ -208,15 +321,30 @@ class Penguins(aggregation_api.AggregationAPI):
 
         return subjects
 
+class SubjectGenerator:
+    def __init__(self,project):
+        assert isinstance(project,aggregation_api.AggregationAPI)
+        self.project = project
 
+    def __iter__(self):
+        subject_ids = []
+        for subject in self.project.__get_retired_subjects__(1,True):
+            subject_ids.append(subject)
+
+            if len(subject_ids) == 50:
+                yield subject_ids
+                subject_ids = []
+
+        yield  subject_ids
+        raise StopIteration
 
 if __name__ == "__main__":
     project = Penguins()
-    project.__migrate__()
+    # project.__migrate__()
     # subjects = project.__get_subject_ids__()
 
     t = 0
-    for s in aggregation_api.SubjectGenerator(project):
+    for s in SubjectGenerator(project):
         t += 1
         project.__aggregate__(workflows=[1],subject_set=s)
 

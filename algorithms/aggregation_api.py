@@ -132,6 +132,8 @@ class AggregationAPI:
         self.host_api = None
         self.subject_id_type = "int"
 
+        self.experts = []
+
         # only continue the set up if the project name is given
         # self.project_short_name = project
 
@@ -208,8 +210,8 @@ class AggregationAPI:
         for workflow_id in workflows:
             print workflow_id
             if subject_set is None:
-                # subject_set = self.__get_retired_subjects__(workflow_id)
-                subject_set = self.__load_subjects__(workflow_id)
+                subject_set = self.__get_retired_subjects__(workflow_id)
+                #subject_set = self.__load_subjects__(workflow_id)
             print "aggregating " + str(len(subject_set)) + " subjects"
             # self.__describe__(workflow_id)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
@@ -370,6 +372,10 @@ class AggregationAPI:
     #             print tasks[task_id]["tools"]
     #     # self. description
 
+
+    # def __compare_to_gold__(self):
+    #     pass
+
     def __get_aggregated_subjects__(self,workflow_id,num_subjects=20):
         """
         return a list of subjects which have aggregation results
@@ -436,7 +442,7 @@ class AggregationAPI:
         return data["projects"][0]["id"]
         # return None
 
-    def __get_retired_subjects__(self,workflow_id):
+    def __get_retired_subjects__(self,workflow_id,with_expert_classifications=None):
         retired_subjects = []
 
         stmt = """SELECT * FROM "subjects"
@@ -899,35 +905,35 @@ class AggregationAPI:
                 os.remove(fname)
                 self.__image_setup__(subject_id)
 
-    def __plot_individual_points__(self,subject_id,task_id,shape):
-        for cluster in self.cluster_alg.clusterResults[task_id][shape][subject_id]:
-            for pt in cluster["points"]:
-                if shape == "line":
-                    plt.plot([pt[0],pt[1]],[pt[2],pt[3]],color="red")
-                elif shape == "point":
-                    plt.plot([pt[0]],[pt[1]],".",color="red")
-                elif shape == "circle":
-                    print (pt[0],pt[1]),pt[2]
-                    e = Ellipse((pt[0],pt[1]),width = pt[2],height=pt[2],fill=False,color="red")
-                    # circle = plt.Circle((pt[0],pt[1]),pt[2],color=cnames.values()[users.index(user_id)])
-                    plt.gca().add_patch(e)
-                    # ax.add_artist(e)
-                    # e.set_alpha(0)
-                elif shape == "ellipse":
-                    # ("angle","rx","ry","x","y")
-                    e = Ellipse((pt[3],pt[4]),width = pt[2],height=pt[1],fill=False,angle=pt[0],color="red")
-                elif shape == "rectangle":
-                    plt.plot([pt[0],pt[0]+pt[2]],[pt[1],pt[1]],color="red")
-                    plt.plot([pt[0],pt[0]],[pt[1],pt[1]+pt[3]],color="red")
-                    plt.plot([pt[0]+pt[2],pt[0]+pt[2]],[pt[1],pt[1]+pt[3]],color="red")
-                    plt.plot([pt[0],pt[0]+pt[2]],[pt[1]+pt[3],pt[1]+pt[3]],color="red")
-                else:
-                    print shape
-                    assert False
+    # def __plot_individual_points__(self,subject_id,task_id,shape):
+    #     for cluster in self.cluster_alg.clusterResults[task_id][shape][subject_id]:
+    #         for pt in cluster["points"]:
+    #             if shape == "line":
+    #                 plt.plot([pt[0],pt[1]],[pt[2],pt[3]],color="red")
+    #             elif shape == "point":
+    #                 plt.plot([pt[0]],[pt[1]],".",color="red")
+    #             elif shape == "circle":
+    #                 print (pt[0],pt[1]),pt[2]
+    #                 e = Ellipse((pt[0],pt[1]),width = pt[2],height=pt[2],fill=False,color="red")
+    #                 # circle = plt.Circle((pt[0],pt[1]),pt[2],color=cnames.values()[users.index(user_id)])
+    #                 plt.gca().add_patch(e)
+    #                 # ax.add_artist(e)
+    #                 # e.set_alpha(0)
+    #             elif shape == "ellipse":
+    #                 # ("angle","rx","ry","x","y")
+    #                 e = Ellipse((pt[3],pt[4]),width = pt[2],height=pt[1],fill=False,angle=pt[0],color="red")
+    #             elif shape == "rectangle":
+    #                 plt.plot([pt[0],pt[0]+pt[2]],[pt[1],pt[1]],color="red")
+    #                 plt.plot([pt[0],pt[0]],[pt[1],pt[1]+pt[3]],color="red")
+    #                 plt.plot([pt[0]+pt[2],pt[0]+pt[2]],[pt[1],pt[1]+pt[3]],color="red")
+    #                 plt.plot([pt[0],pt[0]+pt[2]],[pt[1]+pt[3],pt[1]+pt[3]],color="red")
+    #             else:
+    #                 print shape
+    #                 assert False
+    #
+    #     plt.axis('scaled')
 
-        plt.axis('scaled')
-
-    def __plot_cluster_results__(self,workflow_id,subject_id,task_id,shape,axes,percentile_threshold=1):
+    def __plot_cluster_results__(self,workflow_id,subject_id,task_id,shape,axes,percentile_threshold=1,correct_pts=None):
         """
         plots the clustering results - also stores the distribution of probabilities of existence
         so they can be altered later
@@ -942,7 +948,8 @@ class AggregationAPI:
         stmt = "select aggregation from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = '" + str(subject_id) + "'"
         self.postgres_cursor.execute(stmt)
 
-        self.cluster_pts = {}
+        # dict for storing results used to update matplotlib graphs
+        matplotlib_cluster = {}
 
         self.probabilities = []
 
@@ -966,25 +973,39 @@ class AggregationAPI:
         for cluster_index,cluster in aggregations[str(task_id)][shape + " clusters"].items():
             if cluster_index == "param":
                 continue
-            center = cluster["center"]
+            center = tuple(cluster["center"])
             prob_existence = cluster['existence'][0][1]
             if shape == "point":
                 # with whatever alg we used, what do we think the probability is that
                 # this cluster actually exists?
 
-                if prob_existence >= prob_threshold:
-                    self.cluster_pts[cluster_index] = axes.plot(center[0],center[1],".",color="blue"),prob_existence
+                # if we have gold standard to compare to - use that to determine the colour
+                if correct_pts is not None:
+                    if prob_existence >= prob_threshold:
+                        # based on the threshold - we think this point exists
+                        if center in correct_pts:
+                            # woot - we were right
+                            matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="green")[0],prob_existence
+                        else:
+                            # boo - we were wrong
+                            print "%%%%"
+                            matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="red")[0],prob_existence
+                    else:
+                        # we think this point is a false positive
+                        if center in correct_pts:
+                            # boo - we were wrong
+                            matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="yellow")[0],prob_existence
+                        else:
+                            # woot
+                            matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="blue")[0],prob_existence
                 else:
-                    # we think this is a false positive
-                    self.cluster_pts[cluster_index] = axes.plot(center[0],center[1],".",color="red"),prob_existence
+                    if prob_existence >= prob_threshold:
+                        matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="blue"),prob_existence
+                    else:
+                        # we think this is a false positive
+                        matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="red"),prob_existence
 
-    def __update_threshold__(self,new_percentile_threshold):
-        prob_threshold = numpy.percentile(self.probabilities,(1-new_percentile_threshold)*100)
-        for pt,prob_existence in self.cluster_pts.values():
-            if prob_existence >= prob_threshold:
-                pt[0].set_color("blue")
-            else:
-                pt[0].set_color("red")
+        return matplotlib_cluster
 
     def __plot__(self,workflow_id,task_id):
         print "plotting"
@@ -1311,7 +1332,9 @@ class AggregationAPI:
         # read in the most current version of each of the workflows
         return workflows
 
-    def __sort_annotations__(self,workflow_id,subject_set=None):
+    def __sort_annotations__(self,workflow_id,subject_set=None,filter_experts=0):
+        assert filter_experts in [-1,0,1]
+
         version = int(math.floor(float(self.versions[workflow_id])))
 
         # todo - do this better
@@ -1518,6 +1541,54 @@ class AggregationAPI:
             self.postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
         self.postgres_session.commit()
 
+
+    def __update_threshold__(self,new_percentile_threshold,correct_pts,matplotlib_centers):
+        """
+        returns a tuple of all TP probabilities and the FP ones too, according to the given threshold
+        :param new_percentile_threshold:
+        :return:
+        """
+        assert isinstance(matplotlib_centers,dict)
+        TP = []
+        FP = []
+        print (1-new_percentile_threshold)*100
+        prob_threshold = numpy.percentile(self.probabilities,(1-new_percentile_threshold)*100)
+        print prob_threshold
+
+        # # clusters we have corrected identified as true positivies
+        # green_pts = []
+        # # clusters we have incorrectly identified as true positives
+        # red_pts = []
+        # # clusters have incorrectly idenfitied as false positivies
+        # yellow_pts = []
+        # # etc.
+        # blue_pts = []
+
+        for center,(matplotlib_pt,prob_existence) in matplotlib_centers.items():
+            if correct_pts is not None:
+                if prob_existence >= prob_threshold:
+                    # based on the threshold - we think this point exists
+                    if center in correct_pts:
+                        # woot - we were right
+                        matplotlib_pt.set_color("green")
+                        # green_pts.append(prob_existence)
+                    else:
+                        # boo - we were wrong
+                        matplotlib_pt.set_color("red")
+                        # green_pts.append(prob_existence)
+                else:
+                    # we think this point is a false positive
+                    if center in correct_pts:
+                        matplotlib_pt.set_color("yellow")
+                        # green_pts.append(prob_existence)
+                    else:
+                        matplotlib_pt.set_color("blue")
+                        # green_pts.append(prob_existence)
+            else:
+                # todo - implement
+                assert False
+
+        return TP,FP
 
 class SubjectGenerator:
     def __init__(self,project):

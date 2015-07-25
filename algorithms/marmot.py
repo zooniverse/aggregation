@@ -26,6 +26,9 @@ class Marmot:
 
         self.links = []
 
+        self.true_probabilities = {}
+        self.false_probabilities = {}
+
     def __create_thumb__(self,subject_id):
         fname = self.project.__image_setup__(subject_id)
         openImg = Image.open(fname)
@@ -38,7 +41,9 @@ class Marmot:
 
     def outputButtons(self):
         # for ii,thumbfile in enumerate(thumbfiles[:3]):
-        for ii,subject_id in enumerate(self.project.__get_aggregated_subjects__(1)[:2]):
+
+        # for ii,subject_id in enumerate(self.project.__get_aggregated_subjects__(1)[:9]):
+        for ii,subject_id in enumerate(self.project.__get_retired_subjects__(1,True)[:9]):
             # do we already have a thumb for this file?
             thumb_path = DIR_THUMBS+str(subject_id)+".jpg"
             print thumb_path
@@ -46,15 +51,15 @@ class Marmot:
                 self.__create_thumb__(subject_id)
 
             render_image = ImageTk.PhotoImage(file=thumb_path)
-            print render_image
+
             # but = tkinter.Button(self.root, image=render_image)
             # but.pack(side="left")
 
             # but.destroy
 
             but = ttk.Button(self.root, image=render_image)
-            but.grid(column=1, row=1+ii,sticky=tkinter.W)
-            but.bind('<Button-1>', lambda event:self.m(thumb_path))
+            but.grid(column=ii/3+1, row=(1+ii)%3,sticky=tkinter.W)
+            but.bind('<Button-1>', lambda event,t=thumb_path:self.m(t))
 
             # sigh - I hate having to do this
             self.links.append(render_image)
@@ -72,22 +77,27 @@ class Marmot:
         # plt.show()
         slash_index = thumb_path.rindex("/")
         subject_id = thumb_path[slash_index+1:-4]
-        print subject_id
+
         plt.close()
         fig = plt.figure()
         axes = fig.add_subplot(1, 1, 1)
 
         self.project.__plot_image__(subject_id,axes)
-        self.project.__plot_cluster_results__(1,subject_id,1,"point",axes,0.5)
+        correct_pts = self.project.__get_correct_points__(1,subject_id,1,"point")
+        matplotlib_points = self.project.__plot_cluster_results__(1,subject_id,1,"point",axes,0.5,correct_pts)
         plt.subplots_adjust(left=0.25, bottom=0.25)
         # axcolor = 'lightgoldenrodyellow'
         axfreq = plt.axes([0.25, 0.1, 0.65, 0.03])
         threshold_silder = Slider(axfreq, 'Percentage', 0., 1., valinit=0.5)
 
+        self.project.__get_expert_annotations__(1,subject_id)
+
         # needs to be an inner function - grrrr
         def update(val):
             new_threshold = threshold_silder.val
-            self.project.__update_threshold__(new_threshold)
+            tp_probabilities,fp_probabilities = self.project.__update_threshold__(new_threshold,correct_pts,matplotlib_points)
+            self.true_probabilities[subject_id] = tp_probabilities
+            self.false_probabilities[subject_id] = fp_probabilities
 
         threshold_silder.on_changed(update)
 
