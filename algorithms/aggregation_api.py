@@ -208,8 +208,10 @@ class AggregationAPI:
         given_subject_set = (subject_set != None)
 
         for workflow_id in workflows:
+            print "wtf"
             print workflow_id
             if subject_set is None:
+                print "here"
                 subject_set = self.__get_retired_subjects__(workflow_id)
                 #subject_set = self.__load_subjects__(workflow_id)
             print "aggregating " + str(len(subject_set)) + " subjects"
@@ -228,6 +230,8 @@ class AggregationAPI:
 
             if  marking_tasks != {}:
                 print "clustering"
+                print subject_set
+                print raw_markings
                 clustering_aggregations = self.__cluster__(raw_markings)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
             if (self.classification_alg is not None) and (classification_tasks != {}):
@@ -306,7 +310,6 @@ class AggregationAPI:
         # will store the aggregations for all clustering
         cluster_aggregation = {}
         for shape in self.cluster_algs:
-            # print "shape is " + shape
             shape_aggregation = self.cluster_algs[shape].__aggregate__(raw_markings)
 
             if cluster_aggregation == {}:
@@ -314,26 +317,6 @@ class AggregationAPI:
             else:
                 assert isinstance(cluster_aggregation,dict)
                 cluster_aggregation = self.__merge_aggregations__(cluster_aggregation,shape_aggregation)
-
-                # print json.dumps(cluster_aggregation, sort_keys=True, indent=4, separators=(',', ': '))
-                # assert False
-
-        fnames = {}
-        # for s in subjects[0:20]:
-        #     try:
-        #         print s
-        #         fnames[s] = self.__image_setup__(s,download=False)
-        #     except ImageNotDownloaded:
-        #         break
-
-        # go through each shape separately and merge the results in
-        # for shape in self.cluster_algs:
-        #     print shape
-        #     shape_aggregation = self.cluster_algs[shape].__aggregate__(raw_markings,fnames)
-        #
-        #     # only merge if we have some results
-        #     if shape_aggregation != {"param":"subject_id"}:
-        #         cluster_aggregation = self.__merge_aggregations__(cluster_aggregation,shape_aggregation)
 
         return cluster_aggregation
 
@@ -371,10 +354,6 @@ class AggregationAPI:
     #             assert "tools" in tasks[task_id]
     #             print tasks[task_id]["tools"]
     #     # self. description
-
-
-    # def __compare_to_gold__(self):
-    #     pass
 
     def __get_aggregated_subjects__(self,workflow_id):
         """
@@ -455,9 +434,7 @@ class AggregationAPI:
         self.postgres_cursor.execute(stmt)
         for subject in self.postgres_cursor.fetchall():
             retired_subjects.append(subject[0])
-
-        print sorted(retired_subjects)
-
+        print "hopefully not here"
         return retired_subjects
 
     def __get_subjects__(self,workflow_id):
@@ -494,10 +471,6 @@ class AggregationAPI:
             if int(workflows["id"]) == workflow_id:
 
                 for task_id,task in workflows["tasks"].items():
-                    # print task
-                    # print task["tools"]["details"]
-                    # print
-
                     instructions[task_id] = {}
                     # classification task
                     if "question" in task:
@@ -525,12 +498,8 @@ class AggregationAPI:
                                     instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index] = {}
                                     instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["question"] = subtask["question"]
                                     instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"] = {}
-                                    #print subtask["question"]
                                     for answer_index,answers in enumerate(subtask["answers"]):
                                         instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"][answer_index] = answers
-
-                        # print tool["label"]
-                    # print task
 
                 return instructions
 
@@ -597,9 +566,6 @@ class AggregationAPI:
             raise
 
         data = json.loads(body)
-
-        # print data["subjects"]
-        # assert False
 
         url = str(data["subjects"][0]["locations"][0]["image/jpeg"])
 
@@ -768,9 +734,6 @@ class AggregationAPI:
         # insert any "left over" classifications
         if statements_and_params != []:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
-        # stmt = "select count(*) from subjects"
-        # print migrated
-        # print self.cassandra_session.execute(stmt)
 
         # now update the subject ids
         statements_and_params = []
@@ -1010,42 +973,41 @@ class AggregationAPI:
 
         return matplotlib_cluster
 
-    def __plot__(self,workflow_id,task_id):
-        print "plotting"
-        try:
-            print "----"
-            print self.cluster_alg.clusterResults
-            for shape in self.cluster_alg.clusterResults[task_id]:
-                for subject_id in self.cluster_alg.clusterResults[task_id][shape]:
-                    print subject_id
-                    if (len(self.users_per_subject[subject_id]) >= 1):# and (subject_id in self.classification_alg.results):
-                        # if self.cluster_alg.clusterResults[task][shape][subject_id]["users"]
-                        self.__plot_image__(subject_id)
-                        self.__plot_individual_points__(subject_id,task_id,shape)
-                        # self.__plot_cluster_results__(subject_id,task,shape)
-
-                        if (self.classification_alg is not None) and (subject_id in self.classification_alg.results):
-                            classification_task = "init"
-                            classifications = self.classification_alg.results[subject_id][classification_task]
-                            # print classifications
-                            votes,total = classifications
-                            title = self.description[classification_task][0]
-                            # print self.description
-                            for answer_index,percentage in votes.items():
-                                if title != "":
-                                    title += "\n"
-                                title += self.description[classification_task][answer_index+1] + ": " + str(int(percentage*total))
-                            # print  self.description[classification_task][0]
-                            # print title
-
-                            plt.title(title)
-                        plt.title("number of users: " + str(len(self.users_per_subject[subject_id][task_id])))
-                        plt.savefig("/home/greg/Databases/"+self.project_short_name+"/markings/"+str(subject_id)+".jpg")
-                        plt.close()
-                        # assert False
-        except KeyError as e:
-            print self.cluster_alg.clusterResults.keys()
-            raise
+    # def __plot__(self,workflow_id,task_id):
+    #     print "plotting"
+    #     try:
+    #         print "----"
+    #         for shape in self.cluster_alg.clusterResults[task_id]:
+    #             for subject_id in self.cluster_alg.clusterResults[task_id][shape]:
+    #                 print subject_id
+    #                 if (len(self.users_per_subject[subject_id]) >= 1):# and (subject_id in self.classification_alg.results):
+    #                     # if self.cluster_alg.clusterResults[task][shape][subject_id]["users"]
+    #                     self.__plot_image__(subject_id)
+    #                     self.__plot_individual_points__(subject_id,task_id,shape)
+    #                     # self.__plot_cluster_results__(subject_id,task,shape)
+    #
+    #                     if (self.classification_alg is not None) and (subject_id in self.classification_alg.results):
+    #                         classification_task = "init"
+    #                         classifications = self.classification_alg.results[subject_id][classification_task]
+    #                         # print classifications
+    #                         votes,total = classifications
+    #                         title = self.description[classification_task][0]
+    #                         # print self.description
+    #                         for answer_index,percentage in votes.items():
+    #                             if title != "":
+    #                                 title += "\n"
+    #                             title += self.description[classification_task][answer_index+1] + ": " + str(int(percentage*total))
+    #                         # print  self.description[classification_task][0]
+    #                         # print title
+    #
+    #                         plt.title(title)
+    #                     plt.title("number of users: " + str(len(self.users_per_subject[subject_id][task_id])))
+    #                     plt.savefig("/home/greg/Databases/"+self.project_short_name+"/markings/"+str(subject_id)+".jpg")
+    #                     plt.close()
+    #                     # assert False
+    #     except KeyError as e:
+    #         print self.cluster_alg.clusterResults.keys()
+    #         raise
 
     def __postgres_connect__(self,database_details):
 
@@ -1071,31 +1033,31 @@ class AggregationAPI:
         # cur = self.postgres_session.cursor()
         # cur.execute(select)
 
-    def __postgres_backup__(self):
-        local_session = psycopg2.connect("dbname='tate' user='panoptes' host='localhost' password='apassword'")
-        local_cursor = local_session.cursor()
-
-        # local_cursor.execute("CREATE TABLE annotate_classifications (project_id integer,user_id integer,workflow_id integer,annotations text,created_at timestamp,updated_at timestamp,user_group_id integer, user_ip inet, completed boolean, gold_standard boolean, expert_classifier integer, metadata text, subject_ids integer, workflow_version text);")
-        local_cursor.execute("CREATE TABLE annotate_classifications (annotations json);")
-
-        select = "SELECT * from classifications where project_id="+str(self.project_id)
-        cur = self.postgres_session.cursor()
-        cur.execute(select)
-
-        for ii,t in enumerate(cur.fetchall()):
-            id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
-            print type(json.dumps(annotations))
-            # local_cursor.execute("""
-            #     INSERT INTO annotate_classifications
-            #     (project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id, user_ip, completed, gold_standard, expert_classifier, metadata, subject_id, workflow_version)
-            #     values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-            #     (id_,project_id,user_id,workflow_id,json.dumps(annotations),created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,json.dumps(metadata),subject_ids[0],workflow_version))
-            st = json.dumps(annotations)
-            local_cursor.execute("""
-                INSERT INTO annotate_classifications
-                (annotations)
-                values (%s)""",
-                (annotations))
+    # def __postgres_backup__(self):
+    #     local_session = psycopg2.connect("dbname='tate' user='panoptes' host='localhost' password='apassword'")
+    #     local_cursor = local_session.cursor()
+    #
+    #     # local_cursor.execute("CREATE TABLE annotate_classifications (project_id integer,user_id integer,workflow_id integer,annotations text,created_at timestamp,updated_at timestamp,user_group_id integer, user_ip inet, completed boolean, gold_standard boolean, expert_classifier integer, metadata text, subject_ids integer, workflow_version text);")
+    #     local_cursor.execute("CREATE TABLE annotate_classifications (annotations json);")
+    #
+    #     select = "SELECT * from classifications where project_id="+str(self.project_id)
+    #     cur = self.postgres_session.cursor()
+    #     cur.execute(select)
+    #
+    #     for ii,t in enumerate(cur.fetchall()):
+    #         id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
+    #         print type(json.dumps(annotations))
+    #         # local_cursor.execute("""
+    #         #     INSERT INTO annotate_classifications
+    #         #     (project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id, user_ip, completed, gold_standard, expert_classifier, metadata, subject_id, workflow_version)
+    #         #     values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+    #         #     (id_,project_id,user_id,workflow_id,json.dumps(annotations),created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,json.dumps(metadata),subject_ids[0],workflow_version))
+    #         st = json.dumps(annotations)
+    #         local_cursor.execute("""
+    #             INSERT INTO annotate_classifications
+    #             (annotations)
+    #             values (%s)""",
+    #             (annotations))
 
     def __prune__(self,aggregations):
         """
@@ -1107,8 +1069,7 @@ class AggregationAPI:
         for task_id in aggregations:
             if task_id == "param":
                 continue
-            # we have a cluster
-            print aggregations,task_id
+
             if isinstance(aggregations[task_id],dict):
                 for cluster_type in aggregations[task_id]:
                     if cluster_type == "param":
@@ -1135,11 +1096,6 @@ class AggregationAPI:
         select = "SELECT tasks from workflows where id = " + str(workflow_id)
         self.postgres_cursor.execute(select)
         tasks = self.postgres_cursor.fetchone()[0]
-
-        # select = "SELECT * from workflow_contents where id = " + str(workflow_id)
-        # self.postgres_cursor.execute(select)
-        # print
-        # print self.postgres_cursor.fetchone()
 
         # which of these tasks have classifications associated with them?
         classification_tasks = {}
@@ -1215,38 +1171,36 @@ class AggregationAPI:
 
                     classification_tasks[task_id]["shapes"].append(shape)
 
-        # print workflow_id
-        # print tasks
-        # assert False
+
         return classification_tasks,marking_tasks
 
-    def __remove_user_ids__(self,aggregation):
-        """
-        ids are needed for aggregation but they shouldn't be stored with the results
-        NOTE ids are postgres ids, NOT ip or email addresses
-        """
-        for subject_id in aggregation:
-            if subject_id == "param":
-                continue
-
-            for task_id in aggregation[subject_id]:
-                if task_id == "param":
-                    continue
-                if isinstance(aggregation[subject_id][task_id],dict):
-                    for shape in aggregation[subject_id][task_id]:
-                        if shape == "param":
-                            continue
-
-                        for cluster_index in aggregation[subject_id][task_id][shape]:
-                            if cluster_index == "param":
-                                continue
-
-                            assert isinstance(aggregation[subject_id][task_id][shape][cluster_index],dict)
-                            #aggregation[subject_id][task_id][shape][cluster_index].pop("users",None)
-
-                            del aggregation[subject_id][task_id][shape][cluster_index]["users"]
-
-        return aggregation
+    # def __remove_user_ids__(self,aggregation):
+    #     """
+    #     ids are needed for aggregation but they shouldn't be stored with the results
+    #     NOTE ids are postgres ids, NOT ip or email addresses
+    #     """
+    #     for subject_id in aggregation:
+    #         if subject_id == "param":
+    #             continue
+    #
+    #         for task_id in aggregation[subject_id]:
+    #             if task_id == "param":
+    #                 continue
+    #             if isinstance(aggregation[subject_id][task_id],dict):
+    #                 for shape in aggregation[subject_id][task_id]:
+    #                     if shape == "param":
+    #                         continue
+    #
+    #                     for cluster_index in aggregation[subject_id][task_id][shape]:
+    #                         if cluster_index == "param":
+    #                             continue
+    #
+    #                         assert isinstance(aggregation[subject_id][task_id][shape][cluster_index],dict)
+    #                         #aggregation[subject_id][task_id][shape][cluster_index].pop("users",None)
+    #
+    #                         del aggregation[subject_id][task_id][shape][cluster_index]["users"]
+    #
+    #     return aggregation
 
     def __get_results__(self,workflow_id):
         stmt = "select * from aggregations where workflow_id = " + str(workflow_id)
@@ -1270,8 +1224,6 @@ class AggregationAPI:
             self.postgres_cursor.execute(stmt)
             all_results = []
             for r in self.postgres_cursor.fetchall():
-                # print json.dumps(r[3], sort_keys=True,indent=4, separators=(',', ': '))
-                # print r[3].keys()
                 assert isinstance(r[3],dict)
 
                 ordered_aggregations = OrderedDict(sorted(r[3].items(),key = lambda x:x[0]))
@@ -1360,19 +1312,20 @@ class AggregationAPI:
             for subject_id in s:
                 params = (int(self.project_id),subject_id,int(workflow_id),version)
                 statements_and_params.append((select_statement, params))
-                # print params
+                print params
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
 
             for subject_id,(success,record_list) in zip(s,results):
+
                 if not success:
                     print record_list
                     assert success
 
-                print subject_id,len(record_list)
 
                 non_logged_in_users = 0
-                # print "==++ " + str(subject_id)
                 for record in record_list:
+                    print record
+                    print marking_tasks
                     total += 1
                     user_id = record.user_id
                     if user_id == -1:
@@ -1462,6 +1415,7 @@ class AggregationAPI:
                             #     print task_id,task["value"]
                             raw_classifications[task_id][subject_id].append((user_id,task["value"]))
 
+        assert raw_markings != {}
         return raw_classifications,raw_markings
 
     def __threshold_scaling__(self,workflow_id,):
@@ -1493,8 +1447,12 @@ class AggregationAPI:
         # cur.executemany("""INSERT INTO bar(first_name,last_name) VALUES (%(first_name)s, %(last_name)s)""", namedict)
 
         # self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id int, aggregation jsonb, created_at timestamp, updated_at timestamp)")
-        self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation json)")
-
+        try:
+            self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation jsonb)")
+        except psycopg2.ProgrammingError:
+            # todo - the table should always be deleted after its use, so this should rarely happen
+            # todo - double check
+            pass
         try:
             self.postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
             r = [i[0] for i in self.postgres_cursor.fetchall()]

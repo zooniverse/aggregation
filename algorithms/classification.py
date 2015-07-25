@@ -303,9 +303,6 @@ class Classification:
 
             if isinstance(classification_tasks[task_id],bool):
                 # we have a basic classification task
-                print raw_classifications.keys()
-                print classification_tasks
-                print marking_tasks
                 # todo - double check if this is right
                 if task_id in raw_classifications:
                     temp_results = self.__task_aggregation__(raw_classifications[task_id])

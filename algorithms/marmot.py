@@ -6,9 +6,10 @@ from matplotlib.widgets import Slider, Button, RadioButtons
 import ttk
 import matplotlib.pyplot as plt
 import random
+from aggregation_api import base_directory
 
-DIR_IMGS = '/home/ggdhines/Databases/images/'
-DIR_THUMBS = '/home/ggdhines/Databases/thumbnails/'
+DIR_IMGS = base_directory+'/Databases/images/'
+DIR_THUMBS = base_directory+'/Databases/thumbnails/'
 
 class Marmot:
     def __init__(self):
@@ -38,6 +39,7 @@ class Marmot:
         random.seed(1)
         # store all of the subjects in a random order
         self.subjects = self.project.__get_retired_subjects__(1,True)
+
         random.shuffle(self.subjects)
         self.page_index = 0
         self.step_size = 45
@@ -88,7 +90,8 @@ class Marmot:
             self.links.append(render_image)
 
         # todo - this window is not actually popping up
-        aggregated_subjects = self.project.__get_aggregated_subjects__(1)
+        aggregated_subjects = self.project.__get_aggregated_subjects__(-1)
+        print aggregated_subjects
 
         not_aggregated = [s for s in self.subjects[:self.step_size] if s not in aggregated_subjects]
         print not_aggregated
@@ -98,10 +101,10 @@ class Marmot:
             f.grid()
             ttk.Label(f,text="Aggregating some more subjects for you.").grid(column=1,row=1)
             ttk.Label(f,text="Please wait until this message automatically disappears.").grid(column=1,row=2)
-            self.project.__aggregate__([1],self.subjects[:self.step_size])
+            self.project.__aggregate__([-1],self.subjects[:self.step_size])
             t.destroy()
 
-            assert False
+            # assert False
 
     def __increment__(self):
         self.page_index += 1
@@ -157,7 +160,7 @@ class Marmot:
 
         threshold_silder = Slider(axfreq, 'Percentage', 0., 1., valinit=self.percentage_thresholds[subject_id])
 
-        self.project.__get_expert_annotations__(1,subject_id)
+        self.project.__get_expert_annotations__(-1,subject_id)
 
         # needs to be an inner function - grrrr
         def update(val):

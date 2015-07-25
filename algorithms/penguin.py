@@ -11,6 +11,7 @@ import psycopg2
 import urllib2
 import os
 import math
+import yaml
 
 class Penguins(aggregation_api.AggregationAPI):
     def __init__(self):
@@ -18,7 +19,7 @@ class Penguins(aggregation_api.AggregationAPI):
         self.project_id = -1
         # connect to the mongo server
         client = pymongo.MongoClient()
-        db = client['penguin_2015-05-08']
+        db = client['penguin_2015-06-01']
         self.classification_collection = db["penguin_classifications"]
         self.subject_collection = db["penguin_subjects"]
 
@@ -31,8 +32,8 @@ class Penguins(aggregation_api.AggregationAPI):
 
         database = {}
 
-        self.workflows = {1:(classification_tasks,marking_tasks)}
-        self.versions = {1:1}
+        self.workflows = {-1:(classification_tasks,marking_tasks)}
+        self.versions = {-1:1}
 
         self.cluster_algs = {"point":agglomerative.Agglomerative("point")}
         self.classification_alg = panoptes_ibcc.IBCC()
@@ -43,8 +44,9 @@ class Penguins(aggregation_api.AggregationAPI):
         self.users_table = "penguins_users"
         self.subject_id_type = "text"
 
-        self.postgres_session = psycopg2.connect("dbname='zooniverse' user=ggdhines")
+        self.postgres_session = psycopg2.connect("dbname='zooniverse' user=greg")
         self.postgres_cursor = self.postgres_session.cursor()
+
 
         self.experts = ["caitlin.black"]
 
@@ -52,13 +54,14 @@ class Penguins(aggregation_api.AggregationAPI):
 
     def __get_retired_subjects__(self,workflow_id,with_expert_classifications=False):
         # project_id, workflow_id, subject_id,annotations,user_id,user_ip,workflow_version
-        stmt = "select subject_id from penguins_users where project_id = " + str(self.project_id) + " and workflow_id = 1 and workflow_version = 1 and user_id = '" + str(self.experts[0]) + "'"
-
+        stmt = "select subject_id from penguins_users where project_id = " + str(self.project_id) + " and workflow_id = -1 and workflow_version = 1"# and user_id = '" + str(self.experts[0]) + "'"
+        stmt = "select * from penguins_users"
         subjects = self.cassandra_session.execute(stmt)
         return [r.subject_id for r in subjects]
 
     def __get_expert_annotations__(self,workflow_id,subject_id):
         # todo- for now just use one expert
+        print workflow_id
         version = str(int(math.floor(float(self.versions[workflow_id]))))
         stmt = """select annotations from """+ str(self.classification_table)+""" where project_id = """ + str(self.project_id) + """ and subject_id = '""" + str(subject_id) + """' and workflow_id = """ + str(workflow_id) + """ and workflow_version = """+ version + """ and user_id = '""" + str(self.experts[0]) + "'"
         # print stmt
@@ -239,7 +242,7 @@ class Penguins(aggregation_api.AggregationAPI):
 
         all_tools = []
 
-        for ii,classification in enumerate(self.classification_collection.find()):
+        for ii,classification in enumerate(self.classification_collection.find().limit(500)):
             if ii % 25000 == 0:
                 print ii
                 if ii > 0:
@@ -290,10 +293,11 @@ class Penguins(aggregation_api.AggregationAPI):
 
             if mapped_annotations == {}:
                 continue
-            statements_and_params.append((insert_statement,(-1,1,zooniverse_id,json.dumps(mapped_annotations),user_name,user_ip,1)))
-            statements_and_params2.append((user_insert,(-1,1,zooniverse_id,user_name,user_ip,1)))
+            statements_and_params.append((insert_statement,(-1,-1,zooniverse_id,json.dumps(mapped_annotations),user_name,user_ip,1)))
+            statements_and_params2.append((user_insert,(-1,-1,zooniverse_id,user_name,user_ip,1)))
 
         execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
+        execute_concurrent(self.cassandra_session, statements_and_params2, raise_on_first_error=True)
 
     def __store_results__(self,workflow_id,aggregations):
         if self.gold_standard:
@@ -324,6 +328,7 @@ class Penguins(aggregation_api.AggregationAPI):
 
         return subjects
 
+
 class SubjectGenerator:
     def __init__(self,project):
         assert isinstance(project,aggregation_api.AggregationAPI)
@@ -343,13 +348,19 @@ class SubjectGenerator:
 
 if __name__ == "__main__":
     project = Penguins()
-    # project.__migrate__()
+    project.__migrate__()
     # subjects = project.__get_subject_ids__()
+
+    print "dumb"
+    print project.__get_retired_subjects__(1,True)
+    assert False
 
     t = 0
     for s in SubjectGenerator(project):
         t += 1
-        project.__aggregate__(workflows=[1],subject_set=s)
+        print "subjects below"
+        print s
+        project.__aggregate__(workflows=[-1],subject_set=s)
 
         break
 
