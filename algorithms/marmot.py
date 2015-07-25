@@ -5,6 +5,7 @@ from penguin import Penguins
 from matplotlib.widgets import Slider, Button, RadioButtons
 import ttk
 import matplotlib.pyplot as plt
+import random
 
 DIR_IMGS = '/home/ggdhines/Databases/images/'
 DIR_THUMBS = '/home/ggdhines/Databases/thumbnails/'
@@ -32,6 +33,17 @@ class Marmot:
         self.percentage_thresholds = {}
         self.probability_threshold = {}
         self.weightings = {}
+
+        # might have to truly random - but this way, we don't always download new images
+        random.seed(1)
+        # store all of the subjects in a random order
+        self.subjects = self.project.__get_retired_subjects__(1,True)
+        random.shuffle(self.subjects)
+        self.page_index = 0
+
+        # see for deleting previous thumbnails when we go to a new page
+        self.thumbnails = []
+
     def __create_thumb__(self,subject_id):
         fname = self.project.__image_setup__(subject_id)
         openImg = Image.open(fname)
@@ -42,14 +54,19 @@ class Marmot:
         self.outputButtons()
         self.root.mainloop()
 
-    def outputButtons(self):
-        # for ii,thumbfile in enumerate(thumbfiles[:3]):
+    def __calculate__(self):
+        pass
+
+    def __thumbnail_display__(self):
+        for thumb_index in range(len(self.thumbnails)-1,-1,-1):
+            old_thumb = self.thumbnails.pop(thumb_index)
+            old_thumb.destroy()
 
         # for ii,subject_id in enumerate(self.project.__get_aggregated_subjects__(1)[:9]):
-        for ii,subject_id in enumerate(self.project.__get_retired_subjects__(1,True)[:9]):
+        for ii,subject_id in enumerate(self.subjects[9*self.page_index:9+9*self.page_index]):
             # do we already have a thumb for this file?
             thumb_path = DIR_THUMBS+str(subject_id)+".jpg"
-            print thumb_path
+            print subject_id
             if not os.path.exists(thumb_path):
                 self.__create_thumb__(subject_id)
 
@@ -64,8 +81,28 @@ class Marmot:
             but.grid(column=ii/3+1, row=(1+ii)%3,sticky=tkinter.W)
             but.bind('<Button-1>', lambda event,t=thumb_path:self.m(t))
 
+            self.thumbnails.append(but)
+
             # sigh - I hate having to do this
             self.links.append(render_image)
+
+        print
+
+    def __increment__(self):
+        self.page_index += 1
+        self.__thumbnail_display__()
+
+    def __decrement__(self):
+        self.page_index -= 1
+        self.__thumbnail_display__()
+
+    def outputButtons(self):
+        # for ii,thumbfile in enumerate(thumbfiles[:3]):
+        self.__thumbnail_display__()
+
+
+        ttk.Button(self.root, text="<--", command=self.__decrement__).grid(column=2, row=4)
+        ttk.Button(self.root, text="-->", command=self.__increment__).grid(column=2, row=5)
 
     def m(self,thumb_path):
 
