@@ -112,7 +112,7 @@ def ellipse_mapping(marking,image_dimensions):
 
 
 class AggregationAPI:
-    def __init__(self,project=None):#,user_threshold= None, score_threshold= None): #Supernovae
+    def __init__(self,project=None,environment=None):#,user_threshold= None, score_threshold= None): #Supernovae
         self.cluster_algs = None
         self.classification_alg = None
         self.workflows = None
@@ -128,7 +128,10 @@ class AggregationAPI:
         self.marking_params_per_shape["circle"] = circle_mapping
 
         # default value
-        self.environment = "production"
+        if environment is None:
+            self.environment = "production"
+        else:
+            self.environment = environment
         self.host_api = None
         self.subject_id_type = "int"
 
@@ -208,8 +211,6 @@ class AggregationAPI:
         given_subject_set = (subject_set != None)
 
         for workflow_id in workflows:
-            print "wtf"
-            print workflow_id
             if subject_set is None:
                 print "here"
                 subject_set = self.__get_retired_subjects__(workflow_id)
@@ -230,8 +231,6 @@ class AggregationAPI:
 
             if  marking_tasks != {}:
                 print "clustering"
-                print subject_set
-                print raw_markings
                 clustering_aggregations = self.__cluster__(raw_markings)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
             if (self.classification_alg is not None) and (classification_tasks != {}):
@@ -1011,17 +1010,31 @@ class AggregationAPI:
 
     def __postgres_connect__(self,database_details):
 
-        database = database_details["database"]
-        username = database_details["username"]
-        password = database_details["password"]
-        host = database_details["host"]
+        details = ""
+
+        details += "dbname = '" +database_details["database"] +"'"
+        details += " user = '" + database_details["username"] + "'"
+
+        # if no password is provided - hopefully connecting to the local cluster
+        try:
+            # password = database_details["password"]
+            details += " dname = '"+database_details["password"]+"' "
+        except KeyError:
+            pass
+
+        try:
+            details += " host ='" + database_details["host"] +"'"
+        except KeyError:
+            pass
+        # host = database_details["host"]
 
         # try connecting to the db
-        details = "dbname='"+database+"' user='"+ username+ "' host='"+ host + "' password='"+password+"'"
+        # details = "dbname='"+database+"' user='"+ username+ "' host='"+ host + "' password='"+password+"'"
+        print details
         for i in range(20):
             try:
                 self.postgres_session = psycopg2.connect(details)
-                self.postgres_cursor = self.postgres_session.cursor()
+                # self.postgres_cursor = self.postgres_session.cursor()
                 break
             except psycopg2.OperationalError as e:
                 pass
@@ -1312,7 +1325,6 @@ class AggregationAPI:
             for subject_id in s:
                 params = (int(self.project_id),subject_id,int(workflow_id),version)
                 statements_and_params.append((select_statement, params))
-                print params
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
 
             for subject_id,(success,record_list) in zip(s,results):
@@ -1324,8 +1336,6 @@ class AggregationAPI:
 
                 non_logged_in_users = 0
                 for record in record_list:
-                    print record
-                    print marking_tasks
                     total += 1
                     user_id = record.user_id
                     if user_id == -1:
@@ -1447,18 +1457,24 @@ class AggregationAPI:
         # cur.executemany("""INSERT INTO bar(first_name,last_name) VALUES (%(first_name)s, %(last_name)s)""", namedict)
 
         # self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id int, aggregation jsonb, created_at timestamp, updated_at timestamp)")
+        postgres_cursor = self.postgres_session.cursor()
+
         try:
-            self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation jsonb)")
-        except psycopg2.ProgrammingError:
+            postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation json)")
+        except psycopg2.ProgrammingError as e:
             # todo - the table should always be deleted after its use, so this should rarely happen
-            # todo - double check
-            pass
+            # todo - need to reset the connection
+            print e
+            self.postgres_session.rollback()
+            postgres_cursor = self.postgres_session.cursor()
+
         try:
-            self.postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
-            r = [i[0] for i in self.postgres_cursor.fetchall()]
+            postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
+            r = [i[0] for i in postgres_cursor.fetchall()]
         except psycopg2.ProgrammingError:
             self.postgres_session.rollback()
-            self.postgres_cursor.execute("create table aggregations(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation json,created_at timestamp, updated_at timestamp)")
+            postgres_cursor = self.postgres_session.cursor()
+            postgres_cursor.execute("create table aggregations(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation json,created_at timestamp, updated_at timestamp)")
             r = []
 
         if self.host_api is not None:
@@ -1484,22 +1500,22 @@ class AggregationAPI:
 
             if subject_id in r:
                 # we are updating
-                update_str += ","+self.postgres_cursor.mogrify("(%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregation)))
+                update_str += ","+postgres_cursor.mogrify("(%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregation)))
                 update_counter += 1
             else:
                 # we are inserting a brand new aggregation
-                insert_str += ","+self.postgres_cursor.mogrify("(%s,%s,%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregation),str(datetime.datetime.now()),str(datetime.datetime.now())))
+                insert_str += ","+postgres_cursor.mogrify("(%s,%s,%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregation),str(datetime.datetime.now()),str(datetime.datetime.now())))
                 insert_counter += 1
 
         if update_str != "":
             # are there any updates to actually be done?
             # todo - the updated and created at dates are not being maintained - I'm happy with that
             print "updating " + str(update_counter) + " subjects"
-            self.postgres_cursor.execute("INSERT INTO newvals (workflow_id, subject_id, aggregation) VALUES " + update_str[1:])
-            self.postgres_cursor.execute("UPDATE aggregations SET aggregation = newvals.aggregation FROM newvals WHERE newvals.subject_id = aggregations.subject_id and newvals.workflow_id = aggregations.workflow_id")
+            postgres_cursor.execute("INSERT INTO newvals (workflow_id, subject_id, aggregation) VALUES " + update_str[1:])
+            postgres_cursor.execute("UPDATE aggregations SET aggregation = newvals.aggregation FROM newvals WHERE newvals.subject_id = aggregations.subject_id and newvals.workflow_id = aggregations.workflow_id")
         if insert_str != "":
             print "inserting " + str(insert_counter) + " subjects"
-            self.postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
+            postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
         self.postgres_session.commit()
 
 
