@@ -21,6 +21,8 @@ class Marmot:
         self.root.geometry('900x700')
         self.root.title("Marmot")
 
+        self.root.resizable(False,False)
+
         # ttk stuff - congrads if you understand the difference between tkinter and ttk
         self.mainframe = ttk.Frame(self.root, padding="3 3 12 12")
         self.mainframe.grid(column=0, row=0, sticky=(tkinter.N, tkinter.W, tkinter.E, tkinter.S))
@@ -41,9 +43,10 @@ class Marmot:
         # might have to truly random - but this way, we don't always download new images
         random.seed(1)
         # store all of the subjects in a random order
-        self.subjects = self.project.__get_retired_subjects__(1,True)
-
-        random.shuffle(self.subjects)
+        self.subjects = []
+        # self.subjects = self.project.__get_retired_subjects__(1,True)
+        #
+        # random.shuffle(self.subjects)
         self.page_index = 0
         self.step_size = 45
 
@@ -54,14 +57,51 @@ class Marmot:
         self.true_positives = {}
         self.false_positives = {}
 
+        self.run_mode = None
+
     def __create_thumb__(self,subject_id):
         fname = self.project.__image_setup__(subject_id)
         openImg = Image.open(fname)
         openImg.thumbnail((250, 250))
         openImg.save(DIR_THUMBS + subject_id+".jpg")
 
+    def __create_gold_standard__(self):
+        # setup for when the user wants to explore results that don't have a gold standard
+        self.subjects = self.project.__get_retired_subjects__(1,False)
+        random.shuffle(self.subjects)
+
     def __run__(self):
-        self.outputButtons()
+        # create the welcome window
+        run_type = None
+        t = tkinter.Toplevel(self.root)
+        t.resizable(False,False)
+        frame = ttk.Frame(t, padding="3 3 12 12")
+        frame.grid(column=0, row=0, sticky=(tkinter.N, tkinter.W, tkinter.E, tkinter.S))
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(0, weight=1)
+        ttk.Label(frame,text="Welcome to Marmot.").grid(column=1,row=1)
+        def setup(r):
+            if r == "a":
+                assert False
+            else:
+                # when we want to explore subjects which don't have gold standard
+                # basically creating some as we go
+                # False => read in all subjects, not just those with gold standard annotations
+                # todo - takes a while in read in all subjects. Better way?
+                self.subjects = self.project.__get_retired_subjects__(1,False)
+                self.run_mode = "b"
+            random.shuffle(self.subjects)
+            self.__thumbnail_display__()
+            self.outputButtons()
+
+            t.destroy()
+
+        ttk.Button(frame, text="Explore results using existing expert annotations", command = lambda : setup("a")).grid(column=1, row=2)
+        ttk.Button(frame, text="Explore and create gold standard on the fly", command = lambda : setup("b")).grid(column=1, row=3)
+
+        t.lift(self.root)
+
+        # self.outputButtons()
         self.root.mainloop()
 
     def __calculate__(self):
@@ -97,7 +137,7 @@ class Marmot:
 
             but = ttk.Button(self.root, image=render_image)
             but.grid(column=ii/3+1, row=(1+ii)%3,sticky=tkinter.W)
-            but.bind('<Button-1>', lambda event,t=thumb_path:self.gold_update(t))
+            but.bind('<Button-1>', lambda event,t=thumb_path: self.gold_update(t) if self.run_mode == "a" else self.create_gold(t))
 
             self.thumbnails.append(but)
 
@@ -110,17 +150,17 @@ class Marmot:
         aggregated_subjects = self.project.__get_aggregated_subjects__(-1)
 
         not_aggregated = [s for s in self.subjects[:self.step_size] if s not in aggregated_subjects]
-        print not_aggregated
-        if not_aggregated != []:
-            t = tkinter.Toplevel(self.root)
-            f = ttk.Frame(t)
-            f.grid()
-            ttk.Label(f,text="Aggregating some more subjects for you.").grid(column=1,row=1)
-            ttk.Label(f,text="Please wait until this message automatically disappears.").grid(column=1,row=2)
-            self.project.__aggregate__([-1],self.subjects[:self.step_size])
-            t.destroy()
-
-            # assert False
+        # print not_aggregated
+        # if not_aggregated != []:
+        #     t = tkinter.Toplevel(self.root)
+        #     f = ttk.Frame(t)
+        #     f.grid()
+        #     ttk.Label(f,text="Aggregating some more subjects for you.").grid(column=1,row=1)
+        #     ttk.Label(f,text="Please wait until this message automatically disappears.").grid(column=1,row=2)
+        #     self.project.__aggregate__([-1],self.subjects[:self.step_size])
+        #     t.destroy()
+        #
+        #     # assert False
 
     def __increment__(self):
         self.page_index += 1
@@ -138,7 +178,8 @@ class Marmot:
         ttk.Button(self.root, text="-->", command=self.__increment__).grid(column=2, row=5)
         ttk.Button(self.root, text="Threshold Plot", command=self.__calculate__).grid(column=1, row=5)
 
-    def m(self,thumb_path):
+    def create_gold(self,thumb_path):
+        print "hello world"
         slash_index = thumb_path.rindex("/")
         subject_id = thumb_path[slash_index+1:-4]
 
@@ -152,8 +193,7 @@ class Marmot:
         axes = fig.add_subplot(1, 1, 1)
 
         self.project.__plot_image__(subject_id,axes)
-        correct_pts = self.project.__get_correct_points__(1,subject_id,1,"point")
-        matplotlib_points = self.project.__plot_cluster_results__(1,subject_id,1,"point",axes,self.percentage_thresholds[subject_id],correct_pts)
+        matplotlib_points = self.project.__plot_cluster_results__(-1,subject_id,1,"point",axes,self.percentage_thresholds[subject_id])
         plt.subplots_adjust(left=0.25, bottom=0.25)
         # axcolor = 'lightgoldenrodyellow'
         axfreq = plt.axes([0.25, 0.1, 0.65, 0.03])
@@ -168,7 +208,7 @@ class Marmot:
         def update(val):
             new_threshold = threshold_silder.val
             self.percentage_thresholds[subject_id] = new_threshold
-            self.probability_threshold[subject_id] = self.project.__update_threshold__(new_threshold,correct_pts,matplotlib_points)
+            self.probability_threshold[subject_id] = self.project.__update_threshold__(new_threshold,matplotlib_points)
 
             fig.canvas.draw_idle()
 

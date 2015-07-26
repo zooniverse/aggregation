@@ -57,10 +57,15 @@ class Penguins(aggregation_api.AggregationAPI):
 
     def __get_retired_subjects__(self,workflow_id,with_expert_classifications=False):
         # project_id, workflow_id, subject_id,annotations,user_id,user_ip,workflow_version
-        stmt = "select subject_id from penguins_users where project_id = " + str(self.project_id) + " and workflow_id = " + str(global_workflow_id) + " and workflow_version = " + str(global_version) + " and user_id = '" + str(self.experts[0]) + "'"
+        stmt = "select subject_id from penguins_users where project_id = " + str(self.project_id) + " and workflow_id = " + str(global_workflow_id) + " and workflow_version = " + str(global_version)
+        if with_expert_classifications:
+            stmt += " and user_id = '" + str(self.experts[0]) + "'"
 
         subjects = self.cassandra_session.execute(stmt)
-        return [r.subject_id for r in subjects]
+
+        # if we don't require expert classifications, there are going to be multiple people who have classified an image
+        # so subjects will show up more than once => use a set to make sure of uniqueness
+        return list(set([r.subject_id for r in subjects]))
 
     def __get_expert_annotations__(self,workflow_id,subject_id):
         # todo- for now just use one expert

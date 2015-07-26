@@ -110,7 +110,7 @@ class Classification:
 
         return aggregations
 
-    def __existence_classification__(self,task_id,marking_tasks,clustering_results):
+    def __existence_classification__(self,task_id,marking_tasks,clustering_results,gold_standard_clustering=None):
         """
         classify whether clusters are true or false positives
         i.e. whether each cluster corresponds to something which actually exists
@@ -290,7 +290,7 @@ class Classification:
 
         return aggregations
 
-    def __aggregate__(self,raw_classifications,workflow,clustering_results=None):
+    def __aggregate__(self,raw_classifications,workflow,clustering_results=None,gold_standard_clustering=None):
         # use the first subject_id to find out which tasks we are aggregating the classifications for
         aggregations = {"param":"subject_id"}
         classification_tasks,marking_tasks = workflow
@@ -319,7 +319,7 @@ class Classification:
                 # we have to first decide which cluster is a "true positive" and which is a "false positive"
                 # so a question of whether or not people marked it - regardless of whether they marked it as the
                 # correct "type"
-                existence_results = self.__existence_classification__(task_id,marking_tasks,clustering_results)
+                existence_results = self.__existence_classification__(task_id,marking_tasks,clustering_results,gold_standard_clustering)
 
                 # now decide what type each cluster is
                 # note that this step does not care whether a cluster is a false positive or not (i.e. the results

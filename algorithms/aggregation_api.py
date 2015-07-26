@@ -204,7 +204,16 @@ class AggregationAPI:
         # load the default classification algorithm
         self.__set_classification_alg__(classification.VoteCount)
 
-    def __aggregate__(self,workflows=None,subject_set=None):
+    def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=None):
+        """
+        you can provide a list of clusters - hopefully examples of both true positives and false positives
+        note this means you have already run the aggregation before and are just coming back with
+        more info
+        :param workflows:
+        :param subject_set:
+        :param gold_standard_clusters:
+        :return:
+        """
         if workflows is None:
             workflows = self.workflows
 
@@ -236,7 +245,7 @@ class AggregationAPI:
             if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
                 print "classifying"
-                classification_aggregations = self.__classify__(raw_classifications,clustering_aggregations,workflow_id)
+                classification_aggregations = self.__classify__(raw_classifications,clustering_aggregations,workflow_id,gold_standard_clusters)
 
             # if we have both markings and classifications - we need to merge the results
             if (clustering_aggregations is not None) and (classification_aggregations is not None):
@@ -273,7 +282,7 @@ class AggregationAPI:
         for i in xrange(0, len(l), n):
             yield l[i:i+n]
 
-    def __classify__(self,raw_classifications,clustering_aggregations,workflow_id):
+    def __classify__(self,raw_classifications,clustering_aggregations,workflow_id,gold_standard_classifications):
         # get the raw classifications for the given workflow
         # raw_classifications = self.__sort_classifications__(workflow_id,subject_set)
         if raw_classifications == {}:
@@ -282,7 +291,7 @@ class AggregationAPI:
             # for subject_set in empty_aggregation
             return empty_aggregation
         # assert False
-        return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations)
+        return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations,gold_standard_classifications)
 
     def __cluster__(self,raw_markings):
         """
@@ -895,7 +904,7 @@ class AggregationAPI:
     #
     #     plt.axis('scaled')
 
-    def __plot_cluster_results__(self,workflow_id,subject_id,task_id,shape,axes,percentile_threshold=None,correct_pts=None,picker=False):
+    def __plot_cluster_results__(self,workflow_id,subject_id,task_id,shape,axes,percentile_threshold=None,correct_pts=None):
         """
         plots the clustering results - also stores the distribution of probabilities of existence
         so they can be altered later
@@ -972,6 +981,9 @@ class AggregationAPI:
                                 # woot
                                 color = "blue"
                     else:
+                        # this would probably be for when we just want to see the gold standard results
+                        # but not sure where yet this would fit in
+                        assert False
                         if center in correct_pts:
                             color = "green"
                         else:
@@ -979,12 +991,18 @@ class AggregationAPI:
 
                     matplotlib_cluster[center] = axes.plot(center[0],center[1],marker=marker,color=color)[0],prob_existence,color
                 else:
+                    # we have nothing to compare against - so we are not showing correctness so much
+                    # as just showing which points would be rejected/accepted with the default understanding
+                    # that points will be correctly accepted - points that are rejected - we make no statement about
+                    # they will not be included in the gold standard
                     if prob_existence >= prob_threshold:
-                        matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="blue"),prob_existence
+                        color = "green"
+                        # matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="green"),prob_existence
                     else:
                         # we think this is a false positive
-                        matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="red"),prob_existence
-
+                        color = "yellow"
+                        # matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="red"),prob_existence
+                    matplotlib_cluster[center] = axes.plot(center[0],center[1],marker=marker,color=color)[0],prob_existence,color
         return matplotlib_cluster
 
     # def __plot__(self,workflow_id,task_id):
@@ -1550,7 +1568,7 @@ class AggregationAPI:
         self.postgres_session.commit()
 
 
-    def __update_threshold__(self,new_percentile_threshold,correct_pts,matplotlib_centers):
+    def __update_threshold__(self,new_percentile_threshold,matplotlib_centers,correct_pts=None):
         """
         returns a tuple of all TP probabilities and the FP ones too, according to the given threshold
         :param new_percentile_threshold:
@@ -1593,8 +1611,10 @@ class AggregationAPI:
                         matplotlib_pt.set_color("blue")
                         # green_pts.append(prob_existence)
             else:
-                # todo - implement
-                assert False
+                if prob_existence >= prob_threshold:
+                    matplotlib_pt.set_color("green")
+                else:
+                    matplotlib_pt.set_color("yellow")
 
         return prob_threshold
 
