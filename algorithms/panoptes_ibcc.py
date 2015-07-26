@@ -6,11 +6,11 @@ class IBCC(classification.Classification):
     def __init__(self,clustering_alg=None):
         classification.Classification.__init__(self,clustering_alg)
 
-    def __task_aggregation__(self,raw_classifications,gold_standard_results=None):
+    def __task_aggregation__(self,raw_classifications,gold_standard={}):
         # do we actually need to run ibcc - no if there wasn't any confusion
         # borderline degenerate case but we need to be prepared for it
         # highest_class is needed for helping the degenerate cases
-        run_ibcc,highest_class =self.__ibcc_setup__(raw_classifications)
+        run_ibcc,highest_class =self.__ibcc_setup__(raw_classifications,gold_standard)
 
         # run ibcc
         if run_ibcc:
@@ -69,7 +69,7 @@ class IBCC(classification.Classification):
 
         return results
 
-    def __ibcc_setup__(self,raw_classifications):
+    def __ibcc_setup__(self,raw_classifications,gold_standard={}):
         """
         if raw_classifications correspond to a simple task then each each should just be a subject_id
         if raw_classifications corresponds to marking then each key should be a combination of
@@ -90,13 +90,22 @@ class IBCC(classification.Classification):
         # use this in case there are gaps in the class labels
         highest_class = 0
 
-        with open("/tmp/ibcc_input.csv",'wb') as f:
-            f.write("a,b,c\n")
+        with open("/tmp/ibcc_input.csv",'wb') as f_input,open("/tmp/ibcc_gold.csv",'wb') as f_gold:
+            f_input.write("a,b,c\n")
+            f_gold.write("a,c\n")
             for subject_id in raw_classifications:#sorted(raw_classifications.keys()):
+
                 if subject_id == "param":
                     continue
                 votes = {}
                 global_cluster_index += 1
+
+                if subject_id in gold_standard:
+                    # write out to the gold standard file
+                    print gold_standard[subject_id]
+                    f_gold.write(str(global_cluster_index)+","+str(gold_standard[subject_id])+"\n")
+
+
                 for user,ballot in raw_classifications[subject_id]:
                     # todo - may need to catch cases where users are able to select multiple options
                     assert isinstance(ballot,int)
@@ -104,7 +113,7 @@ class IBCC(classification.Classification):
                         global_user_list.append(user)
 
                     # write out the ibcc input file
-                    f.write(str(global_user_list.index(user))+","+str(global_cluster_index)+","+str(ballot)+"\n")
+                    f_input.write(str(global_user_list.index(user))+","+str(global_cluster_index)+","+str(ballot)+"\n")
 
 
                     # update the prior estimate
@@ -171,11 +180,11 @@ class IBCC(classification.Classification):
         prior_counts = [int(max(1,c*100/sum(prior_counts))) for c in prior_counts]
 
         # now create the config file
-        self.__create_config__(prior_counts,confusion_matrix)
+        self.__create_config__(prior_counts,confusion_matrix,gold_standard!={})
 
         return True,highest_class
 
-    def __create_config__(self,priors,confusion_matrix):
+    def __create_config__(self,priors,confusion_matrix,have_gold_standard):
         """
         write out the config file for running IBCC
         :return:
@@ -196,6 +205,8 @@ class IBCC(classification.Classification):
             f.write("inputFile = \"/tmp/ibcc_input.csv\"\n")
             f.write("outputFile = \"/tmp/ibcc_output.csv\"\n")
             f.write("confMatFile = \"/tmp/ibcc.mat\"\n")
+            if have_gold_standard:
+                f.write("goldFile = \"/tmp/ibcc_gold.csv\"\n")
             f.write("nu0 = np.array("+str(priors)+")\n")
             f.write("alpha0 = np.array("+str(confusion_matrix)+")\n")
 

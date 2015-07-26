@@ -32,7 +32,7 @@ class Classification:
         self.candidates = self.species.keys()
 
     @abc.abstractmethod
-    def __task_aggregation__(self,classifications,gold_standard=False):
+    def __task_aggregation__(self,classifications,gold_standard={}):
         return []
 
     def __subtask_classification__(self,task_id,classification_tasks,raw_classifications,clustering_results):
@@ -119,9 +119,8 @@ class Classification:
         return in json format so we can merge with other results
         :return:
         """
-        print gold_standard_clustering
-        positive_gold_standard = []
-        negative_gold_standard = []
+
+        mapped_gold_standard = {}
         assert isinstance(clustering_results,dict)
         aggregations = {}
 
@@ -183,7 +182,8 @@ class Classification:
                                 closest = (x2,y2)
                         if min_dist == 0.:
                             assert (x,y) == closest
-                            positive_gold_standard.append((subject_id,local_cluster_index))
+                            mapped_gold_standard[(subject_id,local_cluster_index)] = 1
+
                     # now repeat for negative gold standards
                     if subject_id in gold_standard_clustering[1]:
                         x,y = cluster["center"]
@@ -196,7 +196,7 @@ class Classification:
                                 closest = (x2,y2)
                         if min_dist == 0.:
                             assert (x,y) == closest
-                            negative_gold_standard.append((subject_id,local_cluster_index))
+                            mapped_gold_standard[(subject_id,local_cluster_index)] = 0
 
                     users = cluster["users"]
 
@@ -214,8 +214,7 @@ class Classification:
                     global_cluster_index += 1
 
             print "existence aggregation"
-            print positive_gold_standard
-            existence_results = self.__task_aggregation__(existence_classification)
+            existence_results = self.__task_aggregation__(existence_classification,mapped_gold_standard)
             assert isinstance(existence_results,dict)
 
             for subject_id,cluster_index in existence_results:

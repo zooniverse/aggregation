@@ -935,6 +935,8 @@ class AggregationAPI:
             return {}
         aggregations = json.loads(agg[0])
 
+
+
         # # task id could be for example, init, so has to be a string
         # for shapes in aggregations[str(task_id)]:
         #     if shapes == "param":
@@ -946,6 +948,9 @@ class AggregationAPI:
             if cluster_index == "param":
                 continue
             self.probabilities.append(cluster['existence'][0][1])
+
+        if self.probabilities == []:
+            return {}
 
         if percentile_threshold is not None:
             prob_threshold = numpy.percentile(self.probabilities,(1-percentile_threshold)*100)
