@@ -111,7 +111,7 @@ class Classification:
 
         return aggregations
 
-    def __existence_classification__(self,task_id,marking_tasks,clustering_results,gold_standard_clustering=None):
+    def __existence_classification__(self,task_id,marking_tasks,clustering_results,gold_standard_clustering=([],[])):
         """
         classify whether clusters are true or false positives
         i.e. whether each cluster corresponds to something which actually exists
@@ -324,7 +324,7 @@ class Classification:
 
         return aggregations
 
-    def __aggregate__(self,raw_classifications,workflow,clustering_results=None,gold_standard_clustering=None):
+    def __aggregate__(self,raw_classifications,workflow,clustering_results=None,gold_standard_clustering=([],[])):
         # use the first subject_id to find out which tasks we are aggregating the classifications for
         aggregations = {"param":"subject_id"}
         classification_tasks,marking_tasks = workflow

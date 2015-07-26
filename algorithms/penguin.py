@@ -57,7 +57,7 @@ class Penguins(aggregation_api.AggregationAPI):
         # self.postgres_cursor.execute("create table aggregations (workflow_id int, subject_id text, aggregation jsonb, created_at timestamp, updated_at timestamp)")
 
         # roi stuff
-        self.roi_dict = {}
+
         with open(aggregation_api.base_directory+"/github/Penguins/public/roi.tsv","rb") as roi_file:
             roi_file.readline()
             reader = csv.reader(roi_file,delimiter="\t")
@@ -218,6 +218,12 @@ class Penguins(aggregation_api.AggregationAPI):
             subjects.append(r[0])
 
         return subjects
+
+    def __get_subject_dimension__(self,subject_id):
+        subject = self.subject_collection.find_one({"zooniverse_id":subject_id})
+        dim = subject["metadata"]["original_size"]
+
+        return dim
 
     def __image_setup__(self,subject_id,download=True):
         """

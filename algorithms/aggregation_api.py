@@ -127,6 +127,9 @@ class AggregationAPI:
         self.marking_params_per_shape["rectangle"] = rectangle_mapping
         self.marking_params_per_shape["circle"] = circle_mapping
 
+        # in case project wants to have an roi
+        self.roi_dict = {}
+
         # default value
         if environment is None:
             self.environment = "production"
@@ -395,6 +398,16 @@ class AggregationAPI:
             return self.classifications[subject_id][task_id]
         else:
             return self.classifications[subject_id][task_id][cluster_index][question_id]
+
+    def __get_subject_dimension__(self,subject_id):
+        """
+        get the x and y size of the subject
+        useful for plotting and also for checking if we have any bad points
+        if no dimension is founds, return None,None
+        :param subject_id:
+        :return:
+        """
+        return None
 
     def __get_project_id(self):
         """
@@ -874,11 +887,13 @@ class AggregationAPI:
                 # fig, ax = plt.subplots()
                 im = axes.imshow(image)
 
-                return
+                return self.__get_subject_dimension__(subject_id)
             except IOError:
                 # try downloading that image again
                 os.remove(fname)
                 self.__image_setup__(subject_id)
+
+        assert False
 
     # def __plot_individual_points__(self,subject_id,task_id,shape):
     #     for cluster in self.cluster_alg.clusterResults[task_id][shape][subject_id]:
@@ -1388,6 +1403,8 @@ class AggregationAPI:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
 
             for subject_id,(success,record_list) in zip(s,results):
+
+
 
                 if not success:
                     print record_list

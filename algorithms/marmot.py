@@ -205,12 +205,21 @@ class Marmot:
         fig = plt.figure()
         axes = fig.add_subplot(1, 1, 1)
 
-        self.project.__plot_image__(subject_id,axes)
+        dimensions = self.project.__plot_image__(subject_id,axes)
         matplotlib_points = self.project.__plot_cluster_results__(-1,subject_id,1,"point",axes,self.percentage_thresholds[subject_id])
-        plt.subplots_adjust(left=0.25, bottom=0.25)
+        plt.subplots_adjust(bottom=0.2)
         # axcolor = 'lightgoldenrodyellow'
-        axfreq = plt.axes([0.25, 0.1, 0.65, 0.03])
 
+
+        print dimensions
+        # todo - 1.92 is a hack for penguin watch
+        # this rescaling must happen before we add the slider axes - because why not
+        if dimensions is not None:
+            print "setting"
+            plt.axis((0,dimensions["width"]/1.92,dimensions["height"]/1.92,0))
+            # plt.xlim((dimensions["height"],0))
+            # plt.ylim((0,dimensions["width"]))
+        axfreq = plt.axes([0.25, 0.1, 0.65, 0.03])
         # todo - has got to be a better to initalize this
         if subject_id not in self.true_positives:
             prob_threshold,colours = self.probability_threshold[subject_id] = self.project.__update_threshold__(self.percentage_thresholds[subject_id],matplotlib_points)
@@ -220,7 +229,7 @@ class Marmot:
 
         threshold_silder = Slider(axfreq, 'Percentage', 0., 1., valinit=self.percentage_thresholds[subject_id])
 
-        self.project.__get_expert_annotations__(-1,subject_id)
+        # self.project.__get_expert_annotations__(-1,subject_id)
 
         # needs to be an inner function - grrrr
         def update(val):
