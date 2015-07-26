@@ -10,6 +10,7 @@ from copy import deepcopy
 import abc
 import json
 import csv
+import math
 
 def findsubsets(S,m):
     return set(itertools.combinations(S, m))
@@ -119,6 +120,8 @@ class Classification:
         :return:
         """
         print gold_standard_clustering
+        positive_gold_standard = []
+        negative_gold_standard = []
         assert isinstance(clustering_results,dict)
         aggregations = {}
 
@@ -139,14 +142,14 @@ class Classification:
             existence_classification = {"param":"subject_id"}
 
             global_cluster_index = 0
-            clusters_per_subject = []
+            # clusters_per_subject = []
 
             # look at the individual points in the cluster
             for subject_id in clustering_results.keys():
                 if subject_id == "param":
                     continue
 
-                clusters_per_subject.append([])
+                # clusters_per_subject.append([])
 
                 # in either case probably an empty image
                 if subject_id not in clustering_results:
@@ -165,6 +168,36 @@ class Classification:
                     # extract the users who marked this cluster
                     cluster = clustering_results[subject_id][task_id][shape+ " clusters"][local_cluster_index]
 
+                    # todo - I should be able to check membership simply by using "in"
+                    # todo - but there seems to be calculation error
+                    # todo - grrrr, find out why "in" isn't working
+                    # is this a positive gold standard?
+                    if subject_id in gold_standard_clustering[0]:
+                        x,y = cluster["center"]
+                        min_dist = float("inf")
+                        closest= None
+                        for x2,y2 in gold_standard_clustering[0][subject_id]:
+                            dist = math.sqrt((x-x2)**2+(y-y2)**2)
+                            if dist < min_dist:
+                                min_dist = min(dist,min_dist)
+                                closest = (x2,y2)
+                        if min_dist == 0.:
+                            assert (x,y) == closest
+                            positive_gold_standard.append((subject_id,local_cluster_index))
+                    # now repeat for negative gold standards
+                    if subject_id in gold_standard_clustering[1]:
+                        x,y = cluster["center"]
+                        min_dist = float("inf")
+                        closest= None
+                        for x2,y2 in gold_standard_clustering[1][subject_id]:
+                            dist = math.sqrt((x-x2)**2+(y-y2)**2)
+                            if dist < min_dist:
+                                min_dist = min(dist,min_dist)
+                                closest = (x2,y2)
+                        if min_dist == 0.:
+                            assert (x,y) == closest
+                            negative_gold_standard.append((subject_id,local_cluster_index))
+
                     users = cluster["users"]
 
                     ballots = []
@@ -177,10 +210,11 @@ class Classification:
                             ballots.append((u,0))
 
                     existence_classification[(subject_id,local_cluster_index)] = ballots
-                    clusters_per_subject[-1].append(global_cluster_index)
+                    # clusters_per_subject[-1].append(global_cluster_index)
                     global_cluster_index += 1
 
             print "existence aggregation"
+            print positive_gold_standard
             existence_results = self.__task_aggregation__(existence_classification)
             assert isinstance(existence_results,dict)
 
