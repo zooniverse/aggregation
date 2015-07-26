@@ -7,6 +7,7 @@ import ttk
 import matplotlib.pyplot as plt
 import random
 from aggregation_api import base_directory
+import math
 
 DIR_IMGS = base_directory+'/Databases/images/'
 DIR_THUMBS = base_directory+'/Databases/thumbnails/'
@@ -25,6 +26,8 @@ class Marmot:
         self.mainframe.grid(column=0, row=0, sticky=(tkinter.N, tkinter.W, tkinter.E, tkinter.S))
         self.mainframe.columnconfigure(0, weight=1)
         self.mainframe.rowconfigure(0, weight=1)
+
+        self.root.option_add('*tearOff', False)
 
         self.links = []
 
@@ -48,6 +51,9 @@ class Marmot:
         # see for deleting previous thumbnails when we go to a new page
         self.thumbnails = []
 
+        self.true_positives = {}
+        self.false_positives = {}
+
     def __create_thumb__(self,subject_id):
         fname = self.project.__image_setup__(subject_id)
         openImg = Image.open(fname)
@@ -59,7 +65,16 @@ class Marmot:
         self.root.mainloop()
 
     def __calculate__(self):
-        pass
+        if self.percentage_thresholds != {}:
+            plt.close()
+
+            subject_ids = self.probability_threshold.keys()
+            X = [self.probability_threshold[s] for s in subject_ids]
+            Y = [self.weightings[s] for s in subject_ids]
+
+            plt.plot(X,Y,'.')
+            plt.xlim((-0.02,1.02))
+            plt.show()
 
     def __thumbnail_display__(self):
         for thumb_index in range(len(self.thumbnails)-1,-1,-1):
@@ -82,7 +97,7 @@ class Marmot:
 
             but = ttk.Button(self.root, image=render_image)
             but.grid(column=ii/3+1, row=(1+ii)%3,sticky=tkinter.W)
-            but.bind('<Button-1>', lambda event,t=thumb_path:self.m(t))
+            but.bind('<Button-1>', lambda event,t=thumb_path:self.gold_update(t))
 
             self.thumbnails.append(but)
 
@@ -119,23 +134,11 @@ class Marmot:
         # for ii,thumbfile in enumerate(thumbfiles[:3]):
         self.__thumbnail_display__()
 
-
         ttk.Button(self.root, text="<--", command=self.__decrement__).grid(column=2, row=4)
         ttk.Button(self.root, text="-->", command=self.__increment__).grid(column=2, row=5)
-        ttk.Button(self.root, text="Threshold Plot", command=self.__increment__).grid(column=1, row=5)
+        ttk.Button(self.root, text="Threshold Plot", command=self.__calculate__).grid(column=1, row=5)
 
     def m(self,thumb_path):
-
-        # print event
-        # plt.plot(bins, y, 'r--')
-        # plt.xlabel('Smarts')
-        # plt.ylabel('Probability')
-        # plt.title(r'Histogram of IQ: $\mu=100$, $\sigma=15$')
-        #
-        # # Tweak spacing to prevent clipping of ylabel
-        # plt.subplots_adjust(left=0.15)
-        # plt.show()
-
         slash_index = thumb_path.rindex("/")
         subject_id = thumb_path[slash_index+1:-4]
 
@@ -155,9 +158,7 @@ class Marmot:
         # axcolor = 'lightgoldenrodyellow'
         axfreq = plt.axes([0.25, 0.1, 0.65, 0.03])
 
-
         self.weightings[subject_id] = len(matplotlib_points)
-
 
         threshold_silder = Slider(axfreq, 'Percentage', 0., 1., valinit=self.percentage_thresholds[subject_id])
 
@@ -169,8 +170,79 @@ class Marmot:
             self.percentage_thresholds[subject_id] = new_threshold
             self.probability_threshold[subject_id] = self.project.__update_threshold__(new_threshold,correct_pts,matplotlib_points)
 
+            fig.canvas.draw_idle()
+
 
         threshold_silder.on_changed(update)
+
+        plt.show()
+
+
+
+
+    def gold_update(self,thumb_path):
+        slash_index = thumb_path.rindex("/")
+        subject_id = thumb_path[slash_index+1:-4]
+
+        # if we are looking at a image for the first time
+        if subject_id not in self.true_positives:
+            self.true_positives[subject_id] = self.project.__get_correct_points__(1,subject_id,1,"point")
+
+
+        # close any previously open graph
+        plt.close()
+        fig = plt.figure()
+        axes = fig.add_subplot(1, 1, 1)
+
+        # grrr - inner function needed again
+        def onpick3(event):
+            color_list = ["green","yellow","red"]
+
+            x = event.xdata
+            y = event.ydata
+            pt = event.xdata,event.ydata
+            nearest_pt = None
+            closest_dist = float("inf")
+            for x2,y2 in matplotlib_points.keys():
+                dist = math.sqrt((x-x2)**2+(y-y2)**2)
+                if dist < closest_dist:
+                    closest_dist = dist
+                    nearest_pt = (x2,y2)
+
+            if closest_dist < 20:
+                pt,prob,color = matplotlib_points[nearest_pt]
+                new_color = color_list[(color_list.index(color)+1)%3]
+
+                matplotlib_points[nearest_pt] = pt,prob,new_color
+                pt.set_color(new_color)
+                fig.canvas.draw_idle()
+
+                print self.false_positives[subject_id]
+                # update the gold standard accordingly
+                if new_color == "green":
+                    print 1
+                    # gone from a false positive to a true positive
+                    self.false_positives[subject_id].remove(nearest_pt)
+                    self.true_positives[subject_id].append(nearest_pt)
+                elif new_color == "yellow":
+                    print 2
+                    # gone from true positive to don't know
+                    self.true_positives[subject_id].remove(nearest_pt)
+                else:
+                    print 3
+                    # gone from don't know to false positive
+                    self.false_positives[subject_id].append(nearest_pt)
+
+        self.project.__plot_image__(subject_id,axes)
+        matplotlib_points = self.project.__plot_cluster_results__(1,subject_id,1,"point",axes,correct_pts=self.true_positives[subject_id]) #self.percentage_thresholds[subject_id],
+
+        # we can only set the false positives once we have seen all the points
+        if subject_id not in self.false_positives:
+            self.false_positives[subject_id] = [pt for pt in matplotlib_points.keys() if pt not in self.true_positives[subject_id]]
+            print self.false_positives[subject_id]
+        plt.subplots_adjust(left=0.25, bottom=0.25)
+        fig.canvas.mpl_connect('button_press_event', onpick3)
+        # axcolor = 'lightgoldenrodyellow'
 
         plt.show()
 

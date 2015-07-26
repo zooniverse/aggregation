@@ -895,7 +895,7 @@ class AggregationAPI:
     #
     #     plt.axis('scaled')
 
-    def __plot_cluster_results__(self,workflow_id,subject_id,task_id,shape,axes,percentile_threshold=1,correct_pts=None):
+    def __plot_cluster_results__(self,workflow_id,subject_id,task_id,shape,axes,percentile_threshold=None,correct_pts=None,picker=False):
         """
         plots the clustering results - also stores the distribution of probabilities of existence
         so they can be altered later
@@ -934,7 +934,12 @@ class AggregationAPI:
                 continue
             self.probabilities.append(cluster['existence'][0][1])
 
-        prob_threshold = numpy.percentile(self.probabilities,(1-percentile_threshold)*100)
+        if percentile_threshold is not None:
+            prob_threshold = numpy.percentile(self.probabilities,(1-percentile_threshold)*100)
+            marker = '.'
+        else:
+            prob_threshold = None
+            marker = '^'
 
         for cluster_index,cluster in aggregations[str(task_id)][shape + " clusters"].items():
             if cluster_index == "param":
@@ -947,23 +952,32 @@ class AggregationAPI:
 
                 # if we have gold standard to compare to - use that to determine the colour
                 if correct_pts is not None:
-                    if prob_existence >= prob_threshold:
-                        # based on the threshold - we think this point exists
-                        if center in correct_pts:
-                            # woot - we were right
-                            matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="green")[0],prob_existence
+                    # if is equal to None - just compared directly against gold standard with out threshold
+                    if prob_threshold is not None:
+                        if prob_existence >= prob_threshold:
+                            # based on the threshold - we think this point exists
+                            if center in correct_pts:
+                                # woot - we were right
+                                color = "green"
+                            else:
+                                # boo - we were wrong
+                                print "%%%%"
+                                color = "red"
                         else:
-                            # boo - we were wrong
-                            print "%%%%"
-                            matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="red")[0],prob_existence
+                            # we think this point is a false positive
+                            if center in correct_pts:
+                                # boo - we were wrong
+                                color = "yellow"
+                            else:
+                                # woot
+                                color = "blue"
                     else:
-                        # we think this point is a false positive
                         if center in correct_pts:
-                            # boo - we were wrong
-                            matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="yellow")[0],prob_existence
+                            color = "green"
                         else:
-                            # woot
-                            matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="blue")[0],prob_existence
+                            color = "red"
+
+                    matplotlib_cluster[center] = axes.plot(center[0],center[1],marker=marker,color=color)[0],prob_existence,color
                 else:
                     if prob_existence >= prob_threshold:
                         matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="blue"),prob_existence
@@ -1558,7 +1572,7 @@ class AggregationAPI:
         # # etc.
         # blue_pts = []
 
-        for center,(matplotlib_pt,prob_existence) in matplotlib_centers.items():
+        for center,(matplotlib_pt,prob_existence,color) in matplotlib_centers.items():
             if correct_pts is not None:
                 if prob_existence >= prob_threshold:
                     # based on the threshold - we think this point exists
