@@ -177,6 +177,16 @@ class Marmot:
         ttk.Button(self.root, text="<--", command=self.__decrement__).grid(column=2, row=4)
         ttk.Button(self.root, text="-->", command=self.__increment__).grid(column=2, row=5)
         ttk.Button(self.root, text="Threshold Plot", command=self.__calculate__).grid(column=1, row=5)
+        ttk.Button(self.root, text="Re-aggregate", command=self.__reaggregate__).grid(column=1, row=6)
+
+    def __reaggregate__(self):
+        """
+        just rerun aggregation stuff for the current selection of subjects
+        :return:
+        """
+        # todo - just rid of the hard coded 45
+        assert (self.true_positives != {}) or (self.false_positives != {})
+        self.project.__aggregate__([-1],self.subjects[:45],(self.true_positives,self.false_positives))
 
     def create_gold(self,thumb_path):
         print "hello world"
@@ -186,6 +196,9 @@ class Marmot:
         # if we are looking at a image for the first time
         if subject_id not in self.percentage_thresholds:
             self.percentage_thresholds[subject_id] = 0.5
+
+        if subject_id not in self.false_positives:
+            self.false_positives[subject_id] = []
 
         # close any previously open graph
         plt.close()
@@ -198,6 +211,11 @@ class Marmot:
         # axcolor = 'lightgoldenrodyellow'
         axfreq = plt.axes([0.25, 0.1, 0.65, 0.03])
 
+        # todo - has got to be a better to initalize this
+        if subject_id not in self.true_positives:
+            prob_threshold,colours = self.probability_threshold[subject_id] = self.project.__update_threshold__(self.percentage_thresholds[subject_id],matplotlib_points)
+            self.true_positives[subject_id] = colours[0]
+
         self.weightings[subject_id] = len(matplotlib_points)
 
         threshold_silder = Slider(axfreq, 'Percentage', 0., 1., valinit=self.percentage_thresholds[subject_id])
@@ -208,12 +226,53 @@ class Marmot:
         def update(val):
             new_threshold = threshold_silder.val
             self.percentage_thresholds[subject_id] = new_threshold
-            self.probability_threshold[subject_id] = self.project.__update_threshold__(new_threshold,matplotlib_points)
+            prob_threshold,colours = self.probability_threshold[subject_id] = self.project.__update_threshold__(new_threshold,matplotlib_points)
+            # green pts are true positives
+            self.true_positives[subject_id] = colours[0]
 
             fig.canvas.draw_idle()
 
+        def onpick3(event):
+            color_list = ["green","yellow","red"]
+
+            x = event.xdata
+            y = event.ydata
+            pt = event.xdata,event.ydata
+            nearest_pt = None
+            closest_dist = float("inf")
+            for x2,y2 in matplotlib_points.keys():
+                dist = math.sqrt((x-x2)**2+(y-y2)**2)
+                if dist < closest_dist:
+                    closest_dist = dist
+                    nearest_pt = (x2,y2)
+
+            if closest_dist < 20:
+                pt,prob,color = matplotlib_points[nearest_pt]
+                new_color = color_list[(color_list.index(color)+1)%3]
+
+                matplotlib_points[nearest_pt] = pt,prob,new_color
+                pt.set_color(new_color)
+                fig.canvas.draw_idle()
+
+                print self.false_positives[subject_id]
+                # update the gold standard accordingly
+                if new_color == "green":
+                    print 1
+                    # gone from a false positive to a true positive
+                    self.false_positives[subject_id].remove(nearest_pt)
+                    self.true_positives[subject_id].append(nearest_pt)
+                elif new_color == "yellow":
+                    print 2
+                    # gone from true positive to don't know
+                    self.true_positives[subject_id].remove(nearest_pt)
+                else:
+                    print 3
+                    # gone from don't know to false positive
+                    self.false_positives[subject_id].append(nearest_pt)
+
 
         threshold_silder.on_changed(update)
+        fig.canvas.mpl_connect('button_press_event', onpick3)
 
         plt.show()
 
