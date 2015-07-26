@@ -66,6 +66,9 @@ class Penguins(aggregation_api.AggregationAPI):
                 t = [r.split(",") for r in l[1:] if r != ""]
                 self.roi_dict[path] = [(int(x)/1.92,int(y)/1.92) for (x,y) in t]
 
+        # which subjects were taken at which site
+        self.subject_to_site = {}
+
     def __get_retired_subjects__(self,workflow_id,with_expert_classifications=False):
         # project_id, workflow_id, subject_id,annotations,user_id,user_ip,workflow_version
         stmt = "select subject_id from penguins_users where project_id = " + str(self.project_id) + " and workflow_id = " + str(global_workflow_id) + " and workflow_version = " + str(global_version)
@@ -238,6 +241,47 @@ class Penguins(aggregation_api.AggregationAPI):
 
         return image_path
 
+    def __in_roi__(self,subject_id,marking):
+        """
+        does the actual checking
+        :param object_id:
+        :param marking:
+        :return:
+        """
+        site = self.subject_to_site[subject_id]
+        if site is None:
+            return True
+
+        roi = self.roi_dict[site]
+
+        x = marking["x"]
+        y = marking["y"]
+
+        if y > 750:
+            return False
+
+        # find the line segment that "surrounds" x and see if y is above that line segment (remember that
+        # images are flipped)
+        for segment_index in range(len(roi)-1):
+            if (roi[segment_index][0] <= x) and (roi[segment_index+1][0] >= x):
+                rX1,rY1 = roi[segment_index]
+                rX2,rY2 = roi[segment_index+1]
+
+                m = (rY2-rY1)/float(rX2-rX1)
+                rY = m*(x-rX1)+rY1
+
+                if y >= rY:
+                    # we have found a valid marking
+                    # create a special type of animal None that is used when the animal type is missing
+                    # thus, the marking will count towards not being noise but will not be used when determining the type
+
+                    return True
+                else:
+                    return False
+
+        # probably shouldn't happen too often but if it does, assume that we are outside of the ROI
+        return False
+
     def __migrate__(self):
         try:
             self.cassandra_session.execute("drop table " + self.classification_table)
@@ -327,9 +371,47 @@ class Penguins(aggregation_api.AggregationAPI):
         execute_concurrent(self.cassandra_session, statements_and_params2, raise_on_first_error=True)
 
     def __roi_check__(self,marking,subject_id):
-        print self.roi_dict
-        print marking
-        assert False
+        """
+        check if the marking is the in roi
+        :param marking:
+        :param subject_id:
+        :return:
+        """
+        if subject_id not in self.subject_to_site:
+            path = self.subject_collection.find_one({"zooniverse_id":subject_id})["metadata"]["path"]
+            print path
+            assert isinstance(path,unicode)
+            slash_index = path.index("/")
+            underscore_index = path.index("_")
+            site_name = path[slash_index+1:underscore_index]
+
+            # hard code some name changes in
+            if site_name == "BOOTa2012a":
+                site_name = "PCHAa2013"
+            elif site_name == "BOOTb2013a":
+                site_name = "PCHb2013"
+            elif site_name == "DANCa2012a":
+                site_namefit = "DANCa2013"
+            elif site_name == "MAIVb2012a":
+                site_name = "MAIVb2013"
+            elif site_name == "NEKOa2012a":
+                site_name = "NEKOa2013"
+            elif site_name == "PETEa2013a":
+                site_name = "PETEa2013a"
+            elif site_name == "PETEa2013b":
+                site_name = "PETEa2013a"
+            elif site_name == "PETEb2012b":
+                site_name = "PETEb2013"
+            elif site_name == "SIGNa2013a":
+                site_name = "SIGNa2013"
+
+            if not(site_name in self.roi_dict.keys()):
+                self.subject_to_site[subject_id] = None
+            else:
+                self.subject_to_site[subject_id] = site_name
+
+
+        return self.__in_roi__(subject_id,marking)
 
     def __store_results__(self,workflow_id,aggregations):
         if self.gold_standard:

@@ -1445,6 +1445,10 @@ class AggregationAPI:
                                     # print e
                                     continue
 
+                                # if not a valid marking, just skip it
+                                if not self.__roi_check__(marking,subject_id):
+                                    continue
+
                                 raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
 
                                 # is this a confusing shape?
