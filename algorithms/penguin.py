@@ -12,6 +12,7 @@ import urllib2
 import os
 import math
 import yaml
+import csv
 
 global_workflow_id = -1
 global_task_id = 1
@@ -55,6 +56,16 @@ class Penguins(aggregation_api.AggregationAPI):
 
         # self.postgres_cursor.execute("create table aggregations (workflow_id int, subject_id text, aggregation jsonb, created_at timestamp, updated_at timestamp)")
 
+        # roi stuff
+        self.roi_dict = {}
+        with open(aggregation_api.base_directory+"/github/Penguins/public/roi.tsv","rb") as roi_file:
+            roi_file.readline()
+            reader = csv.reader(roi_file,delimiter="\t")
+            for l in reader:
+                path = l[0]
+                t = [r.split(",") for r in l[1:] if r != ""]
+                self.roi_dict[path] = [(int(x)/1.92,int(y)/1.92) for (x,y) in t]
+
     def __get_retired_subjects__(self,workflow_id,with_expert_classifications=False):
         # project_id, workflow_id, subject_id,annotations,user_id,user_ip,workflow_version
         stmt = "select subject_id from penguins_users where project_id = " + str(self.project_id) + " and workflow_id = " + str(global_workflow_id) + " and workflow_version = " + str(global_version)
@@ -77,10 +88,10 @@ class Penguins(aggregation_api.AggregationAPI):
         # print expert_annotations
 
 
-    def __aggregate__(self,workflows=None,subject_set=None):
+    def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[])):
         # if not gold standard
         if not self.gold_standard:
-            aggregation_api.AggregationAPI.__aggregate__(self,workflows,subject_set)
+            aggregation_api.AggregationAPI.__aggregate__(self,workflows,subject_set,gold_standard_clusters)
 
 
     def __get_correct_points__(self,workflow_id,subject_id,task_id,shape):
@@ -314,6 +325,11 @@ class Penguins(aggregation_api.AggregationAPI):
         execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
 
         execute_concurrent(self.cassandra_session, statements_and_params2, raise_on_first_error=True)
+
+    def __roi_check__(self,marking,subject_id):
+        print self.roi_dict
+        print marking
+        assert False
 
     def __store_results__(self,workflow_id,aggregations):
         if self.gold_standard:

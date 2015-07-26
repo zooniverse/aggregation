@@ -204,7 +204,7 @@ class AggregationAPI:
         # load the default classification algorithm
         self.__set_classification_alg__(classification.VoteCount)
 
-    def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=None):
+    def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[])):
         """
         you can provide a list of clusters - hopefully examples of both true positives and false positives
         note this means you have already run the aggregation before and are just coming back with
@@ -1229,6 +1229,14 @@ class AggregationAPI:
 
         return classification_tasks,marking_tasks
 
+    def __roi_check__(self,marking,subject_id):
+        """
+        some projects may have a region of interest in which all markings are supposed to lie
+        since things never go as planned, some marking may be outside of the roi
+        in which case these markings should be rejected
+        """
+        return True
+
     # def __remove_user_ids__(self,aggregation):
     #     """
     #     ids are needed for aggregation but they shouldn't be stored with the results
@@ -1587,6 +1595,8 @@ class AggregationAPI:
         TP = []
         FP = []
         print (1-new_percentile_threshold)*100
+        if self.probabilities == []:
+            return None,([],[],[],[])
         prob_threshold = numpy.percentile(self.probabilities,(1-new_percentile_threshold)*100)
         print prob_threshold
 
