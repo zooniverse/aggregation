@@ -118,6 +118,7 @@ class Classification:
         return in json format so we can merge with other results
         :return:
         """
+        print gold_standard_clustering
         assert isinstance(clustering_results,dict)
         aggregations = {}
 

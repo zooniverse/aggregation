@@ -6,7 +6,7 @@ class IBCC(classification.Classification):
     def __init__(self,clustering_alg=None):
         classification.Classification.__init__(self,clustering_alg)
 
-    def __task_aggregation__(self,raw_classifications,gold_standard=False):
+    def __task_aggregation__(self,raw_classifications,gold_standard_results=None):
         # do we actually need to run ibcc - no if there wasn't any confusion
         # borderline degenerate case but we need to be prepared for it
         # highest_class is needed for helping the degenerate cases

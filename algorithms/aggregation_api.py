@@ -214,6 +214,7 @@ class AggregationAPI:
         :param gold_standard_clusters:
         :return:
         """
+        # todo - set things up so that you don't have to redo all of the aggregations just to rerun ibcc
         if workflows is None:
             workflows = self.workflows
 
@@ -260,7 +261,10 @@ class AggregationAPI:
                 subject_set = None
 
             # finally, store the results
-            self.__upsert_results__(workflow_id,aggregations)
+            # if gold_standard_clusters is not None, assume that we are playing around with values
+            # and we don't want to automatically save the results
+            if gold_standard_clusters is None:
+                self.__upsert_results__(workflow_id,aggregations)
 
     def __cassandra_connect__(self):
         """
@@ -282,7 +286,7 @@ class AggregationAPI:
         for i in xrange(0, len(l), n):
             yield l[i:i+n]
 
-    def __classify__(self,raw_classifications,clustering_aggregations,workflow_id,gold_standard_classifications):
+    def __classify__(self,raw_classifications,clustering_aggregations,workflow_id,gold_standard_classifications=None):
         # get the raw classifications for the given workflow
         # raw_classifications = self.__sort_classifications__(workflow_id,subject_set)
         if raw_classifications == {}:
@@ -1581,16 +1585,20 @@ class AggregationAPI:
         prob_threshold = numpy.percentile(self.probabilities,(1-new_percentile_threshold)*100)
         print prob_threshold
 
-        # # clusters we have corrected identified as true positivies
-        # green_pts = []
-        # # clusters we have incorrectly identified as true positives
-        # red_pts = []
-        # # clusters have incorrectly idenfitied as false positivies
-        # yellow_pts = []
-        # # etc.
-        # blue_pts = []
+        # clusters we have corrected identified as true positivies
+        green_pts = []
+        # clusters we have incorrectly identified as true positives
+        red_pts = []
+        # clusters have incorrectly idenfitied as false positivies
+        yellow_pts = []
+        # etc.
+        blue_pts = []
+
 
         for center,(matplotlib_pt,prob_existence,color) in matplotlib_centers.items():
+            x,y = matplotlib_pt.get_data()
+            x = x[0]
+            y = y[0]
             if correct_pts is not None:
                 if prob_existence >= prob_threshold:
                     # based on the threshold - we think this point exists
@@ -1611,12 +1619,16 @@ class AggregationAPI:
                         matplotlib_pt.set_color("blue")
                         # green_pts.append(prob_existence)
             else:
+                # in this case, with no expert data, we are assuming that all points accepted
+                # are correctly accepted and making no judgement about rejected points
                 if prob_existence >= prob_threshold:
                     matplotlib_pt.set_color("green")
+                    green_pts.append((x,y))
                 else:
                     matplotlib_pt.set_color("yellow")
+                    yellow_pts.append((x,y))
 
-        return prob_threshold
+        return prob_threshold,(green_pts,red_pts,yellow_pts,blue_pts)
 
 class SubjectGenerator:
     def __init__(self,project):
