@@ -40,7 +40,7 @@ class Agglomerative(clustering.Cluster):
         self.all_distances = []
         self.max = 0
 
-        self.correction_alg = multiClickCorrect.MultiClickCorrect(overlap_threshold=1,min_cluster_size=2,dist_threshold=50)
+        self.correction_alg = multiClickCorrect.MultiClickCorrect(overlap_threshold=1,min_cluster_size=2,dist_threshold=20)
 
     def __add_cluster(self,cluster_centers,end_clusters,end_users,node):
         # if len(node.pts) < 4:
@@ -170,7 +170,7 @@ class Agglomerative(clustering.Cluster):
 
         end = time.time()
         # print [len(r["users"]) for r in results]
-        # results = self.correction_alg.__fix__(results)
+        results = self.correction_alg.__fix__(results)
         return results,end-start
 
     def __check__(self):

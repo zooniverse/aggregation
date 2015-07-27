@@ -119,6 +119,8 @@ class Classification:
         return in json format so we can merge with other results
         :return:
         """
+        print gold_standard_clustering
+
 
         mapped_gold_standard = {}
         assert isinstance(clustering_results,dict)
@@ -148,13 +150,25 @@ class Classification:
                 if subject_id == "param":
                     continue
 
+                # gold standard pts may not match up perfectly with the given clusters -
+                # for example, we could have a gold penguin at 10,10 but the users' cluster
+                # is centered at 10.1,9.8 - same penguin though
+                # so as we go through the clusters, we need to see which ones match up more closely
+                # with the gold standard
+                if subject_id in gold_standard_clustering[0]:
+                    # closest cluster and distance
+                    gold_to_cluster = {pt:(None,float("inf")) for pt in gold_standard_clustering[0][subject_id]}
+                else:
+                    gold_to_cluster = None
+
+
                 # clusters_per_subject.append([])
 
-                # in either case probably an empty image
-                if subject_id not in clustering_results:
-                    continue
-                if task_id not in clustering_results[subject_id]:
-                    continue
+                # # in either case probably an empty image
+                # if subject_id not in clustering_results:
+                #     continue
+                # if task_id not in clustering_results[subject_id]:
+                #     continue
 
                 if (shape+ " clusters") not in clustering_results[subject_id][task_id]:
                     # if none of the relevant markings were made on this subject, skip it
@@ -167,22 +181,26 @@ class Classification:
                     # extract the users who marked this cluster
                     cluster = clustering_results[subject_id][task_id][shape+ " clusters"][local_cluster_index]
 
-                    # todo - I should be able to check membership simply by using "in"
-                    # todo - but there seems to be calculation error
-                    # todo - grrrr, find out why "in" isn't working
-                    # is this a positive gold standard?
+                    # is this user cluster close to any gold standard pt?
                     if subject_id in gold_standard_clustering[0]:
                         x,y = cluster["center"]
-                        min_dist = float("inf")
-                        closest= None
-                        for x2,y2 in gold_standard_clustering[0][subject_id]:
-                            dist = math.sqrt((x-x2)**2+(y-y2)**2)
-                            if dist < min_dist:
-                                min_dist = min(dist,min_dist)
-                                closest = (x2,y2)
-                        if min_dist == 0.:
-                            assert (x,y) == closest
-                            mapped_gold_standard[(subject_id,local_cluster_index)] = 1
+                        for (gold_x,gold_y) in gold_to_cluster:
+                            dist = math.sqrt((x-gold_x)**2+(y-gold_y)**2)
+                            if dist < gold_to_cluster[(gold_x,gold_y)][1]:
+                                gold_to_cluster[(gold_x,gold_y)] = local_cluster_index,dist
+
+
+                        # min_dist = float("inf")
+                        # closest= None
+                        # for x2,y2 in gold_standard_clustering[0][subject_id]:
+                        #     dist = math.sqrt((x-x2)**2+(y-y2)**2)
+                        #     if dist < min_dist:
+                        #         min_dist = min(dist,min_dist)
+                        #         closest = (x2,y2)
+                        # print min_dist
+                        # if min_dist == 0.:
+                        #     assert (x,y) == closest
+                        #     mapped_gold_standard[(subject_id,local_cluster_index)] = 1
 
                     # now repeat for negative gold standards
                     if subject_id in gold_standard_clustering[1]:
@@ -212,6 +230,15 @@ class Classification:
                     existence_classification[(subject_id,local_cluster_index)] = ballots
                     # clusters_per_subject[-1].append(global_cluster_index)
                     global_cluster_index += 1
+
+                # note we don't care about why a cluster corresponds to a gold standard pt - that is
+                # it could be really close to given gold standards - the point is that it is close
+                # to at least one of them
+                if gold_to_cluster is not None:
+                    for (local_cluster_index,dist) in gold_to_cluster.values():
+                        # arbitrary threshold but seems reasonable
+                        if dist < 1:
+                            mapped_gold_standard[(subject_id,local_cluster_index)] = 1
 
             print "existence aggregation"
             existence_results = self.__task_aggregation__(existence_classification,mapped_gold_standard)

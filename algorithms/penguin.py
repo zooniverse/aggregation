@@ -13,6 +13,7 @@ import os
 import math
 import yaml
 import csv
+import matplotlib.pyplot as plt
 
 global_workflow_id = -1
 global_task_id = 1
@@ -69,6 +70,35 @@ class Penguins(aggregation_api.AggregationAPI):
         # which subjects were taken at which site
         self.subject_to_site = {}
 
+    def __get_related_subjects__(self,workflow_id,subject_id):
+        stmt = "select user_id from " + str(self.classification_table) + " where project_id = " + str(self.project_id) + " and subject_id = '" + str(subject_id) + "' and workflow_id = " + str(global_workflow_id) + " and workflow_version = " + str(global_version)
+        users_records = self.cassandra_session.execute(stmt)
+        users = [u.user_id for u in users_records]
+
+        all_subjects = {}
+
+        for u in users:
+            if u in self.experts:
+                continue
+
+            stmt = "select subject_id from penguins_users where project_id = " + str(self.project_id) + " and workflow_id = " + str(global_workflow_id) + " and workflow_version = " + str(global_version) + " and user_id = '" + str(u) + "'"
+            subject_records = self.cassandra_session.execute(stmt)
+            for r in subject_records:
+                if r.subject_id == subject_id:
+                    continue
+
+                if r.subject_id not in all_subjects:
+                    all_subjects[r.subject_id] = 1
+                else:
+                    all_subjects[r.subject_id] += 1
+
+        related_subjects_and_counts =  sorted(all_subjects.items(), key = lambda x:x[1],reverse=True)
+        # add the starting subject_id to the start - in case of a tie in the count, there is no guarantee that first
+        # X subjects will contain the subject id
+        related_subjects = [subject_id]
+        related_subjects.extend(list(zip(*related_subjects_and_counts)[0]))
+        return related_subjects
+
     def __get_retired_subjects__(self,workflow_id,with_expert_classifications=False):
         # project_id, workflow_id, subject_id,annotations,user_id,user_ip,workflow_version
         stmt = "select subject_id from penguins_users where project_id = " + str(self.project_id) + " and workflow_id = " + str(global_workflow_id) + " and workflow_version = " + str(global_version)
@@ -91,10 +121,10 @@ class Penguins(aggregation_api.AggregationAPI):
         # print expert_annotations
 
 
-    def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[])):
-        # if not gold standard
-        if not self.gold_standard:
-            aggregation_api.AggregationAPI.__aggregate__(self,workflows,subject_set,gold_standard_clusters)
+    # def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[])):
+    #     # if not gold standard
+    #     if not self.gold_standard:
+    #         aggregation_api.AggregationAPI.__aggregate__(self,workflows,subject_set,gold_standard_clusters)
 
 
     def __get_correct_points__(self,workflow_id,subject_id,task_id,shape):
@@ -114,6 +144,9 @@ class Penguins(aggregation_api.AggregationAPI):
         r = self.cassandra_session.execute(stmt)
         expert_annotations = json.loads(r[0].annotations)
 
+        print "experts say"
+        print expert_annotations
+
         # get the markings made by the experts
         gold_pts = []
         for ann in expert_annotations[0]["value"]:
@@ -128,6 +161,9 @@ class Penguins(aggregation_api.AggregationAPI):
         if agg is None:
             return []
         aggregations = json.loads(agg[0])
+
+        print "users say"
+        print aggregations
 
         cluster_centers = []
         for cluster_index,cluster in aggregations[str(task_id)][shape + " clusters"].items():
@@ -260,11 +296,25 @@ class Penguins(aggregation_api.AggregationAPI):
 
         roi = self.roi_dict[site]
 
-        x = marking["x"]
-        y = marking["y"]
+        x = float(marking["x"])
+        y = float(marking["y"])
 
-        if y > 750:
-            return False
+
+        X = []
+        Y = []
+
+        for segment_index in range(len(roi)-1):
+            rX1,rY1 = roi[segment_index]
+            X.append(rX1)
+            Y.append(-rY1)
+        # if subject_id == "APZ0002do1":
+        #     plt.plot(x,-y,"o")
+        #     plt.plot(X,Y)
+        #
+        # if subject_id == "APZ0002do1":
+        #     plt.show()
+
+        # plt.show()
 
         # find the line segment that "surrounds" x and see if y is above that line segment (remember that
         # images are flipped)
@@ -385,7 +435,6 @@ class Penguins(aggregation_api.AggregationAPI):
         """
         if subject_id not in self.subject_to_site:
             path = self.subject_collection.find_one({"zooniverse_id":subject_id})["metadata"]["path"]
-            print path
             assert isinstance(path,unicode)
             slash_index = path.index("/")
             underscore_index = path.index("_")
@@ -397,7 +446,7 @@ class Penguins(aggregation_api.AggregationAPI):
             elif site_name == "BOOTb2013a":
                 site_name = "PCHb2013"
             elif site_name == "DANCa2012a":
-                site_namefit = "DANCa2013"
+                site_name = "DANCa2013"
             elif site_name == "MAIVb2012a":
                 site_name = "MAIVb2013"
             elif site_name == "NEKOa2012a":
@@ -456,10 +505,10 @@ class SubjectGenerator:
 
     def __iter__(self):
         subject_ids = []
-        for subject in self.project.__get_retired_subjects__(1,True):
+        for subject in self.project.__get_retired_subjects__(1,False):
             subject_ids.append(subject)
 
-            if len(subject_ids) == 50:
+            if len(subject_ids) == 5000:
                 yield subject_ids
                 subject_ids = []
 

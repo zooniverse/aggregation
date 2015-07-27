@@ -1,7 +1,7 @@
 import os, sys
 import Tkinter as tkinter
 from PIL import ImageTk, Image
-from penguin import Penguins
+from penguin import Penguins,global_workflow_id
 from matplotlib.widgets import Slider, Button, RadioButtons
 import ttk
 import matplotlib.pyplot as plt
@@ -82,7 +82,8 @@ class Marmot:
         ttk.Label(frame,text="Welcome to Marmot.").grid(column=1,row=1)
         def setup(r):
             if r == "a":
-                assert False
+                self.subjects = self.project.__get_retired_subjects__(1,True)
+                self.run_mode = "a"
             else:
                 # when we want to explore subjects which don't have gold standard
                 # basically creating some as we go
@@ -91,6 +92,7 @@ class Marmot:
                 self.subjects = self.project.__get_retired_subjects__(1,False)
                 self.run_mode = "b"
             random.shuffle(self.subjects)
+
             self.__thumbnail_display__()
             self.outputButtons()
 
@@ -148,19 +150,15 @@ class Marmot:
         # determine which of the subjects we are interested in have actually been processed
         # we may need to do some additional aggregation
         aggregated_subjects = self.project.__get_aggregated_subjects__(-1)
+        print aggregated_subjects
+
 
         not_aggregated = [s for s in self.subjects[:self.step_size] if s not in aggregated_subjects]
+
         # print not_aggregated
-        # if not_aggregated != []:
-        #     t = tkinter.Toplevel(self.root)
-        #     f = ttk.Frame(t)
-        #     f.grid()
-        #     ttk.Label(f,text="Aggregating some more subjects for you.").grid(column=1,row=1)
-        #     ttk.Label(f,text="Please wait until this message automatically disappears.").grid(column=1,row=2)
-        #     self.project.__aggregate__([-1],self.subjects[:self.step_size])
-        #     t.destroy()
-        #
-        #     # assert False
+        if not_aggregated != []:
+            self.project.__aggregate__([-1],self.subjects[:self.step_size])
+
 
     def __increment__(self):
         self.page_index += 1
@@ -172,7 +170,6 @@ class Marmot:
 
     def outputButtons(self):
         # for ii,thumbfile in enumerate(thumbfiles[:3]):
-        self.__thumbnail_display__()
 
         ttk.Button(self.root, text="<--", command=self.__decrement__).grid(column=2, row=4)
         ttk.Button(self.root, text="-->", command=self.__increment__).grid(column=2, row=5)
@@ -210,12 +207,9 @@ class Marmot:
         plt.subplots_adjust(bottom=0.2)
         # axcolor = 'lightgoldenrodyellow'
 
-
-        print dimensions
         # todo - 1.92 is a hack for penguin watch
         # this rescaling must happen before we add the slider axes - because why not
         if dimensions is not None:
-            print "setting"
             plt.axis((0,dimensions["width"]/1.92,dimensions["height"]/1.92,0))
             # plt.xlim((dimensions["height"],0))
             # plt.ylim((0,dimensions["width"]))
@@ -279,23 +273,60 @@ class Marmot:
                     # gone from don't know to false positive
                     self.false_positives[subject_id].append(nearest_pt)
 
-
         threshold_silder.on_changed(update)
         fig.canvas.mpl_connect('button_press_event', onpick3)
 
         plt.show()
 
+    def __compare_aggregations__(self,agg1,agg2):
+        X = []
+        Y = []
+        plt.close()
+        for subject_id in agg1:
+            if subject_id == "param":
+                continue
+            print agg1[subject_id]
 
+            assert subject_id in agg2
+            for task_id in agg1[subject_id]:
+                if task_id == "param":
+                    continue
 
+                print agg1[subject_id][task_id]
+
+                assert task_id in agg2[subject_id]
+                for shape in agg1[subject_id][task_id]:
+                    if shape == "param":
+                        continue
+
+                    print agg1[subject_id][task_id][shape]
+
+                    assert shape in agg2[subject_id][task_id]
+
+                    for cluster_index in agg1[subject_id][task_id][shape]:
+                        if (cluster_index == "param") or (cluster_index == "all_users"):
+                            continue
+
+                        assert cluster_index in agg2[subject_id][task_id][shape]
+                        print cluster_index
+
+                        X.append(agg1[subject_id][task_id][shape][cluster_index]["existence"][0][1])
+                        Y.append(agg2[subject_id][task_id][shape][cluster_index]["existence"][0][1])
+        plt.close()
+        plt.plot(X,Y,"o")
+        plt.show()
 
     def gold_update(self,thumb_path):
         slash_index = thumb_path.rindex("/")
         subject_id = thumb_path[slash_index+1:-4]
 
+
+
         # if we are looking at a image for the first time
         if subject_id not in self.true_positives:
-            self.true_positives[subject_id] = self.project.__get_correct_points__(1,subject_id,1,"point")
-
+            self.true_positives[subject_id] = self.project.__get_correct_points__(global_workflow_id,subject_id,1,"point")
+            print "slowly but surely"
+            print self.true_positives[subject_id]
 
         # close any previously open graph
         plt.close()
@@ -341,8 +372,29 @@ class Marmot:
                     # gone from don't know to false positive
                     self.false_positives[subject_id].append(nearest_pt)
 
+        def ibcc_check(event):
+            """
+            for when we want to see the affects of using gold standard data
+            :param event:
+            :return:
+            """
+            related_subjects = self.project.__get_related_subjects__(global_workflow_id,subject_id)[:10]
+
+            base_aggregations = self.project.__aggregate__([global_workflow_id],related_subjects,store_values=False)
+
+            # now try it with gold standard
+            print (self.true_positives[subject_id],self.false_positives[subject_id])
+
+            pos_gold_standard = {subject_id :self.true_positives[subject_id]}
+            neg_gold_standard = {subject_id :self.false_positives[subject_id]}
+
+
+            extra_aggregations = self.project.__aggregate__([global_workflow_id],related_subjects,gold_standard_clusters=(pos_gold_standard,neg_gold_standard),expert=self.project.experts[0],store_values=False)
+            self.__compare_aggregations__(base_aggregations,extra_aggregations)
+
+        print "here maybe>?"
         self.project.__plot_image__(subject_id,axes)
-        matplotlib_points = self.project.__plot_cluster_results__(1,subject_id,1,"point",axes,correct_pts=self.true_positives[subject_id]) #self.percentage_thresholds[subject_id],
+        matplotlib_points = self.project.__plot_cluster_results__(-1,subject_id,1,"point",axes,correct_pts=self.true_positives[subject_id]) #self.percentage_thresholds[subject_id],
 
         # we can only set the false positives once we have seen all the points
         if subject_id not in self.false_positives:
@@ -351,6 +403,14 @@ class Marmot:
         plt.subplots_adjust(left=0.25, bottom=0.25)
         fig.canvas.mpl_connect('button_press_event', onpick3)
         # axcolor = 'lightgoldenrodyellow'
+
+        dimensions = self.project.__plot_image__(subject_id,axes)
+        if dimensions is not None:
+            plt.axis((0,dimensions["width"]/1.92,dimensions["height"]/1.92,0))
+
+        axfreq = plt.axes([0.25, 0.1, 0.65, 0.03])
+        bprev = Button(axfreq, 'IBCC check')
+        bprev.on_clicked(ibcc_check)
 
         plt.show()
 

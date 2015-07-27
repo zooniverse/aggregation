@@ -1091,7 +1091,6 @@ class Cluster:
 
                 if not(center in self.correct_pts[subject_id]):
                     if prob > 0.8:
-                        print prob
                         try:
                             gold_pts = zip(*self.project_api.__get_markings__(subject_id,expert_markings=True)[1][0])[0]
                             x,y = zip(*gold_pts)

@@ -29,6 +29,7 @@ import clustering
 import blob_clustering
 from collections import OrderedDict
 import numpy
+import traceback
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -79,8 +80,15 @@ def line_mapping(marking,image_dimensions):
 def point_mapping(marking,image_dimensions):
     # todo - this has to be changed
     image_dimensions = 1000,1000
-    x = float(marking["x"])
-    y = float(marking["y"])
+    if (marking["x"] == "") or (marking["y"] == ""):
+        raise InvalidMarking(marking)
+
+    try:
+        x = float(marking["x"])
+        y = float(marking["y"])
+    except ValueError:
+        print marking
+        raise
 
     if (x<0)or(y<0)or(x > image_dimensions[0]) or(y>image_dimensions[1]):
         raise InvalidMarking(marking)
@@ -207,16 +215,19 @@ class AggregationAPI:
         # load the default classification algorithm
         self.__set_classification_alg__(classification.VoteCount)
 
-    def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[])):
+    def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[]),expert=None,store_values=True):
         """
         you can provide a list of clusters - hopefully examples of both true positives and false positives
         note this means you have already run the aggregation before and are just coming back with
         more info
+        for now, only one expert - easily generalizable but just want to avoid the situation where
+        multiple experts have marked the same subject - need to be a bit careful there
         :param workflows:
         :param subject_set:
         :param gold_standard_clusters:
         :return:
         """
+
         # todo - set things up so that you don't have to redo all of the aggregations just to rerun ibcc
         if workflows is None:
             workflows = self.workflows
@@ -239,7 +250,9 @@ class AggregationAPI:
             # ideally if there are no marking tasks, then we shouldn't have provided a clustering algorithm
             # but nice sanity check
 
-            raw_classifications,raw_markings = self.__sort_annotations__(workflow_id,subject_set)
+            raw_classifications,raw_markings = self.__sort_annotations__(workflow_id,subject_set,expert)
+            # print raw_markings[1]["point"]["APZ0002do1"]
+            # assert False
             # print raw_markings["T1"].keys()
 
             if  marking_tasks != {}:
@@ -266,8 +279,13 @@ class AggregationAPI:
             # finally, store the results
             # if gold_standard_clusters is not None, assume that we are playing around with values
             # and we don't want to automatically save the results
-            if gold_standard_clusters is None:
+
+            # print aggregations["APZ0002do1"]
+            # print clustering_aggregations["APZ0002do1"]
+            if store_values:
                 self.__upsert_results__(workflow_id,aggregations)
+            else:
+                return aggregations
 
     def __cassandra_connect__(self):
         """
@@ -934,9 +952,13 @@ class AggregationAPI:
         :param threshold:
         :return:
         """
+        print subject_id
+        print correct_pts
         postgres_cursor = self.postgres_session.cursor()
         # todo - generalize for panoptes
         stmt = "select aggregation from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = '" + str(subject_id) + "'"
+        # stmt = "select aggregation from aggregations where subject_id = '" + str(subject_id) + "'"
+
         postgres_cursor.execute(stmt)
 
         # dict for storing results used to update matplotlib graphs
@@ -947,6 +969,7 @@ class AggregationAPI:
         # todo - this should be a dict but doesn't seem to be - hmmmm :/
         agg = postgres_cursor.fetchone()
         if agg is None:
+            print "returning none"
             return {}
         aggregations = json.loads(agg[0])
 
@@ -964,8 +987,9 @@ class AggregationAPI:
                 continue
             self.probabilities.append(cluster['existence'][0][1])
 
-        if self.probabilities == []:
-            return {}
+        # if self.probabilities == []:
+        #     print "here here two"
+        #     return {}
 
         if percentile_threshold is not None:
             prob_threshold = numpy.percentile(self.probabilities,(1-percentile_threshold)*100)
@@ -982,11 +1006,11 @@ class AggregationAPI:
             if shape == "point":
                 # with whatever alg we used, what do we think the probability is that
                 # this cluster actually exists?
-
                 # if we have gold standard to compare to - use that to determine the colour
                 if correct_pts is not None:
                     # if is equal to None - just compared directly against gold standard with out threshold
                     if prob_threshold is not None:
+                        # we have both a threshold and gold standard - gives us four options
                         if prob_existence >= prob_threshold:
                             # based on the threshold - we think this point exists
                             if center in correct_pts:
@@ -994,7 +1018,6 @@ class AggregationAPI:
                                 color = "green"
                             else:
                                 # boo - we were wrong
-                                print "%%%%"
                                 color = "red"
                         else:
                             # we think this point is a false positive
@@ -1005,14 +1028,11 @@ class AggregationAPI:
                                 # woot
                                 color = "blue"
                     else:
-                        # this would probably be for when we just want to see the gold standard results
-                        # but not sure where yet this would fit in
-                        assert False
+                        # we have just the gold standard - so we are purely reviewing the expert results
                         if center in correct_pts:
                             color = "green"
                         else:
                             color = "red"
-
                     matplotlib_cluster[center] = axes.plot(center[0],center[1],marker=marker,color=color)[0],prob_existence,color
                 else:
                     # we have nothing to compare against - so we are not showing correctness so much
@@ -1365,8 +1385,14 @@ class AggregationAPI:
         # read in the most current version of each of the workflows
         return workflows
 
-    def __sort_annotations__(self,workflow_id,subject_set=None,filter_experts=0):
-        assert filter_experts in [-1,0,1]
+    def __sort_annotations__(self,workflow_id,subject_set=None,expert=None):
+        """
+        experts is when you have experts for whom you don't want to read in there classifications
+        :param workflow_id:
+        :param subject_set:
+        :param experts:
+        :return:
+        """
 
         version = int(math.floor(float(self.versions[workflow_id])))
 
@@ -1404,7 +1430,7 @@ class AggregationAPI:
 
             for subject_id,(success,record_list) in zip(s,results):
 
-
+                # print subject_id
 
                 if not success:
                     print record_list
@@ -1415,7 +1441,12 @@ class AggregationAPI:
 
                     total += 1
                     user_id = record.user_id
-                    if user_id == -1:
+
+                    if user_id == expert:
+                        continue
+
+                    # todo - maybe having user_id=="" would be useful for penguins
+                    if (user_id == -1):
                         non_logged_in_users += -1
                         user_id = non_logged_in_users
 
@@ -1453,18 +1484,20 @@ class AggregationAPI:
                                     print "unrecognized shape: " + shape
                                     assert False
 
-                                spotted_shapes.add(shape)
-
                                 try:
                                     # extract the params specifically relevant to the given shape
                                     relevant_params = self.marking_params_per_shape[shape](marking,(width,height))
                                 except InvalidMarking as e:
                                     # print e
                                     continue
-
+                                # if subject_id == "APZ0002do1":
+                                #     print  self.__roi_check__(marking,subject_id)
                                 # if not a valid marking, just skip it
                                 if not self.__roi_check__(marking,subject_id):
                                     continue
+
+
+                                spotted_shapes.add(shape)
 
                                 raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
 
@@ -1498,6 +1531,7 @@ class AggregationAPI:
 
                             # note which shapes the user saw nothing of
                             # otherwise, it will be as if the user didn't see the subject in the first place
+
                             for shape in set(marking_tasks[task_id]):
                                 if shape not in spotted_shapes:
                                     raw_markings[task_id][shape][subject_id].append((user_id,None,None))
@@ -1513,6 +1547,9 @@ class AggregationAPI:
                             raw_classifications[task_id][subject_id].append((user_id,task["value"]))
 
         assert raw_markings != {}
+        # print
+        # print raw_markings[1]["point"]["APZ0002do1"]
+        # assert False
         return raw_classifications,raw_markings
 
     def __threshold_scaling__(self,workflow_id,):
