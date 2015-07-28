@@ -189,19 +189,6 @@ class Classification:
                             if dist < gold_to_cluster[(gold_x,gold_y)][1]:
                                 gold_to_cluster[(gold_x,gold_y)] = local_cluster_index,dist
 
-
-                        # min_dist = float("inf")
-                        # closest= None
-                        # for x2,y2 in gold_standard_clustering[0][subject_id]:
-                        #     dist = math.sqrt((x-x2)**2+(y-y2)**2)
-                        #     if dist < min_dist:
-                        #         min_dist = min(dist,min_dist)
-                        #         closest = (x2,y2)
-                        # print min_dist
-                        # if min_dist == 0.:
-                        #     assert (x,y) == closest
-                        #     mapped_gold_standard[(subject_id,local_cluster_index)] = 1
-
                     # now repeat for negative gold standards
                     if subject_id in gold_standard_clustering[1]:
                         x,y = cluster["center"]
@@ -240,7 +227,6 @@ class Classification:
                         if dist < 1:
                             mapped_gold_standard[(subject_id,local_cluster_index)] = 1
 
-            print "existence aggregation"
             existence_results = self.__task_aggregation__(existence_classification,mapped_gold_standard)
             assert isinstance(existence_results,dict)
 

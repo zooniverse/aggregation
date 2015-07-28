@@ -93,19 +93,21 @@ class MultiClickCorrect:
             # start by dealing with the users (and their corresponding points) which only occur in one cluster
             # for now - those users who appear in both cluster - I'm going to just take there first point
             # todo - check to make sure that this reasonable
-            from_cluster1 = [(u,p) for u,p in zip(cluster1["users"],cluster1["points"])]
-            from_cluster2 = [(u,p) for u,p in zip(cluster2["users"],cluster2["points"]) if u not in cluster1["users"]]
+            from_cluster1 = [(u,p,t) for u,p,t in zip(cluster1["users"],cluster1["cluster members"],cluster1["tools"])]
+            from_cluster2 = [(u,p,t) for u,p,t in zip(cluster2["users"],cluster2["cluster members"],cluster2["tools"]) if u not in cluster1["users"]]
 
             # now combine those points
-            users,points = zip(*from_cluster1)
-            users2,points2 = zip(*from_cluster2)
+            users,points,tools = zip(*from_cluster1)
+            users2,points2,tools2 = zip(*from_cluster2)
             users = list(users)
             points = list(points)
+            tools = list(tools)
             users.extend(users2)
             points.extend(points2)
+            tools.extend(tools2)
 
             # take the median along each dimension
             center = [np.median(dim) for dim in zip(*points)]
-            cluster_results.append({"center":center,"points":points,"users":users})
+            cluster_results.append({"center":center,"cluster members":points,"users":users,"tools":tools})
 
         return cluster_results

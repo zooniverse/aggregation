@@ -1105,9 +1105,6 @@ class AggregationAPI:
             pass
         # host = database_details["host"]
 
-        # try connecting to the db
-        # details = "dbname='"+database+"' user='"+ username+ "' host='"+ host + "' password='"+password+"'"
-        print details
         for i in range(20):
             try:
                 self.postgres_session = psycopg2.connect(details)

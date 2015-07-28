@@ -11,6 +11,17 @@ class IBCC(classification.Classification):
         # borderline degenerate case but we need to be prepared for it
         # highest_class is needed for helping the degenerate cases
         run_ibcc,highest_class =self.__ibcc_setup__(raw_classifications,gold_standard)
+        print gold_standard
+        var = raw_input("Please enter something: ")
+        # with open("/tmp/config.py",'rb') as f_input,open("/tmp/ibcc_gold.csv",'rb') as f_gold:
+        #     for l in f_input.readlines():
+        #         print l[:-1]
+        #     print
+        #     print
+        #
+        #     for l in f_gold.readlines():
+        #         print l[:-1]
+        #     var = raw_input("Please enter something: ")
 
         # run ibcc
         if run_ibcc:
@@ -204,11 +215,12 @@ class IBCC(classification.Classification):
             f.write("nClasses = "+str(num_classes)+"\n")
             f.write("inputFile = \"/tmp/ibcc_input.csv\"\n")
             f.write("outputFile = \"/tmp/ibcc_output.csv\"\n")
-            f.write("confMatFile = \"/tmp/ibcc.mat\"\n")
             if have_gold_standard:
                 f.write("goldFile = \"/tmp/ibcc_gold.csv\"\n")
-            f.write("nu0 = np.array("+str(priors)+")\n")
-            f.write("alpha0 = np.array("+str(confusion_matrix)+")\n")
+            else:
+                f.write("confMatFile = \"/tmp/ibcc.mat\"\n")
+                f.write("nu0 = np.array("+str(priors)+")\n")
+                f.write("alpha0 = np.array("+str(confusion_matrix)+")\n")
 
     # def __classify__(self,subject_ids,gold_standard=False):
     #     self.results = {}

@@ -170,7 +170,7 @@ class Agglomerative(clustering.Cluster):
 
         end = time.time()
         # print [len(r["users"]) for r in results]
-        results = self.correction_alg.__fix__(results)
+        # results = self.correction_alg.__fix__(results)
         return results,end-start
 
     def __check__(self):

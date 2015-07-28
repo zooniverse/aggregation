@@ -7,13 +7,14 @@ import panoptes_ibcc
 import cassandra
 import json
 from cassandra.concurrent import execute_concurrent
-import psycopg2
+
 import urllib2
 import os
 import math
 import yaml
 import csv
 import matplotlib.pyplot as plt
+import classification
 
 global_workflow_id = -1
 global_task_id = 1
@@ -42,7 +43,7 @@ class Penguins(aggregation_api.AggregationAPI):
         self.versions = {global_workflow_id:global_version}
 
         self.cluster_algs = {"point":agglomerative.Agglomerative("point")}
-        self.classification_alg = panoptes_ibcc.IBCC()
+        self.classification_alg = classification.VoteCount()#panoptes_ibcc.IBCC()
 
         self.__cassandra_connect__()
 
@@ -323,6 +324,10 @@ class Penguins(aggregation_api.AggregationAPI):
                 rX1,rY1 = roi[segment_index]
                 rX2,rY2 = roi[segment_index+1]
 
+                # todo - check why such cases are happening
+                if rX1 == rX2:
+                    continue
+
                 m = (rY2-rY1)/float(rX2-rX1)
                 rY = m*(x-rX1)+rY1
 
@@ -522,11 +527,10 @@ if __name__ == "__main__":
 
     # print project.__get_retired_subjects__(1,True)
 
-    for s in SubjectGenerator(project):
-        print "subjects below"
-        project.__aggregate__(workflows=[global_workflow_id],subject_set=s)
 
-        break
+    project.__aggregate__(workflows=[global_workflow_id],subject_set=project.__get_retired_subjects__(1,False)[100000:200000])
+
+
 
         # if t == 15:
         #     break
