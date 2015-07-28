@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-
+# from setuptools import setup, find_packages
 import os
 import yaml
 import urllib2
@@ -13,23 +13,21 @@ from cassandra.concurrent import execute_concurrent
 import urllib
 import datetime
 import classification
-# import clustering_dict
 import matplotlib.pyplot as plt
 import matplotlib.cbook as cbook
 import math
-from matplotlib.patches import Ellipse
-# from clustering import  cnames
-# import numpy
-# import datetime
 import sys
-from PIL import Image
 import agglomerative
-import cluster_count
 import clustering
 import blob_clustering
 from collections import OrderedDict
 import numpy
-import traceback
+
+# setup(
+#     name = "Zooniverse Aggregation",
+#     version = "0.1",
+#     packages = find_packages(),
+# )
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -120,7 +118,7 @@ def ellipse_mapping(marking,image_dimensions):
 
 
 class AggregationAPI:
-    def __init__(self,project=None,environment=None):#,user_threshold= None, score_threshold= None): #Supernovae
+    def __init__(self,project=None,environment=None,project_id=None):#,user_threshold= None, score_threshold= None): #Supernovae
         self.cluster_algs = None
         self.classification_alg = None
         self.workflows = None
@@ -143,6 +141,7 @@ class AggregationAPI:
             self.environment = "production"
         else:
             self.environment = environment
+
         self.host_api = None
         self.subject_id_type = "int"
 
@@ -158,6 +157,7 @@ class AggregationAPI:
         except IOError:
             database_file = open(base_directory+"/Databases/database.yml")
 
+
         database_details = yaml.load(database_file)
         self.postgres_session = None
         self.__postgres_connect__(database_details[self.environment])
@@ -166,7 +166,7 @@ class AggregationAPI:
         # one - so all of the code after the return will handle things like connecting to the Panoptes API
         # (which the ouroboros project won't have to do) and the Postgres/Cassandra connections
         # (which the ouroboros project will have to do specially because of some differences)
-        if project is None:
+        if (project is None) and (project_id is None):
             return
 
 
@@ -194,11 +194,14 @@ class AggregationAPI:
         # set the http_api and basic project details
         self.__panoptes_connect__(api_details[project])
 
-        # # details about the project we are going to work with
-        try:
-            self.project_id = api_details[project]["project_id"]
-        except KeyError:
-            self.project_id = self.__get_project_id()
+        if project_id is None:
+            # # details about the project we are going to work with
+            try:
+                self.project_id = api_details[project]["project_id"]
+            except KeyError:
+                self.project_id = self.__get_project_id()
+        else:
+            self.project_id = project_id
 
 
 
@@ -249,7 +252,7 @@ class AggregationAPI:
             # if we have provided a clustering algorithm and there are marking tasks
             # ideally if there are no marking tasks, then we shouldn't have provided a clustering algorithm
             # but nice sanity check
-
+            print sorted(subject_set)
             raw_classifications,raw_markings = self.__sort_annotations__(workflow_id,subject_set,expert)
             # print raw_markings[1]["point"]["APZ0002do1"]
             # assert False
@@ -474,8 +477,9 @@ class AggregationAPI:
             INNER JOIN "workflows" ON "workflows"."id" = "subject_sets_workflows"."workflow_id"
             WHERE "workflows"."id" = """+str(workflow_id)+ """ AND (""" + str(workflow_id) + """ = ANY("set_member_subjects"."retired_workflow_ids"))"""
 
-        self.postgres_cursor.execute(stmt)
-        for subject in self.postgres_cursor.fetchall():
+        cursor = self.postgres_session.cursor()
+        cursor.execute(stmt)
+        for subject in cursor.fetchall():
             retired_subjects.append(subject[0])
         print "hopefully not here"
         return retired_subjects
@@ -971,7 +975,13 @@ class AggregationAPI:
         if agg is None:
             print "returning none"
             return {}
-        aggregations = json.loads(agg[0])
+
+        if isinstance(agg[0],str):
+            aggregations = json.loads(agg[0])
+        else:
+            aggregations = agg[0]
+
+        assert isinstance(aggregations,dict)
 
 
 
@@ -985,13 +995,18 @@ class AggregationAPI:
         for cluster_index,cluster in aggregations[str(task_id)][shape + " clusters"].items():
             if cluster_index == "param":
                 continue
-            self.probabilities.append(cluster['existence'][0][1])
+            print cluster['existence']
+            if isinstance(cluster['existence'][0],dict):
+                self.probabilities.append(cluster['existence'][0]['1'])
+            else:
+                self.probabilities.append(cluster['existence'][0][1])
 
-        # if self.probabilities == []:
-        #     print "here here two"
-        #     return {}
+        if self.probabilities == []:
+            print "here here two"
+            return {}
 
         if percentile_threshold is not None:
+            print self.probabilities
             prob_threshold = numpy.percentile(self.probabilities,(1-percentile_threshold)*100)
             marker = '.'
         else:
@@ -1002,7 +1017,10 @@ class AggregationAPI:
             if cluster_index == "param":
                 continue
             center = tuple(cluster["center"])
-            prob_existence = cluster['existence'][0][1]
+            if isinstance(cluster['existence'][0],dict):
+                prob_existence = cluster['existence'][0]['1']
+            else:
+                prob_existence = cluster['existence'][0][1]
             if shape == "point":
                 # with whatever alg we used, what do we think the probability is that
                 # this cluster actually exists?
@@ -1095,7 +1113,7 @@ class AggregationAPI:
         # if no password is provided - hopefully connecting to the local cluster
         try:
             # password = database_details["password"]
-            details += " dname = '"+database_details["password"]+"' "
+            details += " password = '"+database_details["password"]+"' "
         except KeyError:
             pass
 
@@ -1111,6 +1129,7 @@ class AggregationAPI:
                 # self.postgres_cursor = self.postgres_session.cursor()
                 break
             except psycopg2.OperationalError as e:
+                print e
                 pass
 
         if self.postgres_session is None:
@@ -1181,8 +1200,9 @@ class AggregationAPI:
         """
         # get the tasks associated with the given workflow
         select = "SELECT tasks from workflows where id = " + str(workflow_id)
-        self.postgres_cursor.execute(select)
-        tasks = self.postgres_cursor.fetchone()[0]
+        cursor = self.postgres_session.cursor()
+        cursor.execute(select)
+        tasks = cursor.fetchone()[0]
 
         # which of these tasks have classifications associated with them?
         classification_tasks = {}
@@ -1406,14 +1426,6 @@ class AggregationAPI:
 
         total = 0
 
-        # create here so even if we have empty images, we will know that we aggregated them
-        for task_id in marking_tasks.keys():
-            raw_markings[task_id] = {}
-            for shape in set(marking_tasks[task_id]):
-                raw_markings[task_id][shape] = {}
-                for subject_id in subject_set:
-                    raw_markings[task_id][shape][subject_id] = []
-
         # do this in bite sized pieces to avoid overwhelming DB
         for s in self.__chunks(subject_set,15):
             statements_and_params = []
@@ -1426,15 +1438,28 @@ class AggregationAPI:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
 
             for subject_id,(success,record_list) in zip(s,results):
-
-                # print subject_id
-
                 if not success:
                     print record_list
-                    assert success
+                assert success
+
+                # seem to have the occasional "retired" subject with no classifications, not sure
+                # why this is possible but if it can happen, just make a note of the subject id and skip
+                if record_list == []:
+                    print "warning :: subject " + str(subject_id) + " has no classifications"
+                    continue
+
+                # create here so even if we have empty images, we will know that we aggregated them
+                for task_id in marking_tasks.keys():
+                    raw_markings[task_id] = {}
+                    for shape in set(marking_tasks[task_id]):
+                        raw_markings[task_id][shape] = {}
+                        raw_markings[task_id][shape][subject_id] = []
+
 
                 non_logged_in_users = 0
                 for record in record_list:
+                    if (subject_id == 464588) or (subject_id == "464588"):
+                        print record
 
                     total += 1
                     user_id = record.user_id
@@ -1493,7 +1518,6 @@ class AggregationAPI:
                                 if not self.__roi_check__(marking,subject_id):
                                     continue
 
-
                                 spotted_shapes.add(shape)
 
                                 raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
@@ -1543,7 +1567,6 @@ class AggregationAPI:
                             #     print task_id,task["value"]
                             raw_classifications[task_id][subject_id].append((user_id,task["value"]))
 
-        assert raw_markings != {}
         # print
         # print raw_markings[1]["point"]["APZ0002do1"]
         # assert False
@@ -1581,7 +1604,7 @@ class AggregationAPI:
         postgres_cursor = self.postgres_session.cursor()
 
         try:
-            postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation json)")
+            postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation jsonb)")
         except psycopg2.ProgrammingError as e:
             # todo - the table should always be deleted after its use, so this should rarely happen
             # todo - need to reset the connection
@@ -1734,9 +1757,9 @@ if __name__ == "__main__":
     project_name = sys.argv[1]
     project = AggregationAPI(project_name)
 
-    project.__migrate__()
+    # project.__migrate__()
 
     # project.__info__()
     project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
-    project.__results_to_file__()#workflow_ids =[84],subject_id=494900)
+    # project.__results_to_file__()#workflow_ids =[84],subject_id=494900)
     # project.__get_workflow_details__(84)
