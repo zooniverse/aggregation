@@ -203,9 +203,6 @@ class AggregationAPI:
         else:
             self.project_id = project_id
 
-
-
-
         # there may be more than one workflow associated with a project - read them all in
         # and set up the associated tasks
         self.workflows = self.__setup_workflows__()

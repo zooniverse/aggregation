@@ -439,7 +439,7 @@ class Cluster:
     def __get_cluster__(self,subject_id):
         return self.clusterResults[subject_id]
 
-    def __aggregate__(self,raw_markings,fnames=None):
+    def __aggregate__(self,raw_markings):
         """
         the function to call from outside to do the clustering
         override but call if you want to add additional functionality
@@ -462,6 +462,9 @@ class Cluster:
                     continue
 
                 for subject_id in raw_markings[task_id][shape]:
+                    if raw_markings[task_id][shape][subject_id] == []:
+                        print subject_id
+                        assert False
                     # remove any "markings" which correspond to the user not making a marking
                     # these are still useful for noting that the user saw that image
                     pruned_markings = [(u,m,t) for u,m,t in raw_markings[task_id][shape][subject_id] if m is not None]
