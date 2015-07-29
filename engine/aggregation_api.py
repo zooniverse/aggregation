@@ -197,10 +197,13 @@ class AggregationAPI:
         if project_id is None:
             # # details about the project we are going to work with
             try:
+                print "a"
                 self.project_id = api_details[project]["project_id"]
             except KeyError:
+                print "b"
                 self.project_id = self.__get_project_id()
         else:
+            print "c"
             self.project_id = project_id
 
         # there may be more than one workflow associated with a project - read them all in
@@ -249,12 +252,10 @@ class AggregationAPI:
             # if we have provided a clustering algorithm and there are marking tasks
             # ideally if there are no marking tasks, then we shouldn't have provided a clustering algorithm
             # but nice sanity check
-            print sorted(subject_set)
+            # print sorted(subject_set)
             raw_classifications,raw_markings = self.__sort_annotations__(workflow_id,subject_set,expert)
-            # print raw_markings[1]["point"]["APZ0002do1"]
-            # assert False
-            # print raw_markings["T1"].keys()
 
+            # do we have any marking tasks?
             if  marking_tasks != {}:
                 print "clustering"
                 clustering_aggregations = self.__cluster__(raw_markings)
@@ -294,7 +295,7 @@ class AggregationAPI:
         """
         for i in range(10):
             try:
-                self.cluster = Cluster()#['panoptes-cassandra.zooniverse.org'],protocol_version = 3)
+                self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'],protocol_version = 3)
                 self.cassandra_session = self.cluster.connect('zooniverse')
                 return
             except cassandra.cluster.NoHostAvailable:
@@ -578,10 +579,12 @@ class AggregationAPI:
         versions = {}
 
         for workflows in data["workflows"]:
+            print workflows["version"]
+
             # if int(workflows["id"]) == workflow_id:
             versions[int(workflows["id"])] = int(math.floor(float(workflows["version"])))
             # versions[int(w["id"])] = w["version"] #int(math.floor(float(w["version"])))
-
+        print "+==="
         return versions
 
     def __image_setup__(self,subject_id,download=True):
@@ -700,9 +703,10 @@ class AggregationAPI:
         return agg1
 
     def __migrate__(self):
-        # tt = set([465026, 465003, 493062, 492809, 465034, 465172, 493205, 465048, 465177, 493211, 464965, 492960, 465057, 465058, 492707, 492836, 465121, 492975, 464951, 464952, 464953, 464954, 464955, 464956, 464957, 464958, 464959, 464960, 464961, 492611, 492741, 492615, 465100, 492623, 492728, 492626, 492886, 464975, 464988, 492897, 464998, 492776, 492907, 492914, 465019, 492669])
-        # print self.versions
-        # assert False
+        """
+        move data from postgres to cassandra
+        :return:
+        """
         # try:
         #     self.cassandra_session.execute("drop table classifications")
         #     self.cassandra_session.execute("drop table subjects")
@@ -710,15 +714,16 @@ class AggregationAPI:
         # except cassandra.InvalidRequest:
         #     print "table did not already exist"
         #
-        # self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
-        # self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
-        # except
-        #     print "table did not exist"
-        #     pass
+        try:
+            self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
+        except cassandra.AlreadyExists:
+            pass
 
-        # try:
-        #             # except cassandra.AlreadyExists:
-        #     pass
+        try:
+            self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
+        except cassandra.AlreadyExists:
+            pass
+
 
         subject_listing = set()
 
@@ -1751,12 +1756,16 @@ def twod_linesegment(pt):
     return dist,theta
 
 if __name__ == "__main__":
-    project_name = sys.argv[1]
-    project = AggregationAPI(project_name)
+    project_identifier = sys.argv[1]
+    try:
+        project_id = int(project_identifier)
+        project = AggregationAPI(project_id=project_id)
+    except ValueError:
+        project = AggregationAPI(project=project_identifier)
 
-    # project.__migrate__()
+    project.__migrate__()
 
     # project.__info__()
-    project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+    # project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
     # project.__results_to_file__()#workflow_ids =[84],subject_id=494900)
     # project.__get_workflow_details__(84)
