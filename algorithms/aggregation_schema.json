@@ -6,11 +6,6 @@
       " instructions": {
         "description": "a json object description each step of the workflow. Used to be able to map task ids to something meaningful",
         "type": "object"
-      },
-      "param": {
-        "description": "just to let us know that all of the params at this level (other than reserved keywords) are task ids",
-        "type": "string",
-        "pattern": "task_id"
       }
     },
     "patternProperties": {
@@ -36,10 +31,83 @@
             ]
           },
           {"type": "object",
-            "description": "clustering results"
+            "description": "clustering results",
+            "patternProperties": {
+              "(line clusters)" : {
+                "type" : "object",
+                "description" : "a listing of the clusters for each different shape type",
+                "patternProperties": {
+                  "[0-9]+" : {
+                    "type" : "object",
+                    "description" : "summary values for an individual cluster",
+                    "properties": {
+                      "existence" : {
+                        "type" : "array",
+                        "description" : "probability that the cluster is true/false positive - if either value is missing, it is equal to 0",
+                        "items": [
+                          {
+                            "type" : "object",
+                            "properties" : {
+                              "0" : {
+                                "type" : "number",
+                                "description" : "'probability' that the cluster is a false positive"
+                              },
+                              "1" : {
+                                "type" : "number",
+                                "description" : "'probability' that the cluster is a true positive"
+                              }
+                            }
+                          },
+                          {
+                            "type" : "number",
+                            "description" : "number of users who have viewed this subject for this workflow/task, regardless of whether they marked this cluster"
+                          }
+                        ]
+                      },
+                      "center" : {
+                        "type" : "array",
+                        "description" : "center of the cluster",
+                        "items" : {
+                          "description" : "cluster center - median based - along each dimension",
+                          "type" : "number"
+                        }
+                      },
+                      "tool_classification" : {
+                        "type" : "array",
+                        "description" : "which tool the cluster corresponds to, e.g. a point cluster corresponding to an adult penguin",
+                        "items" : [
+                          {
+                            "type" : "object",
+                            "description": "mapping from tool to percentage of markings/probability",
+                            "patternProperties": {
+                              "[0-9]+": {
+                                "type": "number",
+                                "description":  "percentage/probability"
+                              },
+                              "additionalProperties" : false
+                            }
+                          },
+                          {
+                            "type" : "number",
+                            "description" : "total number of people with markings in this cluster"
+                          }
+                        ]
+                      },
+                      "followup_questions" : {}
+                    },
+                    "required": ["existence","center","tool_classification"],
+                    "additionalProperties" : false
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+
+            "additionalProperties" : false
           }
         ]
       }
     },
-  "required": [" instructions","param"]
+  "required": [" instructions"],
+  "additionalProperties": false
 }
