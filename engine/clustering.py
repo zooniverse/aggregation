@@ -462,6 +462,7 @@ class Cluster:
                     continue
 
                 for subject_id in raw_markings[task_id][shape]:
+
                     if raw_markings[task_id][shape][subject_id] == []:
                         print subject_id
                         assert False

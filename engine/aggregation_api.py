@@ -1444,6 +1444,8 @@ class AggregationAPI:
                     print record_list
                 assert success
 
+                print subject_id
+
                 # seem to have the occasional "retired" subject with no classifications, not sure
                 # why this is possible but if it can happen, just make a note of the subject id and skip
                 if record_list == []:
@@ -1451,17 +1453,20 @@ class AggregationAPI:
                     continue
 
                 # create here so even if we have empty images, we will know that we aggregated them
+                # make sure to not overwrite/delete existing information - sigh
                 for task_id in marking_tasks.keys():
-                    raw_markings[task_id] = {}
+                    if task_id not in raw_markings:
+                        raw_markings[task_id] = {}
                     for shape in set(marking_tasks[task_id]):
-                        raw_markings[task_id][shape] = {}
-                        raw_markings[task_id][shape][subject_id] = []
+                        if shape not in raw_markings[task_id]:
+                            raw_markings[task_id][shape] = {}
+                        if subject_id not in raw_markings[task_id][shape]:
+                            raw_markings[task_id][shape][subject_id] = []
 
 
                 non_logged_in_users = 0
                 for record in record_list:
-                    if (subject_id == 464588) or (subject_id == "464588"):
-                        print record
+
 
                     total += 1
                     user_id = record.user_id
@@ -1521,7 +1526,6 @@ class AggregationAPI:
                                     continue
 
                                 spotted_shapes.add(shape)
-
                                 raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
 
                                 # is this a confusing shape?
@@ -1571,6 +1575,7 @@ class AggregationAPI:
 
         # print
         # print raw_markings[1]["point"]["APZ0002do1"]
+        print raw_markings[1]["point"].keys()
         # assert False
         return raw_classifications,raw_markings
 
