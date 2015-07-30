@@ -1,70 +1,105 @@
 {
-  "type":"object",
-  "properties" : {
-  " instructions": {
-    "description": "a json object description each step of the workflow. Used to be able to map task ids to something meaningful",
-    "type": "object",
-    "patternProperties": {
-      "init|(T[0-9]+)": {
-        "oneOf": [
-          {
-            "type": "object",
-            "properties": {
-              "instruction": {
-                "type": "string"
-              },
-              "answers": {
-                "type": "object"
-              }
-            },
-            "additionalProperties": false
-          }
-        ]
-      },
-      "additionalProperties": false
-    }
-  }}
-}
-
-
-{
   "type": "object",
   "properties": {
     " instructions": {
-      "description": "a json object description each step of the workflow. Used to be able to map task ids to something meaningful",
       "type": "object",
       "patternProperties": {
         "init|(T[0-9]+)": {
           "oneOf": [
             {
               "type": "object",
+              "description": "instructions related to a marking task",
+              "properties": {
+                "instruction": {
+                  "type": "string",
+                  "description": "the description of the marking task"
+                },
+                "tools": {
+                  "description": "the different tools available to the user for this specific task",
+                  "type": "object",
+                  "patternProperties": {
+                    "[0-9]+": {
+                      "type": "object",
+                      "properties": {
+                        "marking tool": {
+                          "type": "string",
+                          "description": "the specific text shown for each tool"
+                        },
+                        "followup_questions": {
+                          "type": "object",
+                          "description": "possible follow up questions associated with the specific marking tool",
+                          "patternProperties": {
+                            "[0-9]+": {
+                              "type": "object",
+                              "properties": {
+                                "answers": {
+                                  "type": "object",
+                                  "patternProperties": {
+                                    "[0-9]+": {
+                                      "type": "object",
+                                      "properties": {
+                                        "label": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "additionalProperties": false,
+                                      "required": [
+                                        "label"
+                                      ]
+                                    }
+                                  },
+                                  "additionalProperties": false
+                                },
+                                "question": {
+                                  "description": "the text associated with the follow up question",
+                                  "type": "string"
+                                }
+                              },
+                              "additionalProperties": false
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "required": [
+                "instruction",
+                "tools"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "description": "instructions related to a simple classification task",
               "properties": {
                 "instruction": {
                   "type": "string"
                 },
                 "answers": {
-                  "type": "object"
+                  "type": "object",
+                  "patternProperties": {
+                    "[0-9]+": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
                 }
               },
+              "required": [
+                "instruction",
+                "answers"
+              ],
               "additionalProperties": false
             }
           ]
-        },
-        "additionalProperties": false
-      }
-    }
-  }
-}
-
-{
-  " instructions": {
-    "T1": {
-      "answers": {
-        "0": "Reddish",
-        "1": "Blackish",
-        "2": "Pale"
+        }
       },
-      "instruction": "What color is the item?"
+      "additionalProperties": false
     }
   }
 }
