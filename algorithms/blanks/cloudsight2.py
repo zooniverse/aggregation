@@ -36,8 +36,6 @@ for subject_id in subjects:
         urls.append("https://static.zooniverse.org/www.snapshotserengeti.org/subjects/standard/" + i[slash_index+1:])
 
     # have we processed all of the images in this subject?
-
-
     if False not in [u in token_mapping for u in urls]:
         overall_found = False
         # print subject["metadata"]["retire_reason"]
@@ -46,7 +44,7 @@ for subject_id in subjects:
         else:
             print 0
         # print subject["metadata"]["counters"]
-
+        bad_image = False
         for u in urls:
             get_url = "https://api.cloudsightapi.com/image_responses/"+token_mapping[u]
             header = {"Authorization":"CloudSight FH4Bnx5ahv3_r3V9Ja8bcg"}
@@ -64,10 +62,13 @@ for subject_id in subjects:
                     print t["name"]
             except KeyError:
                 print t
+                if t["status"] in ["not completed","timeout"]:
+                    bad_image = True
 
             overall_found = overall_found or found_animal
 
-
+        if bad_image:
+            continue
 
         total += 1
         if not overall_found:

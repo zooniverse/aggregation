@@ -10,6 +10,9 @@ class Counting(clustering.Cluster):
     def __inner_fit__(self,markings,user_ids,tools):
         counts= {}
 
+        print markings
+        assert False
+
         for tool_id in set(tools):
             values = []
             for user in set(user_ids):

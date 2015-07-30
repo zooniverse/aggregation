@@ -1,0 +1,70 @@
+{
+  "type":"object",
+  "properties" : {
+  " instructions": {
+    "description": "a json object description each step of the workflow. Used to be able to map task ids to something meaningful",
+    "type": "object",
+    "patternProperties": {
+      "init|(T[0-9]+)": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "instruction": {
+                "type": "string"
+              },
+              "answers": {
+                "type": "object"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
+      },
+      "additionalProperties": false
+    }
+  }}
+}
+
+
+{
+  "type": "object",
+  "properties": {
+    " instructions": {
+      "description": "a json object description each step of the workflow. Used to be able to map task ids to something meaningful",
+      "type": "object",
+      "patternProperties": {
+        "init|(T[0-9]+)": {
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "instruction": {
+                  "type": "string"
+                },
+                "answers": {
+                  "type": "object"
+                }
+              },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "additionalProperties": false
+      }
+    }
+  }
+}
+
+{
+  " instructions": {
+    "T1": {
+      "answers": {
+        "0": "Reddish",
+        "1": "Blackish",
+        "2": "Pale"
+      },
+      "instruction": "What color is the item?"
+    }
+  }
+}
