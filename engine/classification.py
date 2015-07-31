@@ -106,6 +106,7 @@ class Classification:
                     if cluster_index not in aggregations[subject_id][task_id][shape+ " clusters"]:
                         aggregations[subject_id][task_id][shape+ " clusters"][cluster_index] = {}
 
+                    # todo - not compliant
                     aggregations[subject_id][task_id][shape+ " clusters"][cluster_index]["followup_questions"] = followup_results[(subject_id,cluster_index)]
 
         return aggregations
