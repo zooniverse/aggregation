@@ -403,6 +403,9 @@ class AggregationAPI:
 
         for r in cursor.fetchall():
             aggregation = r[1]
+            if isinstance(aggregation,str):
+                aggregation = json.loads(aggregation)
+
             assert isinstance(aggregation,dict)
 
             for task_id in aggregation:
@@ -1840,12 +1843,9 @@ if __name__ == "__main__":
     except ValueError:
         project = AggregationAPI(project=project_identifier)
 
-    # project.__migrate__()
-
-    for c in project.__get_aggregations__(9):
-        print c
+    project.__migrate__()
 
     # project.__info__()
-    # project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+    project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
     # project.__results_to_file__()#workflow_ids =[84],subject_id=494900)
     # project.__get_workflow_details__(84)
