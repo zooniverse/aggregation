@@ -1,6 +1,9 @@
 {
   "title": "Zooniverse aggregation json schema",
   "description": "The aggregation scheme for Zooniverse aggregation results",
+  "$schema": "http://json-schema.org/schema#",
+  "id": "http://www.zooniverse.org" ,
+  "version" : "0.1",
   "type": "object",
   "properties": {
     " instructions": {
