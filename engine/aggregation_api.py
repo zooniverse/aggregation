@@ -192,18 +192,19 @@ class AggregationAPI:
 
         print "connecting to Panoptes http api"
         # set the http_api and basic project details
-        self.__panoptes_connect__(api_details[project])
-
+        # if project id is given, connect using basic values - assume we are in production space
         if project_id is None:
+            # owner and project_id are only relevant if we do not have the project_id
+            self.owner = api_details[project]["owner"]
+            self.project_name = api_details[project]["project_name"]
+            self.__panoptes_connect__(api_details[project])
             # # details about the project we are going to work with
             try:
-                print "a"
                 self.project_id = api_details[project]["project_id"]
             except KeyError:
-                print "b"
                 self.project_id = self.__get_project_id()
         else:
-            print "c"
+            self.__panoptes_connect__(api_details["production"])
             self.project_id = project_id
 
         # there may be more than one workflow associated with a project - read them all in
@@ -388,6 +389,22 @@ class AggregationAPI:
     #             assert "tools" in tasks[task_id]
     #             print tasks[task_id]["tools"]
     #     # self. description
+
+    def __get_aggregation__(self,workflows=None):
+        if workflows is None:
+            workflows = self.workflows
+        elif isinstance(workflows,int):
+            # just in case we didn't provide the workflows as a list, be nice and convert
+            workflows = [workflows]
+
+        for workflow_id in workflows:
+            stmt = "select subject_id,aggregation from aggregations where workflow_id = " + str(workflow_id)
+            cursor = self.postgres_session.cursor()
+
+            cursor.execute(stmt)
+
+            for r in cursor.fetchall():
+                print r
 
     def __get_aggregated_subjects__(self,workflow_id):
         """
@@ -808,8 +825,8 @@ class AggregationAPI:
         self.password = api_details["password"]
         self.host = api_details["host"] #"https://panoptes-staging.zooniverse.org/"
         self.host_api = self.host+"api/"
-        self.owner = api_details["owner"] #"brian-testing" or zooniverse
-        self.project_name = api_details["project_name"]
+         #"brian-testing" or zooniverse
+
         self.app_client_id = api_details["app_client_id"]
         self.environment = api_details["environment"]
         self.token = None
@@ -1764,11 +1781,14 @@ if __name__ == "__main__":
     project_identifier = sys.argv[1]
     try:
         project_id = int(project_identifier)
+        print "here"
         project = AggregationAPI(project_id=project_id)
     except ValueError:
         project = AggregationAPI(project=project_identifier)
 
-    project.__migrate__()
+    # project.__migrate__()
+
+    project.__get_aggregation__()
 
     # project.__info__()
     # project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
