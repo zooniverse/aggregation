@@ -1279,12 +1279,13 @@ class AggregationAPI:
         # which have drawings associated with them
         marking_tasks = {}
 
+        # convert to json is necessary - not sure why this is necessary but it does happen
+        # see https://github.com/zooniverse/aggregation/issues/7
+        if isinstance(tasks,str):
+            tasks = json.loads(tasks)
+
         for task_id in tasks:
             # self.task_type[task_id] = tasks[task_id]["type"]
-            print tasks
-            print type(tasks)
-            print tasks[task_id]
-            print type(tasks[task_id])
             # if the task is a drawing one, get the necessary details for clustering
             if tasks[task_id]["type"] == "drawing":
                 marking_tasks[task_id] = []
