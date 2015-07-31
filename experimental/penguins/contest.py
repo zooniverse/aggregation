@@ -274,5 +274,5 @@ for user in ballots:
 
 
 import random
-winner = random.sample(ballot_list,1)
+winner = random.sample(ballot_list,3)
 print winner

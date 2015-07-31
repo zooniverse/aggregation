@@ -52,7 +52,8 @@ for ii, classification in enumerate(classification_collection.find().skip(0).lim
     if "user_name" not in classification:
         continue
     #print classification["user_name"]
-    id =  classification["user_ip"]
+    # id =  classification["user_ip"]
+    id_ =  classification["user_name"]
     # what time was the classification made at?
     time = classification["updated_at"]
 
@@ -69,7 +70,7 @@ for ii, classification in enumerate(classification_collection.find().skip(0).lim
     #if subject["metadata"]["retire_reason"] in ["blank"]:
     if subjects_index[zoonvierse_id]=="blank":
         try:
-            num_blanks[id] += 1
+            num_blanks[id_] += 1
         except KeyError:
             num_blanks[id] = 1
         total_blanks += 1
