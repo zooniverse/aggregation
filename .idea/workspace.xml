@@ -2,9 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="b947194c-c006-45c3-a9f6-30272d1b8f46" name="Default" comment="">
-      <change type="NEW" beforePath="" afterPath="$PROJECT_DIR$/algorithms/csv_output.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/engine/classification.py" afterPath="$PROJECT_DIR$/engine/classification.py" />
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/algorithms/schema_check.py" afterPath="$PROJECT_DIR$/algorithms/schema_check.py" />
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/engine/aggregation_api.py" afterPath="$PROJECT_DIR$/engine/aggregation_api.py" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
     </list>
     <ignored path="reduction.iws" />
@@ -30,7 +28,7 @@
         <entry file="file://$PROJECT_DIR$/engine/classification.py">
           <provider selected="true" editor-type-id="text-editor">
             <state vertical-scroll-proportion="0.0">
-              <caret line="109" column="42" selection-start-line="109" selection-start-column="42" selection-end-line="109" selection-end-column="42" />
+              <caret line="335" column="105" selection-start-line="335" selection-start-column="86" selection-end-line="335" selection-end-column="105" />
               <folding>
                 <element signature="e#20#37#0" expanded="true" />
               </folding>
@@ -42,7 +40,7 @@
         <entry file="file://$PROJECT_DIR$/engine/clustering.py">
           <provider selected="true" editor-type-id="text-editor">
             <state vertical-scroll-proportion="17.071428">
-              <caret line="713" column="21" selection-start-line="713" selection-start-column="17" selection-end-line="713" selection-end-column="21" />
+              <caret line="714" column="11" selection-start-line="713" selection-start-column="17" selection-end-line="713" selection-end-column="21" />
               <folding>
                 <element signature="e#20#33#0" expanded="true" />
               </folding>
@@ -83,8 +81,8 @@
       <file leaf-file-name="aggregation_api.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/engine/aggregation_api.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state vertical-scroll-proportion="0.81945837">
-              <caret line="1790" column="32" selection-start-line="1790" selection-start-column="32" selection-end-line="1790" selection-end-column="32" />
+            <state vertical-scroll-proportion="0.8645938">
+              <caret line="453" column="62" selection-start-line="453" selection-start-column="62" selection-end-line="453" selection-end-column="62" />
               <folding>
                 <element signature="e#68#77#0" expanded="true" />
               </folding>
@@ -838,37 +836,11 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/experimental/penguins/contest.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state vertical-scroll-proportion="0.0">
-          <caret line="276" column="36" selection-start-line="276" selection-start-column="36" selection-end-line="276" selection-end-column="36" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/engine/agglomerative.py">
       <provider selected="true" editor-type-id="text-editor">
         <state vertical-scroll-proportion="0.0">
           <caret line="64" column="2" selection-start-line="64" selection-start-column="2" selection-end-line="64" selection-end-column="2" />
           <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/algorithms/penguin.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state vertical-scroll-proportion="0.0">
-          <caret line="132" column="30" selection-start-line="132" selection-start-column="30" selection-end-line="132" selection-end-column="30" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/engine/clustering.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state vertical-scroll-proportion="17.071428">
-          <caret line="713" column="21" selection-start-line="713" selection-start-column="17" selection-end-line="713" selection-end-column="21" />
-          <folding>
-            <element signature="e#20#33#0" expanded="true" />
-          </folding>
         </state>
       </provider>
     </entry>
@@ -899,17 +871,43 @@
     <entry file="file://$PROJECT_DIR$/engine/classification.py">
       <provider selected="true" editor-type-id="text-editor">
         <state vertical-scroll-proportion="0.0">
-          <caret line="109" column="42" selection-start-line="109" selection-start-column="42" selection-end-line="109" selection-end-column="42" />
+          <caret line="335" column="105" selection-start-line="335" selection-start-column="86" selection-end-line="335" selection-end-column="105" />
           <folding>
             <element signature="e#20#37#0" expanded="true" />
           </folding>
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/engine/clustering.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="17.071428">
+          <caret line="714" column="11" selection-start-line="713" selection-start-column="17" selection-end-line="713" selection-end-column="21" />
+          <folding>
+            <element signature="e#20#33#0" expanded="true" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/experimental/penguins/contest.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0">
+          <caret line="276" column="36" selection-start-line="276" selection-start-column="36" selection-end-line="276" selection-end-column="36" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/algorithms/penguin.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state vertical-scroll-proportion="0.0">
+          <caret line="132" column="30" selection-start-line="132" selection-start-column="30" selection-end-line="132" selection-end-column="30" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/engine/aggregation_api.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state vertical-scroll-proportion="0.81945837">
-          <caret line="1790" column="32" selection-start-line="1790" selection-start-column="32" selection-end-line="1790" selection-end-column="32" />
+        <state vertical-scroll-proportion="0.8645938">
+          <caret line="453" column="62" selection-start-line="453" selection-start-column="62" selection-end-line="453" selection-end-column="62" />
           <folding>
             <element signature="e#68#77#0" expanded="true" />
           </folding>
