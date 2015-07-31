@@ -178,9 +178,6 @@ class AggregationAPI:
         self.classification_table = "classifications"
 
 
-
-
-
         # get my userID and password
         # purely for testing, if this file does not exist, try opening on Greg's computer
         try:
@@ -188,7 +185,6 @@ class AggregationAPI:
         except IOError:
             panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
         api_details = yaml.load(panoptes_file)
-
 
         print "connecting to Panoptes http api"
         # set the http_api and basic project details
@@ -203,6 +199,9 @@ class AggregationAPI:
                 self.project_id = api_details[project]["project_id"]
             except KeyError:
                 self.project_id = self.__get_project_id()
+
+            print self.project_id
+            assert False
         else:
             self.__panoptes_connect__(api_details["production"])
             self.project_id = project_id
@@ -1282,7 +1281,10 @@ class AggregationAPI:
 
         for task_id in tasks:
             # self.task_type[task_id] = tasks[task_id]["type"]
-
+            print tasks
+            print type(tasks)
+            print tasks[task_id]
+            print type(tasks[task_id])
             # if the task is a drawing one, get the necessary details for clustering
             if tasks[task_id]["type"] == "drawing":
                 marking_tasks[task_id] = []
@@ -1833,7 +1835,6 @@ if __name__ == "__main__":
     project_identifier = sys.argv[1]
     try:
         project_id = int(project_identifier)
-        print "here"
         project = AggregationAPI(project_id=project_id)
     except ValueError:
         project = AggregationAPI(project=project_identifier)
