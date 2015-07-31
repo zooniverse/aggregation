@@ -390,21 +390,73 @@ class AggregationAPI:
     #             print tasks[task_id]["tools"]
     #     # self. description
 
-    def __get_aggregation__(self,workflows=None):
-        if workflows is None:
-            workflows = self.workflows
-        elif isinstance(workflows,int):
-            # just in case we didn't provide the workflows as a list, be nice and convert
-            workflows = [workflows]
+    def __get_aggregations__(self,workflow_id):
+        # if workflows is None:
+        #     workflows = self.workflows
+        # elif isinstance(workflows,int):
+        #     # just in case we didn't provide the workflows as a list, be nice and convert
+        #     workflows = [workflows]
 
-        for workflow_id in workflows:
-            stmt = "select subject_id,aggregation from aggregations where workflow_id = " + str(workflow_id)
-            cursor = self.postgres_session.cursor()
+        stmt = "select subject_id,aggregation from aggregations where workflow_id = " + str(workflow_id)
+        cursor = self.postgres_session.cursor()
 
-            cursor.execute(stmt)
+        cursor.execute(stmt)
 
-            for r in cursor.fetchall():
-                print r
+        for r in cursor.fetchall():
+            aggregation = r[1]
+            assert isinstance(aggregation,dict)
+
+            for task_id in aggregation:
+                if task_id in [" instructions"," metadata","param"]:
+                    continue
+
+                # we have an instance of marking
+                if isinstance(aggregation[task_id],dict):
+                    for cluster_type in aggregation[task_id]:
+                        if cluster_type != "param":
+                            for cluster_index in aggregation[task_id][cluster_type]:
+                                if cluster_index != "param":
+                                    cluster = aggregation[task_id][cluster_type][cluster_index]
+                                    shape = cluster_type.split(" ")[0]
+
+                                    if cluster_type == "point clusters":
+                                        p_x = cluster["center"][0]
+                                        p_y = cluster["center"][1]
+                                        height = None
+                                        width = None
+                                        rotation = None
+                                    elif cluster_type == "rectangle clusters":
+                                        p_x,_py = cluster["center"][0]
+                                        p_x2,p_y2 = cluster["center"][2]
+
+                                        width = math.fabs(p_x2 - p_x)
+                                        height = math.fabs(p_y2 - p_y2)
+                                        rotation = None
+                                    elif cluster_type == "circle clusters":
+                                        p_x = cluster["center"][0]
+                                        p_y = cluster["center"][1]
+                                        height = cluster["center"][2]
+                                        width = None
+                                        rotation = None
+
+
+                                    number_of_users_per_subject = cluster["existence"][1]
+                                    probability_of_existence = cluster["existence"][0]["1"]
+
+                                    number_of_users_per_cluster = cluster["tool_classification"][1]
+                                    tool_classification = cluster["tool_classification"][0]
+                                    most_likely_tool,tool_probability = max(tool_classification.items(), lambda x:x[1])[0]
+
+                                    yield r[0],str(task_id),int(cluster_index),shape,int(most_likely_tool),p_x,p_y,height,width,rotation,number_of_users_per_subject,number_of_users_per_cluster,probability_of_existence,tool_probability
+                else:
+                    classification_record = aggregation[task_id][0]
+                    max_class_index = max([int(c) for c in classification_record])
+                    for class_index in range(max_class_index+1):
+                        if str(class_index) not in classification_record:
+                            print 0
+                        else:
+                            print classification_record[str(class_index)]
+                    yield aggregation[task_id]
 
     def __get_aggregated_subjects__(self,workflow_id):
         """
@@ -1788,7 +1840,8 @@ if __name__ == "__main__":
 
     # project.__migrate__()
 
-    project.__get_aggregation__()
+    for c in project.__get_aggregations__(9):
+        print c
 
     # project.__info__()
     # project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
