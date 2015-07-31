@@ -1,6 +1,5 @@
 __author__ = 'greg'
 import clustering
-import ouroboros_api
 import os
 import re
 import matplotlib.pyplot as plt
