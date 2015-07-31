@@ -6,9 +6,7 @@
   "version" : "0.1",
   "type": "object",
   "properties": {
-    " instructions": {
-      "type": "object",
-      "properties": {
+
         " instructions": {
           "type": "object",
           "patternProperties": {
@@ -108,8 +106,6 @@
             }
           },
           "additionalProperties": false
-        }
-      }
     },
     " metadata": {}
   },
