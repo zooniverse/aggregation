@@ -10,7 +10,7 @@ with open("/home/greg/test.json","rb") as f:
 t = json.loads(s)
 
 schema_str = ""
-with open("aggregation_schema.json","rb") as f:
+with open("/home/greg/simple_schema.json","rb") as f:
     for l in f.readlines():
         schema_str += l.strip()
 
