@@ -372,7 +372,7 @@ class AggregationAPI:
             csv_files[c+"c"].write("subject id, shape,cluster index,followup index, most likely label, probability of most likely label, number of users\n")
         for c in marking_tasks:
             csv_files[c+"m"] = open("/tmp/"+c+"_marking.csv","wb")
-            csv_files[c+"m"].write("subject id, shape,cluster index,most likely tool, x center, y center, height,rotation, number of users per subject/task, number of users per cluster,probability of existence, probability of most likely tool")
+            csv_files[c+"m"].write("subject id, shape,cluster index,most likely tool, x center, y center, height,rotation, number of users per subject/task, number of users per cluster,probability of existence, probability of most likely tool\n")
 
         for record in self.__get_aggregations__(workflow_id):
             subject_id = record[1]
