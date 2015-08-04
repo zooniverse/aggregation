@@ -199,9 +199,6 @@ class AggregationAPI:
                 self.project_id = api_details[project]["project_id"]
             except KeyError:
                 self.project_id = self.__get_project_id()
-
-            print self.project_id
-            assert False
         else:
             self.__panoptes_connect__(api_details["production"])
             self.project_id = project_id
@@ -295,7 +292,12 @@ class AggregationAPI:
         """
         for i in range(10):
             try:
-                self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'],protocol_version = 3)
+                self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
+                # self.cluster = Cluster()
+
+                cassandra_session = self.cluster.connect()
+                cassandra_session.execute("drop keyspace zooniverse")
+                cassandra_session.execute("CREATE KEYSPACE zooniverse WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 2 }")
                 self.cassandra_session = self.cluster.connect('zooniverse')
                 return
             except cassandra.cluster.NoHostAvailable:
@@ -405,7 +407,8 @@ class AggregationAPI:
             aggregation = r[1]
             if isinstance(aggregation,str):
                 aggregation = json.loads(aggregation)
-
+            elif not isinstance(aggregation,dict):
+                print type(aggregation)
             assert isinstance(aggregation,dict)
 
             for task_id in aggregation:
@@ -778,13 +781,13 @@ class AggregationAPI:
         move data from postgres to cassandra
         :return:
         """
-        # try:
-        #     self.cassandra_session.execute("drop table classifications")
-        #     self.cassandra_session.execute("drop table subjects")
-        #     print "table dropped"
-        # except cassandra.InvalidRequest:
-        #     print "table did not already exist"
-        #
+        try:
+            self.cassandra_session.execute("drop table classifications")
+            self.cassandra_session.execute("drop table subjects")
+            print "table dropped"
+        except cassandra.InvalidRequest:
+            print "table did not already exist"
+
         try:
             self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
         except cassandra.AlreadyExists:
@@ -803,7 +806,7 @@ class AggregationAPI:
         cur = self.postgres_session.cursor()
         cur.execute(select)
 
-        self.migrated_subjects = set()
+        # self.migrated_subjects = set()
         print "trying to migrate " + str(self.project_id)
         insert_statement = self.cassandra_session.prepare("""
                 insert into classifications (project_id, user_id, workflow_id,  created_at,annotations, updated_at, user_group_id, user_ip, completed, gold_standard, subject_id, workflow_version,metadata)
@@ -819,7 +822,7 @@ class AggregationAPI:
             # print t
             # assert False
             assert len(subject_ids) == 1
-            self.migrated_subjects.add(subject_ids[0])
+            # self.migrated_subjects.add(subject_ids[0])
 
             if gold_standard != True:
                 gold_standard = False
@@ -847,6 +850,7 @@ class AggregationAPI:
             subject_listing.add((project_id,workflow_id,workflow_version,subject_ids[0]))
 
             if len(statements_and_params) == 100:
+                print statements_and_params
                 results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
                 statements_and_params = []
                 # print results
@@ -1846,6 +1850,6 @@ if __name__ == "__main__":
     project.__migrate__()
 
     # project.__info__()
-    project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+    # project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
     # project.__results_to_file__()#workflow_ids =[84],subject_id=494900)
     # project.__get_workflow_details__(84)
