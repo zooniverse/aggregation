@@ -79,12 +79,10 @@ class Agglomerative(clustering.Cluster):
         user_ids = list(user_ids)
         start = time.time()
 
-
-
         if len(user_ids) == len(set(user_ids)):
             # all of the markings are from different users => so only one cluster
             # todo implement
-            result = {"users":user_ids,"cluster members":markings,"tools":tools}
+            result = {"users":user_ids,"cluster members":markings,"tools":tools,"num users":len(user_ids)}
             result["center"] = [np.median(axis) for axis in zip(*markings)]
             return [result],0
 
@@ -109,7 +107,7 @@ class Agglomerative(clustering.Cluster):
 
         # use the results to build a tree representation
         # nodes = [LeafNode(pt,ii,user=user) for ii,(user,pt) in enumerate(zip(user_ids,markings))]
-        results = [{"users":[u],"cluster members":[p],"tools":[t]} for u,p,t in zip(user_ids,markings,tools)]
+        results = [{"users":[u],"cluster members":[p],"tools":[t],"num users":len(user_ids)} for u,p,t in zip(user_ids,markings,tools)]
 
         # read through the results
         # each row gives a cluster/node to merge
@@ -157,7 +155,8 @@ class Agglomerative(clustering.Cluster):
                     merged_users.extend(lnode["users"])
                     merged_points.extend(lnode["cluster members"])
                     merged_tools.extend(lnode["tools"])
-                    results.append({"users":merged_users,"cluster members":merged_points,"tools":merged_tools})
+                    num_users = rnode["num users"] + lnode["num users"]
+                    results.append({"users":merged_users,"cluster members":merged_points,"tools":merged_tools,"num users":num_users})
 
         # go and remove all non terminal nodes from the results
         for i in range(len(results)-1,-1,-1):
@@ -167,6 +166,9 @@ class Agglomerative(clustering.Cluster):
             if (results[i] is None) or ("center" not in results[i]):
                 results.pop(i)
 
+        # todo - this is just for debugging
+        for j in results:
+            assert "num users" in j
 
         end = time.time()
         # print [len(r["users"]) for r in results]
