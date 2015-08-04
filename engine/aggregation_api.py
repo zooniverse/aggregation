@@ -118,7 +118,9 @@ def ellipse_mapping(marking,image_dimensions):
 
 
 class AggregationAPI:
-    def __init__(self,project=None,environment=None,project_id=None):#,user_threshold= None, score_threshold= None): #Supernovae
+    def __init__(self,project=None,environment=None):#,user_threshold= None, score_threshold= None): #Supernovae
+
+
         self.cluster_algs = None
         self.classification_alg = None
         self.workflows = None
@@ -166,7 +168,7 @@ class AggregationAPI:
         # one - so all of the code after the return will handle things like connecting to the Panoptes API
         # (which the ouroboros project won't have to do) and the Postgres/Cassandra connections
         # (which the ouroboros project will have to do specially because of some differences)
-        if (project is None) and (project_id is None):
+        if project is None:
             return
 
 
@@ -189,19 +191,20 @@ class AggregationAPI:
         print "connecting to Panoptes http api"
         # set the http_api and basic project details
         # if project id is given, connect using basic values - assume we are in production space
-        if project_id is None:
-            # owner and project_id are only relevant if we do not have the project_id
-            self.owner = api_details[project]["owner"]
-            self.project_name = api_details[project]["project_name"]
-            self.__panoptes_connect__(api_details[project])
-            # # details about the project we are going to work with
-            try:
-                self.project_id = api_details[project]["project_id"]
-            except KeyError:
+        # if project id is given as an int, assume that it is referring to the Panoptes id
+        self.__panoptes_connect__(api_details["production"])
+        try:
+            self.project_id = int(project)
+        except ValueError:
+            # we were given a project string name - so try looking for the number in either config file
+            # or connect to panoptes to fine out
+            if "project_id" in api_details[project]:
+                self.project_id = int (api_details[project]["project_id"])
+            else:
+                # owner and project_id are only relevant if we do not have the project_id
+                self.owner = api_details[project]["owner"]
+                self.project_name = api_details[project]["project_name"]
                 self.project_id = self.__get_project_id()
-        else:
-            self.__panoptes_connect__(api_details["production"])
-            self.project_id = project_id
 
         # there may be more than one workflow associated with a project - read them all in
         # and set up the associated tasks
@@ -292,13 +295,16 @@ class AggregationAPI:
         """
         for i in range(10):
             try:
-                self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
+                self.cluster = Cluster()#['panoptes-cassandra.zooniverse.org'])
                 # self.cluster = Cluster()
 
-                cassandra_session = self.cluster.connect()
-                cassandra_session.execute("drop keyspace zooniverse")
-                cassandra_session.execute("CREATE KEYSPACE zooniverse WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 2 }")
-                self.cassandra_session = self.cluster.connect('zooniverse')
+                try:
+                    self.cassandra_session = self.cluster.connect("zooniverse")
+                except cassandra.InvalidRequest:
+                    cassandra_session = self.cluster.connect()
+                    cassandra_session.execute("CREATE KEYSPACE zooniverse WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 2 }")
+                    self.cassandra_session = self.cluster.connect('zooniverse')
+
                 return
             except cassandra.cluster.NoHostAvailable:
                 pass
@@ -356,6 +362,11 @@ class AggregationAPI:
 
         return cluster_aggregation
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.cassandra_session.shutdown()
 
     # def __describe__(self,workflow_id):
     #     select = "SELECT tasks from workflows where id = " + str(workflow_id)
@@ -544,10 +555,8 @@ class AggregationAPI:
 
         stmt = """SELECT * FROM "subjects"
             INNER JOIN "set_member_subjects" ON "set_member_subjects"."subject_id" = "subjects"."id"
-            INNER JOIN "subject_sets" ON "subject_sets"."id" = "set_member_subjects"."subject_set_id"
-            INNER JOIN "subject_sets_workflows" ON "subject_sets_workflows"."subject_set_id" = "subject_sets"."id"
-            INNER JOIN "workflows" ON "workflows"."id" = "subject_sets_workflows"."workflow_id"
-            WHERE "workflows"."id" = """+str(workflow_id)+ """ AND (""" + str(workflow_id) + """ = ANY("set_member_subjects"."retired_workflow_ids"))"""
+            INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."set_member_subject_id" = "set_member_subjects"."id"
+            WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" IS NOT NULL"""
 
         cursor = self.postgres_session.cursor()
         cursor.execute(stmt)
@@ -850,10 +859,8 @@ class AggregationAPI:
             subject_listing.add((project_id,workflow_id,workflow_version,subject_ids[0]))
 
             if len(statements_and_params) == 100:
-                print statements_and_params
                 results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
                 statements_and_params = []
-                # print results
 
         # insert any "left over" classifications
         if statements_and_params != []:
@@ -1652,10 +1659,6 @@ class AggregationAPI:
                             #     print task_id,task["value"]
                             raw_classifications[task_id][subject_id].append((user_id,task["value"]))
 
-        # print
-        # print raw_markings[1]["point"]["APZ0002do1"]
-        print raw_markings[1]["point"].keys()
-        # assert False
         return raw_classifications,raw_markings
 
     def __threshold_scaling__(self,workflow_id,):
@@ -1841,13 +1844,8 @@ def twod_linesegment(pt):
 
 if __name__ == "__main__":
     project_identifier = sys.argv[1]
-    try:
-        project_id = int(project_identifier)
-        project = AggregationAPI(project_id=project_id)
-    except ValueError:
-        project = AggregationAPI(project=project_identifier)
-
-    project.__migrate__()
+    with AggregationAPI(project_identifier) as project:
+        project.__migrate__()
 
     # project.__info__()
     # project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
