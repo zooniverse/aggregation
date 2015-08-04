@@ -461,10 +461,8 @@ class Cluster:
                     continue
 
                 for subject_id in raw_markings[task_id][shape]:
+                    assert raw_markings[task_id][shape][subject_id] != []
 
-                    if raw_markings[task_id][shape][subject_id] == []:
-                        print subject_id
-                        assert False
                     # remove any "markings" which correspond to the user not making a marking
                     # these are still useful for noting that the user saw that image
                     pruned_markings = [(u,m,t) for u,m,t in raw_markings[task_id][shape][subject_id] if m is not None]

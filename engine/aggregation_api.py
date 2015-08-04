@@ -295,7 +295,7 @@ class AggregationAPI:
         """
         for i in range(10):
             try:
-                self.cluster = Cluster()#['panoptes-cassandra.zooniverse.org'])
+                self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
                 # self.cluster = Cluster()
 
                 try:
@@ -1532,27 +1532,16 @@ class AggregationAPI:
 
                 print subject_id
 
+
+
                 # seem to have the occasional "retired" subject with no classifications, not sure
                 # why this is possible but if it can happen, just make a note of the subject id and skip
                 if record_list == []:
                     print "warning :: subject " + str(subject_id) + " has no classifications"
                     continue
 
-                # create here so even if we have empty images, we will know that we aggregated them
-                # make sure to not overwrite/delete existing information - sigh
-                for task_id in marking_tasks.keys():
-                    if task_id not in raw_markings:
-                        raw_markings[task_id] = {}
-                    for shape in set(marking_tasks[task_id]):
-                        if shape not in raw_markings[task_id]:
-                            raw_markings[task_id][shape] = {}
-                        if subject_id not in raw_markings[task_id][shape]:
-                            raw_markings[task_id][shape][subject_id] = []
-
-
                 non_logged_in_users = 0
                 for record in record_list:
-
 
                     total += 1
                     user_id = record.user_id
@@ -1573,6 +1562,19 @@ class AggregationAPI:
 
                         # is this a marking task?
                         if task_id in marking_tasks:
+                            # if a user gets to marking task but makes no markings, we want to record that the user
+                            # has still seen that image/task. If a user never gets to a marking task for that image
+                            # than they are irrelevant
+                            # create here so even if we have empty images, we will know that we aggregated them
+                            # make sure to not overwrite/delete existing information - sigh
+                            if task_id not in raw_markings:
+                                raw_markings[task_id] = {}
+                            for shape in set(marking_tasks[task_id]):
+                                if shape not in raw_markings[task_id]:
+                                    raw_markings[task_id][shape] = {}
+                                if subject_id not in raw_markings[task_id][shape]:
+                                    raw_markings[task_id][shape][subject_id] = []
+
                             if not isinstance(task["value"],list):
                                 print "not properly formed marking - skipping"
                                 continue
@@ -1658,6 +1660,14 @@ class AggregationAPI:
                             # if task_id == "init":
                             #     print task_id,task["value"]
                             raw_classifications[task_id][subject_id].append((user_id,task["value"]))
+
+        # for debugging only
+        for task_id in raw_markings:
+            # go through each shape independently
+            for shape in raw_markings[task_id].keys():
+                for subject_id in raw_markings[task_id][shape]:
+                    print subject_id
+                    assert raw_markings[task_id][shape][subject_id] != []
 
         return raw_classifications,raw_markings
 
@@ -1845,9 +1855,7 @@ def twod_linesegment(pt):
 if __name__ == "__main__":
     project_identifier = sys.argv[1]
     with AggregationAPI(project_identifier) as project:
-        project.__migrate__()
-
-    # project.__info__()
-    # project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+        # project.__migrate__()
+        project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
     # project.__results_to_file__()#workflow_ids =[84],subject_id=494900)
     # project.__get_workflow_details__(84)
