@@ -13,6 +13,33 @@ import multiClickCorrect
 import json
 import random
 
+
+def text_line_mappings(line_segments):
+    """
+    use if we want to cluster based on Hesse normal form - but want to retain the original values
+    :param line_segment:
+    :return:
+    """
+    reduced_markings = []
+
+    for line_seg in line_segments:
+        x1,y1,x2,y2,text = line_seg
+
+        x2 += random.uniform(-0.0001,0.0001)
+        x1 += random.uniform(-0.0001,0.0001)
+
+        dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
+
+        try:
+            tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
+            theta = math.atan(tan_theta)
+        except ZeroDivisionError:
+            theta = math.pi/2.
+
+        reduced_markings.append((dist,theta,text))
+
+    return reduced_markings
+
 class Agglomerative(clustering.Cluster):
     def __init__(self,shape,dim_reduction_alg):
         clustering.Cluster.__init__(self,shape,dim_reduction_alg)
@@ -84,6 +111,8 @@ class Agglomerative(clustering.Cluster):
         # nodes = [LeafNode(pt,ii,user=user) for ii,(user,pt) in enumerate(zip(user_ids,markings))]
         results = [{"users":[u],"cluster members":[p],"tools":[t],"num users":len(user_ids)} for u,p,t in zip(user_ids,markings,tools)]
 
+
+
         print results
 
         # read through the results
@@ -124,10 +153,6 @@ class Agglomerative(clustering.Cluster):
                 if intersection != []:
                     rnode["center"] = [np.median(axis) for axis in zip(*rnode["cluster members"])]
                     lnode["center"] = [np.median(axis) for axis in zip(*lnode["cluster members"])]
-                    print "+++"
-                    print rnode["cluster members"]
-                    print zip(*rnode["cluster members"])
-                    print
                     results.append(None)
                 else:
                     # else just merge
@@ -157,10 +182,10 @@ class Agglomerative(clustering.Cluster):
         # print [len(r["users"]) for r in results]
         # results = self.correction_alg.__fix__(results)
 
-        print
+        for r in results:
+            assert len(r["center"]) == 4
+
         print results
-        print
-        print
 
         return results,end-start
 

@@ -119,12 +119,13 @@ def relevant_circle_params(marking,image_dimensions):
 def relevant_ellipse_params(marking,image_dimensions):
     return marking["x"],marking["y"],marking["rx"],marking["ry"],marking["angle"]
 
+
 # mappings are for use in dimension reduction
 def identity_mapping(markings):
     return markings
 
 
-def hesse_line_mapping(line_segments):
+def hesse_line_reduction(line_segments):
     """
     use if we want to cluster based on Hesse normal form - but want to retain the original values
     :param line_segment:
@@ -149,6 +150,9 @@ def hesse_line_mapping(line_segments):
         reduced_markings.append((dist,theta))
 
     return reduced_markings
+
+
+
 
 class AggregationAPI:
     def __init__(self,project=None,environment=None,db_connection=True,user_id=None,password=None):#,user_threshold= None, score_threshold= None): #Supernovae
@@ -249,11 +253,13 @@ class AggregationAPI:
 
         # load the default clustering algorithms
         default_clustering_algs = {"point":agglomerative.Agglomerative,"circle":agglomerative.Agglomerative,"ellipse": agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering,"line":agglomerative.Agglomerative}
-        reduction_algs = {"line":hesse_line_mapping}
+        reduction_algs = {"line":hesse_line_reduction}
         self.__set_clustering_algs__(default_clustering_algs,reduction_algs)
 
         # load the default classification algorithm
         self.__set_classification_alg__(classification.VoteCount)
+
+        self.ignore_versions = False
 
     def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[]),expert=None,store_values=True):
         """
@@ -683,9 +689,6 @@ class AggregationAPI:
 
     def __get_retired_subjects__(self,workflow_id,with_expert_classifications=None):
         retired_subjects = []
-
-        print workflow_id
-        print self.updated_at_timestamps[workflow_id]
 
         stmt = """SELECT * FROM "subjects"
             INNER JOIN "set_member_subjects" ON "set_member_subjects"."subject_id" = "subjects"."id"
@@ -1710,11 +1713,17 @@ class AggregationAPI:
         # do this in bite sized pieces to avoid overwhelming DB
         for s in self.__chunks(subject_set,15):
             statements_and_params = []
-            ignore_version = True
 
-            select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
+            if self.ignore_versions:
+                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ?")
+            else:
+                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
+
             for subject_id in s:
-                params = (int(self.project_id),subject_id,int(workflow_id),version)
+                if self.ignore_versions:
+                    params = (int(self.project_id),subject_id,int(workflow_id))
+                else:
+                    params = (int(self.project_id),subject_id,int(workflow_id),version)
                 statements_and_params.append((select_statement, params))
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
 
@@ -1788,11 +1797,12 @@ class AggregationAPI:
 
                                 if shape ==  "image":
                                     # todo - treat image like a rectangle
-                                    assert False
+                                    print "image found - skipping"
+                                    continue
 
                                 if shape not in self.marking_params_per_shape:
-                                    print "unrecognized shape: " + shape
-                                    assert False
+                                    print "unrecognized shape: (skipping) " + shape
+                                    continue
 
                                 try:
                                     # extract the params specifically relevant to the given shape
@@ -1937,6 +1947,8 @@ class AggregationAPI:
 
             aggregation[" instructions"] = self.instructions[workflow_id]
 
+
+            print json.dumps(aggregation,indent=4)
 
             if subject_id in r:
                 # we are updating
