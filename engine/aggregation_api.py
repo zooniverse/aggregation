@@ -406,6 +406,8 @@ class AggregationAPI:
             workflows = [given_workflows]
 
         for workflow_id in workflows:
+            json.dump(self.instructions[workflow_id],open("/tmp/workflow_"+str(workflow_id)+"_instructions.json","wb"),indent=4)
+
             # yield task_id,r[0],int(cluster_index),shape,int(most_likely_tool),p_x,p_y,height,width,rotation,number_of_users_per_subject,number_of_users_per_cluster,probability_of_existence,tool_probability
             classification_tasks,marking_tasks = self.workflows[workflow_id]
             csv_files = {}
@@ -500,18 +502,21 @@ class AggregationAPI:
         #     # just in case we didn't provide the workflows as a list, be nice and convert
         #     workflows = [workflows]
 
-        stmt = "select subject_id,aggregation from aggregations where workflow_id = " + str(workflow_id)
+        stmt = "select subject_id,aggregation,updated_at from aggregations where workflow_id = " + str(workflow_id)
         cursor = self.postgres_session.cursor()
 
         cursor.execute(stmt)
 
         for r in cursor.fetchall():
             aggregation = r[1]
+
             if isinstance(aggregation,str):
                 aggregation = json.loads(aggregation)
             elif not isinstance(aggregation,dict):
                 print type(aggregation)
             assert isinstance(aggregation,dict)
+
+            print r[2]
 
             try:
                 for task_id in aggregation:
@@ -679,16 +684,20 @@ class AggregationAPI:
     def __get_retired_subjects__(self,workflow_id,with_expert_classifications=None):
         retired_subjects = []
 
+        print workflow_id
+        print self.updated_at_timestamps[workflow_id]
+
         stmt = """SELECT * FROM "subjects"
             INNER JOIN "set_member_subjects" ON "set_member_subjects"."subject_id" = "subjects"."id"
             INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."set_member_subject_id" = "set_member_subjects"."id"
-            WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" IS NOT NULL"""
+            WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" > '""" + str(self.updated_at_timestamps[workflow_id]) + """'"""
+            # WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" IS NOT NULL"""
 
         cursor = self.postgres_session.cursor()
         cursor.execute(stmt)
         for subject in cursor.fetchall():
             retired_subjects.append(subject[0])
-        print "hopefully not here"
+
         return retired_subjects
 
     def __get_subjects__(self,workflow_id):
@@ -1396,6 +1405,8 @@ class AggregationAPI:
         if self.postgres_session is None:
             raise psycopg2.OperationalError()
 
+        cursor = self.postgres_session.cursor()
+
         # select = "SELECT * from project_contents"
         # cur = self.postgres_session.cursor()
         # cur.execute(select)
@@ -2042,7 +2053,7 @@ if __name__ == "__main__":
     project_identifier = sys.argv[1]
     with AggregationAPI(project_identifier) as project:
         # project.__migrate__()
-        project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+        # project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
         # project.__panoptes_aggregation__()
         project.__csv_output__()#workflow_ids =[84],subject_id=494900)
     # project.__get_workflow_details__(84)
