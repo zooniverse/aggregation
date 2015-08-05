@@ -23,7 +23,7 @@ import blob_clustering
 from collections import OrderedDict
 import numpy
 import random
-
+import cPickle as pickle
 # setup(
 #     name = "Zooniverse Aggregation",
 #     version = "0.1",
@@ -259,6 +259,17 @@ class AggregationAPI:
         # load the default classification algorithm
         self.__set_classification_alg__(classification.VoteCount)
 
+        # todo - do in this in Cassandra
+        # for reading in from classifications only done since the last run
+        # if any trouble - start over from the beginning
+        try:
+            self.old_time = pickle.load(open("/tmp/"+str(self.project_id)+".time","rb"))
+        except:
+            self.old_time = datetime.datetime(2000,01,01)
+
+        self.old_time = datetime.datetime(2000,01,01)
+
+        self.current_time = datetime.datetime.now()
         self.ignore_versions = False
 
     def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[]),expert=None,store_values=True):
@@ -465,6 +476,7 @@ class AggregationAPI:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
         self.cassandra_session.shutdown()
 
     # def __describe__(self,workflow_id):
@@ -950,28 +962,28 @@ class AggregationAPI:
         move data from postgres to cassandra
         :return:
         """
-        try:
-            self.cassandra_session.execute("drop table classifications")
-            self.cassandra_session.execute("drop table subjects")
-            print "table dropped"
-        except cassandra.InvalidRequest:
-            print "table did not already exist"
-
-        try:
-            self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
-        except cassandra.AlreadyExists:
-            pass
-
-        try:
-            self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
-        except cassandra.AlreadyExists:
-            pass
+        # try:
+        #     self.cassandra_session.execute("drop table classifications")
+        #     self.cassandra_session.execute("drop table subjects")
+        #     print "table dropped"
+        # except cassandra.InvalidRequest:
+        #     print "table did not already exist"
+        #
+        # try:
+        #     self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
+        # except cassandra.AlreadyExists:
+        #     pass
+        #
+        # try:
+        #     self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
+        # except cassandra.AlreadyExists:
+        #     pass
 
 
         subject_listing = set()
 
 
-        select = "SELECT * from classifications where project_id="+str(self.project_id)
+        select = "SELECT * from classifications where project_id="+str(self.project_id) +" and created_at >= '" + str(self.old_time) +"'"
         cur = self.postgres_session.cursor()
         cur.execute(select)
 
@@ -1946,9 +1958,6 @@ class AggregationAPI:
             # aggregation[" metadata"] = metadata
 
             aggregation[" instructions"] = self.instructions[workflow_id]
-
-
-            print json.dumps(aggregation,indent=4)
 
             if subject_id in r:
                 # we are updating

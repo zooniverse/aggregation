@@ -17,6 +17,7 @@ from copy import deepcopy
 import itertools
 import json
 import matplotlib.pyplot as plt
+import datetime
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -643,11 +644,15 @@ def text_mapping2(marking,image_dimensions):
 
 
 def relevant_text_params(marking,image_dimensions):
-    print marking
-    x1 = marking["x1"]
-    x2 = marking["x2"]
-    y1 = marking["y1"]
-    y2 = marking["y2"]
+    if ("startPoint" not in marking) or ("endPoint" not in marking):
+        raise InvalidMarking(marking)
+    x1 = marking["startPoint"]["x"]
+    y1 = marking["startPoint"]["y"]
+    x2 = marking["endPoint"]["x"]
+    y2 = marking["endPoint"]["y"]
+
+    if min(x1,x2,y1,y2) < 0:
+        raise InvalidMarking(marking)
 
     if "text" not in marking:
         raise InvalidMarking(marking)
@@ -658,6 +663,7 @@ def relevant_text_params(marking,image_dimensions):
         return x1,x2,y1,y2,text
     else:
         return x2,x2,y2,y1,text
+
 
 def text_line_reduction(line_segments):
     """
@@ -687,13 +693,13 @@ def text_line_reduction(line_segments):
 
 class Tate(AggregationAPI):
     def __init__(self):
-        AggregationAPI.__init__(self,"tate",environment="staging")
+        AggregationAPI.__init__(self,245)#"tate",environment="staging")
 
         self.marking_params_per_shape = dict()
         self.marking_params_per_shape["text"] = text_mapping2
 
-        self.workflows[683] = {},{"init":["text"]}
-        self.versions[683] = 1
+        # self.workflows[683] = {},{"init":["text"]}
+        # self.versions[683] = 1
 
         self.marking_params_per_shape["text"] = relevant_text_params
 
@@ -728,7 +734,17 @@ class Tate(AggregationAPI):
         # print json.loads(aggregations[0])
 
     def __get_retired_subjects__(self,workflow_id,with_expert_classifications=None):
-        return [4127]#,4129,4130,4131,4132,4133,4136]
+        recently_classified_subjects = set()
+
+        select = "SELECT created_at,subject_ids from classifications where project_id="+str(self.project_id)+" and created_at >= '" + str(self.old_time) +"'"
+        cur = self.postgres_session.cursor()
+        cur.execute(select)
+
+        for r in cur.fetchall():
+            subject_id = r[1][0]
+            recently_classified_subjects.add(subject_id)
+
+        return list(recently_classified_subjects)
 
     def __prune__(self,aggregations):
         assert isinstance(aggregations,dict)
@@ -748,13 +764,6 @@ class Tate(AggregationAPI):
 
         return aggregations
 
-bentham = [4150,4151,4152,4153,4154]
-tate = [4127,4129,4130,4131,4132,4133,4136]
-project = Tate()
-# project.__migrate__()
-subject_id = 4154
-# print project.__image_setup__(4129)
-# project.__set_clustering_alg__({"text":(TextCluster,{})})
-# project.__migrate__()
-project.__aggregate__()#workflows=[683],subject_set=[subject_id])
-# project.__plot_cluster_results__(subject_id,"init",683)
+if __name__ == "__main__":
+    with Tate() as project:
+        project.__aggregate__(workflows=[121])
