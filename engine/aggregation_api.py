@@ -242,8 +242,10 @@ class AggregationAPI:
 
         # there may be more than one workflow associated with a project - read them all in
         # and set up the associated tasks
-        self.workflows = self.__setup_workflows__()
-        self.versions = self.__get_workflow_versions__()
+        self.workflows,self.versions,self.instructions,self.updated_at_timestamps = self.__get_workflow_details__()
+        # self.workflows = self.__setup_workflows__()
+        # self.versions = self.__get_workflow_versions__()
+        # self.workflows_updated_at =
 
         # load the default clustering algorithms
         default_clustering_algs = {"point":agglomerative.Agglomerative,"circle":agglomerative.Agglomerative,"ellipse": agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering,"line":agglomerative.Agglomerative}
@@ -551,6 +553,15 @@ class AggregationAPI:
                                             height = cluster["center"][2]
                                             width = cluster["center"][3]
                                             rotation = cluster["center"][4]
+                                        elif cluster_type == "line clusters":
+                                            print r[0]
+                                            print cluster
+                                            print
+                                            p_x = cluster["center"][0]
+                                            p_y = cluster["center"][1]
+                                            height = cluster["center"][1] - cluster["center"][3]
+                                            width = cluster["center"][0] - cluster["center"][2]
+                                            rotation = None
                                         else:
                                             print cluster_type, cluster
                                             assert False
@@ -684,7 +695,12 @@ class AggregationAPI:
         pass
 
 
-    def __get_workflow_details__(self,workflow_id):
+    def __get_workflow_details__(self,given_workflow_id=None):
+        """
+        get everything about the workflows - if no id is provided, go with everything
+        :param workflow_id:
+        :return:
+        """
         request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
         # request = urllib2.Request(self.host_api+"workflows/project_id="+str(self.project_id))
         request.add_header("Accept","application/vnd.api+json; version=1")
@@ -710,80 +726,97 @@ class AggregationAPI:
         data = json.loads(body)
 
         instructions = {}
-        for workflows in data["workflows"]:
-            if int(workflows["id"]) == workflow_id:
+        workflows = {}
+        updated_at_timestamps = {}
+        versions = {}
 
-                for task_id,task in workflows["tasks"].items():
-                    instructions[task_id] = {}
+        for individual_workflow in data["workflows"]:
+            workflow_id = int(individual_workflow["id"])
+            if (given_workflow_id is None) or (workflow_id == given_workflow_id):
+                # read in the basic structure of the workflow
+                workflows[workflow_id] = self.__readin_tasks__(workflow_id)
+
+                # read in the instructions associated with the workflow
+                # not used for the actual aggregation but for printing out results to the user
+                instructions[workflow_id] = {}
+                for task_id,task in individual_workflow["tasks"].items():
+                    instructions[workflow_id][task_id] = {}
                     # classification task
                     if "question" in task:
                         question = task["question"]
-                        instructions[task_id]["instruction"] = re.sub("'","",question)
-                        instructions[task_id]["answers"] = {}
+                        instructions[workflow_id][task_id]["instruction"] = re.sub("'","",question)
+                        instructions[workflow_id][task_id]["answers"] = {}
                         for answer_id,answer in enumerate(task["answers"]):
                             label = answer["label"]
                             label = re.sub("'","",label)
-                            instructions[task_id]["answers"][answer_id] = label
+                            instructions[workflow_id][task_id]["answers"][answer_id] = label
 
                     else:
                         instruct_string = task["instruction"]
-                        instructions[task_id]["instruction"] = re.sub("'","",instruct_string)
+                        instructions[workflow_id][task_id]["instruction"] = re.sub("'","",instruct_string)
 
-                        instructions[task_id]["tools"] = {}
+                        instructions[workflow_id][task_id]["tools"] = {}
                         for tool_index,tool in enumerate(task["tools"]):
-                            instructions[task_id]["tools"][tool_index] = {}
+                            instructions[workflow_id][task_id]["tools"][tool_index] = {}
                             label = tool["label"]
-                            instructions[task_id]["tools"][tool_index]["marking tool"] = re.sub("'","",label)
+                            instructions[workflow_id][task_id]["tools"][tool_index]["marking tool"] = re.sub("'","",label)
                             if tool["details"] != []:
-                                instructions[task_id]["tools"][tool_index]["followup_questions"] = {}
+                                instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"] = {}
 
                                 for subtask_index,subtask in enumerate(tool["details"]):
-                                    instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index] = {}
-                                    instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["question"] = subtask["question"]
-                                    instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"] = {}
+                                    instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index] = {}
+                                    instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["question"] = subtask["question"]
+                                    instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"] = {}
                                     for answer_index,answers in enumerate(subtask["answers"]):
-                                        instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"][answer_index] = answers
+                                        instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"][answer_index] = answers
 
-                return instructions
+                # read in when the workflow last went through a major change
+                # real problems with subjects that were retired before that date or classifications
+                # given for a subject before that date (since the workflow may have changed completely)
+                updated_at_timestamps[workflow_id] = individual_workflow["updated_at"]
 
-        assert False
+                # get the MAJOR version number
+                versions[workflow_id] = int(math.floor(float(individual_workflow["version"])))
+
+        return workflows,versions,instructions,updated_at_timestamps
 
 
-    def __get_workflow_versions__(self):#,project_id):
-        request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
-        # request = urllib2.Request(self.host_api+"workflows/project_id="+str(self.project_id))
-        request.add_header("Accept","application/vnd.api+json; version=1")
-        request.add_header("Authorization","Bearer "+self.token)
 
-        # request
-        try:
-            response = urllib2.urlopen(request)
-        except urllib2.HTTPError as e:
-            sys.stderr.write('The server couldn\'t fulfill the request.\n')
-            sys.stderr.write('Error code: ' + str(e.code) + "\n")
-            sys.stderr.write('Error response body: ' + str(e.read()) + "\n")
-            raise
-        except urllib2.URLError as e:
-            sys.stderr.write('We failed to reach a server.\n')
-            sys.stderr.write('Reason: ' + str(e.reason) + "\n")
-            raise
-        else:
-            # everything is fine
-            body = response.read()
-
-        # put it in json structure and extract id
-        data = json.loads(body)
-
-        versions = {}
-
-        for workflows in data["workflows"]:
-            print workflows["version"]
-
-            # if int(workflows["id"]) == workflow_id:
-            versions[int(workflows["id"])] = int(math.floor(float(workflows["version"])))
-            # versions[int(w["id"])] = w["version"] #int(math.floor(float(w["version"])))
-        print "+==="
-        return versions
+    # def __get_workflow_versions__(self):#,project_id):
+    #     request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
+    #     # request = urllib2.Request(self.host_api+"workflows/project_id="+str(self.project_id))
+    #     request.add_header("Accept","application/vnd.api+json; version=1")
+    #     request.add_header("Authorization","Bearer "+self.token)
+    #
+    #     # request
+    #     try:
+    #         response = urllib2.urlopen(request)
+    #     except urllib2.HTTPError as e:
+    #         sys.stderr.write('The server couldn\'t fulfill the request.\n')
+    #         sys.stderr.write('Error code: ' + str(e.code) + "\n")
+    #         sys.stderr.write('Error response body: ' + str(e.read()) + "\n")
+    #         raise
+    #     except urllib2.URLError as e:
+    #         sys.stderr.write('We failed to reach a server.\n')
+    #         sys.stderr.write('Reason: ' + str(e.reason) + "\n")
+    #         raise
+    #     else:
+    #         # everything is fine
+    #         body = response.read()
+    #
+    #     # put it in json structure and extract id
+    #     data = json.loads(body)
+    #
+    #     versions = {}
+    #
+    #     for workflow in data["workflows"]:
+    #         print workflow["version"]
+    #
+    #         # if int(workflows["id"]) == workflow_id:
+    #         versions[int(workflow["id"])] = int(math.floor(float(workflow["version"])))
+    #         # versions[int(w["id"])] = w["version"] #int(math.floor(float(w["version"])))
+    #     print "+==="
+    #     return versions
 
     def __image_setup__(self,subject_id,download=True):
         """
@@ -1600,43 +1633,44 @@ class AggregationAPI:
                 self.cluster_algs[shape] = clustering_algorithms[shape](shape,identity_mapping)
             assert isinstance(self.cluster_algs[shape],clustering.Cluster)
 
-    def __setup_workflows__(self):#,project_id):
-        request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
-        request.add_header("Accept","application/vnd.api+json; version=1")
-        request.add_header("Authorization","Bearer "+self.token)
-
-        # request
-        try:
-            response = urllib2.urlopen(request)
-        except urllib2.HTTPError as e:
-            print 'The server couldn\'t fulfill the request.'
-            print 'Error code: ', e.code
-            print 'Error response body: ', e.read()
-            raise
-        except urllib2.URLError as e:
-            print 'We failed to reach a server.'
-            print 'Reason: ', e.reason
-            raise
-        else:
-            # everything is fine
-            body = response.read()
-
-        # put it in json structure and extract id
-        data = json.loads(body)
-
-        # for each workflow, read in the tasks
-        workflows = {}
-
-
-        for individual_work in data["workflows"]:
-            id_ = int(individual_work["id"])
-            # self.workflows.append(id_)
-            workflows[id_] = self.__readin_tasks__(id_)
-            # self.subject_sets[id_] = self.__get_subject_ids__(id_)
-
-        # assert False
-        # read in the most current version of each of the workflows
-        return workflows
+    # def __setup_workflows__(self):#,project_id):
+    #     request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
+    #     request.add_header("Accept","application/vnd.api+json; version=1")
+    #     request.add_header("Authorization","Bearer "+self.token)
+    #
+    #     # request
+    #     try:
+    #         response = urllib2.urlopen(request)
+    #     except urllib2.HTTPError as e:
+    #         print 'The server couldn\'t fulfill the request.'
+    #         print 'Error code: ', e.code
+    #         print 'Error response body: ', e.read()
+    #         raise
+    #     except urllib2.URLError as e:
+    #         print 'We failed to reach a server.'
+    #         print 'Reason: ', e.reason
+    #         raise
+    #     else:
+    #         # everything is fine
+    #         body = response.read()
+    #
+    #     # put it in json structure and extract id
+    #     data = json.loads(body)
+    #
+    #     # for each workflow, read in the tasks
+    #     workflows = {}
+    #
+    #     for individual_workflow in data["workflows"]:
+    #         id_ = int(individual_workflow["id"])
+    #         print individual_workflow["updated_at"]
+    #         assert False
+    #         # self.workflows.append(id_)
+    #         workflows[id_] = self.__readin_tasks__(id_)
+    #         # self.subject_sets[id_] = self.__get_subject_ids__(id_)
+    #
+    #     # assert False
+    #     # read in the most current version of each of the workflows
+    #     return workflows
 
     def __sort_annotations__(self,workflow_id,subject_set=None,expert=None):
         """
@@ -1868,10 +1902,10 @@ class AggregationAPI:
             postgres_cursor.execute("create table aggregations(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation json,created_at timestamp, updated_at timestamp)")
             r = []
 
-        if self.host_api is not None:
-            workflow_details = self.__get_workflow_details__(workflow_id)
-        else:
-            workflow_details = ""
+        # if self.host_api is not None:
+        #     workflow_details = self.__get_workflow_details__(workflow_id)
+        # else:
+        #     workflow_details = ""
 
         update_str = ""
         insert_str = ""
@@ -1890,7 +1924,7 @@ class AggregationAPI:
             aggregation = self.__prune__(aggregations[subject_id])
             # aggregation[" metadata"] = metadata
 
-            aggregation[" instructions"] = workflow_details
+            aggregation[" instructions"] = self.instructions[workflow_id]
 
 
             if subject_id in r:
