@@ -22,6 +22,7 @@ import clustering
 import blob_clustering
 from collections import OrderedDict
 import numpy
+import random
 
 # setup(
 #     name = "Zooniverse Aggregation",
@@ -55,7 +56,10 @@ class ImproperTool(Exception):
         return "improper tool: " + str(self.tool)
 
 
-def line_mapping(marking,image_dimensions):
+# extract the relevant params for different shapes from the json blob
+# todo - do a better job of checking to make sure that the marking lies within the image dimension
+# todo - also generalize to ROI
+def relevant_line_params(marking,image_dimensions):
     # want to extract the params x1,x2,y1,y2 but
     # ALSO make sure that x1 <= x2 and flip if necessary
     x1 = marking["x1"]
@@ -70,12 +74,12 @@ def line_mapping(marking,image_dimensions):
         raise InvalidMarking(marking)
 
     if x1 <= x2:
-        return (x1,y1),(x2,y2)
+        return x1,y1,x2,y2
     else:
-        return (x2,y2),(x1,y1)
+        return x2,y2,x1,y1
 
 
-def point_mapping(marking,image_dimensions):
+def relevant_point_params(marking,image_dimensions):
     # todo - this has to be changed
     image_dimensions = 1000,1000
     if (marking["x"] == "") or (marking["y"] == ""):
@@ -94,7 +98,7 @@ def point_mapping(marking,image_dimensions):
     return x,y
 
 
-def rectangle_mapping(marking,image_dimensions):
+def relevant_rectangle_params(marking,image_dimensions):
     x = marking["x"]
     y = marking["y"]
 
@@ -108,17 +112,46 @@ def rectangle_mapping(marking,image_dimensions):
     return (x,y),(x,y2),(x2,y2),(x2,y)
 
 
-def circle_mapping(marking,image_dimensions):
+def relevant_circle_params(marking,image_dimensions):
     return marking["x"],marking["y"],marking["r"]
 
 
-
-def ellipse_mapping(marking,image_dimensions):
+def relevant_ellipse_params(marking,image_dimensions):
     return marking["x"],marking["y"],marking["rx"],marking["ry"],marking["angle"]
 
+# mappings are for use in dimension reduction
+def identity_mapping(markings):
+    return markings
+
+
+def hesse_line_mapping(line_segments):
+    """
+    use if we want to cluster based on Hesse normal form - but want to retain the original values
+    :param line_segment:
+    :return:
+    """
+    reduced_markings = []
+
+    for line_seg in line_segments:
+        x1,y1,x2,y2 = line_seg
+
+        x2 += random.uniform(-0.0001,0.0001)
+        x1 += random.uniform(-0.0001,0.0001)
+
+        dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
+
+        try:
+            tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
+            theta = math.atan(tan_theta)
+        except ZeroDivisionError:
+            theta = math.pi/2.
+
+        reduced_markings.append((dist,theta))
+
+    return reduced_markings
 
 class AggregationAPI:
-    def __init__(self,project=None,environment=None):#,user_threshold= None, score_threshold= None): #Supernovae
+    def __init__(self,project=None,environment=None,db_connection=True,user_id=None,password=None):#,user_threshold= None, score_threshold= None): #Supernovae
 
 
         self.cluster_algs = None
@@ -129,11 +162,11 @@ class AggregationAPI:
 
         # functions for converting json instances into values we can actually cluster on
         self.marking_params_per_shape = dict()
-        self.marking_params_per_shape["line"] = line_mapping
-        self.marking_params_per_shape["point"] = point_mapping
-        self.marking_params_per_shape["ellipse"] = ellipse_mapping
-        self.marking_params_per_shape["rectangle"] = rectangle_mapping
-        self.marking_params_per_shape["circle"] = circle_mapping
+        self.marking_params_per_shape["line"] = relevant_line_params
+        self.marking_params_per_shape["point"] = relevant_point_params
+        self.marking_params_per_shape["ellipse"] = relevant_ellipse_params
+        self.marking_params_per_shape["rectangle"] = relevant_rectangle_params
+        self.marking_params_per_shape["circle"] = relevant_circle_params
 
         # in case project wants to have an roi
         self.roi_dict = {}
@@ -154,30 +187,25 @@ class AggregationAPI:
 
         # connect to the Panoptes db - postgres
         # even if we are running an ouroboros project we will want to connect to Postgres
-        try:
-            database_file = open("config/database.yml")
-        except IOError:
-            database_file = open(base_directory+"/Databases/database.yml")
+        if db_connection:
+            try:
+                database_file = open("config/database.yml")
+            except IOError:
+                database_file = open(base_directory+"/Databases/database.yml")
 
 
-        database_details = yaml.load(database_file)
-        self.postgres_session = None
-        self.__postgres_connect__(database_details[self.environment])
-
-        # if project is None - then this should be an ouroboros project pretending to be a Panoptes
-        # one - so all of the code after the return will handle things like connecting to the Panoptes API
-        # (which the ouroboros project won't have to do) and the Postgres/Cassandra connections
-        # (which the ouroboros project will have to do specially because of some differences)
-        if project is None:
-            return
+            database_details = yaml.load(database_file)
+            self.postgres_session = None
+            self.__postgres_connect__(database_details[self.environment])
 
 
 
-        # and to the cassandra db as well
-        self.__cassandra_connect__()
 
-        # will only override this for ouroboros instances
-        self.classification_table = "classifications"
+            # and to the cassandra db as well
+            self.__cassandra_connect__()
+
+            # will only override this for ouroboros instances
+            self.classification_table = "classifications"
 
 
         # get my userID and password
@@ -189,10 +217,16 @@ class AggregationAPI:
         api_details = yaml.load(panoptes_file)
 
         print "connecting to Panoptes http api"
+        if user_id is None:
+            user_id = api_details["production"]["name"]
+        if password is None:
+            password = api_details["production"]["password"]
         # set the http_api and basic project details
         # if project id is given, connect using basic values - assume we are in production space
         # if project id is given as an int, assume that it is referring to the Panoptes id
-        self.__panoptes_connect__(api_details["production"])
+        self.__panoptes_connect__(api_details["production"],user_id,password)
+
+
         try:
             self.project_id = int(project)
         except ValueError:
@@ -213,7 +247,8 @@ class AggregationAPI:
 
         # load the default clustering algorithms
         default_clustering_algs = {"point":agglomerative.Agglomerative,"circle":agglomerative.Agglomerative,"ellipse": agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering,"line":agglomerative.Agglomerative}
-        self.__set_clustering_algs__(default_clustering_algs)
+        reduction_algs = {"line":hesse_line_mapping}
+        self.__set_clustering_algs__(default_clustering_algs,reduction_algs)
 
         # load the default classification algorithm
         self.__set_classification_alg__(classification.VoteCount)
@@ -239,9 +274,8 @@ class AggregationAPI:
 
         for workflow_id in workflows:
             if subject_set is None:
-                print "here"
-                # subject_set = self.__get_retired_subjects__(workflow_id)
-                subject_set = self.__load_subjects__(workflow_id)
+                subject_set = self.__get_retired_subjects__(workflow_id)
+                # subject_set = self.__load_subjects__(workflow_id)
             print "workflow id : " + str(workflow_id)
             print "aggregating " + str(len(subject_set)) + " subjects"
             # self.__describe__(workflow_id)
@@ -363,53 +397,59 @@ class AggregationAPI:
 
         return cluster_aggregation
 
-    def __csv_output__(self,workflow_id):
-        # yield task_id,r[0],int(cluster_index),shape,int(most_likely_tool),p_x,p_y,height,width,rotation,number_of_users_per_subject,number_of_users_per_cluster,probability_of_existence,tool_probability
-        classification_tasks,marking_tasks = self.workflows[workflow_id]
-        csv_files = {}
-        for c in classification_tasks:
-            csv_files[c+"c"] = open("/tmp/"+c+"_classification.csv","wb")
-            csv_files[c+"c"].write("subject id, shape,cluster index,followup index, most likely label, probability of most likely label, number of users\n")
-        for c in marking_tasks:
-            csv_files[c+"m"] = open("/tmp/"+c+"_marking.csv","wb")
-            csv_files[c+"m"].write("subject id, shape,cluster index,most likely tool, x center, y center, height,rotation, number of users per subject/task, number of users per cluster,probability of existence, probability of most likely tool\n")
+    def __csv_output__(self,given_workflows = None):
+        if given_workflows is None:
+            workflows = self.workflows
+        else:
+            workflows = [given_workflows]
 
-        for record in self.__get_aggregations__(workflow_id):
-            subject_id = record[1]
-            if isinstance(record[2],list):
-                # classification
-                f = csv_files[record[0]+"c"]
+        for workflow_id in workflows:
+            # yield task_id,r[0],int(cluster_index),shape,int(most_likely_tool),p_x,p_y,height,width,rotation,number_of_users_per_subject,number_of_users_per_cluster,probability_of_existence,tool_probability
+            classification_tasks,marking_tasks = self.workflows[workflow_id]
+            csv_files = {}
+            for c in classification_tasks:
+                csv_files[c+"c"] = open("/tmp/workflow_"+str(workflow_id)+"_task_"+c+"_classification.csv","wb")
+                csv_files[c+"c"].write("subject id, shape,cluster index,followup index, most likely label, probability of most likely label, number of users\n")
+            for c in marking_tasks:
+                csv_files[c+"m"] = open("/tmp/workflow_"+str(workflow_id)+"_task_"+c+"_marking.csv","wb")
+                csv_files[c+"m"].write("subject id, shape,cluster index,most likely tool, x center, y center, height,rotation, number of users per subject/task, number of users per cluster,probability of existence, probability of most likely tool\n")
+
+            for record in self.__get_aggregations__(workflow_id):
+                subject_id = record[1]
+                if isinstance(record[2],list):
+                    # classification
+                    f = csv_files[record[0]+"c"]
+                    assert isinstance(f,file)
+                    probabilities = record[2][0].items()
+                    most_likely, highest_prob = max(probabilities, key = lambda x:x[1])
+                    num_users = record[2][1]
+                    f.write(str(subject_id) + ",,,," + str(most_likely) + "," + str(highest_prob) + "," + str(num_users) +"\n")
+                else:
+                    # marking
+                    f = csv_files[record[0]+"m"]
+                    csv_record = str(subject_id) + ","
+                    for field in record[2:-1]:
+                        if field is not None:
+                            csv_record += str(field)
+                        csv_record += ","
+                    f.write(csv_record[:-1]+"\n")
+
+                    # there were followup questions
+                    if record[-1] is not None:
+                        for followup_index,followup_question in enumerate(record[-1]):
+                            num_users = followup_question[1]
+                            if num_users != 0:
+                                probabilities = followup_question[0].items()
+                                most_likely, highest_prob = max(probabilities, key = lambda x:x[1])
+
+                                f = csv_files[record[0]+"c"]
+                                shape = record[2]
+                                cluster_index = record[3]
+                                f.write(str(subject_id)+","+str(shape)+","+str(cluster_index)+","+str(followup_index)+","+str(most_likely)+","+str(highest_prob)+","+str(num_users))
+
+            for f in csv_files.values():
                 assert isinstance(f,file)
-                probabilities = record[2][0].items()
-                most_likely, highest_prob = max(probabilities, key = lambda x:x[1])
-                num_users = record[2][1]
-                f.write(str(subject_id) + ",,,," + str(most_likely) + "," + str(highest_prob) + "," + str(num_users) +"\n")
-            else:
-                # marking
-                f = csv_files[record[0]+"m"]
-                csv_record = str(subject_id) + ","
-                for field in record[2:-1]:
-                    if field is not None:
-                        csv_record += str(field)
-                    csv_record += ","
-                f.write(csv_record[:-1]+"\n")
-
-                # there were followup questions
-                if record[-1] is not None:
-                    for followup_index,followup_question in enumerate(record[-1]):
-                        num_users = followup_question[1]
-                        if num_users != 0:
-                            probabilities = followup_question[0].items()
-                            most_likely, highest_prob = max(probabilities, key = lambda x:x[1])
-
-                            f = csv_files[record[0]+"c"]
-                            shape = record[2]
-                            cluster_index = record[3]
-                            f.write(str(subject_id)+","+str(shape)+","+str(cluster_index)+","+str(followup_index)+","+str(most_likely)+","+str(highest_prob)+","+str(num_users))
-
-        for f in csv_files.values():
-            assert isinstance(f,file)
-            f.close()
+                f.close()
 
     def __enter__(self):
         return self
@@ -514,7 +554,6 @@ class AggregationAPI:
                                         else:
                                             print cluster_type, cluster
                                             assert False
-
 
                                         number_of_users_per_subject = cluster["existence"][1]
                                         probability_of_existence = cluster["existence"][0]["1"]
@@ -956,14 +995,14 @@ class AggregationAPI:
         if statements_and_params != []:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
 
-    def __panoptes_connect__(self,api_details):
+    def __panoptes_connect__(self,api_details,user_name,password):
         """
         make the main connection to Panoptes - through http
         :return:
         """
         # details for connecting to Panoptes
-        self.user_name = api_details["name"]
-        self.password = api_details["password"]
+        # self.user_name = api_details["name"]
+        # self.password = api_details["password"]
         self.host = api_details["host"] #"https://panoptes-staging.zooniverse.org/"
         self.host_api = self.host+"api/"
          #"brian-testing" or zooniverse
@@ -995,7 +1034,7 @@ class AggregationAPI:
                     raise
 
                 #2. use the token to get a devise session via JSON stored in a cookie
-                devise_login_data=("{\"user\": {\"login\":\""+self.user_name+"\",\"password\":\""+self.password+
+                devise_login_data=("{\"user\": {\"login\":\""+user_name+"\",\"password\":\""+password+
                                    "\"}, \"authenticity_token\": \""+csrf_token+"\"}")
 
                 request = urllib2.Request(self.host+"users/sign_in",data=devise_login_data)
@@ -1053,6 +1092,35 @@ class AggregationAPI:
                 print "trying to connect/init again again"
                 pass
 
+    def __panoptes_aggregation__(self):
+
+        # request = urllib2.Request(self.host_api+"aggregations?workflow_id="+str(2)+"&subject_id="+str(458021)+"&admin=true")
+        request = urllib2.Request(self.host_api+"aggregations?workflow_id="+str(2)+"&admin=true")
+        print self.host_api+"aggregations?workflow_id="+str(2)+",subject_id="+str(458021)
+        # request = urllib2.Request(self.host_api+"workflows/project_id="+str(self.project_id))
+        request.add_header("Accept","application/vnd.api+json; version=1")
+        request.add_header("Authorization","Bearer "+self.token)
+
+        # request
+        try:
+            response = urllib2.urlopen(request)
+        except urllib2.HTTPError as e:
+            sys.stderr.write('The server couldn\'t fulfill the request.\n')
+            sys.stderr.write('Error code: ' + str(e.code) + "\n")
+            sys.stderr.write('Error response body: ' + str(e.read()) + "\n")
+            raise
+        except urllib2.URLError as e:
+            sys.stderr.write('We failed to reach a server.\n')
+            sys.stderr.write('Reason: ' + str(e.reason) + "\n")
+            raise
+        else:
+            # everything is fine
+            body = response.read()
+
+        # put it in json structure and extract id
+        data = json.loads(body)
+
+        print data
 
 
     def __plot_image__(self,subject_id,axes):
@@ -1517,16 +1585,20 @@ class AggregationAPI:
         self.classification_alg = alg()
         assert isinstance(self.classification_alg,classification.Classification)
 
-    def __set_clustering_algs__(self,clustering_algorithms):
+    def __set_clustering_algs__(self,clustering_algorithms,reduction_algs={}):
 
         # the dictionary allows us to give a different clustering algorithm for different shapes
 
         self.cluster_algs = {}
         assert isinstance(clustering_algorithms,dict)
-        for kw in clustering_algorithms:
-            assert kw in self.marking_params_per_shape
-            self.cluster_algs[kw] = clustering_algorithms[kw](kw)
-            assert isinstance(self.cluster_algs[kw],clustering.Cluster)
+        for shape in clustering_algorithms:
+            assert shape in self.marking_params_per_shape
+            print shape
+            if shape in reduction_algs:
+                self.cluster_algs[shape] = clustering_algorithms[shape](shape,reduction_algs[shape])
+            else:
+                self.cluster_algs[shape] = clustering_algorithms[shape](shape,identity_mapping)
+            assert isinstance(self.cluster_algs[shape],clustering.Cluster)
 
     def __setup_workflows__(self):#,project_id):
         request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
@@ -1919,23 +1991,24 @@ class SubjectGenerator:
         raise StopIteration
 
 
-def twod_linesegment(pt):
-    x1,x2,y1,y2 = pt
-    print x1,x2,y1,y2
-    dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
-
-    try:
-        tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
-        theta = math.atan(tan_theta)
-    except ZeroDivisionError:
-        theta = math.pi/2.
-
-    return dist,theta
+# def twod_linesegment(pt):
+#     x1,x2,y1,y2 = pt
+#     print x1,x2,y1,y2
+#     dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
+#
+#     try:
+#         tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
+#         theta = math.atan(tan_theta)
+#     except ZeroDivisionError:
+#         theta = math.pi/2.
+#
+#     return dist,theta
 
 if __name__ == "__main__":
     project_identifier = sys.argv[1]
     with AggregationAPI(project_identifier) as project:
         # project.__migrate__()
-        # project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
-        project.__csv_output__(2)#workflow_ids =[84],subject_id=494900)
+        project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+        # project.__panoptes_aggregation__()
+        project.__csv_output__()#workflow_ids =[84],subject_id=494900)
     # project.__get_workflow_details__(84)

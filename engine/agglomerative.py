@@ -13,30 +13,9 @@ import multiClickCorrect
 import json
 import random
 
-def hesse_line_mapping(line_segment):
-    """
-    use if we want to cluster based on Hesse normal form - but want to retain the original values
-    :param line_segment:
-    :return:
-    """
-    (x1,y1),(x2,y2) = line_segment
-
-    x2 += random.uniform(-0.0001,0.0001)
-    x1 += random.uniform(-0.0001,0.0001)
-
-    dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
-
-    try:
-        tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
-        theta = math.atan(tan_theta)
-    except ZeroDivisionError:
-        theta = math.pi/2.
-
-    return dist,theta
-
 class Agglomerative(clustering.Cluster):
-    def __init__(self,shape):
-        clustering.Cluster.__init__(self,shape)
+    def __init__(self,shape,dim_reduction_alg):
+        clustering.Cluster.__init__(self,shape,dim_reduction_alg)
         self.all_distances = []
         self.max = 0
 
@@ -62,7 +41,7 @@ class Agglomerative(clustering.Cluster):
     #
     #     return results
 
-    def __inner_fit__(self,markings,user_ids,tools):
+    def __inner_fit__(self,markings,user_ids,tools,reduced_markings):
         """
         the actual clustering algorithm
         markings and user_ids should be the same length - a one to one mapping
@@ -75,6 +54,7 @@ class Agglomerative(clustering.Cluster):
         :return:
         """
         assert len(markings) == len(user_ids)
+        assert len(markings) == len(reduced_markings)
         assert isinstance(user_ids,tuple)
         user_ids = list(user_ids)
         start = time.time()
@@ -88,19 +68,14 @@ class Agglomerative(clustering.Cluster):
 
         all_users = set()
 
-        # check if the markings are for line segments - if so, convert to Hesse values
-        # we keep the original values around since we still need those
-        if self.shape == "line":
-            mapped_markings = [hesse_line_mapping(l) for l in markings]
-        else:
-            mapped_markings = markings
+        # cluster based n the reduced markings, but list the clusters based on their original values
 
         # this converts stuff into panda format - probably a better way to do this but the labels do seem
         # necessary
-        labels = [str(i) for i in markings]
-        param_labels = [str(i) for i in range(len(markings[0]))]
+        labels = [str(i) for i in reduced_markings]
+        param_labels = [str(i) for i in range(len(reduced_markings[0]))]
 
-        df = pd.DataFrame(np.array(mapped_markings), columns=param_labels, index=labels)
+        df = pd.DataFrame(np.array(reduced_markings), columns=param_labels, index=labels)
         row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
         # use ward metric to do the actual clustering
         row_clusters = linkage(row_dist, method='ward')
@@ -108,6 +83,8 @@ class Agglomerative(clustering.Cluster):
         # use the results to build a tree representation
         # nodes = [LeafNode(pt,ii,user=user) for ii,(user,pt) in enumerate(zip(user_ids,markings))]
         results = [{"users":[u],"cluster members":[p],"tools":[t],"num users":len(user_ids)} for u,p,t in zip(user_ids,markings,tools)]
+
+        print results
 
         # read through the results
         # each row gives a cluster/node to merge
@@ -134,6 +111,8 @@ class Agglomerative(clustering.Cluster):
             # maybe just the lnode is done:
             elif (lnode is None) or ("center" in lnode):
                 rnode["center"] = [np.median(axis) for axis in zip(*rnode["cluster members"])]
+                print "---"
+                print rnode["cluster members"]
                 results.append(None)
             else:
                 # check if we should merge - only if there is no overlap
@@ -145,6 +124,10 @@ class Agglomerative(clustering.Cluster):
                 if intersection != []:
                     rnode["center"] = [np.median(axis) for axis in zip(*rnode["cluster members"])]
                     lnode["center"] = [np.median(axis) for axis in zip(*lnode["cluster members"])]
+                    print "+++"
+                    print rnode["cluster members"]
+                    print zip(*rnode["cluster members"])
+                    print
                     results.append(None)
                 else:
                     # else just merge
@@ -173,6 +156,12 @@ class Agglomerative(clustering.Cluster):
         end = time.time()
         # print [len(r["users"]) for r in results]
         # results = self.correction_alg.__fix__(results)
+
+        print
+        print results
+        print
+        print
+
         return results,end-start
 
     def __check__(self):

@@ -43,50 +43,18 @@ def chunk_it(seq, num):
 class Cluster:
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self,shape):
+    def __init__(self,shape,dim_reduction_alg):
         """
         :param project_api: how to talk to whatever project we are clustering for (Panoptes/Ouroboros shouldn't matter)
         :param min_cluster_size: minimum number of points in a cluster to not be considered noise
         :return:
         """
         self.shape = shape
+        self.dim_reduction_alg = dim_reduction_alg
 
-        # assert isinstance(project_api,panoptes_api.PanoptesAPI)
-        # self.project_api = project_api
-        # we must say what shapes we want
-        # self.clusterResults = {}
-        # self.goldResults = {}
-
-        # self.correct_pts = {}
-        # for gold points which we have missed
-        # self.missed_pts = {}
-        # for false positives (according to the gold standard)
-        # self.false_positives = {}
-        # we also need to map between user points and gold points
-        # self.user_gold_mapping = {}
-
-        # the distance between a user cluster and what we believe to do the corresponding goal standard point
-        # self.user_gold_distance = {}
-
-        # the list of every subject we have processed so far - a set just in case we accidentally process the same
-        # one twice. Probably should never happen but just in case
-        # self.processed_subjects = set([])
-
-        # needed for when we want use ibcc for stuff
-        # current_directory = os.getcwd()
-        # slash_indices = [m.start() for m in re.finditer('/', current_directory)]
-        # self.base_directory = current_directory[:slash_indices[2]+1]
-
-        # for creating names of ibcc output files
-        # self.alg = None
-
-        self.x_roc = None
-        self.y_roc = None
-
-        self.algorithm_name = None
 
     @abc.abstractmethod
-    def __inner_fit__(self,markings,user_ids,tools):
+    def __inner_fit__(self,markings,user_ids,tools,reduced_markings):
         """
         the main function for clustering
         :param user_ids:
@@ -143,8 +111,10 @@ class Cluster:
                     else:
                         users,markings,tools = zip(*pruned_markings)
 
+                        reduced_markings = self.dim_reduction_alg(markings)
+
                         # do the actual clustering
-                        cluster_results,time_to_cluster = self.__inner_fit__(markings,users,tools)
+                        cluster_results,time_to_cluster = self.__inner_fit__(markings,users,tools,reduced_markings)
 
                     # store the results - note we need to store even for empty images
                     if subject_id not in aggregation:
