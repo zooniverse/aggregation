@@ -267,8 +267,6 @@ class AggregationAPI:
         except:
             self.old_time = datetime.datetime(2000,01,01)
 
-        self.old_time = datetime.datetime(2000,01,01)
-
         self.current_time = datetime.datetime.now()
         self.ignore_versions = False
 
