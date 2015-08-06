@@ -57,11 +57,13 @@ class Marmot:
 
         self.true_positives = {}
         self.false_positives = {}
+        self.unknown_positives = {}
 
         self.run_mode = None
 
         # used that we can store values when we go back to an image
         self.matplotlib_points = {}
+        self.probabilities = {}
 
         # by default no
         self.require_gold_standard = False
@@ -186,11 +188,67 @@ class Marmot:
         ttk.Button(self.root, text="-->", command=self.__increment__).grid(column=2, row=5)
         # ttk.Button(self.root, text="Threshold Plot", command=self.__calculate__).grid(column=1, row=5)
         # ttk.Button(self.root, text="Re-aggregate", command=self.__reaggregate__).grid(column=1, row=6)
-        ttk.Button(self.root, text="ROC estimate", command=self.__reaggregate__).grid(column=1, row=6)
+        ttk.Button(self.root, text="ROC estimate", command=self.__roc_estimate__).grid(column=1, row=6)
 
     def __roc_estimate__(self):
-        print self.true_positives
-        print self.false_positives
+        plt.close()
+        true_positives = []
+        false_positives = []
+        unknowns = []
+
+        for subject_id in self.true_positives:
+            for pt in self.true_positives[subject_id]:
+                true_positives.append(self.probabilities[subject_id][pt])
+
+            for pt in self.false_positives[subject_id]:
+                false_positives.append(self.probabilities[subject_id][pt])
+
+            for pt in self.unknown_positives[subject_id]:
+                unknowns.append(self.probabilities[subject_id][pt])
+
+        overall_probabilities = true_positives[:]
+        overall_probabilities.extend(false_positives)
+
+        # remove duplicates and sort
+        overall_probabilities = sorted(list(set(overall_probabilities)),reverse=True)
+
+        X = []
+        Y = []
+
+        for p in overall_probabilities:
+            num_true = sum([1 for p1 in true_positives if p1 >= p])
+            num_false = sum([1 for p1 in false_positives if p1 >= p])
+
+            # treat them as positives
+            num_true += sum([1 for p1 in unknowns if p1 >= p])
+
+            Y.append(num_true)
+            X.append(num_false)
+
+        X = [x/float(max(X)) for x in X]
+        Y = [y/float(max(Y)) for y in Y]
+
+        plt.plot(X,Y,"o-")
+
+        X = []
+        Y = []
+
+        for p in overall_probabilities:
+            num_true = sum([1 for p1 in true_positives if p1 >= p])
+            num_false = sum([1 for p1 in false_positives if p1 >= p])
+
+            # treat them as negatives
+            num_false += sum([1 for p1 in unknowns if p1 >= p])
+
+            Y.append(num_true)
+            X.append(num_false)
+
+        X = [x/float(max(X)) for x in X]
+        Y = [y/float(max(Y)) for y in Y]
+
+        plt.plot(X,Y,"o-")
+
+        plt.show()
 
 
     def __reaggregate__(self):
@@ -275,7 +333,7 @@ class Marmot:
         axes = fig.add_subplot(1, 1, 1)
 
         # get the cluster markings from the aggregation api
-        probabilities = self.project.__get_cluster_markings__(-1,subject_id,1,"point")
+        self.probabilities[subject_id] = self.project.__get_cluster_markings__(-1,subject_id,1,"point")
 
         # if this is the first time we are seeing this particular image
         # by default, accept the 50% in terms of probability threshold
@@ -283,7 +341,7 @@ class Marmot:
             self.percentage_thresholds[subject_id] = 0.5
 
         # plot centers
-        matplotlib_objects = self.__plot_cluster_markings__(probabilities,"point",axes,self.percentage_thresholds[subject_id])
+        matplotlib_objects = self.__plot_cluster_markings__(self.probabilities[subject_id],"point",axes,self.percentage_thresholds[subject_id])
 
         # if this is the first time we've seen this image
         # accept all points above the threshold
@@ -296,6 +354,8 @@ class Marmot:
             self.true_positives[subject_id] = [pt for pt,obj in matplotlib_objects.items() if obj.get_color() == "green"]
             # by default any point above the threshold is just unknown - NOT a false positive
             self.false_positives[subject_id] = []
+            self.unknown_positives[subject_id] = [pt for pt in matplotlib_objects if pt not in self.true_positives[subject_id]]
+
         else:
             # immediately reload previous colours
             for pt,obj in matplotlib_objects.items():
@@ -370,9 +430,11 @@ class Marmot:
                 elif old_colour == "green":
                     # gone from true positive to don't know
                     self.true_positives[subject_id].remove(nearest_pt)
+                    self.unknown_positives[subject_id].add(nearest_pt)
                     obj.set_color("yellow")
                 else:
                     # gone from don't know to false positive
+                    self.unknown_positives[subject_id].remove(nearest_pt)
                     self.false_positives[subject_id].append(nearest_pt)
                     obj.set_color("red")
 
