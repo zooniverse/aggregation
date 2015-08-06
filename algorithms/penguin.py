@@ -1,12 +1,13 @@
 #!/usr/bin/env python
 __author__ = 'greg'
 import sys
-sys.path.append("/home/greg/github/reduction/engine")
+# sys.path.append("/home/greg/github/reduction/engine")
+sys.path.append("/home/ggdhines/PycharmProjects/reduction/engine")
 
 import pymongo
 import agglomerative
 import aggregation_api
-import panoptes_ibcc
+# import panoptes_ibcc
 import cassandra
 import json
 from cassandra.concurrent import execute_concurrent
@@ -14,10 +15,10 @@ from cassandra.cluster import Cluster
 import urllib2
 import os
 import math
-import yaml
+# import yaml
 import csv
-import matplotlib.pyplot as plt
-import classification
+# import matplotlib.pyplot as plt
+# import classification
 
 global_workflow_id = -1
 global_task_id = 1
@@ -25,11 +26,11 @@ global_version = 1
 
 class Penguins(aggregation_api.AggregationAPI):
     def __init__(self):
-        aggregation_api.AggregationAPI.__init__(self,environment="penguins")
+        aggregation_api.AggregationAPI.__init__(self,project = -1, environment="penguins")
         self.project_id = -1
         # connect to the mongo server
         client = pymongo.MongoClient()
-        db = client['penguin_2015-06-01']
+        db = client['penguin_2015-05-08']
         self.classification_collection = db["penguin_classifications"]
         self.subject_collection = db["penguin_subjects"]
 
@@ -45,10 +46,10 @@ class Penguins(aggregation_api.AggregationAPI):
         self.workflows = {global_workflow_id:(classification_tasks,marking_tasks)}
         self.versions = {global_workflow_id:global_version}
 
-        self.cluster_algs = {"point":agglomerative.Agglomerative("point")}
-        self.classification_alg = classification.VoteCount()#panoptes_ibcc.IBCC()
+        # self.cluster_algs = {"point":agglomerative.Agglomerative("point")}
+        # self.classification_alg = classification.VoteCount()#panoptes_ibcc.IBCC()
 
-        self.__cassandra_connect__()
+        # self.__cassandra_connect__()
 
         self.classification_table = "penguins_classifications"
         self.users_table = "penguins_users"
@@ -494,7 +495,6 @@ class Penguins(aggregation_api.AggregationAPI):
                 self.subject_to_site[subject_id] = None
             else:
                 self.subject_to_site[subject_id] = site_name
-
 
         return self.__in_roi__(subject_id,marking)
 

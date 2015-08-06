@@ -977,9 +977,7 @@ class AggregationAPI:
         # except cassandra.AlreadyExists:
         #     pass
 
-
         subject_listing = set()
-
 
         select = "SELECT * from classifications where project_id="+str(self.project_id) +" and created_at >= '" + str(self.old_time) +"'"
         cur = self.postgres_session.cursor()
@@ -990,8 +988,6 @@ class AggregationAPI:
         insert_statement = self.cassandra_session.prepare("""
                 insert into classifications (project_id, user_id, workflow_id,  created_at,annotations, updated_at, user_group_id, user_ip, completed, gold_standard, subject_id, workflow_version,metadata)
                 values (?,?,?,?,?,?,?,?,?,?,?,?,?)""")
-
-
 
         statements_and_params = []
         migrated = {}
@@ -1063,7 +1059,7 @@ class AggregationAPI:
          #"brian-testing" or zooniverse
 
         self.app_client_id = api_details["app_client_id"]
-        self.environment = api_details["environment"]
+        # self.environment = api_details["environment"]
         self.token = None
 
         # the http api for connecting to Panoptes
@@ -1228,10 +1224,10 @@ class AggregationAPI:
     #
     #     plt.axis('scaled')
 
-    def __plot_cluster_results__(self,workflow_id,subject_id,task_id,shape,axes,percentile_threshold=None,correct_pts=None):
+    # def __get_cluster_markings__(self,workflow_id,subject_id,task_id,shape,axes,percentile_threshold=None,correct_pts=None,incorrect_pts=None):
+    def __get_cluster_markings__(self,workflow_id,subject_id,task_id,shape):
         """
-        plots the clustering results - also stores the distribution of probabilities of existence
-        so they can be altered later
+        return the center of each cluster - for plotting - and associated probability of existing
         :param workflow_id:
         :param subject_id:
         :param task_id:
@@ -1239,22 +1235,15 @@ class AggregationAPI:
         :param threshold:
         :return:
         """
-        print subject_id
-        print correct_pts
         postgres_cursor = self.postgres_session.cursor()
         # todo - generalize for panoptes
         stmt = "select aggregation from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = '" + str(subject_id) + "'"
         # stmt = "select aggregation from aggregations where subject_id = '" + str(subject_id) + "'"
-
         postgres_cursor.execute(stmt)
-
-        # dict for storing results used to update matplotlib graphs
-        matplotlib_cluster = {}
-
-        self.probabilities = []
 
         # todo - this should be a dict but doesn't seem to be - hmmmm :/
         agg = postgres_cursor.fetchone()
+
         if agg is None:
             print "returning none"
             return {}
@@ -1262,93 +1251,29 @@ class AggregationAPI:
         if isinstance(agg[0],str):
             aggregations = json.loads(agg[0])
         else:
+            if 0 not in agg:
+                assert False
             aggregations = agg[0]
 
         assert isinstance(aggregations,dict)
 
-
-
-        # # task id could be for example, init, so has to be a string
-        # for shapes in aggregations[str(task_id)]:
-        #     if shapes == "param":
-        #         continue
-        #     shape = shapes.split(" ")[0]
-
-        # do two passes - first to get the probabilities
-        for cluster_index,cluster in aggregations[str(task_id)][shape + " clusters"].items():
-            if cluster_index == "param":
+        probabilities = {}
+        for cluster in aggregations[str(task_id)][shape + " clusters"].values():
+            if cluster == "cluster_index":
                 continue
-            print cluster['existence']
-            if isinstance(cluster['existence'][0],dict):
-                self.probabilities.append(cluster['existence'][0]['1'])
-            else:
-                self.probabilities.append(cluster['existence'][0][1])
 
-        if self.probabilities == []:
-            print "here here two"
-            return {}
-
-        if percentile_threshold is not None:
-            print self.probabilities
-            prob_threshold = numpy.percentile(self.probabilities,(1-percentile_threshold)*100)
-            marker = '.'
-        else:
-            prob_threshold = None
-            marker = '^'
-
-        for cluster_index,cluster in aggregations[str(task_id)][shape + " clusters"].items():
-            if cluster_index == "param":
-                continue
             center = tuple(cluster["center"])
+
+            # todo - should be only one way - check why both are necessary
             if isinstance(cluster['existence'][0],dict):
-                prob_existence = cluster['existence'][0]['1']
+                probabilities[center] = cluster['existence'][0]['1']
             else:
-                prob_existence = cluster['existence'][0][1]
-            if shape == "point":
-                # with whatever alg we used, what do we think the probability is that
-                # this cluster actually exists?
-                # if we have gold standard to compare to - use that to determine the colour
-                if correct_pts is not None:
-                    # if is equal to None - just compared directly against gold standard with out threshold
-                    if prob_threshold is not None:
-                        # we have both a threshold and gold standard - gives us four options
-                        if prob_existence >= prob_threshold:
-                            # based on the threshold - we think this point exists
-                            if center in correct_pts:
-                                # woot - we were right
-                                color = "green"
-                            else:
-                                # boo - we were wrong
-                                color = "red"
-                        else:
-                            # we think this point is a false positive
-                            if center in correct_pts:
-                                # boo - we were wrong
-                                color = "yellow"
-                            else:
-                                # woot
-                                color = "blue"
-                    else:
-                        # we have just the gold standard - so we are purely reviewing the expert results
-                        if center in correct_pts:
-                            color = "green"
-                        else:
-                            color = "red"
-                    matplotlib_cluster[center] = axes.plot(center[0],center[1],marker=marker,color=color)[0],prob_existence,color
-                else:
-                    # we have nothing to compare against - so we are not showing correctness so much
-                    # as just showing which points would be rejected/accepted with the default understanding
-                    # that points will be correctly accepted - points that are rejected - we make no statement about
-                    # they will not be included in the gold standard
-                    if prob_existence >= prob_threshold:
-                        color = "green"
-                        # matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="green"),prob_existence
-                    else:
-                        # we think this is a false positive
-                        color = "yellow"
-                        # matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="red"),prob_existence
-                    matplotlib_cluster[center] = axes.plot(center[0],center[1],marker=marker,color=color)[0],prob_existence,color
-        return matplotlib_cluster
+                probabilities[center] = cluster['existence'][0][1]
+
+        return probabilities
+
+
+
 
     # def __plot__(self,workflow_id,task_id):
     #     print "plotting"
@@ -1978,65 +1903,6 @@ class AggregationAPI:
         self.postgres_session.commit()
 
 
-    def __update_threshold__(self,new_percentile_threshold,matplotlib_centers,correct_pts=None):
-        """
-        returns a tuple of all TP probabilities and the FP ones too, according to the given threshold
-        :param new_percentile_threshold:
-        :return:
-        """
-        assert isinstance(matplotlib_centers,dict)
-        TP = []
-        FP = []
-        print (1-new_percentile_threshold)*100
-        if self.probabilities == []:
-            return None,([],[],[],[])
-        prob_threshold = numpy.percentile(self.probabilities,(1-new_percentile_threshold)*100)
-        print prob_threshold
-
-        # clusters we have corrected identified as true positivies
-        green_pts = []
-        # clusters we have incorrectly identified as true positives
-        red_pts = []
-        # clusters have incorrectly idenfitied as false positivies
-        yellow_pts = []
-        # etc.
-        blue_pts = []
-
-
-        for center,(matplotlib_pt,prob_existence,color) in matplotlib_centers.items():
-            x,y = matplotlib_pt.get_data()
-            x = x[0]
-            y = y[0]
-            if correct_pts is not None:
-                if prob_existence >= prob_threshold:
-                    # based on the threshold - we think this point exists
-                    if center in correct_pts:
-                        # woot - we were right
-                        matplotlib_pt.set_color("green")
-                        # green_pts.append(prob_existence)
-                    else:
-                        # boo - we were wrong
-                        matplotlib_pt.set_color("red")
-                        # green_pts.append(prob_existence)
-                else:
-                    # we think this point is a false positive
-                    if center in correct_pts:
-                        matplotlib_pt.set_color("yellow")
-                        # green_pts.append(prob_existence)
-                    else:
-                        matplotlib_pt.set_color("blue")
-                        # green_pts.append(prob_existence)
-            else:
-                # in this case, with no expert data, we are assuming that all points accepted
-                # are correctly accepted and making no judgement about rejected points
-                if prob_existence >= prob_threshold:
-                    matplotlib_pt.set_color("green")
-                    green_pts.append((x,y))
-                else:
-                    matplotlib_pt.set_color("yellow")
-                    yellow_pts.append((x,y))
-
-        return prob_threshold,(green_pts,red_pts,yellow_pts,blue_pts)
 
 class SubjectGenerator:
     def __init__(self,project):
