@@ -1,5 +1,8 @@
 #!/usr/bin/env python
 __author__ = 'greg'
+import sys
+sys.path.append("/home/greg/github/reduction/engine")
+
 import pymongo
 import agglomerative
 import aggregation_api
@@ -7,7 +10,7 @@ import panoptes_ibcc
 import cassandra
 import json
 from cassandra.concurrent import execute_concurrent
-
+from cassandra.cluster import Cluster
 import urllib2
 import os
 import math
@@ -26,7 +29,7 @@ class Penguins(aggregation_api.AggregationAPI):
         self.project_id = -1
         # connect to the mongo server
         client = pymongo.MongoClient()
-        db = client['penguin_2015-05-08']
+        db = client['penguin_2015-06-01']
         self.classification_collection = db["penguin_classifications"]
         self.subject_collection = db["penguin_subjects"]
 
@@ -51,7 +54,7 @@ class Penguins(aggregation_api.AggregationAPI):
         self.users_table = "penguins_users"
         self.subject_id_type = "text"
 
-        # self.postgres_session = psycopg2.connect("dbname='zooniverse' user=ggdhines")
+        # self.postgres_session = psycopg2.connect("dbname='zooniverse' user=greg")
 
 
         self.experts = ["caitlin.black"]
@@ -70,6 +73,21 @@ class Penguins(aggregation_api.AggregationAPI):
 
         # which subjects were taken at which site
         self.subject_to_site = {}
+
+    def __cassandra_connect__(self):
+        """
+        connect to the AWS instance of Cassandra - try 10 times and raise an error
+        :return:
+        """
+        for i in range(10):
+            try:
+                self.cluster = Cluster()
+                self.cassandra_session = self.cluster.connect('zooniverse')
+                return
+            except cassandra.cluster.NoHostAvailable:
+                pass
+
+        assert False
 
     def __get_related_subjects__(self,workflow_id,subject_id):
         stmt = "select user_id from " + str(self.classification_table) + " where project_id = " + str(self.project_id) + " and subject_id = '" + str(subject_id) + "' and workflow_id = " + str(global_workflow_id) + " and workflow_version = " + str(global_version)
@@ -110,7 +128,9 @@ class Penguins(aggregation_api.AggregationAPI):
 
         # if we don't require expert classifications, there are going to be multiple people who have classified an image
         # so subjects will show up more than once => use a set to make sure of uniqueness
-        return list(set([r.subject_id for r in subjects]))
+        subject_set = list(set([r.subject_id for r in subjects]))
+        print len(subject_set)
+        return subject_set[:1000]
 
     def __get_expert_annotations__(self,workflow_id,subject_id):
         # todo- for now just use one expert
@@ -161,8 +181,13 @@ class Penguins(aggregation_api.AggregationAPI):
         agg = postgres_cursor.fetchone()
         if agg is None:
             return []
-        aggregations = json.loads(agg[0])
 
+        if isinstance(agg[0],str):
+            aggregations = json.loads(agg[0])
+        else:
+            aggregations = agg[0]
+
+        assert isinstance(aggregations,dict)
         print "users say"
         print aggregations
 
@@ -526,18 +551,4 @@ if __name__ == "__main__":
     # subjects = project.__get_subject_ids__()
 
     # print project.__get_retired_subjects__(1,True)
-
-
-    project.__aggregate__(workflows=[global_workflow_id],subject_set=project.__get_retired_subjects__(1,False)[100000:200000])
-
-
-
-        # if t == 15:
-        #     break
-
-    # project.__aggregate__(workflows=[1],subject_set=subjects)
-    # clustering_results = clustering.__aggregate__(raw_markings)
-    #
-    # classificaiton_tasks = {"init":{"shapes":["pt"]}}
-    # print classifying.__aggregate__(raw_classifications,(classificaiton_tasks,{}),clustering_results,users_per_subject)
-
+    project.__aggregate__(workflows=[global_workflow_id],subject_set=project.__get_retired_subjects__(1,False))

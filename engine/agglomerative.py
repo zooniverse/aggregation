@@ -13,30 +13,36 @@ import multiClickCorrect
 import json
 import random
 
-def hesse_line_mapping(line_segment):
+
+def text_line_mappings(line_segments):
     """
     use if we want to cluster based on Hesse normal form - but want to retain the original values
     :param line_segment:
     :return:
     """
-    (x1,y1),(x2,y2) = line_segment
+    reduced_markings = []
 
-    x2 += random.uniform(-0.0001,0.0001)
-    x1 += random.uniform(-0.0001,0.0001)
+    for line_seg in line_segments:
+        x1,y1,x2,y2,text = line_seg
 
-    dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
+        x2 += random.uniform(-0.0001,0.0001)
+        x1 += random.uniform(-0.0001,0.0001)
 
-    try:
-        tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
-        theta = math.atan(tan_theta)
-    except ZeroDivisionError:
-        theta = math.pi/2.
+        dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
 
-    return dist,theta
+        try:
+            tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
+            theta = math.atan(tan_theta)
+        except ZeroDivisionError:
+            theta = math.pi/2.
+
+        reduced_markings.append((dist,theta,text))
+
+    return reduced_markings
 
 class Agglomerative(clustering.Cluster):
-    def __init__(self,shape):
-        clustering.Cluster.__init__(self,shape)
+    def __init__(self,shape,dim_reduction_alg):
+        clustering.Cluster.__init__(self,shape,dim_reduction_alg)
         self.all_distances = []
         self.max = 0
 
@@ -62,7 +68,7 @@ class Agglomerative(clustering.Cluster):
     #
     #     return results
 
-    def __inner_fit__(self,markings,user_ids,tools):
+    def __inner_fit__(self,markings,user_ids,tools,reduced_markings):
         """
         the actual clustering algorithm
         markings and user_ids should be the same length - a one to one mapping
@@ -75,41 +81,39 @@ class Agglomerative(clustering.Cluster):
         :return:
         """
         assert len(markings) == len(user_ids)
+        assert len(markings) == len(reduced_markings)
         assert isinstance(user_ids,tuple)
         user_ids = list(user_ids)
         start = time.time()
 
-
-
         if len(user_ids) == len(set(user_ids)):
             # all of the markings are from different users => so only one cluster
             # todo implement
-            result = {"users":user_ids,"cluster members":markings,"tools":tools}
+            result = {"users":user_ids,"cluster members":markings,"tools":tools,"num users":len(user_ids)}
             result["center"] = [np.median(axis) for axis in zip(*markings)]
             return [result],0
 
         all_users = set()
 
-        # check if the markings are for line segments - if so, convert to Hesse values
-        # we keep the original values around since we still need those
-        if self.shape == "line":
-            mapped_markings = [hesse_line_mapping(l) for l in markings]
-        else:
-            mapped_markings = markings
+        # cluster based n the reduced markings, but list the clusters based on their original values
 
         # this converts stuff into panda format - probably a better way to do this but the labels do seem
         # necessary
-        labels = [str(i) for i in markings]
-        param_labels = [str(i) for i in range(len(markings[0]))]
+        labels = [str(i) for i in reduced_markings]
+        param_labels = [str(i) for i in range(len(reduced_markings[0]))]
 
-        df = pd.DataFrame(np.array(mapped_markings), columns=param_labels, index=labels)
+        df = pd.DataFrame(np.array(reduced_markings), columns=param_labels, index=labels)
         row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
         # use ward metric to do the actual clustering
         row_clusters = linkage(row_dist, method='ward')
 
         # use the results to build a tree representation
         # nodes = [LeafNode(pt,ii,user=user) for ii,(user,pt) in enumerate(zip(user_ids,markings))]
-        results = [{"users":[u],"cluster members":[p],"tools":[t]} for u,p,t in zip(user_ids,markings,tools)]
+        results = [{"users":[u],"cluster members":[p],"tools":[t],"num users":len(user_ids)} for u,p,t in zip(user_ids,markings,tools)]
+
+
+
+        print results
 
         # read through the results
         # each row gives a cluster/node to merge
@@ -136,6 +140,8 @@ class Agglomerative(clustering.Cluster):
             # maybe just the lnode is done:
             elif (lnode is None) or ("center" in lnode):
                 rnode["center"] = [np.median(axis) for axis in zip(*rnode["cluster members"])]
+                print "---"
+                print rnode["cluster members"]
                 results.append(None)
             else:
                 # check if we should merge - only if there is no overlap
@@ -157,7 +163,8 @@ class Agglomerative(clustering.Cluster):
                     merged_users.extend(lnode["users"])
                     merged_points.extend(lnode["cluster members"])
                     merged_tools.extend(lnode["tools"])
-                    results.append({"users":merged_users,"cluster members":merged_points,"tools":merged_tools})
+                    num_users = rnode["num users"] + lnode["num users"]
+                    results.append({"users":merged_users,"cluster members":merged_points,"tools":merged_tools,"num users":num_users})
 
         # go and remove all non terminal nodes from the results
         for i in range(len(results)-1,-1,-1):
@@ -167,10 +174,19 @@ class Agglomerative(clustering.Cluster):
             if (results[i] is None) or ("center" not in results[i]):
                 results.pop(i)
 
+        # todo - this is just for debugging
+        for j in results:
+            assert "num users" in j
 
         end = time.time()
         # print [len(r["users"]) for r in results]
         # results = self.correction_alg.__fix__(results)
+
+        for r in results:
+            assert len(r["center"]) == 4
+
+        print results
+
         return results,end-start
 
     def __check__(self):

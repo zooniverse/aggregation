@@ -1,6 +1,5 @@
 __author__ = 'greg'
 import clustering
-import ouroboros_api
 import os
 import re
 import matplotlib.pyplot as plt
@@ -25,8 +24,6 @@ class Classification:
 
         current_directory = os.getcwd()
         slash_indices = [m.start() for m in re.finditer('/', current_directory)]
-        self.base_directory = current_directory[:slash_indices[2]+1]
-        # print self.base_directory
 
         self.species = {"lobate":0,"larvaceanhouse":0,"salp":0,"thalasso":0,"doliolidwithouttail":0,"rocketthimble":1,"rockettriangle":1,"siphocorncob":1,"siphotwocups":1,"doliolidwithtail":1,"cydippid":2,"solmaris":2,"medusafourtentacles":2,"medusamorethanfourtentacles":2,"medusagoblet":2,"beroida":3,"cestida":3,"radiolariancolonies":3,"larvacean":3,"arrowworm":3,"shrimp":4,"polychaeteworm":4,"copepod":4}
         self.candidates = self.species.keys()
@@ -107,7 +104,11 @@ class Classification:
                     if cluster_index not in aggregations[subject_id][task_id][shape+ " clusters"]:
                         aggregations[subject_id][task_id][shape+ " clusters"][cluster_index] = {}
 
-                    aggregations[subject_id][task_id][shape+ " clusters"][cluster_index]["followup_questions"] = followup_results[(subject_id,cluster_index)]
+                    # todo - not compliant
+                    if "followup_questions" not in aggregations[subject_id][task_id][shape+ " clusters"][cluster_index]:
+                        aggregations[subject_id][task_id][shape+ " clusters"][cluster_index]["followup_questions"] = []
+
+                    aggregations[subject_id][task_id][shape+ " clusters"][cluster_index]["followup_questions"].append(followup_results[(subject_id,cluster_index)])
 
         return aggregations
 

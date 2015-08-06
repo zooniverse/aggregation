@@ -16,12 +16,12 @@ def nCr(n,r):
     return f(n) / f(r) / f(n-r)
 
 class BlobClustering(clustering.Cluster):
-    def __init__(self,shape):
+    def __init__(self,shape,dim_reduction_alg):
         assert shape != "point"
-        clustering.Cluster.__init__(self,shape)
+        clustering.Cluster.__init__(self,shape,dim_reduction_alg)
         self.rectangle = (shape == "rectangle")
 
-    def __inner_fit__(self,markings,user_ids,tools):
+    def __inner_fit__(self,markings,user_ids,tools,reduced_markings):
 
         markings = markings[:15]
         user_ids = user_ids[:15]
