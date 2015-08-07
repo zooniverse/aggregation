@@ -247,9 +247,6 @@ class AggregationAPI:
         # there may be more than one workflow associated with a project - read them all in
         # and set up the associated tasks
         self.workflows,self.versions,self.instructions,self.updated_at_timestamps = self.__get_workflow_details__()
-        # self.workflows = self.__setup_workflows__()
-        # self.versions = self.__get_workflow_versions__()
-        # self.workflows_updated_at =
 
         # load the default clustering algorithms
         default_clustering_algs = {"point":agglomerative.Agglomerative,"circle":agglomerative.Agglomerative,"ellipse": agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering,"line":agglomerative.Agglomerative}
@@ -266,6 +263,7 @@ class AggregationAPI:
             self.old_time = pickle.load(open("/tmp/"+str(self.project_id)+".time","rb"))
         except:
             self.old_time = datetime.datetime(2000,01,01)
+        self.old_time = datetime.datetime(2000,01,01)
 
         self.current_time = datetime.datetime.now()
         self.ignore_versions = False
@@ -649,6 +647,22 @@ class AggregationAPI:
             return self.classifications[subject_id][task_id]
         else:
             return self.classifications[subject_id][task_id][cluster_index][question_id]
+
+    def __get_raw_classifications__(self,subject_id,workflow_id):
+        version = int(math.floor(float(self.versions[workflow_id])))
+        select_statement = self.cassandra_session.prepare("select annotations from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
+        params = (int(self.project_id),subject_id,int(workflow_id),version)
+        statements_and_params = []
+        statements_and_params.append((select_statement, params))
+        results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
+
+        assert results[0][0]
+        for r in results[0][1]:
+            yield json.loads(r.annotations)
+
+        raise StopIteration()
+
+
 
     def __get_subject_dimension__(self,subject_id):
         """
@@ -1251,8 +1265,6 @@ class AggregationAPI:
         if isinstance(agg[0],str):
             aggregations = json.loads(agg[0])
         else:
-            if 0 not in agg:
-                assert False
             aggregations = agg[0]
 
         assert isinstance(aggregations,dict)
@@ -1458,7 +1470,6 @@ class AggregationAPI:
                         # classification_tasks[task_id][tool_id]= [i for i in range(len(tool["details"]))]
                         # todo - fix this
 
-                    print "tool is " + tool["type"]
                     if tool["type"] == "line":
                         marking_tasks[task_id].append("line")
                     elif tool["type"] == "ellipse":
@@ -1880,7 +1891,11 @@ class AggregationAPI:
             aggregation = self.__prune__(aggregations[subject_id])
             # aggregation[" metadata"] = metadata
 
-            aggregation[" instructions"] = self.instructions[workflow_id]
+            # try to add instructions, if none are provided, don't worry
+            try:
+                aggregation[" instructions"] = self.instructions[workflow_id]
+            except KeyError:
+                pass
 
             if subject_id in r:
                 # we are updating
@@ -1938,7 +1953,7 @@ if __name__ == "__main__":
     project_identifier = sys.argv[1]
     with AggregationAPI(project_identifier) as project:
         # project.__migrate__()
-        # project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+        print project.__aggregate__(store_values=False)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
         # project.__panoptes_aggregation__()
-        project.__csv_output__()#workflow_ids =[84],subject_id=494900)
+        # project.__csv_output__()#workflow_ids =[84],subject_id=494900)
     # project.__get_workflow_details__(84)

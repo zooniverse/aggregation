@@ -1,42 +1,51 @@
 #!/usr/bin/env python
+import sys
+sys.path.append("/home/greg/github/reduction/engine")
+sys.path.append("/home/ggdhines/PycharmProjects/reduction/engine")
 
 __author__ = 'greg'
 from aggregation_api import AggregationAPI
-import classification
-import matplotlib.pyplot as plt
-import cluster_count
+import numpy
 
 workflow_id = 6
 
 
-class Wildebeest(AggregationAPI):
-    def __init__(self):
-        AggregationAPI.__init__(self,"wildebeest")
-        self.cluster_algs["point"] = cluster_count.Counting("point")
+wildebeest = AggregationAPI(6)
+aggregations = wildebeest.__aggregate__(workflows = [6],store_values=False)
 
-    # def __plot__(self,workflow_id,task):
-    #     print self.description[task]
-    #     for subject_id in self.subject_sets[workflow_id]:
-    #         if subject_id in self.classification_alg.results:
-    #
-    #             # self.__plot_individual_points__(subject_id,task)
-    #             # self.__plot_cluster_results__(subject_id,task)
-    #             # plt.title("number of users: " + str(len(all_users)))
-    #             classifications = self.classification_alg.results[subject_id][task]
-    #             # print classifications
-    #             votes,total = classifications
-    #             if total >= 5:
-    #                 self.__plot_image__(subject_id)
-    #                 title = ""
-    #                 for answer_index,percentage in votes.items():
-    #                     if title != "":
-    #                         title += "\n"
-    #                     title += self.description[task][answer_index+1] + ": " + str(int(percentage*total))
-    #                 plt.title(title)
-    #
-    #                 plt.savefig("/home/greg/Databases/wildebeest/where_is_the_sun/"+str(subject_id)+".jpg")
-    #                 plt.close()
+marking_task = wildebeest.workflows[workflow_id][1].keys()[0]
+tools = wildebeest.workflows[workflow_id][1][marking_task]
 
-ali = Wildebeest()
-print ali.__setup_workflows__()
-# ali.__aggregate__(workflows=[workflow_id])
+workflows,versions,instructions,updated_at_timestamps = wildebeest.__get_workflow_details__(workflow_id)
+tools_labels = instructions[workflow_id][marking_task]["tools"]
+
+for j,subject_id in enumerate(aggregations):
+    overall_votes = {int(t_index): [] for t_index in range(len(tools))}
+    for annotation in wildebeest.__get_raw_classifications__(subject_id,workflow_id):
+        tool_votes = {int(t_index): 0 for t_index in range(len(tools))}
+        for task in annotation:
+            if task["task"] == marking_task:
+                for marking in task["value"]:
+                    tool_votes[int(marking["tool"])] += 1
+        for t_index in tool_votes:
+            overall_votes[t_index].append(tool_votes[t_index])
+    print
+    print "===----"
+    print subject_id
+    print len(aggregations[subject_id][marking_task]["point clusters"]) - 2
+    for cluster_index in aggregations[subject_id][marking_task]["point clusters"]:
+        if cluster_index in ["param","all_users"]:
+            continue
+
+        cluster = aggregations[subject_id][marking_task]["point clusters"][cluster_index]
+        print cluster["tool_classification"],cluster["existence"]
+
+    print
+
+    for t_index,v in overall_votes.items():
+        # print str(tools_labels[t_index]["marking tool"]) + "\t\t\t" + str(numpy.mean(v))
+        print str(t_index) + "\t\t\t" + str(numpy.mean(v)) + "\t\t\t" + str(numpy.median(v))
+
+
+    if j== 10:
+        break

@@ -111,10 +111,6 @@ class Agglomerative(clustering.Cluster):
         # nodes = [LeafNode(pt,ii,user=user) for ii,(user,pt) in enumerate(zip(user_ids,markings))]
         results = [{"users":[u],"cluster members":[p],"tools":[t],"num users":len(user_ids)} for u,p,t in zip(user_ids,markings,tools)]
 
-
-
-        print results
-
         # read through the results
         # each row gives a cluster/node to merge
         # if one any two clusters have a user in common - don't merge them - and represent this by a None cluster
@@ -140,8 +136,6 @@ class Agglomerative(clustering.Cluster):
             # maybe just the lnode is done:
             elif (lnode is None) or ("center" in lnode):
                 rnode["center"] = [np.median(axis) for axis in zip(*rnode["cluster members"])]
-                print "---"
-                print rnode["cluster members"]
                 results.append(None)
             else:
                 # check if we should merge - only if there is no overlap
@@ -181,11 +175,6 @@ class Agglomerative(clustering.Cluster):
         end = time.time()
         # print [len(r["users"]) for r in results]
         # results = self.correction_alg.__fix__(results)
-
-        for r in results:
-            assert len(r["center"]) == 4
-
-        print results
 
         return results,end-start
 

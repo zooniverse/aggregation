@@ -16,6 +16,7 @@ DIR_THUMBS = base_directory+'/Databases/thumbnails/'
 class Marmot:
     def __init__(self):
         self.project = Penguins()
+        # self.project.__migrate__()
 
         # tkinter stuff
         self.root = tkinter.Tk()
