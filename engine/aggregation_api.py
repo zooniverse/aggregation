@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 # from setuptools import setup, find_packages
 import os
+import tarfile
 import yaml
 import urllib2
 import psycopg2
@@ -412,7 +413,7 @@ class AggregationAPI:
 
         return cluster_aggregation
 
-    def __csv_output__(self,given_workflows = None):
+    def __csv_output__(self,given_workflows = None, compress = False):
         if given_workflows is None:
             workflows = self.workflows
         else:
@@ -464,9 +465,18 @@ class AggregationAPI:
                                 cluster_index = record[3]
                                 f.write(str(subject_id)+","+str(shape)+","+str(cluster_index)+","+str(followup_index)+","+str(most_likely)+","+str(highest_prob)+","+str(num_users))
 
+            if compress:
+                with tarfile.open("/tmp/workflow_"+str(self.project_id)+"export.tar.gz", "w:gz") as tarball:
+                    for f in csv_files.values():
+                        tarInfo = tar.gettarinfo(fileobj=f)
+                        tar.add(tarInfo, fileobj=f)
+
             for f in csv_files.values():
                 assert isinstance(f,file)
                 f.close()
+
+            if compress:
+                return "/tmp/workflow_"+str(self.project_id)+"export.tar.gz"
 
     def __enter__(self):
         return self
