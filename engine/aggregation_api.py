@@ -419,6 +419,8 @@ class AggregationAPI:
         else:
             workflows = [given_workflows]
 
+        self.clustering_headers = ["subject_id", "shape","cluster_index","most_likely_tool", "x", "y", "height","width","rotation", "number_of_users_per_subject", "number_of_users_per_cluster","probability_of_existence", "probability_of_most_likely_tool"]
+
         for workflow_id in workflows:
             json.dump(self.instructions[workflow_id],open("/tmp/workflow_"+str(workflow_id)+"_instructions.json","wb"),indent=4)
 
@@ -430,11 +432,15 @@ class AggregationAPI:
                 csv_files[c+"c"].write("subject id, shape,cluster index,followup index, most likely label, probability of most likely label, number of users\n")
             for c in marking_tasks:
                 csv_files[c+"m"] = open("/tmp/workflow_"+str(workflow_id)+"_task_"+c+"_marking.csv","wb")
-                csv_files[c+"m"].write("subject id, shape,cluster index,most likely tool, x center, y center, height,rotation, number of users per subject/task, number of users per cluster,probability of existence, probability of most likely tool\n")
+                headers = ",".join(self.clustering_headers) + "\n"
+                csv_files[c+"m"].write(headers)
 
-            for record in self.__get_aggregations__(workflow_id):
-                subject_id = record[1]
-                if isinstance(record[2],list):
+            for aggregation_dict in self.__get_aggregations__(workflow_id):
+                # subject_id = record[1]
+                # print aggregation_dict
+                # subject_id = aggregation_dict["subject_id"]
+                if aggregation_dict["t"] == "classification":
+                    continue
                     # classification
                     f = csv_files[record[0]+"c"]
                     assert isinstance(f,file)
@@ -443,17 +449,21 @@ class AggregationAPI:
                     num_users = record[2][1]
                     f.write(str(subject_id) + ",,,," + str(most_likely) + "," + str(highest_prob) + "," + str(num_users) +"\n")
                 else:
+                    assert aggregation_dict["t"] == "marking"
                     # marking
-                    f = csv_files[record[0]+"m"]
-                    csv_record = str(subject_id) + ","
-                    for field in record[2:-1]:
-                        if field is not None:
-                            csv_record += str(field)
-                        csv_record += ","
-                    f.write(csv_record[:-1]+"\n")
+                    # print aggregation_dict.keys()
+                    f = csv_files[aggregation_dict["task_id"]+"m"]
+                    csv_line = ""
+                    for field in self.clustering_headers:
+                        if field in aggregation_dict:
+                            csv_line += str(aggregation_dict[field]) + ","
+                        else:
+                            csv_line += ","
+
+                    f.write(csv_line[:-1]+"\n")
 
                     # there were followup questions
-                    if record[-1] is not None:
+                    if "followup questions" in aggregation_dict:
                         for followup_index,followup_question in enumerate(record[-1]):
                             num_users = followup_question[1]
                             if num_users != 0:
@@ -540,8 +550,6 @@ class AggregationAPI:
                 print type(aggregation)
             assert isinstance(aggregation,dict)
 
-            print r[2]
-
             try:
                 for task_id in aggregation:
                     if task_id in [" instructions"," metadata","param"]:
@@ -554,10 +562,16 @@ class AggregationAPI:
                                 for cluster_index in aggregation[task_id][cluster_type]:
                                     if cluster_index not in ["param","all_users"]:
                                         cluster = aggregation[task_id][cluster_type][cluster_index]
-                                        shape = cluster_type.split(" ")[0]
+
+                                        # build up the dictionary to return
+                                        # omit any values that aren't relevant
+                                        aggregation_dict = {"subject_id":r[0],"t":"marking","cluster_index":cluster_index,"task_id":task_id}
+
+
+
+                                        aggregation_dict["shape"] = cluster_type.split(" ")[0]
 
                                         if cluster_type == "point clusters":
-
                                             p_x = cluster["center"][0]
                                             p_y = cluster["center"][1]
                                             height = None
@@ -571,8 +585,10 @@ class AggregationAPI:
                                             height = math.fabs(p_y2 - p_y2)
                                             rotation = None
                                         elif cluster_type == "circle clusters":
-                                            p_x = cluster["center"][0]
-                                            p_y = cluster["center"][1]
+                                            # p_x = cluster["center"][0]
+                                            aggregation_dict["x"] = cluster["center"][0]
+                                            # p_y = cluster["center"][1]
+                                            aggregation_dict["y"] = cluster["center"][1]
                                             height = cluster["center"][2]
                                             width = None
                                             rotation = None
@@ -583,38 +599,49 @@ class AggregationAPI:
                                             width = cluster["center"][3]
                                             rotation = cluster["center"][4]
                                         elif cluster_type == "line clusters":
-                                            print r[0]
-                                            print cluster
-                                            print
-                                            p_x = cluster["center"][0]
-                                            p_y = cluster["center"][1]
-                                            height = cluster["center"][1] - cluster["center"][3]
-                                            width = cluster["center"][0] - cluster["center"][2]
-                                            rotation = None
+                                            aggregation_dict["x"] = cluster["center"][0]
+                                            aggregation_dict["y"] = cluster["center"][1]
+                                            aggregation_dict["height"] = cluster["center"][1] - cluster["center"][3]
+                                            aggregation_dict["width"] = cluster["center"][0] - cluster["center"][2]
+                                            # p_x = cluster["center"][0]
+                                            # p_y = cluster["center"][1]
+                                            # height = cluster["center"][1] - cluster["center"][3]
+                                            # width = cluster["center"][0] - cluster["center"][2]
+                                            # rotation = None
                                         else:
                                             print cluster_type, cluster
                                             assert False
+                                        # "number_of_users_per_subject", "number_of_users_per_cluster","probability_of_existence"
 
-                                        number_of_users_per_subject = cluster["existence"][1]
-                                        probability_of_existence = cluster["existence"][0]["1"]
+                                        aggregation_dict["number_of_users_per_subject"] = cluster["existence"][1]
+                                        aggregation_dict["probability_of_existence"] = cluster["existence"][0]["1"]
+                                        # number_of_users_per_subject = cluster["existence"][1]
+                                        # probability_of_existence = cluster["existence"][0]["1"]
 
-                                        number_of_users_per_cluster = cluster["num users"]
+                                        aggregation_dict["number_of_users_per_cluster"] = cluster["num users"]
 
                                         # only happens when different tools produce the same shape
                                         if "tool_classification" in cluster:
                                             tool_classification = cluster["tool_classification"][0]
-                                            most_likely_tool,tool_probability = max(tool_classification.items(), lambda x:x[1])[0]
-                                        else:
-                                            most_likely_tool = 0
-                                            tool_probability = None
 
+                                            most_likely_tool_index,tool_probability = max(tool_classification.items(), key = lambda x:x[1])
+
+                                            most_likely_tool = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool_index)]["marking tool"]
+
+                                            aggregation_dict["most_likely_tool"] = most_likely_tool
+                                            aggregation_dict["probability_of_most_likely_tool"] = tool_probability
+
+                                        else:
+                                            aggregation_dict["most_likely_tool"] = self.instructions[workflow_id][task_id]["tools"][0]["marking tool"]
+                                            tool_probability = None
 
                                         if "followup_questions" in cluster:
                                             followup_questions = cluster["followup_questions"]
                                         else:
                                             followup_questions = None
 
-                                        yield task_id,r[0],shape,int(cluster_index),int(most_likely_tool),p_x,p_y,height,width,rotation,number_of_users_per_subject,number_of_users_per_cluster,probability_of_existence,tool_probability,followup_questions
+                                        yield aggregation_dict
+                                        # yield task_id,r[0],shape,int(cluster_index),int(most_likely_tool),p_x,p_y,height,width,rotation,number_of_users_per_subject,number_of_users_per_cluster,probability_of_existence,tool_probability,followup_questions
                     else:
                         classification_record = aggregation[task_id][0]
                         max_class_index = max([int(c) for c in classification_record])
@@ -623,7 +650,8 @@ class AggregationAPI:
                         #         print 0
                         #     else:
                         #         print classification_record[str(class_index)]
-                        yield task_id,r[0],aggregation[task_id]
+                        # yield task_id,r[0],aggregation[task_id]
+                        yield {"t":"classification"}
             except KeyError as e:
                 print "error with subject id: " + str(r[0])
                 print e
@@ -737,13 +765,18 @@ class AggregationAPI:
 
         return retired_subjects
 
-    def __get_subjects__(self,workflow_id,only_retired_subjects=False):
+    def __get_subjects__(self,workflow_id,only_retired_subjects=False,only_recent_subjects=True):
         subjects = []
         if only_retired_subjects:
+            if only_recent_subjects:
+                timestamp = self.updated_at_timestamps[workflow_id]
+            else:
+                timestamp = datetime.datetime(2000,01,01)
+
             stmt = """SELECT * FROM "subjects"
             INNER JOIN "set_member_subjects" ON "set_member_subjects"."subject_id" = "subjects"."id"
             INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."set_member_subject_id" = "set_member_subjects"."id"
-            WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" > '""" + str(self.updated_at_timestamps[workflow_id]) + """'"""
+            WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" > '""" + str(datetime.datetime(2000,01,01)) + """'"""
             # WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" IS NOT NULL"""
 
             cursor = self.postgres_session.cursor()
@@ -1056,6 +1089,7 @@ class AggregationAPI:
             if id not in migrated:
                 migrated[id] = 0
             migrated[id] += 1
+
 
             params = (project_id, user_id, workflow_id,created_at, json.dumps(annotations), updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], workflow_version,json.dumps(metadata))
             statements_and_params.append((insert_statement, params))
@@ -1700,6 +1734,7 @@ class AggregationAPI:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
 
             for subject_id,(success,record_list) in zip(s,results):
+
                 if not success:
                     print record_list
                 assert success
@@ -1979,7 +2014,8 @@ if __name__ == "__main__":
     project_identifier = sys.argv[1]
     with AggregationAPI(project_identifier) as project:
         # project.__migrate__()
-        print project.__aggregate__(store_values=False)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+        # print json.dumps(project.__aggregate__(store_values=False)[464952], sort_keys=True, indent=4, separators=(',', ': '))
+        # print project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
         # project.__panoptes_aggregation__()
-        # project.__csv_output__()#workflow_ids =[84],subject_id=494900)
+        project.__csv_output__()#workflow_ids =[84],subject_id=494900)
     # project.__get_workflow_details__(84)
