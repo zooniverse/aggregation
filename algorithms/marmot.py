@@ -261,20 +261,26 @@ class Marmot:
         assert (self.true_positives != {}) or (self.false_positives != {})
         self.project.__aggregate__([-1],self.subjects[:45],(self.true_positives,self.false_positives))
 
-    def __update_threshold__(self,new_percentile_threshold,matplotlib_centers,correct_pts=None):
+    def __update_threshold__(self,new_percentile_threshold,matplotlib_objects):
         """
+        update whether we think objects are true positives or not - without using gold standard data
+        so this is for creating gold standard
         returns a tuple of all TP probabilities and the FP ones too, according to the given threshold
         :param new_percentile_threshold:
         :return:
         """
-        assert isinstance(matplotlib_centers,dict)
-        TP = []
-        FP = []
-        print (1-new_percentile_threshold)*100
+        assert isinstance(matplotlib_objects,dict)
+        # TP = []
+        # FP = []
+
         # if self.probabilities == []:
         #     return None,([],[],[],[])
-        prob_threshold = numpy.percentile(self.probabilities,(1-new_percentile_threshold)*100)
+        objects,individual_probabilities = zip(*matplotlib_objects.values())
+        prob_threshold = numpy.percentile(individual_probabilities,(1-new_percentile_threshold)*100)
+        print new_percentile_threshold
+        print individual_probabilities
         print prob_threshold
+        print
 
         # clusters we have corrected identified as true positivies
         green_pts = []
@@ -286,40 +292,50 @@ class Marmot:
         blue_pts = []
 
 
-        for center,(matplotlib_pt,prob_existence,color) in matplotlib_centers.items():
-            x,y = matplotlib_pt.get_data()
-            x = x[0]
-            y = y[0]
-            if correct_pts is not None:
-                if prob_existence >= prob_threshold:
-                    # based on the threshold - we think this point exists
-                    if center in correct_pts:
-                        # woot - we were right
-                        matplotlib_pt.set_color("green")
-                        # green_pts.append(prob_existence)
-                    else:
-                        # boo - we were wrong
-                        matplotlib_pt.set_color("red")
-                        # green_pts.append(prob_existence)
-                else:
-                    # we think this point is a false positive
-                    if center in correct_pts:
-                        matplotlib_pt.set_color("yellow")
-                        # green_pts.append(prob_existence)
-                    else:
-                        matplotlib_pt.set_color("blue")
-                        # green_pts.append(prob_existence)
-            else:
-                # in this case, with no expert data, we are assuming that all points accepted
-                # are correctly accepted and making no judgement about rejected points
-                if prob_existence >= prob_threshold:
-                    matplotlib_pt.set_color("green")
-                    green_pts.append((x,y))
-                else:
-                    matplotlib_pt.set_color("yellow")
-                    yellow_pts.append((x,y))
+        for center,(obj,prob_existence) in matplotlib_objects.items():
+            # x,y = matplotlib_pt.get_data()
+            # x = x[0]
+            # y = y[0]
+            # if correct_pts is not None:
+            #     if prob_existence >= prob_threshold:
+            #         # based on the threshold - we think this point exists
+            #         if center in correct_pts:
+            #             # woot - we were right
+            #             matplotlib_pt.set_color("green")
+            #             # green_pts.append(prob_existence)
+            #         else:
+            #             # boo - we were wrong
+            #             matplotlib_pt.set_color("red")
+            #             # green_pts.append(prob_existence)
+            #     else:
+            #         # we think this point is a false positive
+            #         if center in correct_pts:
+            #             matplotlib_pt.set_color("yellow")
+            #             # green_pts.append(prob_existence)
+            #         else:
+            #             matplotlib_pt.set_color("blue")
+            #             # green_pts.append(prob_existence)
+            # else:
+            # in this case, with no expert data, we are assuming that all points accepted
+            # are correctly accepted and making no judgement about rejected points
+            # do not change any points which have been assigned to be a false positive
+            if prob_existence >= prob_threshold:
+                if obj.get_color() != "red":
+                    obj.set_color("green")
 
-        return prob_threshold,(green_pts,red_pts,yellow_pts,blue_pts)
+                    green_pts.append(prob_existence)
+            else:
+                if obj.get_color() != "red":
+                    obj.set_color("yellow")
+                    print "yellow"
+                    yellow_pts.append(prob_existence)
+        print (1-new_percentile_threshold)*100
+        print prob_threshold
+        print green_pts
+        print yellow_pts
+        print
+
+        return prob_threshold
 
     def __create_gold_standard__(self,thumb_path):
         print "hello world"
@@ -352,14 +368,14 @@ class Marmot:
             # ,"point",axes,self.percentage_thresholds[subject_id]
 
             # use the colour to determine if a point has been labelled as true positive
-            self.true_positives[subject_id] = [pt for pt,obj in matplotlib_objects.items() if obj.get_color() == "green"]
+            self.true_positives[subject_id] = [pt for pt,(obj,prob) in matplotlib_objects.items() if obj.get_color() == "green"]
             # by default any point above the threshold is just unknown - NOT a false positive
             self.false_positives[subject_id] = []
             self.unknown_positives[subject_id] = [pt for pt in matplotlib_objects if pt not in self.true_positives[subject_id]]
 
         else:
             # immediately reload previous colours
-            for pt,obj in matplotlib_objects.items():
+            for pt,(obj,prob) in matplotlib_objects.items():
                 if pt in self.true_positives[subject_id]:
                     obj.set_color("green")
                 elif pt in self.false_positives[subject_id]:
@@ -391,20 +407,23 @@ class Marmot:
         # needs to be an inner function - grrrr
         def update(val):
             new_threshold = threshold_silder.val
+            # store this new threshold for future use i.e. when the image is reopened
             self.percentage_thresholds[subject_id] = new_threshold
-            prob_threshold,colours = self.probability_threshold[subject_id] = self.project.__update_threshold__(new_threshold,matplotlib_points)
-            # green pts are true positives
-            # if a point is not a true positive - we make no claim about what it is
-            self.true_positives[subject_id] = colours[0]
+            self.probability_threshold[subject_id] = self.__update_threshold__(new_threshold,matplotlib_objects)
 
+            # if a point is not a true positive - we make no claim about what it is
+            self.true_positives[subject_id] = [pt for pt,(obj,prob) in matplotlib_objects.items() if obj.get_color() == "green"]
+            self.unknown_positives[subject_id] = [pt for pt,(obj,prob) in matplotlib_objects.items() if obj.get_color() == "yellow"]
+            # false positives should not change
             fig.canvas.draw_idle()
 
         def onpick3(event):
-            color_list = ["green","yellow","red"]
-
             x = event.xdata
             y = event.ydata
-            pt = event.xdata,event.ydata
+            if (x is None) or (y is None):
+                return
+
+            # pt = event.xdata,event.ydata
             nearest_pt = None
             closest_dist = float("inf")
             for x2,y2 in matplotlib_objects.keys():
@@ -414,7 +433,7 @@ class Marmot:
                     nearest_pt = (x2,y2)
 
             if closest_dist < 20:
-                obj = matplotlib_objects[nearest_pt]
+                obj,prob = matplotlib_objects[nearest_pt]
                 # new_color = color_list[(color_list.index(color)+1)%3]
 
                 # matplotlib_objects[nearest_pt] = pt,prob,new_color
@@ -431,7 +450,7 @@ class Marmot:
                 elif old_colour == "green":
                     # gone from true positive to don't know
                     self.true_positives[subject_id].remove(nearest_pt)
-                    self.unknown_positives[subject_id].add(nearest_pt)
+                    self.unknown_positives[subject_id].append(nearest_pt)
                     obj.set_color("yellow")
                 else:
                     # gone from don't know to false positive
@@ -532,7 +551,7 @@ class Marmot:
                             color = "green"
                         else:
                             color = "red"
-                    matplotlib_objects[center] = axes.plot(center[0],center[1],marker=marker,color=color)[0]
+                    matplotlib_objects[center] = axes.plot(center[0],center[1],marker=marker,color=color)[0],prob_existence
                 else:
                     # we have nothing to compare against - so we are not showing correctness so much
                     # as just showing which points would be rejected/accepted with the default understanding
@@ -545,7 +564,7 @@ class Marmot:
                         # we think this is a false positive
                         color = "yellow"
                         # matplotlib_cluster[center] = axes.plot(center[0],center[1],".",color="red"),prob_existence
-                    matplotlib_objects[center] = axes.plot(center[0],center[1],marker=marker,color=color)[0]
+                    matplotlib_objects[center] = axes.plot(center[0],center[1],marker=marker,color=color)[0],prob_existence
         return matplotlib_objects
 
 
