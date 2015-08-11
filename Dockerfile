@@ -12,11 +12,13 @@ WORKDIR /app/
 
 ADD . /app/
 
-RUN pip install cassandra-driver
+RUN pip install cassandra-driver Flask redis rq boto3
 RUN pip install .
 
 ADD supervisord.conf /etc/supervisor/conf.d/cron.conf
 
 RUN ln -s /app/config/crontab /etc/cron.d/aggregation
+
+EXPOSE 5000
 
 ENTRYPOINT ["/usr/bin/supervisord"]
