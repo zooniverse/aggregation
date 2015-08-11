@@ -737,8 +737,24 @@ class AggregationAPI:
 
         return retired_subjects
 
-    def __get_subjects__(self,workflow_id):
-        pass
+    def __get_subjects__(self,workflow_id,only_retired_subjects=False):
+        subjects = []
+        if only_retired_subjects:
+            stmt = """SELECT * FROM "subjects"
+            INNER JOIN "set_member_subjects" ON "set_member_subjects"."subject_id" = "subjects"."id"
+            INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."set_member_subject_id" = "set_member_subjects"."id"
+            WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" > '""" + str(self.updated_at_timestamps[workflow_id]) + """'"""
+            # WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" IS NOT NULL"""
+
+            cursor = self.postgres_session.cursor()
+            cursor.execute(stmt)
+            for subject in cursor.fetchall():
+                subjects.append(subject[0])
+        else:
+            stmt = "SELECT subject_id FROM subjects WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)# + " and workflow_version = " + str(version)
+            subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt)])
+
+        return subjects
 
 
     def __get_workflow_details__(self,given_workflow_id=None):

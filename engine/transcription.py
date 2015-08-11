@@ -733,6 +733,19 @@ class Tate(AggregationAPI):
 
         # print json.loads(aggregations[0])
 
+    def __get_subjects__(self,workflow_id,only_retired_subjects=False):
+        recently_classified_subjects = set()
+
+        select = "SELECT created_at,subject_ids from classifications where project_id="+str(self.project_id)+" and created_at >= '" + str(self.old_time) +"'"
+        cur = self.postgres_session.cursor()
+        cur.execute(select)
+
+        for r in cur.fetchall():
+            subject_id = r[1][0]
+            recently_classified_subjects.add(subject_id)
+
+        return list(recently_classified_subjects)
+
     def __get_retired_subjects__(self,workflow_id,with_expert_classifications=None):
         recently_classified_subjects = set()
 
