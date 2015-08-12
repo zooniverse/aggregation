@@ -264,7 +264,7 @@ class AggregationAPI:
             self.old_time = pickle.load(open("/tmp/"+str(self.project_id)+".time","rb"))
         except:
             self.old_time = datetime.datetime(2000,01,01)
-        self.old_time = datetime.datetime(2000,01,01)
+        # self.old_time = datetime.datetime(2000,01,01)
 
         self.current_time = datetime.datetime.now()
         self.ignore_versions = False
@@ -442,7 +442,11 @@ class AggregationAPI:
                 # start with the basic headers and add on ones specific to the task at hand
                 headers_per_task[c] = self.classification_headers[:]
                 for answers_index in self.instructions[workflow_id][c]["answers"]:
-                    headers_per_task[c].append("p("+str(self.instructions[workflow_id][c]["answers"][answers_index])+")")
+                    answer = str(self.instructions[workflow_id][c]["answers"][answers_index])
+                    # bit of a sanity check
+                    answer = answer.replace("\"","")
+                    answer = answer.replace(",","")
+                    headers_per_task[c].append("p\""+answer+"\"")
 
                 header_string = ",".join(headers_per_task[c]) + "\n"
                 # print classification_tasks
@@ -480,6 +484,9 @@ class AggregationAPI:
                     assert aggregation_dict["t"] == "marking"
                     # marking
                     # print aggregation_dict.keys()
+                    if aggregation_dict["probability_of_existence"] < 0.5:
+                        continue
+
                     f = csv_files[aggregation_dict["task_id"]+"m"]
                     csv_line = ""
                     for field in self.clustering_headers:
@@ -598,8 +605,8 @@ class AggregationAPI:
                                     aggregation_dict["shape"] = cluster_type.split(" ")[0]
 
                                     if cluster_type == "point clusters":
-                                        p_x = cluster["center"][0]
-                                        p_y = cluster["center"][1]
+                                        aggregation_dict["x"] = cluster["center"][0]
+                                        aggregation_dict["y"] = cluster["center"][1]
                                         height = None
                                         width = None
                                         rotation = None
@@ -679,7 +686,9 @@ class AggregationAPI:
                     aggregation_dict = {"subject_id":r[0],"t":"classification","task_id":task_id,"number_of_users":aggregation[task_id][1]}
 
                     for answer_index,answer in self.instructions[workflow_id][task_id]["answers"].items():
-                        kw = "p("+str(answer)+")"
+                        answer = answer.replace("\"","")
+                        answer = answer.replace(",","")
+                        kw = "p\""+str(answer)+"\""
                         if str(answer_index) in classification:
                             aggregation_dict[kw] = classification[str(answer_index)]
                         else:
@@ -2044,9 +2053,9 @@ class SubjectGenerator:
 if __name__ == "__main__":
     project_identifier = sys.argv[1]
     with AggregationAPI(project_identifier) as project:
-        # project.__migrate__()
+        project.__migrate__()
         # print json.dumps(project.__aggregate__(store_values=False)[464952], sort_keys=True, indent=4, separators=(',', ': '))
-        # print project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+        print project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
         # project.__panoptes_aggregation__()
         project.__csv_output__()#workflow_ids =[84],subject_id=494900)
     # project.__get_workflow_details__(84)
