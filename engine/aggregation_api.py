@@ -1001,7 +1001,9 @@ class AggregationAPI:
         :return:
         """
         print subject_id
-        request = urllib2.Request(self.host_api+"subjects/"+str(subject_id))
+        print self.host_api+"subjects/"+str(subject_id)+"?"
+        assert False
+        request = urllib2.Request(self.host_api+"subjects/"+str(subject_id)+"?")
         request.add_header("Accept","application/vnd.api+json; version=1")
         request.add_header("Authorization","Bearer "+self.token)
         # request
@@ -1020,7 +1022,7 @@ class AggregationAPI:
             raise
 
         data = json.loads(body)
-
+        print data
         url = str(data["subjects"][0]["locations"][0]["image/jpeg"])
 
         slash_index = url.rfind("/")
