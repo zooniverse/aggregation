@@ -156,8 +156,7 @@ def hesse_line_reduction(line_segments):
 
 
 class AggregationAPI:
-    def __init__(self,project=None,environment=None,db_connection=True,user_id=None,password=None):#,user_threshold= None, score_threshold= None): #Supernovae
-
+    def __init__(self,project=None,environment=None,db_connection=True,user_id=None,password=None,cassandra_connection=True):#,user_threshold= None, score_threshold= None): #Supernovae
 
         self.cluster_algs = None
         self.classification_alg = None
@@ -198,20 +197,16 @@ class AggregationAPI:
             except IOError:
                 database_file = open(base_directory+"/Databases/database.yml")
 
-
             database_details = yaml.load(database_file)
             self.postgres_session = None
             self.__postgres_connect__(database_details[self.environment])
 
-
-
-
+        if cassandra_connection:
             # and to the cassandra db as well
             self.__cassandra_connect__()
 
             # will only override this for ouroboros instances
             self.classification_table = "classifications"
-
 
         # get my userID and password
         # purely for testing, if this file does not exist, try opening on Greg's computer
@@ -231,6 +226,8 @@ class AggregationAPI:
         # if project id is given as an int, assume that it is referring to the Panoptes id
         self.__panoptes_connect__(api_details["production"],user_id,password)
 
+        if project is None:
+            return
 
         try:
             self.project_id = int(project)
@@ -906,7 +903,51 @@ class AggregationAPI:
 
         return workflows,versions,instructions,updated_at_timestamps
 
+    def __get_users_per_cluster__(self,workflow_id,subject_id,task_id,shape):
+        """
+        return the center of each cluster - for plotting - and associated probability of existing
+        :param workflow_id:
+        :param subject_id:
+        :param task_id:
+        :param axes:
+        :param threshold:
+        :return:
+        """
+        postgres_cursor = self.postgres_session.cursor()
+        # todo - generalize for panoptes
+        stmt = "select aggregation from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = '" + str(subject_id) + "'"
+        # stmt = "select aggregation from aggregations where subject_id = '" + str(subject_id) + "'"
+        postgres_cursor.execute(stmt)
 
+        # todo - this should be a dict but doesn't seem to be - hmmmm :/
+        agg = postgres_cursor.fetchone()
+
+        if agg is None:
+            print "returning none"
+            return {}
+
+        if isinstance(agg[0],str):
+            aggregations = json.loads(agg[0])
+        else:
+            aggregations = agg[0]
+
+        assert isinstance(aggregations,dict)
+
+        users = {}
+        for cluster in aggregations[str(task_id)][shape + " clusters"].values():
+            if cluster == "cluster_index":
+                continue
+
+            center = tuple(cluster["center"])
+            print cluster
+            users[center] = cluster["users"]
+            # # todo - should be only one way - check why both are necessary
+            # if isinstance(cluster['existence'][0],dict):
+            #     probabilities[center] = cluster['existence'][0]['1']
+            # else:
+            #     probabilities[center] = cluster['existence'][0][1]
+
+        return users
 
     # def __get_workflow_versions__(self):#,project_id):
     #     request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
@@ -1499,9 +1540,9 @@ class AggregationAPI:
                         if cluster_index == "param":
                             continue
 
-                        del aggregations[task_id][cluster_type][cluster_index]["cluster members"]
+                        # del aggregations[task_id][cluster_type][cluster_index]["cluster members"]
                         del aggregations[task_id][cluster_type][cluster_index]["tools"]
-                        del aggregations[task_id][cluster_type][cluster_index]["users"]
+                        # del aggregations[task_id][cluster_type][cluster_index]["users"]
 
         return aggregations
 
