@@ -3,7 +3,7 @@ import requests
 import json
 from aggregation_api import AggregationAPI
 
-def aggregate(project_id, token, href, metadata, environment="development"):
+def aggregate(project_id, token, href, metadata, environment):
     project = AggregationAPI(project_id, environment=environment)
     project.__aggregate__()
     tarpath = project.__csv_output__(compress=True)
@@ -25,6 +25,7 @@ def send_finished(metadata):
     send_request(body)
 
 def send_request(body):
+    body['admin'] = true
     headers = { 'Accept': 'application/vnd.api+json; version=1',
                 'Content-Type': 'application/json',
                 'Authorization': 'Bearer '+str(token) }
