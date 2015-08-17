@@ -12,7 +12,7 @@ WORKDIR /app/
 
 ADD . /app/
 
-RUN pip install cassandra-driver Flask redis rq boto3
+RUN pip install cassandra-driver Flask redis rq requests
 RUN pip install .
 
 ADD supervisord.conf /etc/supervisor/conf.d/cron.conf

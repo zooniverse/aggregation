@@ -203,7 +203,7 @@ class AggregationAPI:
 
         if cassandra_connection:
             # and to the cassandra db as well
-            self.__cassandra_connect__()
+            self.__cassandra_connect__(environment)
 
             # will only override this for ouroboros instances
             self.classification_table = "classifications"
@@ -218,13 +218,13 @@ class AggregationAPI:
 
         print "connecting to Panoptes http api"
         if user_id is None:
-            user_id = api_details["production"]["name"]
+            user_id = api_details[environment]["name"]
         if password is None:
-            password = api_details["production"]["password"]
+            password = api_details[environment]["password"]
         # set the http_api and basic project details
         # if project id is given, connect using basic values - assume we are in production space
         # if project id is given as an int, assume that it is referring to the Panoptes id
-        self.__panoptes_connect__(api_details["production"],user_id,password)
+        self.__panoptes_connect__(api_details[environment],user_id,password)
 
         if project is None:
             return
@@ -336,14 +336,18 @@ class AggregationAPI:
             else:
                 return aggregations
 
-    def __cassandra_connect__(self):
+    def __cassandra_connect__(self, env):
         """
         connect to the AWS instance of Cassandra - try 10 times and raise an error
         :return:
         """
         for i in range(10):
             try:
-                self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
+                if env is 'production':
+                    self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
+                else:
+                    self.cluster = Cluster(['cassandra'])
+
                 # self.cluster = Cluster()
 
                 try:
@@ -510,8 +514,8 @@ class AggregationAPI:
             if compress:
                 with tarfile.open("/tmp/workflow_"+str(self.project_id)+"export.tar.gz", "w:gz") as tarball:
                     for f in csv_files.values():
-                        tarInfo = tar.gettarinfo(fileobj=f)
-                        tar.add(tarInfo, fileobj=f)
+                        tarInfo = tarball.gettarinfo(fileobj=f)
+                        tarball.addfile(tarInfo, fileobj=f)
 
             for f in csv_files.values():
                 assert isinstance(f,file)
