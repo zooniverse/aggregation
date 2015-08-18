@@ -38,6 +38,7 @@ def start_aggregation():
 @app.errorhandler(500)
 def handle_error(error):
     print error
+    return "Internal Server Error"
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0')
