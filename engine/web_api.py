@@ -6,6 +6,7 @@ from load_redis import configure_redis
 from jobs import aggregate
 import os
 import json
+import logging
 
 app = Flask(__name__)
 env = os.getenv('FLASK_ENV', 'production')
@@ -34,6 +35,14 @@ def start_aggregation():
         resp = make_response(json.dumps({error: [{messages: "Missing Required Key"}]}), 422)
         resp.headers['Content-Type'] = 'application/json'
         return resp
+
+@app.before_first_request
+def setup_logging():
+    if not app.debug:
+        import logging
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.INFO)
+        app.logger.addHandler(handler)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=False)
