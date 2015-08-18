@@ -343,7 +343,7 @@ class AggregationAPI:
         """
         for i in range(10):
             try:
-                if env is 'production':
+                if env is 'production' or env is 'staging':
                     self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
                 else:
                     self.cluster = Cluster(['cassandra'])
