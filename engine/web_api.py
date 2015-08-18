@@ -24,7 +24,7 @@ def start_aggregation():
     try:
         body = request.get_json()
         project = body['project_id']
-        href = body['media_href']
+        href = body['medium_href']
         metadata = body['metadata']
         token = body['token']
         q.enqueue(aggregate, project, token, api_root+"/api"+href, metadata, env)
