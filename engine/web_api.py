@@ -32,7 +32,7 @@ def start_aggregation():
         resp.headers['Content-Type'] = 'application/json'
         return resp
     except KeyError:
-        resp = make_response(json.dumps({error: [{messages: "Missing Required Key"}]}), 422)
+        resp = make_response(json.dumps({'error': [{'messages': "Missing Required Key"}]}), 422)
         resp.headers['Content-Type'] = 'application/json'
         return resp
 
