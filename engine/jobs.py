@@ -10,7 +10,7 @@ def aggregate(project_id, token, href, metadata, environment):
     response = send_uploading(metadata, token, href)
     url = response.json()["media"][0]["src"]
     with open(tarpath, 'rb') as tarball:
-        requests.put(url, data=tarball)
+        requests.put(url, headers={'Content-Type': 'application/x-gzip'}, data=tarball)
     os.remove(tarpath)
     send_finished(metadata, token, href)
 

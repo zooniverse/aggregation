@@ -422,12 +422,17 @@ class AggregationAPI:
         else:
             workflows = [given_workflows]
 
+        print self.workflows
+
         self.clustering_headers = ["subject_id", "shape","cluster_index","most_likely_tool", "x", "y", "height","width","rotation", "number_of_users_per_subject", "number_of_users_per_cluster","probability_of_existence", "probability_of_most_likely_tool"]
         self.classification_headers = ["subject_id",  "number_of_users"]
         # todo - the following are only relevant for followup questions which still need to be done
         # "shape","cluster_index","followup_index",
 
         headers_per_task = {}
+
+        if compress:
+            tarball = tarfile.open("/tmp/"+str(self.project_id)+"export.tar.gz", "w:gz")
 
         for workflow_id in workflows:
             json.dump(self.instructions[workflow_id],open("/tmp/workflow_"+str(workflow_id)+"_instructions.json","wb"),indent=4)
@@ -513,18 +518,17 @@ class AggregationAPI:
                                 cluster_index = record[3]
                                 f.write(str(subject_id)+","+str(shape)+","+str(cluster_index)+","+str(followup_index)+","+str(most_likely)+","+str(highest_prob)+","+str(num_users))
 
-            if compress:
-                with tarfile.open("/tmp/workflow_"+str(self.project_id)+"export.tar.gz", "w:gz") as tarball:
-                    for f in csv_files.values():
-                        tarInfo = tarball.gettarinfo(fileobj=f)
-                        tarball.addfile(tarInfo, fileobj=f)
 
             for f in csv_files.values():
                 assert isinstance(f,file)
+                if compress:
+                    tarInfo = tarball.gettarinfo(fileobj=f)
+                    tarball.addfile(tarInfo, fileobj=f)
                 f.close()
 
-            if compress:
-                return "/tmp/workflow_"+str(self.project_id)+"export.tar.gz"
+        if compress:
+            tarball.close()
+            return "/tmp/"+str(self.project_id)+"export.tar.gz"
 
     def __enter__(self):
         return self
