@@ -132,25 +132,25 @@ for rho,theta in to_draw_1:
 
     cv2.line(img,(x1,y1),(x2,y2),(0,0,255),2)
 
-cv2.imwrite(base_directory + '/houghlines3.jpg',img)
-
-print len(to_draw_1)
-print len(to_draw_2)
-
-img = cv2.imread(base_directory + "/Dropbox/789c61ed-84b5-4f8b-b372-a244889f6588.jpeg")
-for rho,theta in to_draw_2:
-    a = np.cos(theta)
-    b = np.sin(theta)
-    x0 = a*rho
-    y0 = b*rho
-    x1 = int(x0 + 1000*(-b))
-    y1 = int(y0 + 1000*(a))
-    x2 = int(x0 - 1000*(-b))
-    y2 = int(y0 - 1000*(a))
-
-    cv2.line(img,(x1,y1),(x2,y2),(0,0,255),2)
-
-cv2.imwrite(base_directory + '/houghlines1.jpg',img)
+# cv2.imwrite(base_directory + '/houghlines3.jpg',img)
+#
+# print len(to_draw_1)
+# print len(to_draw_2)
+#
+# img = cv2.imread(base_directory + "/Dropbox/789c61ed-84b5-4f8b-b372-a244889f6588.jpeg")
+# for rho,theta in to_draw_2:
+#     a = np.cos(theta)
+#     b = np.sin(theta)
+#     x0 = a*rho
+#     y0 = b*rho
+#     x1 = int(x0 + 1000*(-b))
+#     y1 = int(y0 + 1000*(a))
+#     x2 = int(x0 - 1000*(-b))
+#     y2 = int(y0 - 1000*(a))
+#
+#     cv2.line(img,(x1,y1),(x2,y2),(0,0,255),2)
+#
+# cv2.imwrite(base_directory + '/houghlines1.jpg',img)
 
 for l1_index,l1 in enumerate(to_draw_1):
     if l1[0] < 0:
@@ -220,8 +220,11 @@ for l1_index,l1 in enumerate(to_draw_1):
 
             D3 = deter(d2,d5,d7,d8)
 
-            intersect_x = D1/D3
-            intersect_y = D2/D3
+            intersect_x = int(D1/D3)
+            intersect_y = int(D2/D3)
 
             print intersect_x,intersect_y
 
+            cv2.circle(img,(intersect_x,intersect_y),20,(0,0,255))
+
+cv2.imwrite(base_directory + '/houghlines3.jpg',img)
