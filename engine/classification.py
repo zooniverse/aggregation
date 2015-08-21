@@ -34,15 +34,12 @@ class Classification:
 
     def __subtask_classification__(self,task_id,classification_tasks,raw_classifications,clustering_results):
         # todo: implement this
-        print task_id
         assert task_id != "param"
         assert "subtask" in classification_tasks[task_id]
 
         aggregations = {}
 
         for tool in classification_tasks[task_id]["subtask"]:
-            print "----"
-            print tool
 
             # not every marking tool will have a follow up question
             for followup_question_index in classification_tasks[task_id]["subtask"][tool]:
@@ -120,7 +117,6 @@ class Classification:
         return in json format so we can merge with other results
         :return:
         """
-        print gold_standard_clustering
 
 
         mapped_gold_standard = {}
@@ -265,7 +261,7 @@ class Classification:
         aggregations = {}
         # are there any uncertain shapes associated with this task?
         # if not, return an empty result
-        if "shapes" not in classification_tasks[task_id]:
+        if "confusing shapes" not in classification_tasks[task_id]:
             return {}
 
         # todo - we should skip such cases but they should also be pretty rare - double check
@@ -273,7 +269,7 @@ class Classification:
             return {}
 
         # only go through the "uncertain" shapes
-        for shape in classification_tasks[task_id]["shapes"]:
+        for shape in classification_tasks[task_id]["confusing shapes"]:
             tool_classifications = {}
 
             # todo - we should skip such cases but they should also be pretty rare - double check

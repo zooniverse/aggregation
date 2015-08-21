@@ -313,6 +313,11 @@ class AggregationAPI:
                 print "classifying"
                 classification_aggregations = self.__classify__(raw_classifications,clustering_aggregations,workflow_id,gold_standard_clusters)
 
+            print "***"
+            print self.classification_alg
+            print marking_tasks
+            print classification_tasks
+
             # if we have both markings and classifications - we need to merge the results
             if (clustering_aggregations is not None) and (classification_aggregations is not None):
                 aggregations = self.__merge_aggregations__(clustering_aggregations,classification_aggregations)
@@ -652,6 +657,8 @@ class AggregationAPI:
                                         assert False
                                     # "number_of_users_per_subject", "number_of_users_per_cluster","probability_of_existence"
 
+                                    print cluster
+
                                     aggregation_dict["number_of_users_per_subject"] = cluster["existence"][1]
                                     aggregation_dict["probability_of_existence"] = cluster["existence"][0]["1"]
                                     # number_of_users_per_subject = cluster["existence"][1]
@@ -872,11 +879,15 @@ class AggregationAPI:
         updated_at_timestamps = {}
         versions = {}
 
+        print "+++"
+        print "+++"
+
         for individual_workflow in data["workflows"]:
             workflow_id = int(individual_workflow["id"])
             if (given_workflow_id is None) or (workflow_id == given_workflow_id):
                 # read in the basic structure of the workflow
                 workflows[workflow_id] = self.__readin_tasks__(workflow_id)
+                print workflows[workflow_id]
 
                 # read in the instructions associated with the workflow
                 # not used for the actual aggregation but for printing out results to the user
@@ -1589,6 +1600,8 @@ class AggregationAPI:
         if isinstance(tasks,str):
             tasks = json.loads(tasks)
 
+        print "=====//"
+
         for task_id in tasks:
             # self.task_type[task_id] = tasks[task_id]["type"]
             # if the task is a drawing one, get the necessary details for clustering
@@ -1603,6 +1616,7 @@ class AggregationAPI:
                 for tool in tasks[task_id]["tools"]:
                     # shape = ellipse, line, pt etc.
                     shape = tool["type"]
+                    print shape
 
                     # extract the label of the tool - this means that things don't have to ordered
                     label = tool["label"]
@@ -1639,6 +1653,13 @@ class AggregationAPI:
                         print tool
                         assert False
 
+                    if task_id not in classification_tasks:
+                        classification_tasks[task_id] = {}
+                    if "shapes" not in classification_tasks[task_id]:
+                        classification_tasks[task_id]["shapes"] = []
+
+                    classification_tasks[task_id]["shapes"].append(shape)
+
             else:
                 # self.marking_params_per_task[task_id] = []
                 classification_tasks[task_id] = True
@@ -1651,10 +1672,10 @@ class AggregationAPI:
                     # this shape is confusing
                     if task_id not in classification_tasks:
                         classification_tasks[task_id] = {}
-                    if "shapes" not in classification_tasks[task_id]:
-                        classification_tasks[task_id]["shapes"] = []
+                    if "confusing shapes" not in classification_tasks[task_id]:
+                        classification_tasks[task_id]["confusing shapes"] = []
 
-                    classification_tasks[task_id]["shapes"].append(shape)
+                    classification_tasks[task_id]["confusing shapes"].append(shape)
 
 
         return classification_tasks,marking_tasks
@@ -2105,7 +2126,11 @@ class SubjectGenerator:
 
 if __name__ == "__main__":
     project_identifier = sys.argv[1]
-    with AggregationAPI(project_identifier) as project:
+    if len(sys.argv) > 2:
+        environment = sys.argv[2]
+    else:
+        environment = 'production'
+    with AggregationAPI(project_identifier,environment) as project:
         project.__migrate__()
         # print json.dumps(project.__aggregate__(store_values=False)[464952], sort_keys=True, indent=4, separators=(',', ': '))
         print project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
