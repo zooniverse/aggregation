@@ -1194,8 +1194,11 @@ class AggregationAPI:
                 migrated[id] = 0
             migrated[id] += 1
 
+            if isinstance(annotations,dict):
+                annotations = json.dumps(annotations)
+            assert isinstance(annotations,str)
 
-            params = (project_id, user_id, workflow_id,created_at, json.dumps(annotations), updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], workflow_version,json.dumps(metadata))
+            params = (project_id, user_id, workflow_id,created_at, annotations, updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], workflow_version,json.dumps(metadata))
             statements_and_params.append((insert_statement, params))
 
             # params2 = (project_id,workflow_id,workflow_version,subject_ids[0])
