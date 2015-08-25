@@ -203,7 +203,7 @@ class AggregationAPI:
 
         if cassandra_connection:
             # and to the cassandra db as well
-            self.__cassandra_connect__(environment)
+            self.__cassandra_connect__()
 
             # will only override this for ouroboros instances
             self.classification_table = "classifications"
@@ -218,13 +218,13 @@ class AggregationAPI:
 
         print "connecting to Panoptes http api"
         if user_id is None:
-            user_id = api_details[environment]["name"]
+            user_id = api_details[self.environment]["name"]
         if password is None:
-            password = api_details[environment]["password"]
+            password = api_details[self.environment]["password"]
         # set the http_api and basic project details
         # if project id is given, connect using basic values - assume we are in production space
         # if project id is given as an int, assume that it is referring to the Panoptes id
-        self.__panoptes_connect__(api_details[environment],user_id,password)
+        self.__panoptes_connect__(api_details[self.environment],user_id,password)
 
         if project is None:
             return
@@ -341,16 +341,16 @@ class AggregationAPI:
             else:
                 return aggregations
 
-    def __cassandra_connect__(self, env):
+    def __cassandra_connect__(self):
         """
         connect to the AWS instance of Cassandra - try 10 times and raise an error
         :return:
         """
         for i in range(10):
             try:
-                if env == 'production':
+                if self.environment == 'production':
                     self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
-                if env == 'staging':
+                elif self.environment == 'staging':
                     self.cluster = Cluster(['panoptes-cassandra-staging.zooniverse.org'])
                 else:
                     self.cluster = Cluster(['cassandra'])
