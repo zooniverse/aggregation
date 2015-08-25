@@ -527,8 +527,9 @@ class AggregationAPI:
             for f in csv_files.values():
                 assert isinstance(f,file)
                 if compress:
-                    tarInfo = tarball.gettarinfo(fileobj=f)
-                    tarball.addfile(tarInfo, fileobj=f)
+                    with open(f.name, "rb") as readfile:
+                        tarInfo = tarball.gettarinfo(fileobj=readfile)
+                        tarball.addfile(tarInfo, fileobj=readfile)
                 f.close()
 
         if compress:
