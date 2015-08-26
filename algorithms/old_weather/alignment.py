@@ -30,7 +30,6 @@ lines = [l[0] for l in lines_t]
 # print lines[0]
 # assert False
 
-
 img = cv2.imread(base_directory + "/Dropbox/789c61ed-84b5-4f8b-b372-a244889f6588.jpeg")
 gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 edges = cv2.Canny(gray,minVal,maxVal,apertureSize = 3)
@@ -92,13 +91,12 @@ for i in range(len(lines)):
             if i_temp == i:
                 # print max(dist,dist_2)
                 if max(dist,dist_2) < 0.001:
-                    # bijection = j
                     to_draw_1.append(lines[i])
                     to_draw_2.append(lines_2[j])
                     # print lines[0][i]
                     # print lines_2[0][j]
                     # print
-                    print max(dist,dist_2)
+                    # print max(dist,dist_2)
 
                 break
 
@@ -119,18 +117,22 @@ for i in range(len(lines)):
     #     print
 # assert False
 
-img = cv2.imread(base_directory + "/Dropbox/066e48f5-812c-4b5f-ab04-df6c35f50393.jpeg")
-for rho,theta in to_draw_1:
-    a = np.cos(theta)
-    b = np.sin(theta)
-    x0 = a*rho
-    y0 = b*rho
-    x1 = int(x0 + 1000*(-b))
-    y1 = int(y0 + 1000*(a))
-    x2 = int(x0 - 1000*(-b))
-    y2 = int(y0 - 1000*(a))
+bijections = zip(to_draw_1,to_draw_2)
+for a,b in bijections:
+    print a,b
 
-    cv2.line(img,(x1,y1),(x2,y2),(0,0,255),2)
+# img = cv2.imread(base_directory + "/Dropbox/066e48f5-812c-4b5f-ab04-df6c35f50393.jpeg")
+# for rho,theta in to_draw_1:
+#     a = np.cos(theta)
+#     b = np.sin(theta)
+#     x0 = a*rho
+#     y0 = b*rho
+#     x1 = int(x0 + 1000*(-b))
+#     y1 = int(y0 + 1000*(a))
+#     x2 = int(x0 - 1000*(-b))
+#     y2 = int(y0 - 1000*(a))
+#
+#     cv2.line(img,(x1,y1),(x2,y2),(0,0,255),2)
 
 # cv2.imwrite(base_directory + '/houghlines3.jpg',img)
 #
@@ -152,79 +154,108 @@ for rho,theta in to_draw_1:
 #
 # cv2.imwrite(base_directory + '/houghlines1.jpg',img)
 
-for l1_index,l1 in enumerate(to_draw_1):
-    if l1[0] < 0:
-        l1 = -l1[0],(l1[1]+math.pi/2.)%math.pi
-    for l2 in to_draw_1[:l1_index+1]:
-        if l2[0] < 0:
-            l2 = -l2[0],(l2[1]+math.pi/2.)%math.pi
-        angle_diff = math.fabs(min(l1[1]-l2[1], math.pi-l1[1]-l2[1]))
-        if angle_diff > 0.1:
-            # print angle_diff
-            # print l1
-            # print l2
-            # print
 
-            x1 = math.cos(l1[1])*l1[0]
-            y1 = math.sin(l1[1])*l1[0]
+def intersections(lines):
+    line_intersections = {}
 
-            y2 = None
-            x2 = None
+    for l1_index,l1 in enumerate(lines):
+        if l1[0] < 0:
+            l1 = -l1[0],(l1[1]+math.pi/2.)%math.pi
+        for l2_index,l2 in enumerate(lines[:l1_index+1]):
+            l2_index += l1_index+1
+            if l2[0] < 0:
+                l2 = -l2[0],(l2[1]+math.pi/2.)%math.pi
+            angle_diff = math.fabs(min(l1[1]-l2[1], math.pi-l1[1]-l2[1]))
+            if angle_diff > 0.1:
+                # print angle_diff
+                # print l1
+                # print l2
+                # print
 
-            # vertical line
-            if l1[1] == 0.:
-                x2 = x1
-                y2 = 10
-            # horizontal line
-            elif math.fabs(l1[1] - math.pi/2.) < 0.01:
-                x2 = 10
-                y2 = y1
+                x1 = math.cos(l1[1])*l1[0]
+                y1 = math.sin(l1[1])*l1[0]
 
-            # print (x1,y1),(x2,y2)
+                y2 = None
+                x2 = None
 
-            # see https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
-            # for logic and notation
-            x3 = math.cos(l2[1])*l2[0]
-            y3 = math.sin(l2[1])*l2[0]
+                theta_1 = l1[1]
 
-            x4 = None
-            y4 = None
+                # vertical line
+                if math.fabs(theta_1%math.pi) < 0.01:
+                    x2 = x1
+                    y2 = 10
+                # horizontal line
+                elif math.fabs(theta_1%(math.pi/2.)) < 0.01:
+                    x2 = 10
+                    y2 = y1
+                # elif
 
-            # vertical line
-            if l2[1] == 0.:
-                x4 = x3
-                y4 = 15
-            # horizontal
-            elif math.fabs(l1[1] - math.pi/2.) < 0.01:
-                x4 = 15
-                y4 = y3
+                # print (x1,y1),(x2,y2)
 
-            if None in [x1,x2,x3,x4,y1,y2,y3,y4]:
-                print "skipping"
-                continue
+                # see https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
+                # for logic and notation
+                x3 = math.cos(l2[1])*l2[0]
+                y3 = math.sin(l2[1])*l2[0]
 
-            d1 = deter(x1,y1,x2,y2)
-            d2 = deter(x1,1,x2,1)
-            d3 = deter(x3,y3,x4,y4)
-            d4 = deter(x3,1,x4,1)
+                x4 = None
+                y4 = None
 
-            D1 = deter(d1,d2,d3,d4)
+                theta_2 = l2[1]
 
-            d5 = deter(y1,1,y2,1)
-            d6 = deter(y3,1,y4,1)
+                # vertical line
+                if math.fabs(theta_2%math.pi) < 0.01:
+                    x4 = x3
+                    y4 = 15
+                # horizontal
+                elif math.fabs(theta_2%(math.pi/2.)) < 0.01:
+                    x4 = 15
+                    y4 = y3
 
-            D2 = deter(d1,d5,d3,d6)
+                if None in [x1,x2,x3,x4,y1,y2,y3,y4]:
+                    # print "skipping"
+                    continue
 
-            d7 = deter(x3,1,x4,1)
-            d8 = deter(y3,1,y4,1)
+                d1 = deter(x1,y1,x2,y2)
+                d2 = deter(x1,1,x2,1)
+                d3 = deter(x3,y3,x4,y4)
+                d4 = deter(x3,1,x4,1)
 
-            D3 = deter(d2,d5,d7,d8)
+                D1 = deter(d1,d2,d3,d4)
 
-            intersect_x = int(D1/D3)
-            intersect_y = int(D2/D3)
+                d5 = deter(y1,1,y2,1)
+                d6 = deter(y3,1,y4,1)
 
-            print intersect_x,intersect_y
+                D2 = deter(d1,d5,d3,d6)
 
-            cv2.circle(img,(intersect_x,intersect_y),20,(0,0,255))
+                d7 = deter(x3,1,x4,1)
+                d8 = deter(y3,1,y4,1)
 
-cv2.imwrite(base_directory + '/houghlines3.jpg',img)
+                D3 = deter(d2,d5,d7,d8)
+
+                intersect_x = int(D1/D3)
+                intersect_y = int(D2/D3)
+
+                # print intersect_x,intersect_y
+
+                line_intersections[(l1_index,l2_index)] = (intersect_x,intersect_y)
+
+            # cv2.circle(img,(intersect_x,intersect_y),20,(0,0,255))
+    return line_intersections
+pts1 = intersections(to_draw_1)
+pts2 = intersections(to_draw_2)
+
+x_displacements = []
+y_displacements = []
+
+for line_tuple in pts1.keys():
+    if line_tuple in pts2:
+        d_x = pts2[line_tuple][0] - pts1[line_tuple][0]
+        d_y = pts2[line_tuple][1] - pts1[line_tuple][1]
+
+        x_displacements.append(d_x)
+        y_displacements.append(d_y)
+
+print min(x_displacements),np.mean(x_displacements),max(x_displacements)
+print min(y_displacements),np.mean(y_displacements),max(y_displacements)
+
+# cv2.imwrite(base_directory + '/houghlines3.jpg',img)
