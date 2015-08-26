@@ -34,8 +34,13 @@ end_scale = 28
 def to_scale(pts):
     retval = [0 for i in range(end_scale**2)]
 
-    x,y = zip(*pts)
-    starting_scale = max(y)-min(y)
+    x_l,y_l = zip(*pts)
+    y_l = [y-min(y_l) for y in y_l]
+    x_l = [x-min(x_l) for x in x_l]
+
+    starting_scale = max(y_l)
+
+
     if (max(y)-min(y)) < (max(x) - min(x)):
         return
     # make sure that the digit is vertical
