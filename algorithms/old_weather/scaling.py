@@ -82,20 +82,56 @@ def to_scale(pts):
                 l_y0 = int(math.floor(y0)) + min_y
                 u_y0 = int(math.ceil(y0)) + min_y
 
+                # kernel based smoothing
+                distances = []
+
+                distances.append((x0-l_x0+min_x)**2+(y0-l_y0+min_y)**2)
+                distances.append((x0-l_x0+min_x)**2+(y0-u_y0+min_y)**2)
+                distances.append((x0-u_x0+min_x)**2+(y0-l_y0+min_y)**2)
+                distances.append((x0-u_x0+min_x)**2+(y0-u_y0+min_y)**2)
+
+                # print x0,y0
+                # print l_x0,l_y0
+                # print distances
+
+                b = 0.5
+
+                kernels = [math.exp(-d/float(2*b**2)) for d in distances]
+                print distances
+                print kernels
+                v = []
+                # kernels.append(math.exp())
+
                 pos_neighbours = 0
                 # print (l_x0,l_y0)
                 # print pts
                 # print (l_x0,l_y0)
                 if (l_x0,l_y0) in pts:
                     pos_neighbours += 1
+                    v.append(1)
+                else:
+                    v.append(0)
                 if (l_x0,u_y0) in pts:
                     pos_neighbours += 1
+                    v.append(1)
+                else:
+                    v.append(0)
                 if (u_x0,l_y0) in pts:
                     pos_neighbours += 1
+                    v.append(1)
+                else:
+                    v.append(0)
                 if (u_x0,u_y0) in pts:
                     pos_neighbours += 1
+                    v.append(1)
+                else:
+                    v.append(0)
 
-                if pos_neighbours >= 2:
+                print pos_neighbours/4.
+                print numpy.average(v,weights=kernels)
+                print "--"
+
+                if numpy.average(v,weights=kernels) >= 0.5:
                     plt.plot(x1,y1,"o",color="blue")
 
         plt.xlim((-0.01,28))
