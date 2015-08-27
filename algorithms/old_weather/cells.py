@@ -3,14 +3,17 @@ import matplotlib.pyplot as plt
 import matplotlib.cbook as cbook
 import math
 import numpy
-# from pybrain.tools.shortcuts import buildNetwork
-# from pybrain.datasets import SupervisedDataSet
-# from pybrain.supervised.trainers import BackpropTrainer
 import cPickle
-import gzip
+import os
+from neural_network import Network,load_data_wrapper
+import cv2
 
-# Third-party libraries
-import numpy as np
+if os.path.exists("/home/ggdhines"):
+    base_directory = "/home/ggdhines"
+else:
+    base_directory = "/home/greg"
+
+net = cPickle.load(open(base_directory+"/Dropbox/neural.net","rb"))
 
 
 # net = buildNetwork(784, 30, 10)
@@ -31,13 +34,15 @@ import numpy as np
 X = [285,319,354,422,745,779,871,928,963,990,1034,1068,1160,1228,1262]
 Y = [272,339,369,398,428,457,488,515,545,573,602,631,660]
 
+image_file = cbook.get_sample_data("/home/ggdhines/Dropbox/vol072_237_0.png")
+image = plt.imread(image_file)
+
 # @jit
 def s():
     fig = plt.figure()
     axes = fig.add_subplot(1, 1, 1)
 
-    image_file = cbook.get_sample_data("/home/greg/Dropbox/vol072_237_0.png")
-    image = plt.imread(image_file)
+
     r = []
 
     # fig, ax = plt.subplots()
@@ -81,7 +86,7 @@ def s():
                 # plt.plot(x,-y,"o",color="blue")
 
                 if (min([abs(y-y_l) for y_l in Y]) > 1) and (min([abs(x-x_l) for x_l in X]) > 1):
-                    r.append((x,-y))
+                    r.append((x,y))
 
     # plt.show()
     return numpy.asarray(r)
@@ -104,6 +109,23 @@ db = DBSCAN(eps=2, min_samples=3).fit(t)
 labels = db.labels_
 unique_labels = set(labels)
 colors = plt.cm.Spectral(numpy.linspace(0, 1, len(unique_labels)))
+
+
+def p(a):
+    for x in range(28):
+        for y in range(28):
+
+            if a[y*28+x] > 0:
+                plt.plot(x,y,"o",color="blue")
+
+    plt.xlim((-0.01,28))
+    plt.ylim((28,-0.01))
+    plt.show()
+
+training_data, validation_data, test_data = load_data_wrapper()
+
+# p(test_data[0][0])
+
 for k, col in zip(unique_labels, colors):
     if k == -1:
         # Black used for noise.
@@ -112,33 +134,72 @@ for k, col in zip(unique_labels, colors):
     class_member_mask = (labels == k)
 
     xy = t[class_member_mask]
-    scaling.to_scale(xy)
-    # plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=col,
-    #          markeredgecolor='k', markersize=3)
-    #
-    #
-    # print max(xy[:, 1])- min(xy[:, 1])
+
+    x_l,y_l = zip(*xy)
+    for x,y in xy:
+        plt.plot(x,-y,"o",color="blue")
+    plt.show()
+
+    sub_image = []
+    for y in range(min(y_l),max(y_l)+1):
+        temp = []
+        for x in range(min(x_l),max(x_l)+1):
+            temp.append(image[y][x])
+        sub_image.append(temp)
+
+    sub_image = numpy.array(sub_image)
+
+    fig = plt.figure()
+    axes = fig.add_subplot(1, 1, 1)
+    im = axes.imshow(sub_image)
+    plt.show()
 
 
+    x_range = max(x_l)-min(x_l)
+    y_range = max(y_l)-min(y_l)
 
-# plt.title('Estimated number of clusters: %d' % n_clusters_)
-# plt.show()
+    if max(x_range,y_range) < 28:
+        # always enlarge along the biggest axis
+        if x_range > y_range:
+            new_x = 28
+            scale = 28/float(x_range)
+            new_y = int(round(y_range*scale))
+        else:
+            new_y = 28
+            scale = 28/float(y_range)
+            new_x = int(round(x_range*scale))
 
-# for x_index in range(len(X)-1):
-#     for y_index in range(len(Y)-1):
-#         # ul_x is the upper left corner - x coordinate
-#         ul_x = X[x_index]
-#         lr_x = X[x_index+1]
-#
-#         ul_y = Y[y_index]
-#         lr_y = Y[y_index+1]
-#
-#         for (x,y) in t:
-#             if x < ul_x:
-#                 continue
-#             elif x > lr_x:
-#                 break
-#             else:
-#                 print (x >= ul_y) and (y <= lr_y)
-#     break
-#     #         plt.plot([X[x_index],X[x_index+1],X[x_index+1],X[x_index]],[Y[y_index],Y[y_index],Y[y_index+1],Y[y_index+1]],color="blue")
+        print new_y,new_x
+        resized_image = cv2.resize(sub_image, (new_y,new_x), interpolation=cv2.INTER_CUBIC )
+        fig = plt.figure()
+        axes = fig.add_subplot(1, 1, 1)
+        im = axes.imshow(resized_image)
+        plt.show()
+
+    elif max(x_range,y_range) > 28:
+        # shrinking
+        pass
+    else:
+        # just need to center
+        pass
+
+    continue
+
+    assert False
+
+
+    print min(x),min(y)
+    print max(x),max(y)
+
+    r = scaling.to_scale(xy)
+
+    if r is not None:
+        # # print type(r)
+        # # print r.shape
+        # print "here"
+        # # print len(r)
+        # # print len(net.feedforward(r)[0])
+        l = net.feedforward(r)
+        print numpy.argmax(l), numpy.max(l)/numpy.median(l)
+        # print "->"
+        p(r)

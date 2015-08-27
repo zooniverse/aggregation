@@ -43,9 +43,9 @@ def to_scale(pts):
     y_l = [y-min(y_l) for y in y_l]
     x_l = [x-min(x_l) for x in x_l]
 
-    for (x,y) in zip(x_l,y_l):
-        plt.plot(x,y,"o",color="blue")
-    plt.show()
+    # for (x,y) in zip(x_l,y_l):
+    #     plt.plot(x,y,"o",color="blue")
+    # plt.show()
 
     if min(y_l) == max(y_l):
         return
@@ -69,10 +69,10 @@ def to_scale(pts):
         # now we have x_1 = scale*width+x_x_offset
         x1_max = int(math.floor(scale*width+x_offset))
 
-        print pts
+        # print pts
 
         for y1 in range(28):
-            for x1 in range(x1_min,x1_max+1):
+            for x1 in range(x1_min,min(x1_max+1,28)):
                 y0 = y1/scale
                 x0 = (x1-x_offset)/scale
 
@@ -97,8 +97,8 @@ def to_scale(pts):
                 b = 0.5
 
                 kernels = [math.exp(-d/float(2*b**2)) for d in distances]
-                print distances
-                print kernels
+                # print distances
+                # print kernels
                 v = []
                 # kernels.append(math.exp())
 
@@ -127,18 +127,19 @@ def to_scale(pts):
                 else:
                     v.append(0)
 
-                print pos_neighbours/4.
-                print numpy.average(v,weights=kernels)
-                print "--"
+                # print pos_neighbours/4.
+                # print numpy.average(v,weights=kernels)
+                # print "--"
 
                 if numpy.average(v,weights=kernels) >= 0.5:
-                    plt.plot(x1,y1,"o",color="blue")
+                    # plt.plot(x1,y1,"o",color="blue")
+                    retval[(27-y1)*28+x1]=1
 
-        plt.xlim((-0.01,28))
-        plt.ylim((-0.01,28))
-        plt.show()
+        # plt.xlim((-0.01,28))
+        # plt.ylim((-0.01,28))
+        # plt.show()
 
-    return
+    return numpy.asarray(retval).reshape((784,1))
 
     # # make sure that the digit is vertical
     # assert starting_scale >= (max(x) - min(x))
