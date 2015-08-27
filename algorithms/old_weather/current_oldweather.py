@@ -5,8 +5,29 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 import csv
 import math
+import matplotlib.cbook as cbook
 # from pymongo.objectid import ObjectId
 from bson.objectid import ObjectId
+import os
+import urllib
+
+if os.path.exists("/home/ggdhines"):
+    base_directory = "/home/ggdhines"
+else:
+    base_directory = "/home/greg"
+
+
+def image_setup(url):
+
+    slash_index = url.rfind("/")
+    fname = url[slash_index+1:]
+
+    image_path = base_directory+"/Databases/images/"+fname
+
+    if not(os.path.isfile(image_path)):
+        urllib.urlretrieve(url, image_path)
+
+    return image_path
 
 # connect to the mongo server
 client = pymongo.MongoClient()
@@ -36,12 +57,34 @@ for ann in annotations.find():#{"asset_id":"ObjectId('500ddfffd2ca730755000633')
     asset = assets.find_one({"_id":ObjectId(transcription["asset_id"])})
     location = asset["location"]
     if ("Bear" in location) and ("72" in location):
-        print ann["data"]
+        if "wind_force" in ann["data"]:
+            # print ann["data"]
+            # print ann
+            # print asset
+            # break
+            # print
+            x = transcription["page_data"]["asset_screen_width"]
+            y = transcription["page_data"]["asset_screen_height"]
 
-        print
-        # print transcription
-        # print location
-        # break
+            print ann
+            print transcription
+
+            # print ann["bounds"]
+
+
+            fname = image_setup(location)
+            fig = plt.figure()
+            axes = fig.add_subplot(1, 1, 1)
+            image_file = cbook.get_sample_data(fname)
+            image = plt.imread(image_file)
+
+            print image.shape
+            plt.plot(x,y,"o")
+
+            # fig, ax = plt.subplots()
+            im = axes.imshow(image)
+            plt.show()
+            break
 
 # print annotations.find_one({'transcription_id': ObjectId("500e0f6ad2ca73074b00089b")})
 #
