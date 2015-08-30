@@ -194,18 +194,18 @@ class AggregationAPI:
 
         # connect to the Panoptes db - postgres
         # even if we are running an ouroboros project we will want to connect to Postgres
-        if db_connection and (csv_classification_file is not None):
+        self.postgres_session = None
+        if db_connection and (csv_classification_file is None):
             try:
                 database_file = open("config/database.yml")
             except IOError:
                 database_file = open(base_directory+"/Databases/database.yml")
 
             database_details = yaml.load(database_file)
-            self.postgres_session = None
             self.__postgres_connect__(database_details[self.environment])
 
         # if we have been provided with a csv classification input, don't bother trying to connect to Cassandra
-        if cassandra_connection and (csv_classification_file is not None):
+        if cassandra_connection and (csv_classification_file is None):
             # and to the cassandra db as well
             self.__cassandra_connect__()
 
@@ -388,10 +388,6 @@ class AggregationAPI:
                     print record_list
                 assert success
 
-                print subject_id
-
-
-
                 # seem to have the occasional "retired" subject with no classifications, not sure
                 # why this is possible but if it can happen, just make a note of the subject id and skip
                 if record_list == []:
@@ -400,7 +396,7 @@ class AggregationAPI:
 
                 non_logged_in_users = 0
                 for record in record_list:
-                    yield subject_id,record
+                    yield int(subject_id),int(record.user_id),record.annotations
 
         raise StopIteration()
 
@@ -1236,6 +1232,11 @@ class AggregationAPI:
         move data from postgres to cassandra
         :return:
         """
+        # no need to migrate if we are using csv input files
+        if self.csv_classification_file is not None:
+            return
+
+
         # try:
         #     self.cassandra_session.execute("drop table classifications")
         #     self.cassandra_session.execute("drop table subjects")
@@ -1295,6 +1296,7 @@ class AggregationAPI:
 
             if isinstance(annotations,dict):
                 annotations = json.dumps(annotations)
+
             assert isinstance(annotations,str)
 
             params = (project_id, user_id, workflow_id,created_at, annotations, updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], workflow_version,json.dumps(metadata))
@@ -1948,7 +1950,7 @@ class AggregationAPI:
                 else:
                     non_logged_in_users[subject_id] += 1
                 # non_logged_in_users += -1
-                user_id = non_logged_in_users
+                user_id = non_logged_in_users[subject_id]
 
             # annotations = json.loads(record.annotations)
             annotation = json.loads(annotation)
@@ -2200,11 +2202,16 @@ class SubjectGenerator:
 
 if __name__ == "__main__":
     project_identifier = sys.argv[1]
+    environment = 'production'
+    csv_classification_file = None
+
     if len(sys.argv) > 2:
-        environment = sys.argv[2]
-    else:
-        environment = 'production'
-    with AggregationAPI(project_identifier,environment) as project:
+        if sys.argv[2] in ["production","staging"]:
+            environment = sys.argv[2]
+        else:
+            csv_classification_file = sys.argv[2]
+
+    with AggregationAPI(project_identifier,environment,csv_classification_file=csv_classification_file) as project:
         project.__migrate__()
         # print json.dumps(project.__aggregate__(store_values=False)[464952], sort_keys=True, indent=4, separators=(',', ': '))
         print project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
