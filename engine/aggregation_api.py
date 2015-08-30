@@ -25,6 +25,7 @@ from collections import OrderedDict
 import numpy
 import random
 import cPickle as pickle
+import csv
 # setup(
 #     name = "Zooniverse Aggregation",
 #     version = "0.1",
@@ -156,7 +157,7 @@ def hesse_line_reduction(line_segments):
 
 
 class AggregationAPI:
-    def __init__(self,project=None,environment=None,db_connection=True,user_id=None,password=None,cassandra_connection=True):#,user_threshold= None, score_threshold= None): #Supernovae
+    def __init__(self,project=None,environment=None,db_connection=True,user_id=None,password=None,cassandra_connection=True,csv_classification_file=None):#,user_threshold= None, score_threshold= None): #Supernovae
 
         self.cluster_algs = None
         self.classification_alg = None
@@ -171,6 +172,8 @@ class AggregationAPI:
         self.marking_params_per_shape["ellipse"] = relevant_ellipse_params
         self.marking_params_per_shape["rectangle"] = relevant_rectangle_params
         self.marking_params_per_shape["circle"] = relevant_circle_params
+
+        self.csv_classification_file = csv_classification_file
 
         # in case project wants to have an roi
         self.roi_dict = {}
@@ -191,7 +194,7 @@ class AggregationAPI:
 
         # connect to the Panoptes db - postgres
         # even if we are running an ouroboros project we will want to connect to Postgres
-        if db_connection:
+        if db_connection and (csv_classification_file is not None):
             try:
                 database_file = open("config/database.yml")
             except IOError:
@@ -201,7 +204,8 @@ class AggregationAPI:
             self.postgres_session = None
             self.__postgres_connect__(database_details[self.environment])
 
-        if cassandra_connection:
+        # if we have been provided with a csv classification input, don't bother trying to connect to Cassandra
+        if cassandra_connection and (csv_classification_file is not None):
             # and to the cassandra db as well
             self.__cassandra_connect__()
 
@@ -341,6 +345,65 @@ class AggregationAPI:
             else:
                 return aggregations
 
+    def __cassandra_annotations_(self,workflow_id,subject_set):
+        """
+        get the annotations from Cassandra
+        :return:
+        """
+        version = int(math.floor(float(self.versions[workflow_id])))
+
+        # todo - do this better
+        width = 2000
+        height = 2000
+
+        classification_tasks,marking_tasks = self.workflows[workflow_id]
+        raw_classifications = {}
+        raw_markings = {}
+
+        if subject_set is None:
+            subject_set = self.__load_subjects__(workflow_id)
+
+        total = 0
+
+        # do this in bite sized pieces to avoid overwhelming DB
+        for s in self.__chunks(subject_set,15):
+            statements_and_params = []
+
+            if self.ignore_versions:
+                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ?")
+            else:
+                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
+
+            for subject_id in s:
+                if self.ignore_versions:
+                    params = (int(self.project_id),subject_id,int(workflow_id))
+                else:
+                    params = (int(self.project_id),subject_id,int(workflow_id),version)
+                statements_and_params.append((select_statement, params))
+            results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
+
+            for subject_id,(success,record_list) in zip(s,results):
+
+                if not success:
+                    print record_list
+                assert success
+
+                print subject_id
+
+
+
+                # seem to have the occasional "retired" subject with no classifications, not sure
+                # why this is possible but if it can happen, just make a note of the subject id and skip
+                if record_list == []:
+                    print "warning :: subject " + str(subject_id) + " has no classifications"
+                    continue
+
+                non_logged_in_users = 0
+                for record in record_list:
+                    yield subject_id,record
+
+        raise StopIteration()
+
     def __cassandra_connect__(self):
         """
         connect to the AWS instance of Cassandra - try 10 times and raise an error
@@ -420,6 +483,41 @@ class AggregationAPI:
                 cluster_aggregation = self.__merge_aggregations__(cluster_aggregation,shape_aggregation)
 
         return cluster_aggregation
+
+    def __csv_annotations__(self,workflow_id_filter,subject_set):
+        # find the major id of the workflow we are filtering
+        version_filter = int(math.floor(float(self.versions[workflow_id_filter])))
+
+        if subject_set is None:
+            subject_set = self.__load_subjects__(workflow_id_filter)
+
+        with open(self.csv_classification_file, 'rb') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',', quotechar='|')
+
+            for row in reader:
+                subject_data = row[8]
+                annotations = row[7]
+                workflow_id = row[2]
+                workflow_version = row[4]
+
+                # convert to json form
+                subject_data = json.loads(subject_data)
+                subject_id = subject_data.keys()[0]
+
+                # csv file contains classifications from every workflow - so make sure we find
+                # only the one we currently want
+                if int(workflow_id) != workflow_id_filter:
+                    continue
+
+                # if these are not one of the subjects we are looking for
+                if subject_id not in subject_set:
+                    continue
+
+                # convert to float
+                workflow_version = float(workflow_version)
+                # if we are not at the correct major version id, skip
+                if workflow_version < version_filter:
+                    continue
 
     def __csv_output__(self,given_workflows = None, compress = False):
         if given_workflows is None:
@@ -1818,184 +1916,156 @@ class AggregationAPI:
         :param experts:
         :return:
         """
+        # if we have not been provided with a csv classification file, connect to cassandra
+        if self.csv_classification_file is None:
+            annotation_generator = self.__cassandra_annotations_
+        else:
+            annotation_generator = self.__csv_annotations__
 
-        version = int(math.floor(float(self.versions[workflow_id])))
+        # keep track of the non-logged in users for each subject
+        non_logged_in_users = dict()
 
-        # todo - do this better
-        width = 2000
-        height = 2000
-
+        # load the classification and marking json dicts - helps parse annotations
         classification_tasks,marking_tasks = self.workflows[workflow_id]
+
+        # this is what we return
         raw_classifications = {}
         raw_markings = {}
 
-        if subject_set is None:
-            subject_set = self.__load_subjects__(workflow_id)
+        # todo - do this part better
+        width = 2000
+        height = 2000
 
-        total = 0
+        for subject_id,user_id,annotation in annotation_generator(workflow_id,subject_set):
+            if user_id == expert:
+                continue
 
-        # do this in bite sized pieces to avoid overwhelming DB
-        for s in self.__chunks(subject_set,15):
-            statements_and_params = []
-
-            if self.ignore_versions:
-                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ?")
-            else:
-                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
-
-            for subject_id in s:
-                if self.ignore_versions:
-                    params = (int(self.project_id),subject_id,int(workflow_id))
+            # todo - maybe having user_id=="" would be useful for penguins
+            if (user_id == -1):
+                # if this is the first non-logged-in-user for this subject
+                if subject_id not in non_logged_in_users:
+                    non_logged_in_users[subject_id] = 0
                 else:
-                    params = (int(self.project_id),subject_id,int(workflow_id),version)
-                statements_and_params.append((select_statement, params))
-            results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
+                    non_logged_in_users[subject_id] += 1
+                # non_logged_in_users += -1
+                user_id = non_logged_in_users
 
-            for subject_id,(success,record_list) in zip(s,results):
+            # annotations = json.loads(record.annotations)
+            annotation = json.loads(annotation)
 
-                if not success:
-                    print record_list
-                assert success
+            # go through each annotation and get the associated task
+            for task in annotation:
+                task_id = task["task"]
 
-                print subject_id
+                # is this a marking task?
+                if task_id in marking_tasks:
+                    # if a user gets to marking task but makes no markings, we want to record that the user
+                    # has still seen that image/task. If a user never gets to a marking task for that image
+                    # than they are irrelevant
+                    # create here so even if we have empty images, we will know that we aggregated them
+                    # make sure to not overwrite/delete existing information - sigh
+                    if task_id not in raw_markings:
+                        raw_markings[task_id] = {}
+                    for shape in set(marking_tasks[task_id]):
+                        if shape not in raw_markings[task_id]:
+                            raw_markings[task_id][shape] = {}
+                        if subject_id not in raw_markings[task_id][shape]:
+                            raw_markings[task_id][shape][subject_id] = []
 
-
-
-                # seem to have the occasional "retired" subject with no classifications, not sure
-                # why this is possible but if it can happen, just make a note of the subject id and skip
-                if record_list == []:
-                    print "warning :: subject " + str(subject_id) + " has no classifications"
-                    continue
-
-                non_logged_in_users = 0
-                for record in record_list:
-
-                    total += 1
-                    user_id = record.user_id
-
-                    if user_id == expert:
+                    if not isinstance(task["value"],list):
+                        print "not properly formed marking - skipping"
                         continue
 
-                    # todo - maybe having user_id=="" would be useful for penguins
-                    if (user_id == -1):
-                        non_logged_in_users += -1
-                        user_id = non_logged_in_users
+                    # kind track of which shapes the user did mark - we need to keep track of any shapes
+                    # for which the user did not make any marks at all of
+                    # because a user not seeing something is important
+                    spotted_shapes = set()
 
-                    annotations = json.loads(record.annotations)
+                    for marking in task["value"]:
+                        # what kind of tool made this marking and what was the shape of that tool?
+                        try:
+                            tool = marking["tool"]
+                            shape = marking_tasks[task_id][tool]
+                        except KeyError:
+                            tool = None
+                            shape = marking["type"]
 
-                    # go through each annotation and get the associated task
-                    for task in annotations:
-                        task_id = task["task"]
+                        if shape ==  "image":
+                            # todo - treat image like a rectangle
+                            print "image found - skipping"
+                            continue
 
-                        # is this a marking task?
-                        if task_id in marking_tasks:
-                            # if a user gets to marking task but makes no markings, we want to record that the user
-                            # has still seen that image/task. If a user never gets to a marking task for that image
-                            # than they are irrelevant
-                            # create here so even if we have empty images, we will know that we aggregated them
-                            # make sure to not overwrite/delete existing information - sigh
-                            if task_id not in raw_markings:
-                                raw_markings[task_id] = {}
-                            for shape in set(marking_tasks[task_id]):
-                                if shape not in raw_markings[task_id]:
-                                    raw_markings[task_id][shape] = {}
-                                if subject_id not in raw_markings[task_id][shape]:
-                                    raw_markings[task_id][shape][subject_id] = []
+                        if shape not in self.marking_params_per_shape:
+                            print "unrecognized shape: (skipping) " + shape
+                            continue
 
-                            if not isinstance(task["value"],list):
-                                print "not properly formed marking - skipping"
-                                continue
+                        try:
+                            # extract the params specifically relevant to the given shape
+                            relevant_params = self.marking_params_per_shape[shape](marking,(width,height))
+                        except InvalidMarking as e:
+                            # print e
+                            continue
+                        # if subject_id == "APZ0002do1":
+                        #     print  self.__roi_check__(marking,subject_id)
+                        # if not a valid marking, just skip it
+                        if not self.__roi_check__(marking,subject_id):
+                            continue
 
-                            # kind track of which shapes the user did mark - we need to keep track of any shapes
-                            # for which the user did not make any marks at all of
-                            # because a user not seeing something is important
-                            spotted_shapes = set()
+                        spotted_shapes.add(shape)
+                        raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
 
-                            for marking in task["value"]:
-                                # what kind of tool made this marking and what was the shape of that tool?
-                                try:
-                                    tool = marking["tool"]
-                                    shape = marking_tasks[task_id][tool]
-                                except KeyError:
-                                    tool = None
-                                    shape = marking["type"]
-
-                                if shape ==  "image":
-                                    # todo - treat image like a rectangle
-                                    print "image found - skipping"
-                                    continue
-
-                                if shape not in self.marking_params_per_shape:
-                                    print "unrecognized shape: (skipping) " + shape
-                                    continue
-
-                                try:
-                                    # extract the params specifically relevant to the given shape
-                                    relevant_params = self.marking_params_per_shape[shape](marking,(width,height))
-                                except InvalidMarking as e:
-                                    # print e
-                                    continue
-                                # if subject_id == "APZ0002do1":
-                                #     print  self.__roi_check__(marking,subject_id)
-                                # if not a valid marking, just skip it
-                                if not self.__roi_check__(marking,subject_id):
-                                    continue
-
-                                spotted_shapes.add(shape)
-                                raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
-
-                                # is this a confusing shape?
-                                if (task_id in classification_tasks) and ("shapes" in classification_tasks[task_id]) and (shape in classification_tasks[task_id]["shapes"]):
-                                    if task_id not in raw_classifications:
-                                        raw_classifications[task_id] = {}
-                                    if shape not in raw_classifications[task_id]:
-                                        raw_classifications[task_id][shape] = {}
-                                    if subject_id not in raw_classifications[task_id][shape]:
-                                        raw_classifications[task_id][shape][subject_id] = {}
-
-                                    raw_classifications[task_id][shape][subject_id][(relevant_params,user_id)] = tool
-
-                                # are there follow up questions?
-                                if (task_id in classification_tasks) and ("subtask" in classification_tasks[task_id]) and (tool in classification_tasks[task_id]["subtask"]):
-
-                                    # there could be multiple follow up questions
-                                    for local_subtask_id in classification_tasks[task_id]["subtask"][tool]:
-                                        global_subtask_id = str(task_id)+"_"+str(tool)+"_"+str(local_subtask_id)
-                                        if global_subtask_id not in raw_classifications:
-                                            raw_classifications[global_subtask_id] = {}
-                                        if subject_id not in raw_classifications[global_subtask_id]:
-                                            raw_classifications[global_subtask_id][subject_id] = {}
-
-                                        # # specific tool matters, not just shape
-                                        subtask_value = marking["details"][local_subtask_id]["value"]
-                                        # if tool not in raw_classifications[global_subtask_id][subject_id]:
-                                        #     raw_classifications[global_subtask_id][subject_id][tool] = {}
-                                        raw_classifications[global_subtask_id][subject_id][(relevant_params,user_id)] = subtask_value
-
-                            # note which shapes the user saw nothing of
-                            # otherwise, it will be as if the user didn't see the subject in the first place
-
-                            for shape in set(marking_tasks[task_id]):
-                                if shape not in spotted_shapes:
-                                    raw_markings[task_id][shape][subject_id].append((user_id,None,None))
-
-                        # we a have a pure classification task
-                        else:
+                        # is this a confusing shape?
+                        if (task_id in classification_tasks) and ("shapes" in classification_tasks[task_id]) and (shape in classification_tasks[task_id]["shapes"]):
                             if task_id not in raw_classifications:
                                 raw_classifications[task_id] = {}
-                            if subject_id not in raw_classifications[task_id]:
-                                raw_classifications[task_id][subject_id] = []
-                            # if task_id == "init":
-                            #     print task_id,task["value"]
-                            raw_classifications[task_id][subject_id].append((user_id,task["value"]))
+                            if shape not in raw_classifications[task_id]:
+                                raw_classifications[task_id][shape] = {}
+                            if subject_id not in raw_classifications[task_id][shape]:
+                                raw_classifications[task_id][shape][subject_id] = {}
+
+                            raw_classifications[task_id][shape][subject_id][(relevant_params,user_id)] = tool
+
+                        # are there follow up questions?
+                        if (task_id in classification_tasks) and ("subtask" in classification_tasks[task_id]) and (tool in classification_tasks[task_id]["subtask"]):
+
+                            # there could be multiple follow up questions
+                            for local_subtask_id in classification_tasks[task_id]["subtask"][tool]:
+                                global_subtask_id = str(task_id)+"_"+str(tool)+"_"+str(local_subtask_id)
+                                if global_subtask_id not in raw_classifications:
+                                    raw_classifications[global_subtask_id] = {}
+                                if subject_id not in raw_classifications[global_subtask_id]:
+                                    raw_classifications[global_subtask_id][subject_id] = {}
+
+                                # # specific tool matters, not just shape
+                                subtask_value = marking["details"][local_subtask_id]["value"]
+                                # if tool not in raw_classifications[global_subtask_id][subject_id]:
+                                #     raw_classifications[global_subtask_id][subject_id][tool] = {}
+                                raw_classifications[global_subtask_id][subject_id][(relevant_params,user_id)] = subtask_value
+
+                    # note which shapes the user saw nothing of
+                    # otherwise, it will be as if the user didn't see the subject in the first place
+
+                    for shape in set(marking_tasks[task_id]):
+                        if shape not in spotted_shapes:
+                            raw_markings[task_id][shape][subject_id].append((user_id,None,None))
+
+                # we a have a pure classification task
+                else:
+                    if task_id not in raw_classifications:
+                        raw_classifications[task_id] = {}
+                    if subject_id not in raw_classifications[task_id]:
+                        raw_classifications[task_id][subject_id] = []
+                    # if task_id == "init":
+                    #     print task_id,task["value"]
+                    raw_classifications[task_id][subject_id].append((user_id,task["value"]))
 
         # for debugging only
-        for task_id in raw_markings:
-            # go through each shape independently
-            for shape in raw_markings[task_id].keys():
-                for subject_id in raw_markings[task_id][shape]:
-                    print subject_id
-                    assert raw_markings[task_id][shape][subject_id] != []
+        # for task_id in raw_markings:
+        #     # go through each shape independently
+        #     for shape in raw_markings[task_id].keys():
+        #         for subject_id in raw_markings[task_id][shape]:
+        #             print subject_id
+        #             assert raw_markings[task_id][shape][subject_id] != []
 
         return raw_classifications,raw_markings
 
