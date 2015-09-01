@@ -96,6 +96,8 @@ class Cluster:
                     continue
 
                 for subject_id in raw_markings[task_id][shape]:
+                    print "****"
+                    print subject_id
                     assert raw_markings[task_id][shape][subject_id] != []
 
                     # remove any "markings" which correspond to the user not making a marking

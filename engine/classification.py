@@ -15,12 +15,13 @@ def findsubsets(S,m):
     return set(itertools.combinations(S, m))
 
 class Classification:
-    def __init__(self,clustering_alg=None):
+    def __init__(self):
+        # ,clustering_alg=None
         # assert isinstance(project,ouroboros_api.OuroborosAPI)
 
-        if clustering_alg is not None:
-            assert isinstance(clustering_alg,clustering.Cluster)
-        self.cluster_alg = clustering_alg
+        # if clustering_alg is not None:
+        #     assert isinstance(clustering_alg,clustering.Cluster)
+        # self.cluster_alg = clustering_alg
 
         current_directory = os.getcwd()
         slash_indices = [m.start() for m in re.finditer('/', current_directory)]
@@ -416,8 +417,8 @@ class Classification:
 
 
 class VoteCount(Classification):
-    def __init__(self,clustering_alg=None):
-        Classification.__init__(self,clustering_alg)
+    def __init__(self,param_dict):
+        Classification.__init__(self)
 
     def __task_aggregation__(self,raw_classifications,gold_standard=False):
         """

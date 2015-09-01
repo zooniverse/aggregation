@@ -46,8 +46,6 @@ class SimplifiedTextCluster(transcription.TextCluster):
         current_pts = {}
         clusters = []
 
-        print "markings are:"
-        print reduced_markings
 
         for a,b in ordering:
             # a - line values - "intercept" and slope
@@ -65,9 +63,7 @@ class SimplifiedTextCluster(transcription.TextCluster):
                 print "multiline - skipping"
                 continue
 
-            if text == "":
-                print "empty line"
-                continue
+
 
             # convert from unicode to ascii
             assert isinstance(text,unicode)
@@ -86,6 +82,9 @@ class SimplifiedTextCluster(transcription.TextCluster):
             # todo - find a way to fix this - stupid postgres/json
             text = re.sub(r'\'',"",text)
 
+            # do this now, because all of the above subsitutions may have created an empty line
+            if text == "":
+                continue
 
             # if we have an empty cluster, just add the line
             if current_lines == {}:
@@ -141,8 +140,6 @@ class SimplifiedTextCluster(transcription.TextCluster):
                         current_pts = {user:(raw_pt,user)}
 
         clusters.append((current_lines.values(),current_pts.values()))
-        print "****"
-        print clusters
 
         # remove any clusters which have only one user
         for cluster_index in range(len(clusters)-1,-1,-1):
@@ -151,110 +148,91 @@ class SimplifiedTextCluster(transcription.TextCluster):
                 # assert len(clusters[cluster_index][1]) == 1
                 clusters.pop(cluster_index)
 
-        # after removing such "error" clusters there may be adjacent clusters which should be merged
+        if len(clusters) == 0:
+            return [],0
+
+        # if we have more than one cluster - some of them might need to be merged
+        # after removing "error" cluster
         # to do so - revert back to Hesse format
-        hessen_lines = []
+        if len(clusters) > 1:
 
-        for cluster_index in range(len(clusters)):
-            lines_segments,users = zip(*clusters[cluster_index][1])
-            x1_l, x2_l, y1_l, y2_l = zip(*lines_segments)
-            x1,x2,y1,y2 = np.median(x1_l),np.median(x2_l),np.median(y1_l),np.median(y2_l)
-            hessen_lines.append(hesse_line_reduction([[x1,x2,y1,y2],])[0])
+            hessen_lines = []
 
-        print hessen_lines
-        slope_l,angle_l = zip(*hessen_lines)
-        print
-        max_s,min_s = max(slope_l),min(slope_l)
-        max_a,min_a = max(angle_l),min(angle_l)
+            for cluster_index in range(len(clusters)):
+                lines_segments,users = zip(*clusters[cluster_index][1])
+                x1_l, x2_l, y1_l, y2_l = zip(*lines_segments)
+                x1,x2,y1,y2 = np.median(x1_l),np.median(x2_l),np.median(y1_l),np.median(y2_l)
+                hessen_lines.append(hesse_line_reduction([[x1,x2,y1,y2],])[0])
 
-        print max_s,min_s
-        print max_a,min_a
+            # print hessen_lines
+            slope_l,angle_l = zip(*hessen_lines)
+            # print
+            max_s,min_s = max(slope_l),min(slope_l)
+            max_a,min_a = max(angle_l),min(angle_l)
 
-        # normalize values
-        hessen_lines = [((max_s-s)/(max_s-min_s),(max_a-a)/(max_a-min_a)) for s,a in hessen_lines]
-        print hessen_lines
+            print hessen_lines
 
-        tree = spatial.KDTree(hessen_lines)
+            # normalize values
+            hessen_lines = [((max_s-s)/(max_s-min_s),(max_a-a)/(max_a-min_a)) for s,a in hessen_lines]
+            # print hessen_lines
 
-        to_merge = []
-        will_be_merged = set()
+            tree = spatial.KDTree(hessen_lines)
 
-        for l_index in range(len(hessen_lines)-1,-1,-1):
-            for l2_index in tree.query_ball_point(hessen_lines[l_index],0.1):
-                if l2_index > l_index:
-                    t_lines = clusters[l_index][0][:]
-                    t_lines.extend(clusters[l2_index][0])
+            to_merge = []
+            will_be_merged = set()
 
-                    aligned_text = self.__get_aggregation_lines__(t_lines)
-                    accuracy = self.__agreement__(aligned_text)
-                    if min(accuracy) >= 0.5:
-                        will_be_merged.add(l_index)
-                        will_be_merged.add(l2_index)
+            for l_index in range(len(hessen_lines)-1,-1,-1):
+                for l2_index in tree.query_ball_point(hessen_lines[l_index],0.1):
+                    if l2_index > l_index:
+                        t_lines = clusters[l_index][0][:]
+                        t_lines.extend(clusters[l2_index][0])
 
-                        # make sure that there are not any overlapping users
-                        users_1 = zip(*clusters[l_index][1])[1]
-                        users_2 = zip(*clusters[l2_index][1])[1]
+                        aligned_text = self.__get_aggregation_lines__(t_lines)
+                        accuracy = self.__agreement__(aligned_text)
+                        if min(accuracy) >= 0.5:
+                            will_be_merged.add(l_index)
+                            will_be_merged.add(l2_index)
 
-                        if [u for u in users_1 if u in users_2] != []:
-                            continue
+                            # make sure that there are not any overlapping users
+                            users_1 = zip(*clusters[l_index][1])[1]
+                            users_2 = zip(*clusters[l2_index][1])[1]
 
-                        # is merge "relevant" to any other?
-                        relevant = False
-                        for m_index,m in enumerate(to_merge):
-                            if (l_index in m) or (l2_index in m):
-                                relevant = True
-                                m.add(l_index)
-                                m.add(l2_index)
-                                break
+                            if [u for u in users_1 if u in users_2] != []:
+                                continue
 
-                        if not relevant:
-                            to_merge.append(set([l_index,l2_index]))
+                            # is merge "relevant" to any other?
+                            relevant = False
+                            for m_index,m in enumerate(to_merge):
+                                if (l_index in m) or (l2_index in m):
+                                    relevant = True
+                                    m.add(l_index)
+                                    m.add(l2_index)
+                                    break
 
-        # might be a better way to do this but will mulitple popping from list, safer
-        # to work with a copy
-        new_clusters = []
+                            if not relevant:
+                                to_merge.append(set([l_index,l2_index]))
 
-        for cluster_index in range(len(clusters)):
-            if cluster_index not in will_be_merged:
-                new_clusters.append(clusters[cluster_index])
-        for merged_clusters in to_merge:
-            t_cluster = [[],[]]
-            for cluster_index in merged_clusters:
-                t_cluster[0].extend(clusters[cluster_index][0])
-                t_cluster[1].extend(clusters[cluster_index][1])
-            new_clusters.append(t_cluster[:])
+            # might be a better way to do this but will mulitple popping from list, safer
+            # to work with a copy
+            new_clusters = []
 
-        print clusters
-        clusters = new_clusters
-        print new_clusters
-        # assert False
+            for cluster_index in range(len(clusters)):
+                if cluster_index not in will_be_merged:
+                    new_clusters.append(clusters[cluster_index])
+            for merged_clusters in to_merge:
+                t_cluster = [[],[]]
+                for cluster_index in merged_clusters:
+                    t_cluster[0].extend(clusters[cluster_index][0])
+                    t_cluster[1].extend(clusters[cluster_index][1])
+                new_clusters.append(t_cluster[:])
 
+            # print clusters
+            clusters = new_clusters
 
-        #
-        # for cluster_index in range(len(clusters)-2,-1,-1):
-        #     print clusters[cluster_index][0]
-        #     print clusters[cluster_index+1][0]
-        #     t_lines = clusters[cluster_index][0][:]
-        #     t_lines.extend(clusters[cluster_index+1][0])
-        #
-        #     aligned_text = self.__get_aggregation_lines__(t_lines)
-        #
-        #     accuracy = self.__agreement__(aligned_text)
-        #     print accuracy
-        #     print
-        #
-        #     if min(accuracy)>= 0.5:
-        #         print "merging"
-        #         to_be_merged_cluster = clusters.pop(cluster_index+1)
-        #         clusters[cluster_index][0].extend(to_be_merged_cluster[0])
-        #         clusters[cluster_index][1].extend(to_be_merged_cluster[1])
-        #     # print
-        # now do the actual aggregation (sigh)
+        # and now, finally, the actual text clustering
         cluster_centers = []
         cluster_pts = []
         cluster_users = []
-
-
 
         for lines,pts_and_users in clusters:
             pts,users = zip(*pts_and_users)
@@ -308,5 +286,5 @@ class SimplifiedTate(transcription.Tate):
 
 if __name__ == "__main__":
     with SimplifiedTate() as project:
-        project.__migrate__()
+        # project.__migrate__()
         project.__aggregate__(workflows=[121])

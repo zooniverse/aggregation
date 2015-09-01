@@ -317,11 +317,6 @@ class AggregationAPI:
                 print "classifying"
                 classification_aggregations = self.__classify__(raw_classifications,clustering_aggregations,workflow_id,gold_standard_clusters)
 
-            print "***"
-            print self.classification_alg
-            print marking_tasks
-            print classification_tasks
-
             # if we have both markings and classifications - we need to merge the results
             if (clustering_aggregations is not None) and (classification_aggregations is not None):
                 aggregations = self.__merge_aggregations__(clustering_aggregations,classification_aggregations)
@@ -1310,7 +1305,9 @@ class AggregationAPI:
             if isinstance(annotations,dict):
                 annotations = json.dumps(annotations)
 
-            assert isinstance(annotations,str)
+            if not isinstance(annotations,str):
+                continue
+            # assert isinstance(annotations,str)
 
             params = (project_id, user_id, workflow_id,created_at, annotations, updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], workflow_version,json.dumps(metadata))
             statements_and_params.append((insert_statement, params))
@@ -1865,8 +1862,8 @@ class AggregationAPI:
                 # http://stackoverflow.com/questions/18871217/python-how-to-custom-sort-a-list-of-dict-to-use-in-json-dumps
                 json.dump(all_results, outfile,sort_keys=True,indent=4, separators=(',', ': '))
 
-    def __set_classification_alg__(self,alg):
-        self.classification_alg = alg()
+    def __set_classification_alg__(self,alg,params={}):
+        self.classification_alg = alg(params)
         assert isinstance(self.classification_alg,classification.Classification)
 
     def __set_clustering_algs__(self,clustering_algorithms,reduction_algs={}):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 __author__ = 'greg'
 from aggregation_api import AggregationAPI,InvalidMarking
-import agglomerative
+from classification import Classification
 import clustering
 import math
 import pandas as pd
@@ -13,11 +13,10 @@ import re
 import random
 import unicodedata
 import os
-from copy import deepcopy
 import itertools
-import json
 import matplotlib.pyplot as plt
-import datetime
+import urllib2
+import requests
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -691,6 +690,50 @@ def text_line_reduction(line_segments):
 
     return reduced_markings
 
+
+class SubjectRetirement(Classification):
+    def __init__(self,param_dict):
+        Classification.__init__(self)
+        assert isinstance(param_dict,dict)
+
+        # to retire subjects, we need a connection to the host api, which hopefully is provided
+        self.host_api = None
+        self.project_id = None
+        self.token = None
+        self.workflow_id = None
+        for key,value in param_dict.items():
+            if key == "host":
+                self.host_api = value
+            elif key == "project_id":
+                self.project_id = value
+            elif key == "token":
+                self.token = value
+            elif key == "workflow_id":
+                self.workflow_id = value
+
+        assert (self.host_api is not None) and (self.project_id is not None) and (self.token is not None) and (self.workflow_id is not None)
+
+
+    def __task_aggregation__(self,classifications,gold_standard={}):
+        to_retire = []
+        for subject_id in classifications:
+            users,everything_transcribed = zip(*classifications[subject_id])
+            # count how many people have said everything is transcribed
+            count = sum([1. for e in everything_transcribed if e == True])
+            # and perent
+            percent = sum([1. for e in everything_transcribed if e == True]) / float(len(everything_transcribed))
+            if (count >= 3) and (percent >= 0.6):
+                to_retire.append(subject_id)
+
+        print "retiring"
+        print to_retire
+        headers = {"Accept":"application/vnd.api+json; version=1","Authorization":"Bearer "+self.token}
+        params = {"retired_subjects":to_retire}
+        r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,params=params)
+
+        return []
+
+
 class Tate(AggregationAPI):
     def __init__(self):
         AggregationAPI.__init__(self,245)#"tate",environment="staging")
@@ -705,13 +748,14 @@ class Tate(AggregationAPI):
 
         reduction_algs = {"text":text_line_reduction}
         self.__set_clustering_algs__({"text":TextCluster},reduction_algs)
+        self.__set_classification_alg__(SubjectRetirement,{"host":self.host_api,"project_id":self.project_id,"token":self.token,"workflow_id":121})
 
         self.ignore_versions = True
         self.instructions[683] = {}
 
     def __readin_tasks__(self,workflow_id):
         marking_tasks = {"T2":["text"]}
-        classification_tasks = {}
+        classification_tasks = {"T3" : True}
 
         return classification_tasks,marking_tasks
 
