@@ -170,8 +170,6 @@ class SimplifiedTextCluster(transcription.TextCluster):
             max_s,min_s = max(slope_l),min(slope_l)
             max_a,min_a = max(angle_l),min(angle_l)
 
-            print hessen_lines
-
             # normalize values
             hessen_lines = [((max_s-s)/(max_s-min_s),(max_a-a)/(max_a-min_a)) for s,a in hessen_lines]
             # print hessen_lines
@@ -281,10 +279,10 @@ class SimplifiedTate(transcription.Tate):
         reduction_algs = {"text":transcription.text_line_reduction}
         self.__set_clustering_algs__({"text":SimplifiedTextCluster},reduction_algs)
 
-        self.old_time = datetime.datetime(2000,01,01)
+        # self.old_time = datetime.datetime(2000,01,01)
 
 
 if __name__ == "__main__":
     with SimplifiedTate() as project:
-        # project.__migrate__()
+        project.__migrate__()
         project.__aggregate__(workflows=[121])

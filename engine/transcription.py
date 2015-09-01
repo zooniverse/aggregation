@@ -730,7 +730,7 @@ class SubjectRetirement(Classification):
         headers = {"Accept":"application/vnd.api+json; version=1","Authorization":"Bearer "+self.token}
         params = {"retired_subjects":to_retire}
         r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,params=params)
-
+        print r.text
         return []
 
 
