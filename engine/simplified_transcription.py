@@ -191,6 +191,13 @@ class SimplifiedTextCluster(transcription.TextCluster):
                         will_be_merged.add(l_index)
                         will_be_merged.add(l2_index)
 
+                        # make sure that there are not any overlapping users
+                        users_1 = zip(*clusters[l_index][1])[1]
+                        users_2 = zip(*clusters[l2_index][1])[1]
+
+                        if [u for u in users_1 if u in users_2] != []:
+                            continue
+
                         # is merge "relevant" to any other?
                         relevant = False
                         for m_index,m in enumerate(to_merge):
