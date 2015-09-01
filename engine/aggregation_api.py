@@ -136,7 +136,7 @@ def hesse_line_reduction(line_segments):
     reduced_markings = []
 
     for line_seg in line_segments:
-        x1,y1,x2,y2 = line_seg
+        x1,y1,x2,y2 = line_seg[:4]
 
         x2 += random.uniform(-0.0001,0.0001)
         x1 += random.uniform(-0.0001,0.0001)
@@ -265,7 +265,7 @@ class AggregationAPI:
             self.old_time = pickle.load(open("/tmp/"+str(self.project_id)+".time","rb"))
         except:
             self.old_time = datetime.datetime(2000,01,01)
-        # self.old_time = datetime.datetime(2000,01,01)
+
 
         self.current_time = datetime.datetime.now()
         self.ignore_versions = False
@@ -345,11 +345,13 @@ class AggregationAPI:
             else:
                 return aggregations
 
-    def __cassandra_annotations_(self,workflow_id,subject_set):
+    def __cassandra_annotations__(self,workflow_id,subject_set):
         """
         get the annotations from Cassandra
         :return:
         """
+        assert isinstance(subject_set,list) or isinstance(subject_set,set)
+
         version = int(math.floor(float(self.versions[workflow_id])))
 
         # todo - do this better
@@ -395,7 +397,9 @@ class AggregationAPI:
                     continue
 
                 non_logged_in_users = 0
-                for record in record_list:
+                if len(record_list) == 1:
+                    continue
+                for ii,record in enumerate(record_list):
                     yield int(subject_id),int(record.user_id),record.annotations
 
         raise StopIteration()
@@ -1116,9 +1120,7 @@ class AggregationAPI:
         :param subject_id:
         :return:
         """
-        print subject_id
-        print self.host_api+"subjects/"+str(subject_id)+"?"
-        assert False
+
         request = urllib2.Request(self.host_api+"subjects/"+str(subject_id)+"?")
         request.add_header("Accept","application/vnd.api+json; version=1")
         request.add_header("Authorization","Bearer "+self.token)
@@ -1142,15 +1144,19 @@ class AggregationAPI:
         url = str(data["subjects"][0]["locations"][0]["image/jpeg"])
 
         slash_index = url.rfind("/")
+        print url
         fname = url[slash_index+1:]
+        url = "http://zooniverse-static.s3.amazonaws.com/panoptes-uploads.zooniverse.org/production/subject_location/"+url[slash_index+1:]
+
 
         image_path = base_directory+"/Databases/images/"+fname
 
         if not(os.path.isfile(image_path)):
             if download:
                 print "downloading"
+                print url
                 urllib.urlretrieve(url, image_path)
-            raise ImageNotDownloaded()
+            # raise ImageNotDownloaded()
 
         return image_path
 
@@ -1927,7 +1933,7 @@ class AggregationAPI:
         """
         # if we have not been provided with a csv classification file, connect to cassandra
         if self.csv_classification_file is None:
-            annotation_generator = self.__cassandra_annotations_
+            annotation_generator = self.__cassandra_annotations__
         else:
             annotation_generator = self.__csv_annotations__
 
