@@ -308,5 +308,5 @@ class SimplifiedTate(transcription.Tate):
 
 if __name__ == "__main__":
     with SimplifiedTate() as project:
-        # project.__migrate__()
+        project.__migrate__()
         project.__aggregate__(workflows=[121])
