@@ -1154,6 +1154,13 @@ class AggregationAPI:
 
         return image_path
 
+    def __list_all_projects__(self):
+        postgres_cursor = self.postgres_session.cursor()
+        postgres_cursor.execute("select * from projects")
+        for i in postgres_cursor.fetchall():
+            if "solar" in i[2].lower():
+                print i[0],i[2]
+
     # def __list_all_versions__(self):
     #     request = urllib2.Request(self.host_api+"workflows/6/versions?")
     #     request.add_header("Accept","application/vnd.api+json; version=1")
@@ -1820,11 +1827,11 @@ class AggregationAPI:
     #
     #     return aggregation
 
-    def __get_results__(self,workflow_id):
-        stmt = "select * from aggregations where workflow_id = " + str(workflow_id)
-        self.postgres_cursor.execute(stmt)
-        for r in self.postgres_cursor.fetchall():
-            return r
+    # def __get_results__(self,workflow_id):
+    #     stmt = "select * from aggregations where workflow_id = " + str(workflow_id)
+    #     self.postgres_cursor.execute(stmt)
+    #     for r in self.postgres_cursor.fetchall():
+    #         return r
 
     def __results_to_file__(self,workflow_ids=None,subject_id=None):
         if workflow_ids is None:
