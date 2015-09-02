@@ -799,8 +799,10 @@ class Tate(AggregationAPI):
 
         for r in cur.fetchall():
             subject_id = r[1][0]
+            # print subject_id, r[0]
+            # print r[0] >= self.old_time
             recently_classified_subjects.add(subject_id)
-
+        # assert False
         return list(recently_classified_subjects)
 
     def __prune__(self,aggregations):

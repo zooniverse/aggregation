@@ -270,6 +270,8 @@ class AggregationAPI:
         self.current_time = datetime.datetime.now()
         self.ignore_versions = False
 
+        self.starting_date = datetime.datetime(2000,1,1)
+
     def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[]),expert=None,store_values=True):
         """
         you can provide a list of clusters - hopefully examples of both true positives and false positives
@@ -290,9 +292,11 @@ class AggregationAPI:
         given_subject_set = (subject_set != None)
 
         for workflow_id in workflows:
+            print subject_set
             if subject_set is None:
                 subject_set = self.__get_retired_subjects__(workflow_id)
                 # subject_set = self.__load_subjects__(workflow_id)
+
             print "workflow id : " + str(workflow_id)
             print "aggregating " + str(len(subject_set)) + " subjects"
             # self.__describe__(workflow_id)
@@ -308,7 +312,7 @@ class AggregationAPI:
             raw_classifications,raw_markings = self.__sort_annotations__(workflow_id,subject_set,expert)
 
             # do we have any marking tasks?
-            if  marking_tasks != {}:
+            if marking_tasks != {}:
                 print "clustering"
                 clustering_aggregations = self.__cluster__(raw_markings)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
@@ -367,9 +371,9 @@ class AggregationAPI:
             statements_and_params = []
 
             if self.ignore_versions:
-                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ?")
+                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ?")
             else:
-                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
+                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
 
             for subject_id in s:
                 if self.ignore_versions:
@@ -385,16 +389,21 @@ class AggregationAPI:
                     print record_list
                 assert success
 
+
                 # seem to have the occasional "retired" subject with no classifications, not sure
                 # why this is possible but if it can happen, just make a note of the subject id and skip
                 if record_list == []:
-                    print "warning :: subject " + str(subject_id) + " has no classifications"
+                    # print "warning :: subject " + str(subject_id) + " has no classifications"
                     continue
 
                 non_logged_in_users = 0
-                if len(record_list) == 1:
+                if len(record_list) == 0:
                     continue
                 for ii,record in enumerate(record_list):
+                    if record.created_at < self.starting_date:#datetime.datetime(2015,8,27):
+                        continue
+                    # else:
+                    #     print record.created_at
                     yield int(subject_id),int(record.user_id),record.annotations
 
         raise StopIteration()

@@ -1,25 +1,14 @@
 #!/usr/bin/env python
 __author__ = 'greg'
-import agglomerative
 import clustering
-import math
-import pandas as pd
 import numpy as np
-from scipy.spatial.distance import pdist,squareform
-from scipy.cluster.hierarchy import linkage
-import abc
 import re
-import random
-import unicodedata
 import os
-from copy import deepcopy
-import itertools
-import json
-import matplotlib.pyplot as plt
-import datetime
 import transcription
 from aggregation_api import hesse_line_reduction
 from scipy import spatial
+import datetime
+import cPickle as pickle
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -69,7 +58,11 @@ class SimplifiedTextCluster(transcription.TextCluster):
             assert isinstance(text,unicode)
             text = text.encode('ascii','ignore')
 
-            #  # todo - can this be done better?
+            # #  # todo - can this be done better?
+            # special_characters = {}
+            # for tag in ["[notenglish]","[/notenglish]"]:
+            #     special_characters[tag] = [match.start() for match in re.finditer(re.escape(tag), text)]
+            # print special_characters
             text = re.sub("\[deletion\].*\[/deletion\]","",text)
             text = re.sub(r'\[deletion\].*\[\\deletion\]',"",text)
             text = re.sub("\[illegible\].*\[/illegible\]","",text)
@@ -91,7 +84,7 @@ class SimplifiedTextCluster(transcription.TextCluster):
 
             # if we have an empty cluster, just add the line
             if current_lines == {}:
-                current_lines[user] = text
+                current_lines[user] = text #(text,special_characters)
 
                 # adding the user id is slightly redundant but makes doing the actual clustering easier
                 current_pts[user] = (raw_pt,user)
@@ -104,7 +97,7 @@ class SimplifiedTextCluster(transcription.TextCluster):
                 # cluster - i.e. we don't deal with split lines
                 if user in current_pts:
                     clusters.append((current_lines.values(),current_pts.values()))
-                    current_lines = {user:text}
+                    current_lines = {user:text} #(text,special_characters)}
                     current_pts = {user:(raw_pt,user)}
                 else:
                     # does adding this line to the cluster make sense?
@@ -183,7 +176,7 @@ class SimplifiedTextCluster(transcription.TextCluster):
             will_be_merged = set()
 
             for l_index in range(len(hessen_lines)-1,-1,-1):
-                for l2_index in tree.query_ball_point(hessen_lines[l_index],0.1):
+                for l2_index in tree.query_ball_point(hessen_lines[l_index],0.15):
                     if l2_index > l_index:
                         t_lines = clusters[l_index][0][:]
                         t_lines.extend(clusters[l2_index][0])
@@ -292,10 +285,16 @@ class SimplifiedTate(transcription.Tate):
         reduction_algs = {"text":transcription.text_line_reduction}
         self.__set_clustering_algs__({"text":SimplifiedTextCluster},reduction_algs)
 
-        # self.old_time = datetime.datetime(2000,01,01)
+        # self.old_time = datetime.datetime(2015,8,27)
+        self.starting_date = datetime.datetime(2015,8,27)
 
+        try:
+            self.old_time = pickle.load(open("/tmp/"+str(self.project_id)+".time","rb"))
+        except:
+            self.old_time = datetime.datetime(2015,8,27)
 
 if __name__ == "__main__":
     with SimplifiedTate() as project:
-        project.__migrate__()
+        # project.__migrate__()
         project.__aggregate__(workflows=[121])
+        # print project.__get_retired_subjects__(121)

@@ -4,7 +4,6 @@ import matplotlib.pyplot as plt
 import matplotlib.cbook as cbook
 from termcolor import colored
 
-subject_id = 603260
 subject_id = 603303
 
 with SimplifiedTate() as project:
