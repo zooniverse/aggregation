@@ -75,9 +75,12 @@ class SimplifiedTextCluster(transcription.TextCluster):
             text = re.sub("\[illegible\].*\[/illegible\]","",text)
             text = re.sub(r'\[deletionhas\]\[/deletion\]',"",text)
             text = re.sub("\[insertion\].*\[/insertion\]","",text)
+            text = re.sub("\[underline\].*\[/underline\]","",text)
+            text = re.sub("\[notenglish\].*\[/notenglish\]","",text)
             text = re.sub(r'\[has\]',"",text)
             text = re.sub(r'\(deleted\)',"",text)
             text = re.sub(r'\[deletion\]',"",text)
+            text = re.sub("\[insertion\]","",text)
 
             # todo - find a way to fix this - stupid postgres/json
             text = re.sub(r'\'',"",text)
@@ -232,6 +235,8 @@ class SimplifiedTextCluster(transcription.TextCluster):
         cluster_pts = []
         cluster_users = []
 
+        cluster_members = []
+
         for lines,pts_and_users in clusters:
             pts,users = zip(*pts_and_users)
             x1_values,x2_values,y1_values,y2_values = zip(*pts)
@@ -262,11 +267,19 @@ class SimplifiedTextCluster(transcription.TextCluster):
             cluster_pts.append(zip(pts,lines))
             cluster_users.append(users)
 
+            # try to remove all special characters
+            temp_text = []
+            for text in aligned_text:
+                text = re.sub("@"," ",text)
+                temp_text.append(text)
+
+            cluster_members.append(temp_text)
+
         # results.append({"users":merged_users,"cluster members":merged_points,"tools":merged_tools,"num users":num_users})
 
         results = []
-        for center,pts,users in zip(cluster_centers,cluster_pts,cluster_users):
-            results.append({"center":center,"cluster members":[],"tools":[],"num users":len(users)})
+        for center,pts,users,lines in zip(cluster_centers,cluster_pts,cluster_users,cluster_members):
+            results.append({"center":center,"cluster members":lines,"tools":[],"num users":len(users)})
 
         # return (cluster_centers,cluster_pts,cluster_users),0
         return results,0
