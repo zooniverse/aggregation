@@ -294,7 +294,7 @@ class AggregationAPI:
         for workflow_id in workflows:
             print subject_set
             if subject_set is None:
-                subject_set = self.__get_retired_subjects__(workflow_id)
+                subject_set = self.__get_subjects_to_aggregate__(workflow_id)
                 # subject_set = self.__load_subjects__(workflow_id)
 
             print "workflow id : " + str(workflow_id)
@@ -384,10 +384,12 @@ class AggregationAPI:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
 
             for subject_id,(success,record_list) in zip(s,results):
-
+                print subject_id
                 if not success:
                     print record_list
                 assert success
+
+                print record_list
 
 
                 # seem to have the occasional "retired" subject with no classifications, not sure
@@ -396,11 +398,11 @@ class AggregationAPI:
                     # print "warning :: subject " + str(subject_id) + " has no classifications"
                     continue
 
-                non_logged_in_users = 0
-                if len(record_list) == 0:
-                    continue
+
                 for ii,record in enumerate(record_list):
                     if record.created_at < self.starting_date:#datetime.datetime(2015,8,27):
+                        print "too early"
+                        print record.created_at
                         continue
                     # else:
                     #     print record.created_at
@@ -416,10 +418,12 @@ class AggregationAPI:
         for i in range(10):
             try:
                 if self.environment == 'production':
+                    print "connecting here"
                     self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
                 elif self.environment == 'staging':
                     self.cluster = Cluster(['panoptes-cassandra-staging.zooniverse.org'])
                 else:
+                    print "connecting there"
                     self.cluster = Cluster(['cassandra'])
 
                 # self.cluster = Cluster()
@@ -814,25 +818,25 @@ class AggregationAPI:
                     yield aggregation_dict
 
 
-    def __get_aggregated_subjects__(self,workflow_id):
-        """
-        return a list of subjects which have aggregation results
-        todo: - make sure it for panoptes - not just penguins
-        :param workflow_id:
-        :return:
-        """
-        stmt = "select subject_id from aggregations where workflow_id = " + str(workflow_id)
-        self.postgres_cursor.execute(stmt)
-
-        subjects = []
-
-        for r in self.postgres_cursor.fetchall():
-            subjects.append(r[0])
-
-        return subjects
-
-    def __get_num_clusters__(self,subject_id,task_id):
-        return len(self.cluster_alg.clusterResults[subject_id][task_id])
+    # def __get_aggregated_subjects__(self,workflow_id):
+    #     """
+    #     return a list of subjects which have aggregation results
+    #     todo: - make sure it for panoptes - not just penguins
+    #     :param workflow_id:
+    #     :return:
+    #     """
+    #     stmt = "select subject_id from aggregations where workflow_id = " + str(workflow_id)
+    #     self.postgres_cursor.execute(stmt)
+    #
+    #     subjects = []
+    #
+    #     for r in self.postgres_cursor.fetchall():
+    #         subjects.append(r[0])
+    #
+    #     return subjects
+    #
+    # def __get_num_clusters__(self,subject_id,task_id):
+    #     return len(self.cluster_alg.clusterResults[subject_id][task_id])
 
     def __get_classifications__(self,subject_id,task_id,cluster_index=None,question_id=None):
         # either both of these variables are None or neither of them are
@@ -906,22 +910,6 @@ class AggregationAPI:
         return data["projects"][0]["id"]
         # return None
 
-    def __get_retired_subjects__(self,workflow_id,with_expert_classifications=None):
-        retired_subjects = []
-
-        stmt = """SELECT * FROM "subjects"
-            INNER JOIN "set_member_subjects" ON "set_member_subjects"."subject_id" = "subjects"."id"
-            INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."set_member_subject_id" = "set_member_subjects"."id"
-            WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" > '""" + str(self.updated_at_timestamps[workflow_id]) + """'"""
-            # WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" IS NOT NULL"""
-
-        cursor = self.postgres_session.cursor()
-        cursor.execute(stmt)
-        for subject in cursor.fetchall():
-            retired_subjects.append(subject[0])
-
-        return retired_subjects
-
     def __get_subjects__(self,workflow_id,only_retired_subjects=False,only_recent_subjects=True):
         subjects = []
         if only_retired_subjects:
@@ -945,6 +933,22 @@ class AggregationAPI:
             subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt)])
 
         return subjects
+
+    def __get_subjects_to_aggregate__(self,workflow_id,with_expert_classifications=None):
+        retired_subjects = []
+
+        stmt = """SELECT * FROM "subjects"
+            INNER JOIN "set_member_subjects" ON "set_member_subjects"."subject_id" = "subjects"."id"
+            INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."set_member_subject_id" = "set_member_subjects"."id"
+            WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" > '""" + str(self.updated_at_timestamps[workflow_id]) + """'"""
+            # WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" IS NOT NULL"""
+
+        cursor = self.postgres_session.cursor()
+        cursor.execute(stmt)
+        for subject in cursor.fetchall():
+            retired_subjects.append(subject[0])
+
+        return retired_subjects
 
 
     def __get_workflow_details__(self,given_workflow_id=None):

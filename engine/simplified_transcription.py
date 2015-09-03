@@ -293,8 +293,9 @@ class SimplifiedTate(transcription.Tate):
         except:
             self.old_time = datetime.datetime(2015,8,27)
 
+        self.old_time = datetime.datetime(2015,8,27)
+
 if __name__ == "__main__":
     with SimplifiedTate() as project:
-        # project.__migrate__()
+        project.__migrate__()
         project.__aggregate__(workflows=[121])
-        # print project.__get_retired_subjects__(121)

@@ -713,7 +713,6 @@ class SubjectRetirement(Classification):
 
         assert (self.host_api is not None) and (self.project_id is not None) and (self.token is not None) and (self.workflow_id is not None)
 
-
     def __task_aggregation__(self,classifications,gold_standard={}):
         to_retire = []
         for subject_id in classifications:
@@ -762,46 +761,49 @@ class Tate(AggregationAPI):
     def __plot_individual_points__(self,subject_id,task_id,shape):
         print self.cluster_algs["text"]
 
-    def __plot_cluster_results__(self,subject_id,task_id,workflow_id):
-        stmt = "select aggregation from aggregations where subject_id = " + str(subject_id) + " and workflow_id = " + str(workflow_id)
-        self.postgres_cursor.execute(stmt)
-
-        aggregations = self.postgres_cursor.fetchone()[0]
-        clusters = aggregations[task_id]["text"]["0"]
-        for x1,x2,y1,y2,text in clusters:
-            plt.plot([x1,x2],[-y1,-y2],color="blue")
-            print -y1
-            print text
-
-        plt.show()
+    # def __plot_cluster_results__(self,subject_id,task_id,workflow_id):
+    #     stmt = "select aggregation from aggregations where subject_id = " + str(subject_id) + " and workflow_id = " + str(workflow_id)
+    #     self.postgres_cursor.execute(stmt)
+    #
+    #     aggregations = self.postgres_cursor.fetchone()[0]
+    #     clusters = aggregations[task_id]["text"]["0"]
+    #     for x1,x2,y1,y2,text in clusters:
+    #         plt.plot([x1,x2],[-y1,-y2],color="blue")
+    #         print -y1
+    #         print text
+    #
+    #     plt.show()
 
         # print json.loads(aggregations[0])
 
-    def __get_subjects__(self,workflow_id,only_retired_subjects=False):
+    # def __get_subjects__(self,workflow_id,only_retired_subjects=False):
+    #     recently_classified_subjects = set()
+    #
+    #     select = "SELECT created_at,subject_ids from classifications where project_id="+str(self.project_id)+" and created_at >= '" + str(self.old_time) +"'"
+    #     cur = self.postgres_session.cursor()
+    #     cur.execute(select)
+    #
+    #     for r in cur.fetchall():
+    #         subject_id = r[1][0]
+    #         recently_classified_subjects.add(subject_id)
+    #
+    #     return list(recently_classified_subjects)
+
+    def __get_subjects_to_aggregate__(self,workflow_id,with_expert_classifications=None):
+        """
+        override the retired subjects function to get only subjects which have been transcribed since we last ran
+        the code
+        :param workflow_id:
+        :param with_expert_classifications:
+        :return:
+        """
         recently_classified_subjects = set()
+        select = "SELECT subject_id,created_at from classifications where project_id="+str(self.project_id)
 
-        select = "SELECT created_at,subject_ids from classifications where project_id="+str(self.project_id)+" and created_at >= '" + str(self.old_time) +"'"
-        cur = self.postgres_session.cursor()
-        cur.execute(select)
-
-        for r in cur.fetchall():
-            subject_id = r[1][0]
-            recently_classified_subjects.add(subject_id)
-
-        return list(recently_classified_subjects)
-
-    def __get_retired_subjects__(self,workflow_id,with_expert_classifications=None):
-        recently_classified_subjects = set()
-
-        select = "SELECT created_at,subject_ids from classifications where project_id="+str(self.project_id)+" and created_at >= '" + str(self.old_time) +"'"
-        cur = self.postgres_session.cursor()
-        cur.execute(select)
-
-        for r in cur.fetchall():
-            subject_id = r[1][0]
-            # print subject_id, r[0]
-            # print r[0] >= self.old_time
-            recently_classified_subjects.add(subject_id)
+        for r in self.cassandra_session.execute(select):
+            subject_id = r.subject_id
+            if r.created_at >= self.old_time:
+                recently_classified_subjects.add(subject_id)
         # assert False
         return list(recently_classified_subjects)
 
