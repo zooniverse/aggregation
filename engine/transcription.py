@@ -169,6 +169,8 @@ def Levenshtein(a,b):
     return current[n]
 
 
+
+
 class TextCluster(clustering.Cluster):
     def __init__(self,shape,dim_reduction_alg):
         clustering.Cluster.__init__(self,shape,dim_reduction_alg)
@@ -223,6 +225,7 @@ class TextCluster(clustering.Cluster):
 
             # todo - get this to work!!!
             # cumulative_line = undo_pattern.sub(lambda m: rep[re.escape(m.group(0))], cumulative_line)
+            assert cumulative_line != ""
             aligned_text.append(cumulative_line)
 
         os.remove(base_directory+"/Databases/transcribe"+id_+".fasta")
@@ -724,12 +727,10 @@ class SubjectRetirement(Classification):
             if (count >= 3) and (percent >= 0.6):
                 to_retire.append(subject_id)
 
-        print "retiring"
-        print to_retire
         headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+self.token}
         params = {"retired_subjects":to_retire}
-        r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,params=params)
-        print r.text
+        r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
+        
         return []
 
 
