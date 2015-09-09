@@ -173,16 +173,10 @@ def Levenshtein(a,b):
 class TextCluster(clustering.Cluster):
     def __init__(self,shape,dim_reduction_alg):
         clustering.Cluster.__init__(self,shape,dim_reduction_alg)
+        self.line_agreement = []
 
     def __get_aggregation_lines__(self,lines):
         # mafft doesn't deal well with some characters so need to replace them
-        rep = {" ":"@","-":"#","(":"{",">":"^"}
-        rep = dict((re.escape(k), v) for k, v in rep.iteritems())
-        pattern = re.compile("|".join(rep.keys()))
-
-        undo_rep = {"@":" ","#":"-", "{":"(", "^":">"}
-        undo_rep = dict((re.escape(k), v) for k, v in undo_rep.iteritems())
-        undo_pattern = re.compile("|".join(undo_rep.keys()))
 
         id_ = str(random.uniform(0,1))
 
@@ -194,19 +188,18 @@ class TextCluster(clustering.Cluster):
 
                 # line = unicodedata.normalize('NFKD', line).encode('ascii','ignore')
                 assert isinstance(line,str)
-                fasta_line = pattern.sub(lambda m: rep[re.escape(m.group(0))], line)
 
                 # for i in range(max_length-len(line)):
                 #     fasta_line += "-"
 
                 try:
-                    f.write(">\n"+fasta_line+"\n")
+                    f.write(">\n"+line+"\n")
                 except UnicodeEncodeError:
-                    print fasta_line
-                    print unicodedata.normalize('NFKD', fasta_line).encode('ascii','ignore')
+                    print line
+                    print unicodedata.normalize('NFKD', line).encode('ascii','ignore')
                     raise
 
-        t = "mafft --anysymbol " + base_directory+"/Databases/transcribe"+id_+".fasta>"+base_directory+"/Databases/transcribe"+id_+".out 2> /dev/null"
+        t = "mafft --text " + base_directory+"/Databases/transcribe"+id_+".fasta>"+base_directory+"/Databases/transcribe"+id_+".out 2> /dev/null"
         os.system(t)
 
         aligned_text = []
@@ -514,6 +507,8 @@ class TextCluster(clustering.Cluster):
 
         cluster_members = []
 
+
+        agreement = []
         for lines,pts_and_users in clusters:
             pts,users = zip(*pts_and_users)
             x1_values,x2_values,y1_values,y2_values = zip(*pts)
@@ -527,28 +522,33 @@ class TextCluster(clustering.Cluster):
 
             aligned_text = self.__get_aggregation_lines__(lines)
             aggregate_text = ""
+            character_agreement = []
             for char_index in range(len(aligned_text[0])):
                 char_set = set(text[char_index] for text in aligned_text)
                 # get the percentage of votes for each character at this position
                 char_vote = {c:sum([1 for text in aligned_text if text[char_index] == c])/float(len(aligned_text)) for c in char_set}
                 most_likely_char,vote_percentage = max(char_vote.items(),key=lambda x:x[1])
 
+                character_agreement.append(vote_percentage)
+
                 if vote_percentage > 0.75:
                     aggregate_text += most_likely_char
                 else:
                     aggregate_text += "Z"
 
+
             cluster_centers.append((x1,x2,y1,y2,aggregate_text))
             cluster_pts.append(zip(pts,lines))
             cluster_users.append(users)
+            agreement.append(np.mean(character_agreement))
 
             # todo to remove all special characters from aligned_text
             cluster_members.append(aligned_text)
-            print aligned_text
+            # self.line_agreement.append((np.mean(character_agreement),len(users)))
 
         results = []
-        for center,pts,users,lines in zip(cluster_centers,cluster_pts,cluster_users,cluster_members):
-            results.append({"center":center,"cluster members":lines,"tools":[],"num users":len(users)})
+        for center,pts,users,lines,a in zip(cluster_centers,cluster_pts,cluster_users,cluster_members,agreement):
+            results.append({"center":center,"cluster members":lines,"tools":[],"num users":len(users),"agreement":a})
 
         # return (cluster_centers,cluster_pts,cluster_users),0
         return results,0
@@ -786,5 +786,9 @@ class Tate(AggregationAPI):
 
 if __name__ == "__main__":
     with Tate() as project:
+        # print project.cluster_algs["text"].line_agreement
         project.__migrate__()
         project.__aggregate__(workflows=[121])
+        # agreement_with_3 = [a for (a,l) in project.cluster_algs["text"].line_agreement if l >= 3]
+        # print len(agreement_with_3)
+        # print np.mean(agreement_with_3), np.median(agreement_with_3)
