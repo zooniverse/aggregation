@@ -786,4 +786,5 @@ class Tate(AggregationAPI):
 
 if __name__ == "__main__":
     with Tate() as project:
+        project.__migrate__()
         project.__aggregate__(workflows=[121])
