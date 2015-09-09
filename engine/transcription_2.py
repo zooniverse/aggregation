@@ -315,19 +315,6 @@ class TextCluster(clustering.Cluster):
             # convert to lower case
             text = text.lower()
 
-            # use capital letters to represent special characters
-            # text = re.sub("\[deletion\].*\[/deletion\]","",text)
-            # text = re.sub(r'\[deletion\].*\[\\deletion\]',"",text)
-            # text = re.sub("\[illegible\].*\[/illegible\]","",text)
-            # text = re.sub(r'\[deletionhas\]\[/deletion\]',"",text)
-            # text = re.sub("\[insertion\].*\[/insertion\]","",text)
-            # text = re.sub("\[underline\].*\[/underline\]","",text)
-            # text = re.sub("\[notenglish\].*\[/notenglish\]","",text)
-            # text = re.sub(r'\[has\]',"",text)
-            # text = re.sub(r'\(deleted\)',"",text)
-            # text = re.sub(r'\[deletion\]',"",text)
-            # text = re.sub("\[insertion\]","",text)
-
             # deletion
             text = re.sub("\[deletion\]","A",text)
             text = re.sub("\[/deletion\]","B",text)
@@ -350,10 +337,8 @@ class TextCluster(clustering.Cluster):
             text = re.sub(">","O",text)
             text = re.sub("-","P",text)
 
-
-
             # todo - find a way to fix this - stupid postgres/json
-            text = re.sub(r'\'',"",text)
+            text = re.sub(r'\'',"Q",text)
 
             # do this now, because all of the above subsitutions may have created an empty line
             if text == "":
@@ -529,12 +514,14 @@ class TextCluster(clustering.Cluster):
                 char_vote = {c:sum([1 for text in aligned_text if text[char_index] == c])/float(len(aligned_text)) for c in char_set}
                 most_likely_char,vote_percentage = max(char_vote.items(),key=lambda x:x[1])
 
-                character_agreement.append(vote_percentage)
+
 
                 if vote_percentage > 0.75:
+                    character_agreement.append(1)
                     aggregate_text += most_likely_char
                 else:
                     aggregate_text += "Z"
+                    character_agreement.append(0)
 
 
             cluster_centers.append((x1,x2,y1,y2,aggregate_text))
