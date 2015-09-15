@@ -252,6 +252,12 @@ class AggregationAPI:
             # there may be more than one workflow associated with a project - read them all in
             # and set up the associated tasks
             self.workflows,self.versions,self.instructions,self.updated_at_timestamps = self.__get_workflow_details__()
+            self.retirement_thresholds = self.__get_retirement_threshold__()
+
+        # if a specific workflow id has been provided:
+        if "workflow_id" in api_details[project]:
+            workflow_id = int(api_details[project]["workflow_id"])
+            self.workflows = {workflow_id: self.workflows[workflow_id]}
 
         # load the default clustering algorithms
         default_clustering_algs = {"point":agglomerative.Agglomerative,"circle":agglomerative.Agglomerative,"ellipse": agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering,"line":agglomerative.Agglomerative}
@@ -275,7 +281,9 @@ class AggregationAPI:
 
         self.starting_date = datetime.datetime(2000,1,1)
 
+        # dictionaries to hold the output files
         self.marking_csv_files = {}
+        self.classification_csv_files = {}
 
     def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[]),expert=None,store_values=True):
         """
@@ -495,6 +503,14 @@ class AggregationAPI:
 
         return cluster_aggregation
 
+    def __count_check__(self,workflow_id,subject_id):
+        """
+        for when we want to double check the number of classifications a subject has received
+        """
+        cursor = self.postgres_session.cursor()
+        cursor.execute("SELECT count(*) from classifications where workflow_id="+str(workflow_id) +" AND subject_ids=ARRAY["+ str(subject_id) + "]")
+        return int(cursor.fetchone()[0])
+
     def __csv_annotations__(self,workflow_id_filter,subject_set):
         # find the major id of the workflow we are filtering
         version_filter = int(math.floor(float(self.versions[workflow_id_filter])))
@@ -538,7 +554,7 @@ class AggregationAPI:
         classification_tasks,marking_tasks = self.workflows[workflow_id]
 
         for task in marking_tasks:
-            self.marking_csv_files[task] = open("/tmp/workflow_"+str(workflow_id)+"_task_"+task+"_marking.csv","wb")
+            self.marking_csv_files[task] = open("/tmp/"+str(workflow_id)+"_task_"+task+"_marking.csv","wb")
 
             # build up the header row
             header = "subject_id"
@@ -547,6 +563,40 @@ class AggregationAPI:
                 header += ","+tool
             header += ",mean probability,median probability,mean tool likelihood,median tool likelihood,number of users,ignored classifications due to workflow changes"
             self.marking_csv_files[task].write(header+"\n")
+
+        for task in classification_tasks:
+            # use the instruction label to create the csv file name
+
+            fname = self.instructions[workflow_id][task]["instruction"][:50]
+            fname = re.sub(" ","_",fname)
+            fname = re.sub("\?","",fname)
+            fname = re.sub("\*","",fname)
+            fname += ".csv"
+            self.classification_csv_files[task] = open("/tmp/"+fname,"wb")
+            header = "subject_id"
+            for answer_index in sorted(self.instructions[workflow_id][task]["answers"].keys()):
+                answer = self.instructions[workflow_id][task]["answers"][answer_index]
+                answer = re.sub(",","",answer)
+                answer = re.sub(" ","_",answer)
+                header += ",p("+answer+")"
+            header += ",num_users"
+            self.classification_csv_files[task].write(header+"\n")
+
+    def __csv_classification_output__(self,workflow_id,task_id,subject_id,aggregations):
+        # check to see if the correct number of classifications were received
+        if self.__count_check__(workflow_id,subject_id) < self.__get_retirement_threshold__(workflow_id):
+            return
+        # print
+
+        row = str(subject_id)
+        for answer_index in self.instructions[workflow_id][task_id]["answers"].keys():
+            # at some point the integer indices seem to have been converted into strings
+            if str(answer_index) in aggregations[0].keys():
+                row += "," + str(aggregations[0][str(answer_index)])
+            else:
+                row += ",0"
+        row += "," + str(aggregations[1])
+        self.classification_csv_files[task_id].write(row+"\n")
 
     def __csv_marking__output__(self,workflow_id,task_id,subject_id,aggregations,tasks):
         """
@@ -624,6 +674,8 @@ class AggregationAPI:
         else:
             workflows = [given_workflows]
 
+        print workflows
+
 
 
         # self.clustering_headers = ["subject_id", "shape","cluster_index","most_likely_tool", "x", "y", "height","width","rotation", "number_of_users_per_subject", "number_of_users_per_cluster","probability_of_existence", "probability_of_most_likely_tool"]
@@ -637,8 +689,8 @@ class AggregationAPI:
         #     tarball = tarfile.open("/tmp/"+str(self.project_id)+"export.tar.gz", "w:gz")
 
         for workflow_id in workflows:
-            print "***"
-            print workflow_id
+            print "csv output for workflow - " + str(workflow_id)
+            print self.instructions[workflow_id]
             self.__csv_file_setup__(workflow_id)
             # assert False
             # json.dump(self.instructions[workflow_id],open("/tmp/workflow_"+str(workflow_id)+"_instructions.json","wb"),indent=4)
@@ -685,9 +737,12 @@ class AggregationAPI:
                 # print marking_tasks
                 # print classification_tasks
 
-
+                # are there markings associated with this task?
                 if task_id in marking_tasks:
                     self.__csv_marking__output__(workflow_id,task_id,subject_id,aggregations,marking_tasks[task_id])
+
+                if task_id in classification_tasks:
+                    self.__csv_classification_output__(workflow_id,task_id,subject_id,aggregations)
                 continue
 
                 # subject_id = record[1]
@@ -983,7 +1038,17 @@ class AggregationAPI:
         :param workflow_id:
         :return:
         """
-        return 15
+        data = self.__panoptes_call__("workflows?project_id="+str(self.project_id))
+        retirement_thresholds = {int(workflow["id"]):workflow["retirement"] for workflow in data["workflows"]}
+
+        # deal with any empty thresholds by using the default value
+        for workflow_id,threshold in retirement_thresholds.items():
+            if threshold == {}:
+                retirement_thresholds[workflow_id] = 15
+            else:
+                retirement_thresholds[workflow_id] = threshold["options"]["count"]
+
+        return retirement_thresholds
 
     def __get_subject_dimension__(self,subject_id):
         """
@@ -1492,6 +1557,36 @@ class AggregationAPI:
                 statements_and_params = []
         if statements_and_params != []:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
+
+    def __panoptes_call__(self,url):
+        """
+        for all the times we want to call the panoptes api
+        :param url:
+        :return:
+        """
+        request = urllib2.Request(self.host_api+url)
+        request.add_header("Accept","application/vnd.api+json; version=1")
+        request.add_header("Authorization","Bearer "+self.token)
+
+        # request
+        try:
+            response = urllib2.urlopen(request)
+        except urllib2.HTTPError as e:
+            print 'The server couldn\'t fulfill the request.'
+            print 'Error code: ', e.code
+            print 'Error response body: ', e.read()
+            raise
+        except urllib2.URLError as e:
+            print 'We failed to reach a server.'
+            print 'Reason: ', e.reason
+            raise
+        else:
+            # everything is fine
+            body = response.read()
+
+        data = json.loads(body)
+
+        return data
 
     def __panoptes_connect__(self,api_details,user_name,password):
         """
