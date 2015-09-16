@@ -148,6 +148,7 @@ def create_clusters(ordering,maxima):
 
     return retval
 
+
 def Levenshtein(a,b):
     "Calculates the Levenshtein distance between a and b."
     n, m = len(a), len(b)
@@ -167,8 +168,6 @@ def Levenshtein(a,b):
             current[j] = min(add, delete, change)
 
     return current[n]
-
-
 
 
 class TextCluster(clustering.Cluster):
@@ -196,7 +195,8 @@ class TextCluster(clustering.Cluster):
         # todo - try to remember why I give each output file an id
         id_ = str(random.uniform(0,1))
 
-        with open(base_directory+"/Databases/transcribe"+id_+".fasta","wb") as f:
+        # with open(base_directory+"/Databases/transcribe"+id_+".fasta","wb") as f:
+        with open("/tmp/transcribe"+id_+".fasta","wb") as f:
            for line in lines:
                 if isinstance(line,tuple):
                     # we have a list of text segments which we should join together
@@ -215,11 +215,11 @@ class TextCluster(clustering.Cluster):
                     print unicodedata.normalize('NFKD', line).encode('ascii','ignore')
                     raise
 
-        t = "mafft --text " + base_directory+"/Databases/transcribe"+id_+".fasta>"+base_directory+"/Databases/transcribe"+id_+".out 2> /dev/null"
+        t = "mafft --text /tmp/transcribe"+id_+".fasta> /tmp/transcribe"+id_+".out 2> /dev/null"
         os.system(t)
 
         aligned_text = []
-        with open(base_directory+"/Databases/transcribe"+id_+".out","rb") as f:
+        with open("/tmp/transcribe"+id_+".out","rb") as f:
             cumulative_line = ""
             for line in f.readlines():
                 if (line == ">\n"):
@@ -229,13 +229,11 @@ class TextCluster(clustering.Cluster):
                 else:
                     cumulative_line += line[:-1]
 
-            # todo - get this to work!!!
-            # cumulative_line = undo_pattern.sub(lambda m: rep[re.escape(m.group(0))], cumulative_line)
             assert cumulative_line != ""
             aligned_text.append(cumulative_line)
 
-        os.remove(base_directory+"/Databases/transcribe"+id_+".fasta")
-        os.remove(base_directory+"/Databases/transcribe"+id_+".out")
+        os.remove("/tmp/transcribe"+id_+".fasta")
+        os.remove("/tmp/transcribe"+id_+".out")
 
         return aligned_text
 
