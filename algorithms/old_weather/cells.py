@@ -42,7 +42,6 @@ def s():
     fig = plt.figure()
     axes = fig.add_subplot(1, 1, 1)
 
-
     r = []
 
     # fig, ax = plt.subplots()
