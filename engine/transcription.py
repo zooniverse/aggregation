@@ -176,9 +176,24 @@ class TextCluster(clustering.Cluster):
         clustering.Cluster.__init__(self,shape,dim_reduction_alg)
         self.line_agreement = []
 
-    def __get_aggregation_lines__(self,lines):
-        # mafft doesn't deal well with some characters so need to replace them
+        self.tags = {}
+        self.tags["\[deletion\]"] = chr(150)
+        self.tags["\[/deletion\]"] = chr(151)
+        self.tags["\[illegible\]"] = chr(152)
+        self.tags["\[/illegible\]"] = chr(153)
+        self.tags["\[insertion\]"] = chr(154)
+        self.tags["\[/insertion\]"] = chr(155)
+        self.tags["\[notenglish\]"] = chr(156)
+        self.tags["\[/notenglish\]"] = chr(157)
 
+    def __line_alignment__(self,lines):
+        """
+        align the text by using MAFFT
+        :param lines:
+        :return:
+        """
+
+        # todo - try to remember why I give each output file an id
         id_ = str(random.uniform(0,1))
 
         with open(base_directory+"/Databases/transcribe"+id_+".fasta","wb") as f:
@@ -229,7 +244,14 @@ class TextCluster(clustering.Cluster):
         assert len(s) > 0
         return sum([1 for c in s if c != "-"])/float(len(s))
 
+    # todo - is this function really necessary?
     def __agreement__(self,text):
+        """
+        calculate the % of characters in each line of text where all characters at this position (over all lines)
+        are in agreement. I ignore any starting or trailing "-" (spaces inserted for alignment)
+        :param text:
+        :return:
+        """
         assert isinstance(text,list)
         assert len(text) > 1
         assert isinstance(text[0],str)
@@ -260,21 +282,152 @@ class TextCluster(clustering.Cluster):
             retval.append(agreement/float(rightmost_char-leftmost_char+1))
         return retval
 
-    def __complete_agreement__(self,text):
-        assert isinstance(text,list)
-        assert len(text) > 1
-        assert isinstance(text[0],str)
-        assert min([len(t) for t in text]) == max([len(t) for t in text])
+    # todo - can probably remove this function but double check
+    # def __complete_agreement__(self,text):
+    #     assert isinstance(text,list)
+    #     assert len(text) > 1
+    #     assert isinstance(text[0],str)
+    #     assert min([len(t) for t in text]) == max([len(t) for t in text])
+    #
+    #     agreement = 0
+    #     for i in range(len(text[0])):
+    #
+    #         c = [t[i].lower() for t in text if t[i] != "-"]
+    #         if min(c) == max(c):
+    #             assert c[0] != "-"
+    #             agreement += 1
+    #
+    #     return agreement/float(len(text[0]))
 
-        agreement = 0
-        for i in range(len(text[0])):
+    def __set_special_characters__(self,text):
+        """
+        use upper case letters to represent special characters which MAFFT cannot deal with
+        return a string where upper case letters all represent special characters
+        "A" is used to represent all tags (all for an abitrary number of tags)
+        so also return a dictionary which gives the index of each occurrence of "A" and what tag it originally referred to
+        also return a string where all special characters are represented by capital letters BUT
+        we also keep any capitalize found in the original line of text. Confusing but this will allow us
+        to rebuild the capitalization at the very end
+        """
 
-            c = [t[i].lower() for t in text if t[i] != "-"]
-            if min(c) == max(c):
-                assert c[0] != "-"
-                agreement += 1
+        text = text.encode('ascii','ignore')
 
-        return agreement/float(len(text[0]))
+        # first we need to replace each tag with a one character representation
+        for tag,chr_representation in self.tags.items():
+            text = re.sub(tag,chr_representation,text)
+            # lower_text = re.sub(tag,chr_representation,lower_text)
+
+        # we can do this afterwards because non-alphabet characters are not affected by .lower
+        lower_text = text.lower()
+
+        # then record were each tag occurs
+        # tag_indices = {}
+        new_lower_text = ""
+        for char_index in range(len(lower_text)):
+            if ord(lower_text[char_index]) > 127:
+                new_lower_text += "A"
+                # tag_indices[char_index] = ord(lower_text[char_index])
+            else:
+                new_lower_text += lower_text[char_index]
+        lower_text = new_lower_text
+
+        # take care of other characters which MAFFT cannot handle
+        # note that text contains the original characters
+        lower_text = re.sub(" ","I",lower_text)
+        lower_text = re.sub("=","J",lower_text)
+        lower_text = re.sub("\*","K",lower_text)
+        lower_text = re.sub("\(","L",lower_text)
+        lower_text = re.sub("\)","M",lower_text)
+        lower_text = re.sub("<","N",lower_text)
+        lower_text = re.sub(">","O",lower_text)
+        lower_text = re.sub("-","P",lower_text)
+        lower_text = re.sub("\'","Q",lower_text)
+
+        # text = re.sub(" ",chr(160),text)
+        # text = re.sub("=",chr(161),text)
+        # text = re.sub("\*",chr(162),text)
+        # text = re.sub("\(",chr(163),text)
+        # text = re.sub("\)",chr(164),text)
+        # text = re.sub("<",chr(165),text)
+        # text = re.sub(">",chr(166),text)
+        # text = re.sub("-",chr(167),text)
+
+        # todo - find a way to fix this - stupid postgres/json
+        # text = re.sub(r'\'',chr(168),text)
+
+        return lower_text,text
+
+    def __merge_aligned_text__(self,aligned_text):
+        """
+        once we have aligned the text using MAFFT, use this function to actually decide on an aggregate
+        result - will also return the % of agreement
+        and the percentage of how many characters for each transcription agree with the agree
+        handles special tags just fine - and assumes that we have dealt with capitalization already
+        """
+        aggregate_text = ""
+        num_agreed = 0
+
+        # will keep track of the percentage of characters from each transcription which agree
+        # with the aggregate
+        agreement_per_user = [0 for i in aligned_text]
+
+        for char_index in range(len(aligned_text[0])):
+            # get all the possible characters
+            # todo - we can reduce this down to having to loop over each character once
+            # todo - handle case (lower case vs. upper case) better
+            char_set = set(text[char_index] for text in aligned_text)
+            # get the percentage of votes for each character at this position
+            char_vote = {c:sum([1 for text in aligned_text if text[char_index] == c])/float(len(aligned_text)) for c in char_set}
+            # get the most common character (also the most likely to be the correct one) and the percentage of users
+            # who "voted" for it
+            most_likely_char,vote_percentage = max(char_vote.items(),key=lambda x:x[1])
+
+            # chr 201 - is for inserted spaces to align text. I don't think the most likely character is allowed
+            # to be 201, but just to be safe
+            if (vote_percentage > 0.75) and (most_likely_char != chr(201)):
+                num_agreed += 1
+                aggregate_text += most_likely_char
+
+                for i in range(len(aligned_text)):
+                    if aligned_text[i][char_index] == most_likely_char:
+                        agreement_per_user[i] += 1
+            else:
+                # "Z" represents characters which we are not certain about
+                aggregate_text += chr(200)
+
+        # what percentage of characters have we reached consensus on - i.e. we are fairly confident about?
+        percent_consensus = num_agreed/float(len(aggregate_text))
+
+        # convert the agreement per user to a percentage
+        agreement_per_user = [a/float(len(aggregate_text)) for a in agreement_per_user]
+
+        return aggregate_text,percent_consensus,agreement_per_user
+
+    def __add_alignment_spaces__(self,aligned_text_list,non_fasta_text_dict,pts_and_users):
+        """
+        take the text representation where we still have upper case and lower case letters
+        plus special characters for tags (so definitely not the input for MAFFT) and add in whatever
+        alignment characters are needed (say char(201)) so that the first text representations are all
+        aligned
+        fasta is the format the MAFFT reads in from - so non_fasta_text contains non-alpha-numeric ascii chars
+        pts_and_users is used to match text in aligned text with non_fasta_text
+        """
+        # for text,nf_text in zip(aligned_text,non_fasta_text):
+        #     print text,nf_text
+        aligned_nf_text_list = []
+        for text,user_ident in zip(aligned_text_list,pts_and_users):
+            aligned_nf_text = ""
+            nf_text = non_fasta_text_dict[user_ident]
+            i = 0
+            for c in text:
+                if c == "-":
+                    aligned_nf_text += chr(201)
+                else:
+                    aligned_nf_text += nf_text[i]
+                    i += 1
+            aligned_nf_text_list.append(aligned_nf_text)
+
+        return aligned_nf_text_list
 
     def __inner_fit__(self,markings,user_ids,tools,reduced_markings):
         # we want to first cluster first just on dist and theta - ignoring the text contents
@@ -291,6 +444,7 @@ class TextCluster(clustering.Cluster):
         current_pts = {}
         clusters = []
 
+        non_fasta_text = {}
 
         for a,b in ordering:
             # a - line values - "intercept" and slope
@@ -303,57 +457,36 @@ class TextCluster(clustering.Cluster):
             text = markings[user_index][-1]
             raw_pt = markings[user_index][:-1]
 
-
+            # skip lines with new lines characters in them
+            # Roger has set things up so that new line characters are no longer allowed
+            # but we need to be careful with transcriptions submitted before that change
             if "\n" in text:
                 print "multiline - skipping"
                 continue
 
-
-
             # convert from unicode to ascii
             assert isinstance(text,unicode)
-            text = text.encode('ascii','ignore')
-            # convert to lower case
-            text = text.lower()
 
-            # deletion
-            text = re.sub("\[deletion\]","A",text)
-            text = re.sub("\[/deletion\]","B",text)
-            # illegible
-            text = re.sub("\[illegible\]","C",text)
-            text = re.sub("\[/illegible\]","D",text)
-            # insertion
-            text = re.sub("\[insertion\]","E",text)
-            text = re.sub("\[/insertion\]","F",text)
-            # not english
-            text = re.sub("\[notenglish\]","G",text)
-            text = re.sub("\[/notenglish\]","H",text)
-            # special characters for MAFFT
-            text = re.sub(" ","I",text)
-            text = re.sub("=","J",text)
-            text = re.sub("\*","K",text)
-            text = re.sub("\(","L",text)
-            text = re.sub("\)","M",text)
-            text = re.sub("<","N",text)
-            text = re.sub(">","O",text)
-            text = re.sub("-","P",text)
-
-            # todo - find a way to fix this - stupid postgres/json
-            text = re.sub(r'\'',"Q",text)
-            print text
-
-            # do this now, because all of the above subsitutions may have created an empty line
+            # not sure if it is possible to have empty lines, but just in case
             if text == "":
                 continue
 
+            # handle all characters which MAFFT cannot handle and keep a record of where all
+            # the tags are in the string
+            # text_with_capitalization is used (at the end) to determine the correct capitalization
+            # of character (since in the mean time capital letters are used for other stuff)
+            text, nf_text = self.__set_special_characters__(text)
+
+            # save these values for later use
+            non_fasta_text[(raw_pt,user)] = nf_text
+
             # if we have an empty cluster, just add the line
             if current_lines == {}:
-                current_lines[user] = text #(text,special_characters)
-
+                current_lines[user] = text
                 # adding the user id is slightly redundant but makes doing the actual clustering easier
                 current_pts[user] = (raw_pt,user)
             else:
-                # need to see if we want to merge
+                # need to see if we want to merge the text with the existing cluster or start a new one
                 # do we already have some text from this user for this current cluster?
                 # IMPORTANT
                 # VERY IMPORTANT
@@ -365,11 +498,14 @@ class TextCluster(clustering.Cluster):
                     current_pts = {user:(raw_pt,user)}
                 else:
                     # does adding this line to the cluster make sense?
-                    # compare against the current accuracy - if we only have 1 line so far,
-                    # current accuracy is NA
-                    users_and_lines = sorted(current_lines.items(),key = lambda x:x[0])
-                    sorted_users,sorted_lines = zip(*users_and_lines)
-                    # sorted_lines = zip(*sorted_pts)[-1]
+                    # todo - why am I sorting here? doesn't really seem necessary
+                    # users_and_lines = sorted(current_lines.items(),key = lambda x:x[0])
+                    # sorted_users,sorted_lines = zip(*users_and_lines)
+
+                    # take the current set of text lines and add in the new one
+                    new_lines = current_lines.values()
+                    new_lines.append(text)
+
 
                     # uncomment below if you want to compare the new accuracy against the old
                     # if len(current_lines) > 1:
@@ -379,32 +515,34 @@ class TextCluster(clustering.Cluster):
                     #     current_accuracy = -1
 
                     # what would the accuracy be if we added in this new user's line?
-                    new_lines = list(sorted_lines)
-                    assert isinstance(sorted_users,tuple)
+                    # new_lines = list(sorted_lines)
+                    # assert isinstance(sorted_users,tuple)
                     # user_index = sorted_users.index(user)
 
                     # start by trying straight up replacing
-                    new_lines.append(text)
-                    # print sorted_pts
-                    # print new_lines
-                    new_aligned = self.__get_aggregation_lines__(new_lines)
+                    # new_lines.append(text)
+                    new_aligned = self.__line_alignment__(new_lines)
                     new_accuracy = self.__agreement__(new_aligned)
+                    # todo - we can get two slightly different values for new_accuracy
+                    # todo - because of slightly different approaches - is one better?
+                    # todo - we might not need __agreement__, if not, we can remove it
+                    # temp1,temp2,new_accuracy = self.__merge_aligned_text__(new_aligned)
 
+                    # if the minimum accuracy resulted by adding in this line is still reasonably good
+                    # add the line to the current cluster
                     if min(new_accuracy) >= 0.6:
                         current_pts[user] = (raw_pt,user)
                         current_lines[user] = text
                     else:
+                        # otherwise, start a new cluster
                         clusters.append((current_lines.values(),current_pts.values()))
-                        # current_pts = {user:(pt,text)}
                         current_lines = {user:text}
                         current_pts = {user:(raw_pt,user)}
 
+        # make sure to add the final cluster that we were working on at the end
         clusters.append((current_lines.values(),current_pts.values()))
 
-        print
-        print
-
-        # remove any clusters which have only one user
+        # remove any clusters which have only one user - treat those as noise
         for cluster_index in range(len(clusters)-1,-1,-1):
             # print len(clusters[cluster_index][0])
             if len(clusters[cluster_index][0]) <= 1: #2
@@ -415,8 +553,9 @@ class TextCluster(clustering.Cluster):
             return [],0
 
         # if we have more than one cluster - some of them might need to be merged
-        # after removing "error" cluster
+        # after removing "error" clusters
         # to do so - revert back to Hesse format
+        # todo - maybe only run this if we have removed any error lines
         if len(clusters) > 1:
 
             hessen_lines = []
@@ -429,13 +568,11 @@ class TextCluster(clustering.Cluster):
 
             # print hessen_lines
             slope_l,angle_l = zip(*hessen_lines)
-            # print
             max_s,min_s = max(slope_l),min(slope_l)
             max_a,min_a = max(angle_l),min(angle_l)
 
             # normalize values
             hessen_lines = [((max_s-s)/(max_s-min_s),(max_a-a)/(max_a-min_a)) for s,a in hessen_lines]
-            # print hessen_lines
 
             tree = spatial.KDTree(hessen_lines)
 
@@ -448,7 +585,7 @@ class TextCluster(clustering.Cluster):
                         t_lines = clusters[l_index][0][:]
                         t_lines.extend(clusters[l2_index][0])
 
-                        aligned_text = self.__get_aggregation_lines__(t_lines)
+                        aligned_text = self.__line_alignment__(t_lines)
                         accuracy = self.__agreement__(aligned_text)
                         if min(accuracy) >= 0.5:
                             will_be_merged.add(l_index)
@@ -487,7 +624,6 @@ class TextCluster(clustering.Cluster):
                     t_cluster[1].extend(clusters[cluster_index][1])
                 new_clusters.append(t_cluster[:])
 
-            # print clusters
             clusters = new_clusters
 
         # and now, finally, the actual text clustering
@@ -506,49 +642,38 @@ class TextCluster(clustering.Cluster):
             x1_values,x2_values,y1_values,y2_values = zip(*pts)
 
             # todo - handle when some of the coordinate values are not numbers -
-            # this corresponds to when there are multiple text segments from the same user
+            # todo - this corresponds to when there are multiple text segments from the same user
+            # todo - this in turn corresponds to the case where we look for "broken" lines
+            # todo - so definitely something down the line
             x1 = np.median(x1_values)
             x2 = np.median(x2_values)
             y1 = np.median(y1_values)
             y2 = np.median(y2_values)
 
-            aligned_text = self.__get_aggregation_lines__(lines)
-            print "==----"
-            for t in aligned_text:
-                print t
-            print
-            aggregate_text = ""
-            character_agreement = []
-            for char_index in range(len(aligned_text[0])):
-                char_set = set(text[char_index] for text in aligned_text)
-                # get the percentage of votes for each character at this position
-                char_vote = {c:sum([1 for text in aligned_text if text[char_index] == c])/float(len(aligned_text)) for c in char_set}
-                most_likely_char,vote_percentage = max(char_vote.items(),key=lambda x:x[1])
+            # align the text
+            aligned_text = self.__line_alignment__(lines)
 
+            # align the non-fasta version of the text lines
+            nf_aligned_text = self.__add_alignment_spaces__(aligned_text,non_fasta_text,pts_and_users)
 
-
-                if vote_percentage > 0.75:
-                    character_agreement.append(1)
-                    aggregate_text += most_likely_char
-                else:
-                    aggregate_text += "Z"
-                    character_agreement.append(0)
-
+            # aggregate the lines - looking for character spots where there is mostly consensus
+            aggregate_text,character_agreement,per_user_agreement = self.__merge_aligned_text__(nf_aligned_text)
+            print str(len(users)) + "\t" + aggregate_text
 
             cluster_centers.append((x1,x2,y1,y2,aggregate_text))
             cluster_pts.append(zip(pts,lines))
             cluster_users.append(users)
-            agreement.append(np.mean(character_agreement))
-
-            # todo to remove all special characters from aligned_text
+            agreement.append(character_agreement)
             cluster_members.append(aligned_text)
-            self.line_agreement[-1].append((np.mean(character_agreement),len(users)))
 
+            # use this if you want to keep track of stats
+            # self.line_agreement[-1].append((character_agreement,len(users)))
+
+        print
         results = []
         for center,pts,users,lines,a in zip(cluster_centers,cluster_pts,cluster_users,cluster_members,agreement):
             results.append({"center":center,"cluster members":lines,"tools":[],"num users":len(users),"agreement":a})
 
-        # return (cluster_centers,cluster_pts,cluster_users),0
         return results,0
 
     def __fit2__(self,markings,user_ids,jpeg_file=None,debug=False):
@@ -613,27 +738,35 @@ class TextCluster(clustering.Cluster):
         reachability_ordering = nodes[-1].__traversal__()
         return reachability_ordering
 
-def text_mapping(marking,image_dimensions):
-    # want to extract the params x1,x2,y1,y2 but
-    # ALSO make sure that x1 <= x2 and flip if necessary
-
-    x1 = marking["startPoint"]["x"]
-    x2 = marking["endPoint"]["x"]
-    y1 = marking["startPoint"]["y"]
-    y2 = marking["endPoint"]["y"]
-
-    try:
-        text = marking["text"]
-    except KeyError:
-        raise InvalidMarking(marking)
-
-    if x1 <= x2:
-        return x1,x2,y1,y2,text
-    else:
-        return x2,x1,y2,y1,text
+# def text_mapping(marking,image_dimensions):
+#     # want to extract the params x1,x2,y1,y2 but
+#     # ALSO make sure that x1 <= x2 and flip if necessary
+#
+#     x1 = marking["startPoint"]["x"]
+#     x2 = marking["endPoint"]["x"]
+#     y1 = marking["startPoint"]["y"]
+#     y2 = marking["endPoint"]["y"]
+#
+#     try:
+#         text = marking["text"]
+#     except KeyError:
+#         raise InvalidMarking(marking)
+#
+#     if x1 <= x2:
+#         return x1,x2,y1,y2,text
+#     else:
+#         return x2,x1,y2,y1,text
 
 
 def relevant_text_params(marking,image_dimensions):
+    """
+    extract the relevant params from the the transcription marking
+    note that the text is the last item - which means we can treat the results
+    pretty much like a line segment - which it mostly is
+    :param marking:
+    :param image_dimensions:
+    :return:
+    """
     if ("startPoint" not in marking) or ("endPoint" not in marking):
         raise InvalidMarking(marking)
     x1 = marking["startPoint"]["x"]
@@ -724,7 +857,7 @@ class SubjectRetirement(Classification):
 
 class Tate(AggregationAPI):
     def __init__(self):
-        AggregationAPI.__init__(self,245)#"tate",environment="staging")
+        AggregationAPI.__init__(self,"tate")#"tate",environment="staging")
 
         self.marking_params_per_shape = dict()
 
@@ -736,6 +869,27 @@ class Tate(AggregationAPI):
 
         self.ignore_versions = True
         self.instructions[683] = {}
+
+        self.only_retired_subjects = False
+        self.only_recent_subjects = True
+
+    def __get_workflow_details__(self,given_workflow_id=None):
+        """
+        override the basic aggregation_api call to get the details about workflows
+        since tate does things differently
+        :param given_workflow_id:
+        :return:
+        """
+        workflows = dict()
+        workflows[121] = self.__readin_tasks__(683)
+
+        versions = dict()
+        versions[121] = 17
+
+        instructions = dict()
+        updated_at_timestamps = {}
+
+        return workflows,versions,instructions,updated_at_timestamps
 
     def __readin_tasks__(self,workflow_id):
         marking_tasks = {"T2":["text"]}
@@ -784,9 +938,12 @@ class Tate(AggregationAPI):
 
 if __name__ == "__main__":
     with Tate() as project:
-        subject_id = int(project.__subject_ids_in_set__(905)[1])
-        subject_id = 603303
-        project.__aggregate__(workflows=[121],subject_set=[subject_id])
+        # pass
+        # subject_id = int(project.__subject_ids_in_set__(905)[1])
+        # subject_id = 603303
+        project.__migrate__()
+        project.__aggregate__()
+        # project.__aggregate__(workflows=[121],subject_set=[subject_id])
         # print project.cluster_algs["text"].line_agreement
         # project.__migrate__()
         # project.__aggregate__(workflows=[121])
