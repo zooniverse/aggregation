@@ -104,10 +104,6 @@ class Cluster:
                     all_users,t1,t2 = zip(*raw_markings[task_id][shape][subject_id])
                     all_users = list(set(all_users))
 
-                    print "===--"
-                    print len(raw_markings[task_id][shape][subject_id])
-                    print pruned_markings
-
                     # empty image
                     if pruned_markings == []:
                         # no centers, no points, no users per cluster
@@ -132,8 +128,6 @@ class Cluster:
 
                     for cluster_index,cluster in enumerate(cluster_results):
                         aggregation[subject_id][task_id][shape+ " clusters"][cluster_index] = cluster
-                    print cluster_results
-                    print
 
         # we should have some results
         # assert aggregation != {"param":"subject_id"}
