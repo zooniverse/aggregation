@@ -20,6 +20,74 @@ class SimplifiedTextCluster(transcription.TextCluster):
     def __init__(self,shape,dim_reduction_alg):
         clustering.Cluster.__init__(self,shape,dim_reduction_alg)
 
+        self.completed_lines = {}
+
+    def __aggregate__(self,raw_markings):
+        """
+        the function to call from outside to do the clustering
+        override but call if you want to add additional functionality
+        :param subject_id: what is the subject (in Ouroboros == zooniverse_id)
+        :param jpeg_file: for debugging - to show step by step what is happening
+        :return:
+        """
+        aggregation = {"param":"subject_id"}
+        # start by calling the api to get the annotations along with the list of who made each marking
+        # so for this function, we know that annotations = markings
+        # all_markings =  self.project_api.__get_markings__(subject_id,gold_standard)
+        # print all_markings
+        # self.clusterResults[subject_id] = {"param":"task_id"}
+        for task_id in raw_markings:
+            # go through each shape independently
+            for shape in raw_markings[task_id].keys():
+                # if is this shape does not correspond to the specific shape this clustering algorithm was
+                # created for - skip
+                if shape != self.shape:
+                    continue
+
+                for subject_id in raw_markings[task_id][shape]:
+                    assert raw_markings[task_id][shape][subject_id] != []
+
+                    # remove any "markings" which correspond to the user not making a marking
+                    # these are still useful for noting that the user saw that image
+                    pruned_markings = [(u,m,t) for u,m,t in raw_markings[task_id][shape][subject_id] if m is not None]
+                    all_users,t1,t2 = zip(*raw_markings[task_id][shape][subject_id])
+                    all_users = list(set(all_users))
+
+                    # empty image
+                    if pruned_markings == []:
+                        # no centers, no points, no users per cluster
+                        cluster_results = []
+                    else:
+                        users,markings,tools = zip(*pruned_markings)
+
+                        reduced_markings = self.dim_reduction_alg(markings)
+
+                        # do the actual clustering
+                        cluster_results,time_to_cluster = self.__inner_fit__(markings,users,tools,reduced_markings)
+                        completed = 0
+                        for c in cluster_results:
+                            if c["num users"] >= 5:
+                                completed += 1
+                        if completed > 0:
+                            self.completed_lines[subject_id] = completed
+
+                    # store the results - note we need to store even for empty images
+                    if subject_id not in aggregation:
+                        aggregation[subject_id] = {"param":"task_id"}
+                    if task_id not in aggregation[subject_id]:
+                        aggregation[subject_id][task_id] = {"param":"clusters"}
+                    if shape not in aggregation[subject_id][task_id]:
+                        # store the set of all users who have seen this subject/task
+                        # used for determining false vs. true positives
+                        aggregation[subject_id][task_id][str(shape) + " clusters"] = {"param":"cluster_index","all_users":all_users}
+
+                    for cluster_index,cluster in enumerate(cluster_results):
+                        aggregation[subject_id][task_id][shape+ " clusters"][cluster_index] = cluster
+
+        # we should have some results
+        # assert aggregation != {"param":"subject_id"}
+        return aggregation
+
     def __inner_fit__(self,markings,user_ids,tools,reduced_markings):
         # we want to first cluster first just on dist and theta - ignoring the text contents
         # dist_list,theta_list,text_list,raw_pts_list = zip(*markings)
@@ -260,6 +328,9 @@ class SimplifiedTextCluster(transcription.TextCluster):
             cluster_pts.append(zip(pts,lines))
             cluster_users.append(users)
 
+            # if len(users) >= 5:
+
+
             # try to remove all special characters
             temp_text = []
             for text in aligned_text:
@@ -298,4 +369,6 @@ class SimplifiedTate(transcription.Tate):
 if __name__ == "__main__":
     with SimplifiedTate() as project:
         project.__migrate__()
+        print project.cluster_algs["text"].completed_lines
         project.__aggregate__(workflows=[121])
+        print project.cluster_algs["text"].completed_lines

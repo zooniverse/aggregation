@@ -96,8 +96,6 @@ class Cluster:
                     continue
 
                 for subject_id in raw_markings[task_id][shape]:
-                    print "****"
-                    print subject_id
                     assert raw_markings[task_id][shape][subject_id] != []
 
                     # remove any "markings" which correspond to the user not making a marking
@@ -105,6 +103,10 @@ class Cluster:
                     pruned_markings = [(u,m,t) for u,m,t in raw_markings[task_id][shape][subject_id] if m is not None]
                     all_users,t1,t2 = zip(*raw_markings[task_id][shape][subject_id])
                     all_users = list(set(all_users))
+
+                    print "===--"
+                    print len(raw_markings[task_id][shape][subject_id])
+                    print pruned_markings
 
                     # empty image
                     if pruned_markings == []:
@@ -130,6 +132,8 @@ class Cluster:
 
                     for cluster_index,cluster in enumerate(cluster_results):
                         aggregation[subject_id][task_id][shape+ " clusters"][cluster_index] = cluster
+                    print cluster_results
+                    print
 
         # we should have some results
         # assert aggregation != {"param":"subject_id"}

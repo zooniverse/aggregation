@@ -16,6 +16,7 @@ import os
 import requests
 from aggregation_api import hesse_line_reduction
 from scipy import spatial
+import cPickle as pickle
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -339,6 +340,7 @@ class TextCluster(clustering.Cluster):
 
             # todo - find a way to fix this - stupid postgres/json
             text = re.sub(r'\'',"Q",text)
+            print text
 
             # do this now, because all of the above subsitutions may have created an empty line
             if text == "":
@@ -398,6 +400,9 @@ class TextCluster(clustering.Cluster):
                         current_pts = {user:(raw_pt,user)}
 
         clusters.append((current_lines.values(),current_pts.values()))
+
+        print
+        print
 
         # remove any clusters which have only one user
         for cluster_index in range(len(clusters)-1,-1,-1):
@@ -494,6 +499,8 @@ class TextCluster(clustering.Cluster):
 
 
         agreement = []
+        self.line_agreement.append([])
+
         for lines,pts_and_users in clusters:
             pts,users = zip(*pts_and_users)
             x1_values,x2_values,y1_values,y2_values = zip(*pts)
@@ -506,6 +513,10 @@ class TextCluster(clustering.Cluster):
             y2 = np.median(y2_values)
 
             aligned_text = self.__get_aggregation_lines__(lines)
+            print "==----"
+            for t in aligned_text:
+                print t
+            print
             aggregate_text = ""
             character_agreement = []
             for char_index in range(len(aligned_text[0])):
@@ -531,7 +542,7 @@ class TextCluster(clustering.Cluster):
 
             # todo to remove all special characters from aligned_text
             cluster_members.append(aligned_text)
-            # self.line_agreement.append((np.mean(character_agreement),len(users)))
+            self.line_agreement[-1].append((np.mean(character_agreement),len(users)))
 
         results = []
         for center,pts,users,lines,a in zip(cluster_centers,cluster_pts,cluster_users,cluster_members,agreement):
@@ -773,9 +784,15 @@ class Tate(AggregationAPI):
 
 if __name__ == "__main__":
     with Tate() as project:
+        subject_id = int(project.__subject_ids_in_set__(905)[1])
+        subject_id = 603303
+        project.__aggregate__(workflows=[121],subject_set=[subject_id])
         # print project.cluster_algs["text"].line_agreement
-        project.__migrate__()
-        project.__aggregate__(workflows=[121])
+        # project.__migrate__()
+        # project.__aggregate__(workflows=[121])
+        # pickle.dump(project.cluster_algs["text"].line_agreement,open("/home/greg/agg.out","wb"))
+        # ll = [l for (a,l) in project.cluster_algs["text"].line_agreement]
+        # print max(ll),np.mean(ll),np.median(ll)
         # agreement_with_3 = [a for (a,l) in project.cluster_algs["text"].line_agreement if l >= 3]
         # print len(agreement_with_3)
         # print np.mean(agreement_with_3), np.median(agreement_with_3)

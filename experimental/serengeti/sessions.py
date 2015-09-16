@@ -14,7 +14,7 @@ date = None
 
 delta_t = []
 
-for c in classifications.find({"user_name":"aliburchard"}).limit(500):
+for c in classifications.find({"user_name":"areinders"}).limit(500):
     if date is not None:
         delta_t.append((c["created_at"] - date).seconds/60.)
     date = c["created_at"]

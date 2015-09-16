@@ -137,76 +137,79 @@ class AutomaticOptics(Cluster):
     def __init__(self, project_api,min_cluster_size=1):
         Cluster.__init__(self, project_api,min_cluster_size)
 
-    def __correct__(self,subject_id):
-        """
-        find any nearest neighbour tuples of clusters which have no users in common and merge them
-        :return:
-        """
-        results = self.clusterResults[subject_id]
-        i = 0
-        # the length of results[2] may and probably will change as we correct things
-        # so don't use a for loop
-        # -1 so we always have at least one more element to compare against
+    # def __correct__(self,subject_id):
+    #     """
+    #     find any nearest neighbour tuples of clusters which have no users in common and merge them
+    #     :return:
+    #     """
+    #     results = self.clusterResults[subject_id]
+    #     i = 0
+    #     # the length of results[2] may and probably will change as we correct things
+    #     # so don't use a for loop
+    #     # -1 so we always have at least one more element to compare against
+    #
+    #     while i < len(results[2])-1:
+    #         users_i = results[2][i]
+    #         pts_i = results[1][i]
+    #         cluster_i = results[0][i]
+    #
+    #         closest_distance = float("inf")
+    #         closest_neighbour = None
+    #         overlap = None
+    #         # check the overlap between i and all clusters "above" it - overlap is symmetrical so we don't need
+    #         # to check both ways. Also we are going backwards so that we can pop stuff from the list without
+    #         # messing the indexing up
+    #         for j in range(len(results[2])-1,i,-1):
+    #             assert j != i
+    #             users_j = results[2][j]
+    #             cluster_j = results[0][j]
+    #             dist = math.sqrt(sum([(pi-pj)**2 for (pi,pj) in zip(cluster_i,cluster_j)]))
+    #
+    #             if dist < closest_distance:
+    #                 closest_distance = dist
+    #                 overlap = [u for u in users_j if u in users_i]
+    #                 closest_neighbour = j
+    #
+    #         if len(overlap) == 0:
+    #             # remove the j'th element and merge it with the i'th one
+    #             center = results[0].pop(closest_neighbour)
+    #             pts = results[1].pop(closest_neighbour)
+    #             users = results[2].pop(closest_neighbour)
+    #
+    #             # to allow for generalizations where the overlap is non-empty, we need  a way to merge points
+    #             for users in overlap:
+    #                 # todo: do generalization
+    #                 pass
+    #
+    #             # todo: find a better way to do this, probably stop it from being a tuple in the first place
+    #             results[1][i] = list(results[1][i])
+    #             results[1][i].extend(pts)
+    #             results[2][i].extend(users)
+    #
+    #             # calculate the new center
+    #             results[0][i] = [np.mean(axis) for axis in zip(*results[1][i])]
+    #         # move on to the next element
+    #         i += 1
+    #
+    #     print "ending length is " + str(len(results[2]))
 
-        while i < len(results[2])-1:
-            users_i = results[2][i]
-            pts_i = results[1][i]
-            cluster_i = results[0][i]
-
-            closest_distance = float("inf")
-            closest_neighbour = None
-            overlap = None
-            # check the overlap between i and all clusters "above" it - overlap is symmetrical so we don't need
-            # to check both ways. Also we are going backwards so that we can pop stuff from the list without
-            # messing the indexing up
-            for j in range(len(results[2])-1,i,-1):
-                assert j != i
-                users_j = results[2][j]
-                cluster_j = results[0][j]
-                dist = math.sqrt(sum([(pi-pj)**2 for (pi,pj) in zip(cluster_i,cluster_j)]))
-
-                if dist < closest_distance:
-                    closest_distance = dist
-                    overlap = [u for u in users_j if u in users_i]
-                    closest_neighbour = j
-
-            if len(overlap) == 0:
-                # remove the j'th element and merge it with the i'th one
-                center = results[0].pop(closest_neighbour)
-                pts = results[1].pop(closest_neighbour)
-                users = results[2].pop(closest_neighbour)
-
-                # to allow for generalizations where the overlap is non-empty, we need  a way to merge points
-                for users in overlap:
-                    # todo: do generalization
-                    pass
-
-                # todo: find a better way to do this, probably stop it from being a tuple in the first place
-                results[1][i] = list(results[1][i])
-                results[1][i].extend(pts)
-                results[2][i].extend(users)
-
-                # calculate the new center
-                results[0][i] = [np.mean(axis) for axis in zip(*results[1][i])]
-            # move on to the next element
-            i += 1
-
-        print "ending length is " + str(len(results[2]))
-
-    def __fit__(self,markings,user_ids,jpeg_file=None,debug=False):
-        l = [[(u,m[0]) for m in marking] for u,marking in zip(user_ids,markings)]
-        user_list,pts_list = zip(*[item for sublist in l for item in sublist])
+    # def __fit__(self,markings,user_ids,jpeg_file=None,debug=False):
+    def __inner_fit__(self,markings,user_ids,tools,reduced_markings):
+        # print len(user_ids)
+        # print len(markings)
+        # l = [[(u,m) for m in marking] for u,marking in zip(user_ids,markings)]
+        # user_list,pts_list = zip(*[item for sublist in l for item in sublist])
         # assert len(pts_list) == len(list(set(pts_list)))
-        labels = range(len(pts_list))
+        labels = range(len(markings))
         variables = ["X","Y"]
         # X = np.random.random_sample([5,3])*10
-        df = pd.DataFrame(list(pts_list),columns=variables, index=labels)
+        df = pd.DataFrame(list(markings),columns=variables, index=labels)
 
         row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
 
         row_clusters = linkage(row_dist, method='single')
 
-        nodes = [LeafNode(pt,ii) for ii,pt in enumerate(pts_list)]
+        nodes = [LeafNode(pt,ii) for ii,pt in enumerate(markings)]
 
         for merge in row_clusters:
             rchild_index = int(merge[0])
@@ -276,6 +279,10 @@ class AutomaticOptics(Cluster):
                     important_local_maxima.append((i,dist))
 
         clusters = create_clusters(zip(*reachability_ordering)[0],important_local_maxima)
-        users_per_cluster = [[user_list[pts_list.index(p)] for p in c] for c in clusters]
+        users_per_cluster = [[user_ids[markings.index(p)] for p in c] for c in clusters]
         cluster_centers = [[np.mean(axis) for axis in zip(*c)] for c in clusters]
-        return (cluster_centers,clusters,users_per_cluster),0
+        results = []
+        for centers,pts,users in zip(cluster_centers,clusters,users_per_cluster):
+            results.append({"users":users,"cluster members":pts,"tools":[],"num users":len(users),"center":centers})
+
+        return results,0
