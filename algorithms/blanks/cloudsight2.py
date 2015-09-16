@@ -52,6 +52,8 @@ for subject_id in subjects:
             r = requests.get(get_url,headers=header)
 
             t = json.loads(r.text)
+            print t
+            assert False
             found_animal = False
 
             try:

@@ -209,9 +209,30 @@ def sigmoid_prime(z):
     """Derivative of the sigmoid function."""
     return sigmoid(z)*(1-sigmoid(z))
 
+import matplotlib.pyplot as plt
+
 if __name__ == "__main__":
     training_data, validation_data, test_data = load_data_wrapper()
     print type(test_data[0][0])
+    print test_data[0][0].shape
+
+
+    for array,c in test_data:
+        print array
+        print c
+        for index,i in enumerate(array):
+            print i
+            if i[0] > 0:
+                x = index%28
+                y = index/28
+                plt.plot(x,y,"o",color="blue")
+
+        plt.ylim((28,0))
+        plt.xlim((0,28))
+        print c
+        plt.show()
+
+    print len(test_data[0])
     assert False
     net = Network([784, 100, 10])
     net.SGD(training_data, 30, 10, 3.0, test_data=test_data)

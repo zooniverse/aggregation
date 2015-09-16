@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 __author__ = 'greg'
 import sys
-# sys.path.append("/home/greg/github/reduction/engine")
+sys.path.append("/home/greg/github/reduction/engine")
 sys.path.append("/home/ggdhines/PycharmProjects/reduction/engine")
-
+import automatic_optics
 import pymongo
 import agglomerative
 import aggregation_api
@@ -17,8 +17,9 @@ import os
 import math
 # import yaml
 import csv
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 # import classification
+import matplotlib.cbook as cbook
 
 global_workflow_id = -1
 global_task_id = 1
@@ -26,11 +27,11 @@ global_version = 1
 
 class Penguins(aggregation_api.AggregationAPI):
     def __init__(self):
-        aggregation_api.AggregationAPI.__init__(self,project = -1, environment="penguins")
+        aggregation_api.AggregationAPI.__init__(self,project = -1, environment="penguins",panoptes_connect=False)
         self.project_id = -1
         # connect to the mongo server
         client = pymongo.MongoClient()
-        db = client['penguin_2015-05-08']
+        db = client['penguin_2015-06-01']
         self.classification_collection = db["penguin_classifications"]
         self.subject_collection = db["penguin_subjects"]
 
@@ -75,6 +76,67 @@ class Penguins(aggregation_api.AggregationAPI):
         # which subjects were taken at which site
         self.subject_to_site = {}
 
+        default_clustering_algs = {"point":automatic_optics.AutomaticOptics}
+        reduction_algs = {}
+        # self.__set_clustering_algs__(default_clustering_algs,reduction_algs)
+
+    def __cassandra_annotations__(self,workflow_id,subject_set):
+        """
+        get the annotations from Cassandra
+        :return:
+        """
+        assert isinstance(subject_set,list) or isinstance(subject_set,set)
+
+        version = int(math.floor(float(self.versions[workflow_id])))
+
+        # todo - do this better
+        width = 2000
+        height = 2000
+
+        classification_tasks,marking_tasks = self.workflows[workflow_id]
+        raw_classifications = {}
+        raw_markings = {}
+
+        if subject_set is None:
+            subject_set = self.__load_subjects__(workflow_id)
+
+        total = 0
+
+        # do this in bite sized pieces to avoid overwhelming DB
+        for s in self.__chunks__(subject_set,15):
+            statements_and_params = []
+
+            if self.ignore_versions:
+                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ?")
+            else:
+                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
+
+            for subject_id in s:
+                if self.ignore_versions:
+                    params = (int(self.project_id),subject_id,int(workflow_id))
+                else:
+                    params = (int(self.project_id),subject_id,int(workflow_id),version)
+                statements_and_params.append((select_statement, params))
+            results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
+
+            for subject_id,(success,record_list) in zip(s,results):
+                if not success:
+                    print record_list
+                assert success
+
+
+                # seem to have the occasional "retired" subject with no classifications, not sure
+                # why this is possible but if it can happen, just make a note of the subject id and skip
+                if record_list == []:
+                    # print "warning :: subject " + str(subject_id) + " has no classifications"
+                    continue
+
+                for ii,record in enumerate(record_list):
+                    if record.user_id not in self.experts:
+                        yield subject_id,record.user_id,record.annotations
+
+        raise StopIteration()
+
     def __cassandra_connect__(self):
         """
         connect to the AWS instance of Cassandra - try 10 times and raise an error
@@ -89,6 +151,8 @@ class Penguins(aggregation_api.AggregationAPI):
                 pass
 
         assert False
+
+
 
     def __get_related_subjects__(self,workflow_id,subject_id):
         stmt = "select user_id from " + str(self.classification_table) + " where project_id = " + str(self.project_id) + " and subject_id = '" + str(subject_id) + "' and workflow_id = " + str(global_workflow_id) + " and workflow_version = " + str(global_version)
@@ -139,7 +203,7 @@ class Penguins(aggregation_api.AggregationAPI):
         stmt = """select annotations from """+ str(self.classification_table)+""" where project_id = """ + str(self.project_id) + """ and subject_id = '""" + str(subject_id) + """' and workflow_id = """ + str(workflow_id) + """ and workflow_version = """+ version + """ and user_id = '""" + str(self.experts[0]) + "'"
         # print stmt
         expert_annotations = self.cassandra_session.execute(stmt)
-
+        return expert_annotations
         # print expert_annotations
 
 
@@ -310,6 +374,9 @@ class Penguins(aggregation_api.AggregationAPI):
 
         return image_path
 
+    def __get_expert_markings__(self,subject_id):
+        return self.classification_collection.find_one({"subjects.zooniverse_id":subject_id,"user_name":self.experts[0]})
+
     def __in_roi__(self,subject_id,marking):
         """
         does the actual checking
@@ -465,7 +532,12 @@ class Penguins(aggregation_api.AggregationAPI):
         :return:
         """
         if subject_id not in self.subject_to_site:
-            path = self.subject_collection.find_one({"zooniverse_id":subject_id})["metadata"]["path"]
+            try:
+                path = self.subject_collection.find_one({"zooniverse_id":subject_id})["metadata"]["path"]
+            except TypeError:
+                print subject_id
+                print self.subject_collection.find_one({"zooniverse_id":subject_id})
+                raise
             assert isinstance(path,unicode)
             slash_index = path.index("/")
             underscore_index = path.index("_")
@@ -551,4 +623,27 @@ if __name__ == "__main__":
     # subjects = project.__get_subject_ids__()
 
     # print project.__get_retired_subjects__(1,True)
-    project.__aggregate__(workflows=[global_workflow_id],subject_set=project.__get_retired_subjects__(1,False))
+
+    for subject_id in project.__get_retired_subjects__(1,True)[:1]:
+        fname = project.__image_setup__(subject_id)
+
+        fig = plt.figure()
+        axes = fig.add_subplot(1, 1, 1)
+        image_file = cbook.get_sample_data(fname)
+        image = plt.imread(image_file)
+        # fig, ax = plt.subplots()
+        im = axes.imshow(image)
+
+        clusters = project.__aggregate__(workflows=[global_workflow_id],subject_set=[subject_id],store_values=False)[subject_id][1]["point clusters"]
+
+        for cluster_index in clusters:
+            if cluster_index not in ["param","all_users"]:
+                center = clusters[cluster_index]["center"]
+                plt.plot(center[0],center[1],"o",color="blue")
+            # print clusters[cluster_index]
+
+        for marking in project.__get_expert_markings__(subject_id)["annotations"][1]["value"].values():
+            plt.plot(float(marking["x"]),float(marking["y"]),"o",color="green")
+
+        # plt.ylim((520,360))
+        plt.show()

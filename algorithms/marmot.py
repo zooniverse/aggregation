@@ -22,7 +22,6 @@ class Marmot:
         self.root = tkinter.Tk()
         self.root.geometry('900x700')
         self.root.title("Marmot")
-
         self.root.resizable(False,False)
 
         # ttk stuff - congrads if you understand the difference between tkinter and ttk
