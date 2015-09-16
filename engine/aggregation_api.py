@@ -1518,7 +1518,6 @@ class AggregationAPI:
         for ii,t in enumerate(cur.fetchall()):
             print ii
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
-            print project_id,workflow_id
             # can't really handle pairwise comparisons yet
             assert len(subject_ids) == 1
             # self.migrated_subjects.add(subject_ids[0])
@@ -1559,12 +1558,10 @@ class AggregationAPI:
             if len(statements_and_params) == 100:
                 results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
                 statements_and_params = []
-                print results
 
         # insert any "left over" classifications
         if statements_and_params != []:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
-            print results
 
         # now update the subject ids
         statements_and_params = []
@@ -1576,7 +1573,6 @@ class AggregationAPI:
 
             if len(statements_and_params) == 100:
                 results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
-                print results
                 # statements_and_params = []
         if statements_and_params != []:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
