@@ -173,7 +173,7 @@ def hesse_line_reduction(line_segments):
 
 
 class AggregationAPI:
-    def __init__(self,project=None,environment=None,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None),panoptes_connect=True):#,user_threshold= None, score_threshold= None): #Supernovae
+    def __init__(self,project=None,environment=None,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None)):#,user_threshold= None, score_threshold= None): #Supernovae
 
         self.cluster_algs = None
         self.classification_alg = None
@@ -224,13 +224,13 @@ class AggregationAPI:
             # tries to avoid causing problems with the production DB
             if expanduser("~") == "/home/greg":
                 self.__postgres_connect__(database_details["local_host"])
+                self.__cassandra_connect__("local_host")
             else:
                 self.__postgres_connect__(database_details[self.environment])
+                # and to the cassandra db as well
+                self.__cassandra_connect__(self.environment)
 
-            # and to the cassandra db as well
-            self.__cassandra_connect__()
-
-            # will only override this for ouroboros instances
+            # use for Cassandra connection - can override for Ourboros projects
             self.classification_table = "classifications"
 
         # get my userID and password
@@ -245,35 +245,33 @@ class AggregationAPI:
             return
 
         print "connecting to Panoptes http api"
-        if panoptes_connect:
-            if user_id is None:
-                user_id = api_details[self.environment]["name"]
-            if password is None:
-                password = api_details[self.environment]["password"]
-            # set the http_api and basic project details
-            # if project id is given, connect using basic values - assume we are in production space
-            # if project id is given as an int, assume that it is referring to the Panoptes id
-            self.__panoptes_connect__(api_details[self.environment],user_id,password)
+        # todo - allow for public connections where user_id and password are not needed
+        if user_id is None:
+            user_id = api_details[self.environment]["name"]
+        if password is None:
+            password = api_details[self.environment]["password"]
+        self.__panoptes_connect__(api_details[self.environment],user_id,password)
 
+        # if project id is given, connect using basic values - assume we are in production space
+        # if project id is given as an int, assume that it is referring to the Panoptes id
+        try:
+            self.project_id = int(project)
+        except ValueError:
+            # we were given a project string name - so try looking for the number in either config file
+            # or connect to panoptes to fine out
+            if "project_id" in api_details[project]:
+                self.project_id = int (api_details[project]["project_id"])
+            else:
+                # owner and project_id are only relevant if we do not have the project_id
+                self.owner = api_details[project]["owner"]
+                self.project_name = api_details[project]["project_name"]
+                self.project_id = self.__get_project_id()
 
-            try:
-                self.project_id = int(project)
-            except ValueError:
-                # we were given a project string name - so try looking for the number in either config file
-                # or connect to panoptes to fine out
-                if "project_id" in api_details[project]:
-                    self.project_id = int (api_details[project]["project_id"])
-                else:
-                    # owner and project_id are only relevant if we do not have the project_id
-                    self.owner = api_details[project]["owner"]
-                    self.project_name = api_details[project]["project_name"]
-                    self.project_id = self.__get_project_id()
-
-            # there may be more than one workflow associated with a project - read them all in
-            # and set up the associated tasks
-            self.workflows,self.versions,self.instructions,self.updated_at_timestamps = self.__get_workflow_details__()
-            self.retirement_thresholds = self.__get_retirement_threshold__()
-            self.workflow_names = self.__get_workflow_names__()
+        # there may be more than one workflow associated with a project - read them all in
+        # and set up the associated tasks
+        self.workflows,self.versions,self.instructions,self.updated_at_timestamps = self.__get_workflow_details__()
+        self.retirement_thresholds = self.__get_retirement_threshold__()
+        self.workflow_names = self.__get_workflow_names__()
 
         # if a specific workflow id has been provided:
         if "workflow_id" in api_details[project]:
@@ -323,6 +321,14 @@ class AggregationAPI:
 
         # bit of a stop gap measure - stores how many people have classified a given subject
         self.classifications_per_subject = {}
+
+        # do we want to aggregate over only retired subjects?
+        self.only_retired_subjects = True
+        # do we want to aggregate over only subjects that have been retired/classified since
+        # the last time we ran the code?
+        # retire => self.only_retired_subjects = True
+        self.only_recent_subjects = False
+
 
     def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[]),expert=None,store_values=True):
         """
@@ -460,23 +466,22 @@ class AggregationAPI:
             raise StopIteration()
         return annotation_generator
 
-    def __cassandra_connect__(self):
+    def __cassandra_connect__(self,environment):
         """
         connect to the AWS instance of Cassandra - try 10 times and raise an error
         :return:
         """
         for i in range(10):
             try:
-                if self.environment == 'production':
+                if environment == 'production':
                     print "connecting to production Cassandra"
                     self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
-                elif self.environment == 'staging':
+                elif environment == 'staging':
+                    print "connecting to staging Cassandra"
                     self.cluster = Cluster(['panoptes-cassandra-staging.zooniverse.org'])
                 else:
-                    print "connecting to staging Cassandra"
-                    self.cluster = Cluster(['cassandra'])
-
-                # self.cluster = Cluster()
+                    print "connecting to local Cassandra instance"
+                    self.cluster = Cluster()
 
                 try:
                     self.cassandra_session = self.cluster.connect("zooniverse")
@@ -789,8 +794,13 @@ class AggregationAPI:
         if exc_type == InstanceAlreadyRunning:
             pass
         else:
-            # proper exit - clean up afterwards and remove lock file
-            pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
+            # if no error happened - update the timestamp
+            # else - the next run will start at the old time stamp (which we want)
+            if exc_type is None:
+                pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
+
+            # shutdown the connection to Cassandra and remove the lock so other aggregation instances
+            # can run
             self.cassandra_session.shutdown()
             os.remove(expanduser("~")+"/aggregation.lock")
 
@@ -1094,8 +1104,8 @@ class AggregationAPI:
         :return:
         """
         subjects = []
-        if True:# only_retired_subjects:
-            if False:#only_recent_subjects:
+        if self.only_retired_subjects:
+            if self.only_recent_subjects:
                 timestamp = self.updated_at_timestamps[workflow_id]
             else:
                 timestamp = datetime.datetime(2000,01,01)
@@ -1116,18 +1126,12 @@ class AggregationAPI:
             for subject in cursor.fetchall():
                 subjects.append(subject[0])
         else:
-            print "here there"
             # stmt = "SELECT subject_id,workflow_version FROM \"classifications\" WHERE \"project_id\" = " + str(self.project_id) + " and \"workflow_id\" = " + str(workflow_id) + " and \"updated_at\" > '" + str(datetime.datetime(2000,1,1)) +"'"
             stmt = "SELECT subject_id,workflow_version FROM classifications WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)# + " and \"updated_at\" > '" + str(datetime.datetime(2000,1,1)) +"'"
-            print stmt
             # filter for subjects which have the correct major version number
-            print [int(r.workflow_version) for r in self.cassandra_session.execute(stmt)]
-            print int(self.versions[workflow_id])
-            # subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt) if int(r.workflow_version) == int(self.versions[workflow_id]) ])
-            print subjects
-            assert False
+            subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt) if int(r.workflow_version) == int(self.versions[workflow_id]) ])
 
-        return subjects
+        return list(subjects)
 
     def __get_subject_metadata__(self,subject_id):
         print self.host_api+"subjects/"+str(subject_id)+"?"
@@ -1388,12 +1392,12 @@ class AggregationAPI:
 
         return image_path
 
-    def __list_all_projects__(self):
-        postgres_cursor = self.postgres_session.cursor()
-        postgres_cursor.execute("select * from projects")
-        for i in postgres_cursor.fetchall():
-            if "solar" in i[2].lower():
-                print i[0],i[2]
+    # def __list_all_projects__(self):
+    #     postgres_cursor = self.postgres_session.cursor()
+    #     postgres_cursor.execute("select * from projects")
+    #     for i in postgres_cursor.fetchall():
+    #         if "solar" in i[2].lower():
+    #             print i[0],i[2]
 
     # def __list_all_versions__(self):
     #     request = urllib2.Request(self.host_api+"workflows/6/versions?")
@@ -1477,26 +1481,28 @@ class AggregationAPI:
         if self.csv_classification_file is not None:
             return
 
+        # uncomment this code if this is the first time you've run migration on whatever machine
+        # will create the necessary cassandra tables for you - also useful if you need to reset
+        try:
+            self.cassandra_session.execute("drop table classifications")
+            self.cassandra_session.execute("drop table subjects")
+            print "tables dropped"
+        except cassandra.InvalidRequest:
+            print "tables did not already exist"
 
-        # try:
-        #     self.cassandra_session.execute("drop table classifications")
-        #     self.cassandra_session.execute("drop table subjects")
-        #     print "table dropped"
-        # except cassandra.InvalidRequest:
-        #     print "table did not already exist"
-        #
-        # try:
-        #     self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
-        # except cassandra.AlreadyExists:
-        #     pass
-        #
-        # try:
-        #     self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
-        # except cassandra.AlreadyExists:
-        #     pass
+        try:
+            self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
+        except cassandra.AlreadyExists:
+            pass
+
+        try:
+            self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
+        except cassandra.AlreadyExists:
+            pass
 
         subject_listing = set()
 
+        # only migrate classifications created since we last ran this code
         select = "SELECT * from classifications where project_id="+str(self.project_id) +" and created_at >= '" + str(self.old_time) +"'"
         cur = self.postgres_session.cursor()
         cur.execute(select)
@@ -1512,8 +1518,8 @@ class AggregationAPI:
         for ii,t in enumerate(cur.fetchall()):
             print ii
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
-            # print t
-            # assert False
+            print project_id,workflow_id
+            # can't really handle pairwise comparisons yet
             assert len(subject_ids) == 1
             # self.migrated_subjects.add(subject_ids[0])
 
@@ -1535,12 +1541,13 @@ class AggregationAPI:
                 migrated[id] = 0
             migrated[id] += 1
 
-            if isinstance(annotations,dict):
+            # cassandra can only handle json in str format - so convert if necessary
+            # "if necessary" - I think annotations should always start off as json format but
+            # I seem to remember sometime, somehow, that that wasn't the case - so just to be sure
+            if isinstance(annotations,dict) or isinstance(annotations,list):
                 annotations = json.dumps(annotations)
 
-            if not isinstance(annotations,str):
-                continue
-            # assert isinstance(annotations,str)
+            assert isinstance(annotations,str)
 
             params = (project_id, user_id, workflow_id,created_at, annotations, updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], workflow_version,json.dumps(metadata))
             statements_and_params.append((insert_statement, params))
@@ -1552,10 +1559,12 @@ class AggregationAPI:
             if len(statements_and_params) == 100:
                 results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
                 statements_and_params = []
+                print results
 
         # insert any "left over" classifications
         if statements_and_params != []:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
+            print results
 
         # now update the subject ids
         statements_and_params = []
@@ -1567,9 +1576,11 @@ class AggregationAPI:
 
             if len(statements_and_params) == 100:
                 results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
-                statements_and_params = []
+                print results
+                # statements_and_params = []
         if statements_and_params != []:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
+            # print results
 
     def __panoptes_call__(self,url):
         """
