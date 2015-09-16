@@ -60,6 +60,12 @@ class ImproperTool(Exception):
         return "improper tool: " + str(self.tool)
 
 
+class InstanceAlreadyRunning(Exception):
+    def __init__(self):
+        pass
+    def __str__(self):
+        return "aggregation engine already running"
+
 # extract the relevant params for different shapes from the json blob
 # todo - do a better job of checking to make sure that the marking lies within the image dimension
 # todo - also generalize to ROI
@@ -768,11 +774,25 @@ class AggregationAPI:
         zipf.close()
 
     def __enter__(self):
+        # check if another instance of the aggregation engine is already running
+        # if so, raise an error
+        # if not, create the lock file to prevent another instance from starting
+        # todo - maybe write something to the lock file in case another instance checks at the
+        # todo - exact same time. What about instances for different projects?
+        if os.path.isfile(expanduser("~")+"/aggregation.lock"):
+            raise InstanceAlreadyRunning()
+        open(expanduser("~")+"/aggregation.lock","w").close()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
-        self.cassandra_session.shutdown()
+        # if another instance is already running - don't do anything, just exit
+        if exc_type == InstanceAlreadyRunning:
+            pass
+        else:
+            # proper exit - clean up afterwards and remove lock file
+            pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
+            self.cassandra_session.shutdown()
+            os.remove(expanduser("~")+"/aggregation.lock")
 
 
 
