@@ -26,6 +26,8 @@ import numpy
 import random
 import cPickle as pickle
 import csv
+import zipfile
+from os.path import expanduser
 # setup(
 #     name = "Zooniverse Aggregation",
 #     version = "0.1",
@@ -81,6 +83,8 @@ def relevant_line_params(marking,image_dimensions):
         return x2,y2,x1,y1
 
 
+# the following convert json blobs into sets of values we can actually cluster on
+# todo - do a better job with checking whether the markings fall within the image_dimensions
 def relevant_point_params(marking,image_dimensions):
     # todo - this has to be changed
     image_dimensions = 1000,1000
@@ -122,6 +126,12 @@ def relevant_ellipse_params(marking,image_dimensions):
     return marking["x"],marking["y"],marking["rx"],marking["ry"],marking["angle"]
 
 
+def relevant_polygon_params(marking,image_dimensions):
+    points = marking["points"]
+    return tuple([(p["x"],p["y"]) for p in points])
+
+
+
 # mappings are for use in dimension reduction
 def identity_mapping(markings):
     return markings
@@ -157,7 +167,7 @@ def hesse_line_reduction(line_segments):
 
 
 class AggregationAPI:
-    def __init__(self,project=None,environment=None,db_connection=True,user_id=None,password=None,cassandra_connection=True,(csv_classification_file,csv_subject_file)=(None,None),panoptes_connect=True):#,user_threshold= None, score_threshold= None): #Supernovae
+    def __init__(self,project=None,environment=None,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None),panoptes_connect=True):#,user_threshold= None, score_threshold= None): #Supernovae
 
         self.cluster_algs = None
         self.classification_alg = None
@@ -172,6 +182,7 @@ class AggregationAPI:
         self.marking_params_per_shape["ellipse"] = relevant_ellipse_params
         self.marking_params_per_shape["rectangle"] = relevant_rectangle_params
         self.marking_params_per_shape["circle"] = relevant_circle_params
+        self.marking_params_per_shape["polygon"] = relevant_polygon_params
 
         self.csv_classification_file = csv_classification_file
 
@@ -192,26 +203,29 @@ class AggregationAPI:
         # only continue the set up if the project name is given
         # self.project_short_name = project
 
-        # only try to connect to Panoptes db stuff if we haven't been provided the csv files
+        self.postgres_session = None
+        self.cassandra_session = None
+        # only try to connect to the databases if we haven't been provided the csv files
         if csv_classification_file is None:
-            # connect to the Panoptes db - postgres
-            # even if we are running an ouroboros project we will want to connect to Postgres
-            self.postgres_session = None
-            if db_connection and (csv_classification_file is None):
-                try:
-                    database_file = open("config/database.yml")
-                except IOError:
-                    database_file = open(base_directory+"/Databases/database.yml")
 
-                database_details = yaml.load(database_file)
+            try:
+                database_file = open("config/database.yml")
+            except IOError:
+                database_file = open(base_directory+"/Databases/database.yml")
+
+            database_details = yaml.load(database_file)
+            # if we are running on Greg's computer(s), connect to a local (and slightly out of date) DB instance
+            # tries to avoid causing problems with the production DB
+            if expanduser("~") == "/home/greg":
+                self.__postgres_connect__(database_details["local_host"])
+            else:
                 self.__postgres_connect__(database_details[self.environment])
 
-            if cassandra_connection:
-                # and to the cassandra db as well
-                self.__cassandra_connect__()
+            # and to the cassandra db as well
+            self.__cassandra_connect__()
 
-                # will only override this for ouroboros instances
-                self.classification_table = "classifications"
+            # will only override this for ouroboros instances
+            self.classification_table = "classifications"
 
         # get my userID and password
         # purely for testing, if this file does not exist, try opening on Greg's computer
@@ -253,14 +267,30 @@ class AggregationAPI:
             # and set up the associated tasks
             self.workflows,self.versions,self.instructions,self.updated_at_timestamps = self.__get_workflow_details__()
             self.retirement_thresholds = self.__get_retirement_threshold__()
+            self.workflow_names = self.__get_workflow_names__()
 
         # if a specific workflow id has been provided:
         if "workflow_id" in api_details[project]:
             workflow_id = int(api_details[project]["workflow_id"])
-            self.workflows = {workflow_id: self.workflows[workflow_id]}
+            try:
+                self.workflows = {workflow_id: self.workflows[workflow_id]}
+            except KeyError:
+                print "could not given desired workflow: " + str(workflow_id)
+                print "here's the workflows we do have"
+                print self.workflows
+                raise
 
         # load the default clustering algorithms
-        default_clustering_algs = {"point":agglomerative.Agglomerative,"circle":agglomerative.Agglomerative,"ellipse": agglomerative.Agglomerative,"rectangle":blob_clustering.BlobClustering,"line":agglomerative.Agglomerative}
+        default_clustering_algs = dict()
+        # the following shapes using the basic agglomerative clustering
+        default_clustering_algs["point"] = agglomerative.Agglomerative
+        default_clustering_algs["circle"] = agglomerative.Agglomerative
+        default_clustering_algs["ellipse"] = agglomerative.Agglomerative
+        default_clustering_algs["line"] = agglomerative.Agglomerative
+        # these shapes use the blob clustering approach
+        default_clustering_algs["rectangle"] = blob_clustering.BlobClustering
+        default_clustering_algs["polygon"] = blob_clustering.BlobClustering
+        # and set any reduction algorithms - to reduce the dimensionality of markings
         reduction_algs = {"line":hesse_line_reduction}
         self.__set_clustering_algs__(default_clustering_algs,reduction_algs)
 
@@ -285,6 +315,9 @@ class AggregationAPI:
         self.marking_csv_files = {}
         self.classification_csv_files = {}
 
+        # bit of a stop gap measure - stores how many people have classified a given subject
+        self.classifications_per_subject = {}
+
     def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[]),expert=None,store_values=True):
         """
         you can provide a list of clusters - hopefully examples of both true positives and false positives
@@ -306,7 +339,7 @@ class AggregationAPI:
 
         for workflow_id in workflows:
             if subject_set is None:
-                subject_set = self.__get_subjects__(workflow_id,only_retired_subjects=True)
+                subject_set = self.__get_subjects__(workflow_id,only_retired_subjects=False)
                 # subject_set = self.__load_subjects__(workflow_id)
 
             print "workflow id : " + str(workflow_id)
@@ -429,12 +462,12 @@ class AggregationAPI:
         for i in range(10):
             try:
                 if self.environment == 'production':
-                    print "connecting here"
+                    print "connecting to production Cassandra"
                     self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
                 elif self.environment == 'staging':
                     self.cluster = Cluster(['panoptes-cassandra-staging.zooniverse.org'])
                 else:
-                    print "connecting there"
+                    print "connecting to staging Cassandra"
                     self.cluster = Cluster(['cassandra'])
 
                 # self.cluster = Cluster()
@@ -507,9 +540,20 @@ class AggregationAPI:
         """
         for when we want to double check the number of classifications a subject has received
         """
+        # check to see if we have previously stored values, hopefully will task on calls to the DB
+        if workflow_id in self.classifications_per_subject:
+            if subject_id in self.classifications_per_subject[workflow_id]:
+                return self.classifications_per_subject[workflow_id][subject_id]
+        else:
+            self.classifications_per_subject[workflow_id] = {}
+
         cursor = self.postgres_session.cursor()
         cursor.execute("SELECT count(*) from classifications where workflow_id="+str(workflow_id) +" AND subject_ids=ARRAY["+ str(subject_id) + "]")
-        return int(cursor.fetchone()[0])
+        count = int(cursor.fetchone()[0])
+
+        self.classifications_per_subject[workflow_id][subject_id] = count
+
+        return count
 
     def __csv_annotations__(self,workflow_id_filter,subject_set):
         # find the major id of the workflow we are filtering
@@ -550,29 +594,49 @@ class AggregationAPI:
         """
         open csv files for each output and write headers for each file
         """
+        # start by creating a directory specific to this workflow (and project if necessary)
+        output_directory = "/tmp/"+str(self.project_id)+"/"
+        if not os.path.exists(output_directory):
+            os.makedirs(output_directory)
+
+        # remove any bad characters
+        workflow_name = self.workflow_names[workflow_id]
+        workflow_name = re.sub(" ","_",workflow_name)
+
+        output_directory += workflow_name +"/"
+        if not os.path.exists(output_directory):
+            os.makedirs(output_directory)
+
+        # close any previously opened files - needed when we have multiple workflows per porject
+        for f in self.marking_csv_files.values():
+            assert isinstance(f,file)
+            f.close()
+
+        for f in self.classification_csv_files.values():
+            assert isinstance(f,file)
+            f.close()
+
+        # and reset
+        self.marking_csv_files = {}
+        self.classification_csv_files = {}
 
         classification_tasks,marking_tasks = self.workflows[workflow_id]
-
         for task in marking_tasks:
-            self.marking_csv_files[task] = open("/tmp/"+str(workflow_id)+"_task_"+task+"_marking.csv","wb")
+            self.marking_csv_files[task] = open(output_directory+str(workflow_id)+"_task_"+task+"_marking.csv","wb")
 
-            # build up the header row
-            header = "subject_id"
-            for tool_id in sorted(self.instructions[workflow_id][task]["tools"].keys()):
-                tool = self.instructions[workflow_id][task]["tools"][tool_id]["marking tool"]
-                header += ","+tool
-            header += ",mean probability,median probability,mean tool likelihood,median tool likelihood,number of users,ignored classifications due to workflow changes"
-            self.marking_csv_files[task].write(header+"\n")
+
 
         for task in classification_tasks:
             # use the instruction label to create the csv file name
-
+            # todo - what if the instruction labels are the same?
             fname = self.instructions[workflow_id][task]["instruction"][:50]
+
+            # remove any characters which shouldn't be in a file name
             fname = re.sub(" ","_",fname)
             fname = re.sub("\?","",fname)
             fname = re.sub("\*","",fname)
             fname += ".csv"
-            self.classification_csv_files[task] = open("/tmp/"+fname,"wb")
+            self.classification_csv_files[task] = open(output_directory+fname,"wb")
             header = "subject_id"
             for answer_index in sorted(self.instructions[workflow_id][task]["answers"].keys()):
                 answer = self.instructions[workflow_id][task]["answers"][answer_index]
@@ -583,20 +647,33 @@ class AggregationAPI:
             self.classification_csv_files[task].write(header+"\n")
 
     def __csv_classification_output__(self,workflow_id,task_id,subject_id,aggregations):
-        # check to see if the correct number of classifications were received
-        if self.__count_check__(workflow_id,subject_id) < self.__get_retirement_threshold__(workflow_id):
-            return
-        # print
-
+        """
+        add a row to the classifciation csv output file
+        """
+        # first column is the subject id
         row = str(subject_id)
+
+        # now go through each of the possible resposnes
         for answer_index in self.instructions[workflow_id][task_id]["answers"].keys():
             # at some point the integer indices seem to have been converted into strings
+            # if a value isn't there - use 0
             if str(answer_index) in aggregations[0].keys():
                 row += "," + str(aggregations[0][str(answer_index)])
             else:
                 row += ",0"
+
+        # add the number of people who saw this subject
         row += "," + str(aggregations[1])
         self.classification_csv_files[task_id].write(row+"\n")
+
+    def __csv_marking_header_setup__(self,workflow_id,task):
+        # build up the header row
+        header = "subject_id"
+        for tool_id in sorted(self.instructions[workflow_id][task]["tools"].keys()):
+            tool = self.instructions[workflow_id][task]["tools"][tool_id]["marking tool"]
+            header += ","+tool
+        header += ",mean probability,median probability,mean tool likelihood,median tool likelihood,number of users"
+        self.marking_csv_files[task].write(header+"\n")
 
     def __csv_marking__output__(self,workflow_id,task_id,subject_id,aggregations,tasks):
         """
@@ -607,6 +684,9 @@ class AggregationAPI:
         tool_history = []
         existence_history = []
 
+        # determine how many users classified this image
+        # if '0' - a back up way in case "all_users" isn't there
+        # todo - figure out why all_users isn't always there and why the back up case sometimes fails too
         if "all_users" in aggregations["point clusters"]:
             num_users = len(aggregations["point clusters"]["all_users"])
         else:
@@ -615,35 +695,10 @@ class AggregationAPI:
             else:
                 return
 
-        error_str = ""
-
-        if num_users != "error":
-            if self.csv_classification_file is None:
-                annotation_generator = self.__cassandra_annotations__(True)
-            else:
-                annotation_generator = self.__csv_annotations__
-
-            if num_users < self.__get_retirement_threshold__(workflow_id):
-                count = 0
-                for i in annotation_generator(workflow_id,[subject_id]):
-                    count += 1
-                # print subject_id, count
-
-                if count < self.__get_retirement_threshold__(workflow_id):
-                    return
-
-                error_str = "Yes"
-
-        # if aggregations["point clusters"].keys() != ["all_users"]:
-
-            # print self.instructions[workflow_id][task_id]["tools"]
         for cluster_index in aggregations["point clusters"].keys():
             if cluster_index in ["param","all_users"]:
                 continue
 
-            # if cluster_index == "all_users":
-            #     num_users = aggregations["point clusters"][cluster_index]
-            # else:
             cluster = aggregations["point clusters"][cluster_index]
             existence = cluster["existence"][0]["1"]
             if existence >= 0.5:
@@ -660,149 +715,57 @@ class AggregationAPI:
             row += "," + str(counts[i])
 
         if tool_history != []:
-            row += ","+str(numpy.mean(existence_history)) + "," + str(numpy.median(existence_history)) + ","+ str(numpy.mean(tool_history)) + ","+str(numpy.median(tool_history))+","+str(num_users)+","+error_str
+            row += ","+str(numpy.mean(existence_history)) + "," + str(numpy.median(existence_history)) + ","+ str(numpy.mean(tool_history)) + ","+str(numpy.median(tool_history))+","+str(num_users)
         else:
-            row += ",,,,"+str(num_users)+","+error_str
+            row += ",,,,"+str(num_users)
 
         self.marking_csv_files[task_id].write(row+"\n")
 
         # assert False
 
-    def __csv_output__(self,given_workflows = None, compress = False):
-        if given_workflows is None:
-            workflows = self.workflows
-        else:
-            workflows = [given_workflows]
-
-        print workflows
-
-
-
-        # self.clustering_headers = ["subject_id", "shape","cluster_index","most_likely_tool", "x", "y", "height","width","rotation", "number_of_users_per_subject", "number_of_users_per_cluster","probability_of_existence", "probability_of_most_likely_tool"]
-        # self.classification_headers = ["subject_id",  "number_of_users"]
-        # todo - the following are only relevant for followup questions which still need to be done
-        # "shape","cluster_index","followup_index",
-
-        headers_per_task = {}
-
-        # if compress:
-        #     tarball = tarfile.open("/tmp/"+str(self.project_id)+"export.tar.gz", "w:gz")
-
-        for workflow_id in workflows:
+    def __csv_output__(self):
+        """
+        create the csv outputs for a given set of workflows
+        the workflows are specified by self.workflows which is determined when the aggregation engine starts
+        a zipped file is created in the end
+        """
+        for workflow_id in self.workflows:
             print "csv output for workflow - " + str(workflow_id)
-            print self.instructions[workflow_id]
             self.__csv_file_setup__(workflow_id)
-            # assert False
-            # json.dump(self.instructions[workflow_id],open("/tmp/workflow_"+str(workflow_id)+"_instructions.json","wb"),indent=4)
-            #
-            # # yield task_id,r[0],int(cluster_index),shape,int(most_likely_tool),p_x,p_y,height,width,rotation,number_of_users_per_subject,number_of_users_per_cluster,probability_of_existence,tool_probability
             classification_tasks,marking_tasks = self.workflows[workflow_id]
-            # csv_files = {}
-            # for c in classification_tasks:
-            #     if isinstance(classification_tasks[c],dict):
-            #         print "skipping"
-            #         continue
-            #
-                # csv_files[c+"c"] = open("/tmp/workflow_"+str(workflow_id)+"_task_"+c+"_classification.csv","wb")
-            #     # csv_files[c+"c"].write("subject id, shape,cluster index,followup index, most likely label, probability of most likely label, number of users\n")
-            #     # start with the basic headers and add on ones specific to the task at hand
-            #     headers_per_task[c] = self.classification_headers[:]
-            #     for answers_index in self.instructions[workflow_id][c]["answers"]:
-            #         answer = str(self.instructions[workflow_id][c]["answers"][answers_index])
-            #         # bit of a sanity check
-            #         answer = answer.replace("\"","")
-            #         answer = answer.replace(",","")
-            #         headers_per_task[c].append("p\""+answer+"\"")
-            #
-            #     header_string = ",".join(headers_per_task[c]) + "\n"
-            #     # print classification_tasks
-            #     # print c
-            #     # print self.instructions[workflow_id][c]
-            #     # for answers_index in self.instructions[workflow_id][c]["answers"]:
-            #     #     headers += "p("+str(self.instructions[workflow_id][c]["answers"][answers_index])+"),"
-            #
-            #     # headers = headers[:-1] + "\n"
-            #     csv_files[c+"c"].write(header_string)
-            #
-            # for c in marking_tasks:
-            #     csv_files[c+"m"] = open("/tmp/workflow_"+str(workflow_id)+"_task_"+c+"_marking.csv","wb")
-            # #     headers = ",".join(self.clustering_headers) + "\n"
-            # #     csv_files[c+"m"].write(headers)
 
             retired_subjects = self.__get_subjects__(workflow_id,only_retired_subjects=True,only_recent_subjects=False)
             for subject_id,task_id,aggregations in self.__yield_aggregations__(workflow_id):
-                if subject_id not in retired_subjects:
+                # check to see if the correct number of classifications were received
+                # todo - this is only a stop gap measure until we figure out why some subjects are being
+                # todo - retired early. Once that is done, we can remove this
+                if self.__count_check__(workflow_id,subject_id) < self.retirement_thresholds[workflow_id]:
                     continue
-                # print subject_id,task_id,aggregations
-                # print marking_tasks
-                # print classification_tasks
 
                 # are there markings associated with this task?
                 if task_id in marking_tasks:
                     self.__csv_marking__output__(workflow_id,task_id,subject_id,aggregations,marking_tasks[task_id])
 
+                # are there any classifications associated with this task
                 if task_id in classification_tasks:
                     self.__csv_classification_output__(workflow_id,task_id,subject_id,aggregations)
-                continue
 
-                # subject_id = record[1]
-                # print aggregation_dict
-                # subject_id = aggregation_dict["subject_id"]
-                # if aggregation_dict["t"] == "classification":
-                #     f = csv_files[aggregation_dict["task_id"]+"c"]
-                #     assert isinstance(f,file)
-                #
-                #     csv_line = ""
-                #     for field in headers_per_task[aggregation_dict["task_id"]]:
-                #         csv_line += str(aggregation_dict[field]) + ","
-                #     f.write(csv_line[:-1]+"\n")
-                #
-                #     # probabilities = record[2][0].items()
-                #     # most_likely, highest_prob = max(probabilities, key = lambda x:x[1])
-                #     # num_users = record[2][1]
-                #     # f.write(str(subject_id) + ",,,," + str(most_likely) + "," + str(highest_prob) + "," + str(num_users) +"\n")
-                # else:
-                #     assert aggregation_dict["t"] == "marking"
-                #     # marking
-                #     # print aggregation_dict.keys()
-                #     if aggregation_dict["probability_of_existence"] < 0.5:
-                #         continue
-                #
-                #     f = csv_files[aggregation_dict["task_id"]+"m"]
-                #     csv_line = ""
-                #     for field in self.clustering_headers:
-                #         if field in aggregation_dict:
-                #             csv_line += str(aggregation_dict[field]) + ","
-                #         else:
-                #             csv_line += ","
-                #
-                #     f.write(csv_line[:-1]+"\n")
-                #
-                #     # there were followup questions
-                #     if "followup questions" in aggregation_dict:
-                #         for followup_index,followup_question in enumerate(record[-1]):
-                #             num_users = followup_question[1]
-                #             if num_users != 0:
-                #                 probabilities = followup_question[0].items()
-                #                 most_likely, highest_prob = max(probabilities, key = lambda x:x[1])
-                #
-                #                 f = csv_files[record[0]+"c"]
-                #                 shape = record[2]
-                #                 cluster_index = record[3]
-                #                 f.write(str(subject_id)+","+str(shape)+","+str(cluster_index)+","+str(followup_index)+","+str(most_likely)+","+str(highest_prob)+","+str(num_users))
+        # finally zip everything (over all workflows) into one zip file
+        self.__csv_to_zip__()
 
+    def __csv_to_zip__(self):
+        """
+        put the results into a  nice csv file
+        """
+        # code taken from http://stackoverflow.com/questions/1855095/how-to-create-a-zip-archive-of-a-directory
+        zipf = zipfile.ZipFile("/tmp/"+str(self.project_id)+".zip", 'w')
 
-            # for f in csv_files.values():
-            #     assert isinstance(f,file)
-            #     if compress:
-            #         with open(f.name, "rb") as readfile:
-            #             tarInfo = tarball.gettarinfo(fileobj=readfile)
-            #             tarball.addfile(tarInfo, fileobj=readfile)
-            #     f.close()
+        # walk through the output directory, compressing as we go
+        for root, dirs, files in os.walk("/tmp/"+str(self.project_id)+"/"):
+            for file in files:
+                zipf.write(os.path.join(root, file))
 
-        # if compress:
-        #     tarball.close()
-        #     return "/tmp/"+str(self.project_id)+"export.tar.gz"
+        zipf.close()
 
     def __enter__(self):
         return self
@@ -811,9 +774,7 @@ class AggregationAPI:
         pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
         self.cassandra_session.shutdown()
 
-        for f in self.marking_csv_files.values():
-            assert isinstance(f,file)
-            f.close()
+
 
     # def __describe__(self,workflow_id):
     #     select = "SELECT tasks from workflows where id = " + str(workflow_id)
@@ -1032,7 +993,7 @@ class AggregationAPI:
 
         raise StopIteration()
 
-    def __get_retirement_threshold__(self,workflow_id):
+    def __get_retirement_threshold__(self):
         """
         return the number of classifications needed for a subject to be retired
         :param workflow_id:
@@ -1103,26 +1064,48 @@ class AggregationAPI:
         # return None
 
     def __get_subjects__(self,workflow_id,only_retired_subjects=False,only_recent_subjects=True):
+        """
+        gets the subjects to aggregate
+        if we need retired subjects, query against the production postgresDB
+        if we need only recent subjects, query against the cassandra DB
+        :param workflow_id:
+        :param only_retired_subjects: return only subjects which have been retired
+        :param only_recent_subjects: return subjects which have been classified/marked/transcribed/retired since the last running of the algorithm
+        :return:
+        """
         subjects = []
-        if only_retired_subjects:
-            if only_recent_subjects:
+        if True:# only_retired_subjects:
+            if False:#only_recent_subjects:
                 timestamp = self.updated_at_timestamps[workflow_id]
             else:
                 timestamp = datetime.datetime(2000,01,01)
 
-            stmt = """SELECT * FROM "subjects"
+            stmt = """EXPLAIN SELECT * FROM "subjects"
             INNER JOIN "set_member_subjects" ON "set_member_subjects"."subject_id" = "subjects"."id"
             INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."set_member_subject_id" = "set_member_subjects"."id"
             WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" > '""" + str(timestamp) + """'"""
             # WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" IS NOT NULL"""
+            print stmt
 
             cursor = self.postgres_session.cursor()
             cursor.execute(stmt)
+            for r in cursor.fetchall():
+                print r
+
+            assert False
             for subject in cursor.fetchall():
                 subjects.append(subject[0])
         else:
-            stmt = "SELECT subject_id FROM subjects WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)# + " and workflow_version = " + str(version)
-            subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt)])
+            print "here there"
+            # stmt = "SELECT subject_id,workflow_version FROM \"classifications\" WHERE \"project_id\" = " + str(self.project_id) + " and \"workflow_id\" = " + str(workflow_id) + " and \"updated_at\" > '" + str(datetime.datetime(2000,1,1)) +"'"
+            stmt = "SELECT subject_id,workflow_version FROM classifications WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)# + " and \"updated_at\" > '" + str(datetime.datetime(2000,1,1)) +"'"
+            print stmt
+            # filter for subjects which have the correct major version number
+            print [int(r.workflow_version) for r in self.cassandra_session.execute(stmt)]
+            print int(self.versions[workflow_id])
+            # subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt) if int(r.workflow_version) == int(self.versions[workflow_id]) ])
+            print subjects
+            assert False
 
         return subjects
 
@@ -1160,7 +1143,6 @@ class AggregationAPI:
     #         retired_subjects.append(subject[0])
     #
     #     return retired_subjects
-
 
     def __get_workflow_details__(self,given_workflow_id=None):
         """
@@ -1227,7 +1209,8 @@ class AggregationAPI:
                             instructions[workflow_id][task_id]["tools"][tool_index] = {}
                             label = tool["label"]
                             instructions[workflow_id][task_id]["tools"][tool_index]["marking tool"] = re.sub("'","",label)
-                            if tool["details"] != []:
+
+                            if ("details" in tool) and (tool["details"] != []):
                                 instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"] = {}
 
                                 for subtask_index,subtask in enumerate(tool["details"]):
@@ -1292,6 +1275,16 @@ class AggregationAPI:
             #     probabilities[center] = cluster['existence'][0][1]
 
         return users
+
+    def __get_workflow_names__(self):
+        """
+        get the names for each workflow
+        :return:
+        """
+        data = self.__panoptes_call__("workflows?project_id="+str(self.project_id))
+
+        names = {int(workflow["id"]) : workflow["display_name"] for workflow in data["workflows"]}
+        return names
 
     # def __get_workflow_versions__(self):#,project_id):
     #     request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
@@ -1609,7 +1602,7 @@ class AggregationAPI:
 
         for i in range(20):
             try:
-                print "connecting to Pantopes, attempt: " + str(i)
+                print "attempt: " + str(i)
                 cj = cookielib.CookieJar()
                 opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
 
@@ -1964,8 +1957,6 @@ class AggregationAPI:
         if isinstance(tasks,str):
             tasks = json.loads(tasks)
 
-        print "=====//"
-
         for task_id in tasks:
             # self.task_type[task_id] = tasks[task_id]["type"]
             # if the task is a drawing one, get the necessary details for clustering
@@ -2124,7 +2115,9 @@ class AggregationAPI:
         assert isinstance(clustering_algorithms,dict)
         for shape in clustering_algorithms:
             assert shape in self.marking_params_per_shape
-            print shape
+
+            # if a reduction algorithm is provided, use it
+            # otherwise, use the identity reduction - which doesn't do anything
             if shape in reduction_algs:
                 self.cluster_algs[shape] = clustering_algorithms[shape](shape,reduction_algs[shape])
             else:
@@ -2284,7 +2277,8 @@ class AggregationAPI:
                             if subject_id not in raw_classifications[task_id][shape]:
                                 raw_classifications[task_id][shape][subject_id] = {}
 
-                            raw_classifications[task_id][shape][subject_id][(relevant_params,user_id)] = tool
+                            # the [:5] is to make sure that the relevant params don't become any arbitrarly long list of values (which could happen with polygons)
+                            raw_classifications[task_id][shape][subject_id][(relevant_params[:5],user_id)] = tool
 
                         # are there follow up questions?
                         if (task_id in classification_tasks) and ("subtask" in classification_tasks[task_id]) and (tool in classification_tasks[task_id]["subtask"]):
@@ -2465,21 +2459,21 @@ class AggregationAPI:
 
 
 
-class SubjectGenerator:
-    def __init__(self,project):
-        self.project = project
-
-    def __iter__(self):
-        subject_ids = []
-        for subject in self.project.subject_collection.find():
-            subject_ids.append(subject["zooniverse_id"])
-
-            if len(subject_ids) == 50:
-                yield subject_ids
-                subject_ids = []
-
-        yield  subject_ids
-        raise StopIteration
+# class SubjectGenerator:
+#     def __init__(self,project):
+#         self.project = project
+#
+#     def __iter__(self):
+#         subject_ids = []
+#         for subject in self.project.subject_collection.find():
+#             subject_ids.append(subject["zooniverse_id"])
+#
+#             if len(subject_ids) == 50:
+#                 yield subject_ids
+#                 subject_ids = []
+#
+#         yield  subject_ids
+#         raise StopIteration
 
 
 # def twod_linesegment(pt):
@@ -2495,6 +2489,16 @@ class SubjectGenerator:
 #
 #     return dist,theta
 
+class CountingAggregation:
+    def __csv_marking_header_setup__(self,workflow_id,task):
+    # build up the header row
+        header = "subject_id"
+        for tool_id in sorted(self.instructions[workflow_id][task]["tools"].keys()):
+            tool = self.instructions[workflow_id][task]["tools"][tool_id]["marking tool"]
+            header += ","+tool
+        header += ",mean probability,median probability,mean tool likelihood,median tool likelihood,number of users"
+        self.marking_csv_files[task].write(header+"\n")
+
 if __name__ == "__main__":
     project_identifier = sys.argv[1]
     environment = 'production'
@@ -2509,7 +2513,7 @@ if __name__ == "__main__":
     with AggregationAPI(project_identifier,environment) as project:
         # project.__migrate__()
         # print json.dumps(project.__aggregate__(store_values=False)[464952], sort_keys=True, indent=4, separators=(',', ': '))
-        # project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+        project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
         # project.__panoptes_aggregation__()
-        project.__csv_output__()#workflow_ids =[84],subject_id=494900)
+        # project.__csv_output__()#workflow_ids =[84],subject_id=494900)
     # project.__get_workflow_details__(84)
