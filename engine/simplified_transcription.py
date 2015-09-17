@@ -4,7 +4,7 @@ import clustering
 import numpy as np
 import re
 import os
-import transcription
+import old_transcription
 from aggregation_api import hesse_line_reduction
 from scipy import spatial
 import datetime
@@ -16,7 +16,7 @@ else:
     base_directory = "/home/greg"
 
 
-class SimplifiedTextCluster(transcription.TextCluster):
+class SimplifiedTextCluster(old_transcription.TextCluster):
     def __init__(self,shape,dim_reduction_alg):
         clustering.Cluster.__init__(self,shape,dim_reduction_alg)
 
@@ -349,11 +349,11 @@ class SimplifiedTextCluster(transcription.TextCluster):
         return results,0
 
 
-class SimplifiedTate(transcription.Tate):
+class SimplifiedTate(old_transcription.Tate):
     def __init__(self):
-        transcription.Tate.__init__(self)
+        old_transcription.Tate.__init__(self)
 
-        reduction_algs = {"text":transcription.text_line_reduction}
+        reduction_algs = {"text":old_transcription.text_line_reduction}
         self.__set_clustering_algs__({"text":SimplifiedTextCluster},reduction_algs)
 
         # self.old_time = datetime.datetime(2015,8,27)
