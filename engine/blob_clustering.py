@@ -18,6 +18,109 @@ def nCr(n,r):
     f = math.factorial
     return f(n) / f(r) / f(n-r)
 
+
+class Controller:
+    def __init__(self):
+        self.generator = None
+
+    def __register__(self,generator):
+        assert isinstance(generator,SubsetGenerator)
+        self.generator = generator
+
+    def __skip__(self,branch_to_skip):
+        self.generator.__skip__(branch_to_skip)
+
+
+class SubsetGenerator:
+    def __init__(self,elements,subset_size,controller):
+        assert len(elements) >= subset_size
+        assert isinstance(controller,Controller)
+        self.elements = elements
+        self.num_elements = len(elements)
+        self.subset_size = subset_size
+
+        self.curr_subset_indices = None
+
+        # start off assuming that we can increment to another subset, but don't specify which one
+        self.can_increment = -1
+        self.saved_subset = None
+
+        controller.__register__(self)
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return self.next()
+
+    # todo - REFACTOR!!!
+    def __skip__(self,branch_to_skip):
+        """
+        skip a given branch - because of the way Python works, this change can happen immediately
+        for example we could have
+        print a => [0,1,2]
+        __skip__(0)
+        print a=> [1,2,3]
+        without having to go through the loop again - don't want this
+        so we will save the results and the next "next" call will return those saved results
+        :param branch_to_skip:
+        :return:
+        """
+        self.saved_subset = self.curr_subset_indices[:]
+
+        self.can_increment = None
+        for i in range(len(branch_to_skip)):
+            if i == (len(branch_to_skip)-1):
+                if branch_to_skip[i] < (self.num_elements -1):
+                    self.can_increment = i
+                else:
+                    if (branch_to_skip[i]+1) < branch_to_skip[i]:
+                        self.can_increment = i
+
+        # if we have found a place to increment, do it
+        # otherwise, the next call to "next" should raise a StopIncrement error
+        if self.can_increment is not None:
+            self.saved_subset[self.can_increment] += 1
+            # reset all the indices to the right of the one we just updated (even if they weren't
+            # explicity mentioned in the branch_to_skip
+            for i in range(self.can_increment+1,len(self.curr_subset_indices)):
+                self.saved_subset[i] = self.saved_subset[i-1] + 1
+
+    def next(self):
+        # check if a skip call resulted in us finishing the iteration
+        # we can probably get away with just checking once after we've updated (in which case the update
+        # is invalid and irrelevant) but I want to make sure that such an update doesn't do anything funny
+        if self.can_increment is None:
+            raise StopIteration()
+
+        # if we have stored values as the results of skipping some branches
+        if self.saved_subset is not None:
+            self.curr_subset_indices = self.saved_subset[:]
+            self.saved_subset = None
+        else:
+            if self.curr_subset_indices is None:
+                self.curr_subset_indices = range(self.subset_size)
+            else:
+                can_increment = None
+                for i in range(len(self.curr_subset_indices)):
+                    if i == (len(self.curr_subset_indices)-1):
+                        if self.curr_subset_indices[i] < (self.num_elements-1):
+                            can_increment = i
+                    else:
+                        if (self.curr_subset_indices[i]+1) < self.curr_subset_indices[i+1]:
+                            can_increment = i
+
+                if can_increment is None:
+                    raise StopIteration()
+
+                self.curr_subset_indices[can_increment] += 1
+                for i in range(can_increment+1,len(self.curr_subset_indices)):
+                    self.curr_subset_indices[i] = self.curr_subset_indices[i-1] + 1
+
+        return self.curr_subset_indices
+
+
+
 class BlobClustering(clustering.Cluster):
     def __init__(self,shape,dim_reduction_alg):
         assert shape != "point"
@@ -280,3 +383,11 @@ class BlobClustering(clustering.Cluster):
         return results,0
 
 
+if __name__ == "__main__":
+    c = Controller()
+    for a in SubsetGenerator(range(5),3,c):
+        print a
+        if a[0] == 0:
+            c.__skip__([0])
+        print a
+        print
