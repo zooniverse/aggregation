@@ -1,14 +1,11 @@
 import clustering
 import matplotlib.pyplot as plt
-import matplotlib.cbook as cbook
 from shapely.geometry import Polygon
-from shapely.geometry import MultiPolygon
-import networkx as nx
 import itertools
 import math
-import shapely
 from shapely.validation import explain_validity
-import random
+import matplotlib
+from shapely.ops import cascaded_union
 
 def findsubsets(S,m):
     return set(itertools.combinations(S, m))
@@ -117,8 +114,119 @@ class SubsetGenerator:
                 for i in range(can_increment+1,len(self.curr_subset_indices)):
                     self.curr_subset_indices[i] = self.curr_subset_indices[i-1] + 1
 
-        return self.curr_subset_indices
+        return [self.elements[j] for j in self.curr_subset_indices]
 
+
+class QuadTree:
+    def __init__(self,((lb_x,lb_y),(ub_x,ub_y)),parent=None):
+        self.lb_x = lb_x
+        self.ub_x = ub_x
+        self.lb_y = lb_y
+        self.ub_y = ub_y
+
+        self.children = None
+        self.parent = parent
+        self.polygons = {}
+
+        self.bounding_box = Polygon([(lb_x,lb_y),(ub_x,lb_y),(ub_x,ub_y),(lb_x,ub_y)])
+
+
+        self.user_ids = []
+
+    def __get_splits__(self):
+        if (self.bounding_box.area < 5) or (len(self.polygons) <= 2):
+            return []
+
+        complete_agreement = 0
+
+        for user in self.polygons:
+            u = cascaded_union(self.polygons[user])
+            if math.fabs(self.bounding_box.intersection(u).area - self.bounding_box.area) < 1:
+                complete_agreement += 1
+
+        if complete_agreement >= 3:
+            return []
+
+        # calculate the height and width of the new children nodes
+        new_width = (self.lb_x+self.ub_x)/2. - self.lb_x
+        new_height = (self.ub_y+self.lb_y)/2. - self.lb_y
+
+        lower_left = (self.lb_x,self.lb_y),(self.lb_x+new_width,self.lb_y+new_height)
+        lower_right = (self.lb_x+new_width,self.lb_y),(self.ub_x,self.lb_y+new_height)
+        upper_left = (self.lb_x,self.lb_y+new_height),(self.lb_x+new_width,self.ub_y)
+        upper_right = (self.lb_x+new_width,self.lb_y+new_height),(self.ub_x,self.ub_y)
+
+        self.children = [QuadTree(lower_left,self) ,QuadTree(lower_right,self),QuadTree(upper_left,self),QuadTree(upper_right,self)]
+        for c in self.children:
+            assert isinstance(c,QuadTree)
+            assert c.bounding_box.area == self.bounding_box.area/4.
+
+        return self.children
+
+    def __plot__(self,ax):
+        if self.children is None:
+            if len(self.polygons) >= 3:
+                plt.plot((self.lb_x,self.ub_x,self.ub_x,self.lb_x,self.lb_x),(self.lb_y,self.lb_y,self.ub_y,self.ub_y,self.lb_y),color="red")
+                # rect = plt.Rectangle((self.lb_x,self.lb_y),(self.ub_x-self.lb_x),(self.ub_y-self.lb_y),color="red")
+                # print (self.lb_x,self.lb_y),(self.ub_x-self.lb_x),(self.ub_y-self.lb_y)
+                # ax.add_artist(rect)
+        else:
+            for c in self.children:
+                assert isinstance(c,QuadTree)
+                c.__plot__(ax)
+
+
+
+    def __add_polygon__(self,user,polygon,debug=False):
+        assert isinstance(polygon,Polygon)
+        # don't add it if there is no intersection
+        if self.bounding_box.intersection(polygon).is_empty:
+
+            return
+
+        if debug:
+            plt.plot((self.lb_x,self.ub_x,self.ub_x,self.lb_x,self.lb_x),(self.lb_y,self.lb_y,self.ub_y,self.ub_y,self.lb_y))
+            x,y = polygon.exterior.xy
+            plt.plot(x,y)
+            # box = [[0,0],[800,0],[800,500],[0,500]]
+            plt.xlim((0,800))
+            plt.ylim((0,500))
+            plt.show()
+
+        if user not in self.polygons:
+            self.polygons[user] = [polygon]
+            self.user_ids.append(user)
+        else:
+            self.polygons[user].append(polygon)
+
+    def __poly_iteration__(self):
+        class Iterator:
+            def __init__(self,node):
+                assert isinstance(node,QuadTree)
+                self.node = node
+                self.user_index = None
+                self.polygon_index = None
+
+            def __iter__(self):
+                return self
+
+            def next(self):
+                if self.user_index is None:
+                    self.user_index = 0
+                    self.polygon_index = 0
+                else:
+                    self.polygon_index += 1
+                    if self.polygon_index == len(self.node.polygons[self.node.user_ids[self.user_index]]):
+                        self.polygon_index = 0
+                        self.user_index += 1
+
+                    if self.user_index == len(self.node.user_ids):
+                        raise StopIteration
+
+                user_id = self.node.user_ids[self.user_index]
+                return user_id,self.node.polygons[user_id][self.polygon_index]
+
+        return Iterator(self)
 
 
 class BlobClustering(clustering.Cluster):
@@ -184,203 +292,83 @@ class BlobClustering(clustering.Cluster):
                     fixed_polygons = self.__fix_polygon__(new_polygon_points)
                 # else try to merge the results in
                 else:
-                    fixed_polygons = fixed_polygons.union(self.__fix_polygon__(new_polygon_points))
+                    fixed_polygons.extend(self.__fix_polygon__(new_polygon_points))
             else:
                 if fixed_polygons is None:
-                    fixed_polygons = Polygon(new_polygon_points)
+                    fixed_polygons = [Polygon(new_polygon_points)]
                 else:
-                    fixed_polygons = fixed_polygons.union(Polygon(new_polygon_points))
+                    fixed_polygons.append(Polygon(new_polygon_points))
 
         return fixed_polygons
 
-
     def __inner_fit__(self,markings,user_ids,tools,reduced_markings):
-        # convert markings to a list so that we can pop elements from it
-        if len(set(user_ids)) > 15:
-            selected_users = list(set(user_ids))
-            random.shuffle(selected_users)
-            selected_users = selected_users[:15]
+        poly_dictionary = {}
+        for polygon_pts,u in zip(markings,user_ids):
+            # we need at least 3 points to made a valid polygon
+            if len(polygon_pts) < 3:
+                continue
 
-            markings_and_users = [[m,u] for (m,u) in zip(markings,user_ids) if u in selected_users]
-            markings,user_ids = zip(*markings_and_users)
+            poly = Polygon(polygon_pts)
+            validity = explain_validity(poly)
 
-        markings = list(markings)
-        user_ids = list(user_ids)
+            if validity != "Valid Geometry":
+                corrected_polygon = self.__fix_polygon__(polygon_pts)
+                # if isinstance(polygon_collection,Polygon):
+                #     valid_polygons = polygon_collection]
+                # else:
+                #     # if the valid polygon is actually a group of polygon add them separately
+                #     valid_polygons = []
+                #     for p in polygon_collection:
+                #         valid_polygons.append(p)
+            else:
+                corrected_polygon = [poly]
 
+            if u not in poly_dictionary:
+                poly_dictionary[u] = corrected_polygon
+            else:
+                # update the user's polygon by taking the union
+                poly_dictionary[u].extend(corrected_polygon)
 
-        # markings = markings[:15]
-        # user_ids = user_ids[:15]
-        # tools = tools[:15]
+        box = [[0,0],[800,0],[800,500],[0,500]]
 
-        results = []
-        if len(markings) > 1:
-            blobs = []
+        quad_root = QuadTree((box[0],box[2]))
 
-            # graph is used to find cliques of overlapping polygon/blobs
-            G=nx.Graph()
+        for user,polygon_list in poly_dictionary.items():
+            for polygon in polygon_list:
+                quad_root.__add_polygon__(user,polygon)
 
-            # take markings from only the first 5 users
-            # useable_users = list(set(user_ids))[:15]
-            # all_combined = [(m,u,t) for m,u,t in zip(markings,user_ids,tools) if u in useable_users]
-            # markings,user_ids,tools = zip(*all_combined)
+        to_process = [quad_root]
 
-            # hard code to a maximum of 15 users
-            # markings = markings[:15]
-            # user_ids = user_ids[:15]
-
-            # check for bad polygons and discard if necessary
-            # do it here so we don't have gaps in the ordering later
-            for i in range(len(markings)-1,-1,-1):
-                if len(markings[i]) <= 2:
-                    markings.pop(i)
-                    user_ids.pop(i)
-
-            # convert to Shapely polygon objects
-            for j,pts in enumerate(markings):
-                assert isinstance(pts,list) or isinstance(pts,tuple)
-
-                p = Polygon(pts)
-                validity = explain_validity(p)
-
-                if validity != "Valid Geometry":
-                    # use below to see the before and after of the correction
-                    #     t = pts[:]
-                    #     t = list(t)
-                    #     t.append(t[0])
-                    #     t_x,t_y = zip(*t)
-                    #     plt.plot(t_x,t_y,"-")
-                    #     plt.show()
-                    #
-                    #
-                    #     if isinstance(polygon_collection,Polygon):
-                    #         x,y = polygon_collection.exterior.xy
-                    #         x.append(x[0])
-                    #         y.append(y[0])
-                    #         plt.plot(x,y)
-                    #     else:
-                    #         for p in polygon_collection:
-                    #             x,y = p.exterior.xy
-                    #             x.append(x[0])
-                    #             y.append(y[0])
-                    #             plt.plot(x,y)
-                    #
-                    #     plt.show()
-                    #     assert False
-                    polygon_collection = self.__fix_polygon__(pts)
-                    if isinstance(polygon_collection,Polygon):
-                        blobs.append(polygon_collection)
-                    else:
-                        for p in polygon_collection:
-                            blobs.append(p)
-                else:
-                    blobs.append(Polygon(list(pts)))
-
-                G.add_node(j)
+        while to_process != []:
+            node = to_process.pop(-1)
+            assert isinstance(node,QuadTree)
 
 
+            # if we have parent != the root => need to read in
+            if node.parent is not None:
+                for user,poly in node.parent.__poly_iteration__():
+                    node.__add_polygon__(user,poly,debug=False)
 
-                for i,old_blob in enumerate(blobs[:-1]):
-                    try:
-                        if not blobs[-1].intersection(old_blob).is_empty:
-                            G.add_edge(i,j)
-                    except shapely.geos.TopologicalError:
-                        print blobs[-1]
-                        print old_blob
-                        print explain_validity(blobs[-1])
-                        print explain_validity(old_blob)
-                        raise
+            new_children = node.__get_splits__()
 
+            to_process.extend(new_children)
 
-            for c in nx.connected_components(G):
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        quad_root.__plot__(ax)
+        plt.show()
+        assert False
 
-                union_blob = None
-                if len(c) >= 3:
-                    overlapping_blobs = [blobs[k] for k in c]
-                    num_blobs = 3
-                    # while nCr(len(overlapping_blobs),num_blobs) > 20:
-                    #     print "** " + str(num_blobs)
-                    #     num_blobs += 1
+    def __put_markings_in_boxes__(self,bounding_box):
+        for polygons in poly_dictionary.values():
+            for p in polygons:
+                print bounding_box.intersection(p).is_empty
 
-                    for subset_count, subset in enumerate(itertools.combinations(overlapping_blobs,num_blobs)):
+                x,y = p.exterior.xy
+                plt.plot(x,y)
+        plt.show()
+        assert False
 
-                        overlap = subset[0]
-                        for b in subset[1:]:
-                            overlap = overlap.intersection(b)
-
-                        # if isinstance(overlap,MultiPolygon):
-                        #     overlap = overlap.geoms[0]
-                        # print type(overlap)
-                        # assert isinstance(overlap,Polygon)
-
-                        if not overlap.is_empty:
-                            # # print type(overlap)
-                            # x,y = overlap.exterior.xy
-                            # plt.plot(x,y,color="red")
-
-                            if union_blob is None:
-                                union_blob = overlap
-                            else:
-                                union_blob = union_blob.union(overlap)
-
-                if isinstance(union_blob,Polygon):
-                    blob_results = dict()
-
-                    if self.rectangle:
-                        x,y = union_blob.exterior.xy
-                        x1 = min(x)
-                        x2 = max(x)
-                        y1 = min(y)
-                        y2 = max(y)
-                        blob_results["center"] = [(x1,y1),(x1,y2),(x2,y2),(x2,y1)]
-                    else:
-                        x,y = union_blob.exterior.xy
-                        blob_results["center"] = zip(x,y)
-
-                    blob_results["cluster members"] = []
-                    blob_results["users"] = []
-                    blob_results["tools"] = []
-
-                    # todo: must be a better way to do this
-                    # find which users overlap with this blob
-                    for i in c:
-                        if union_blob.intersects(blobs[i]):
-                            blob_results["users"].append(user_ids[i])
-                            x,y = blobs[i].exterior.xy
-                            blob_results["cluster members"].append(zip(x,y)[:-1])
-                            blob_results["tools"].append(tools[i])
-
-                    results.append(blob_results)
-
-                    # plt.plot(x,y,color="red")
-                elif isinstance(union_blob,MultiPolygon):
-                    for blob in union_blob:
-                        blob_results = dict()
-                        x,y = blob.exterior.xy
-                        if self.rectangle:
-                            x1 = min(x)
-                            x2 = max(x)
-                            y1 = min(y)
-                            y2 = max(y)
-                            blob_results["center"] = [(x1,y1),(x1,y2),(x2,y2),(x2,y1)]
-                        else:
-                            blob_results["center"] = zip(x,y)
-
-                        blob_results["cluster members"] = []
-                        blob_results["users"] = []
-                        blob_results["tools"] = []
-
-                        # todo: must be a better way to do this
-                        # find which users overlap with this blob
-                        for i in c:
-                            if union_blob.intersects(blobs[i]):
-                                blob_results["users"].append(user_ids[i])
-                                x,y = blobs[i].exterior.xy
-                                blob_results["cluster members"].append(zip(x,y)[:-1])
-                                blob_results["tools"].append(tools[i])
-
-                        results.append(blob_results)
-
-        return results,0
 
 
 if __name__ == "__main__":
