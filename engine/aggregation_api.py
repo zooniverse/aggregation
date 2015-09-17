@@ -250,8 +250,6 @@ class AggregationAPI:
             rollbar.report_message('Greg is testing rollbar', 'error')
             assert False
 
-        assert False
-
         print "connecting to Panoptes http api"
         # todo - allow for public connections where user_id and password are not needed
         if user_id is None:
@@ -316,7 +314,6 @@ class AggregationAPI:
             self.old_time = pickle.load(open("/tmp/"+str(self.project_id)+".time","rb"))
         except:
             self.old_time = datetime.datetime(2000,01,01)
-
 
         self.current_time = datetime.datetime.now()
         self.ignore_versions = False
@@ -1045,7 +1042,10 @@ class AggregationAPI:
             if threshold == {}:
                 retirement_thresholds[workflow_id] = 15
             else:
-                retirement_thresholds[workflow_id] = threshold["options"]["count"]
+                if "options" in threshold:
+                    retirement_thresholds[workflow_id] = threshold["options"]["count"]
+                else:
+                    retirement_thresholds[workflow_id] = threshold["classification_count"]["count"]
 
         return retirement_thresholds
 
@@ -1118,19 +1118,15 @@ class AggregationAPI:
             else:
                 timestamp = datetime.datetime(2000,01,01)
 
-            stmt = """EXPLAIN SELECT * FROM "subjects"
+            stmt = """SELECT * FROM "subjects"
             INNER JOIN "set_member_subjects" ON "set_member_subjects"."subject_id" = "subjects"."id"
             INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."set_member_subject_id" = "set_member_subjects"."id"
             WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" > '""" + str(timestamp) + """'"""
             # WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" IS NOT NULL"""
-            print stmt
 
             cursor = self.postgres_session.cursor()
             cursor.execute(stmt)
-            for r in cursor.fetchall():
-                print r
 
-            assert False
             for subject in cursor.fetchall():
                 subjects.append(subject[0])
         else:
@@ -1619,17 +1615,14 @@ class AggregationAPI:
     def __panoptes_connect__(self,api_details,user_name,password):
         """
         make the main connection to Panoptes - through http
+        the below code is based heavily on code originally by Margaret Kosmala
+        https://github.com/mkosmala/PanoptesScripts
         :return:
         """
         # details for connecting to Panoptes
-        # self.user_name = api_details["name"]
-        # self.password = api_details["password"]
-        self.host = api_details["host"] #"https://panoptes-staging.zooniverse.org/"
+        self.host = api_details["host"]
         self.host_api = self.host+"api/"
-         #"brian-testing" or zooniverse
-
         self.app_client_id = api_details["app_client_id"]
-        # self.environment = api_details["environment"]
         self.token = None
 
         # the http api for connecting to Panoptes
@@ -2006,7 +1999,6 @@ class AggregationAPI:
                 for tool in tasks[task_id]["tools"]:
                     # shape = ellipse, line, pt etc.
                     shape = tool["type"]
-                    print shape
 
                     # extract the label of the tool - this means that things don't have to ordered
                     label = tool["label"]
