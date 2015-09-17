@@ -28,6 +28,7 @@ import cPickle as pickle
 import csv
 import zipfile
 from os.path import expanduser
+import rollbar
 # setup(
 #     name = "Zooniverse Aggregation",
 #     version = "0.1",
@@ -240,6 +241,15 @@ class AggregationAPI:
         except IOError:
             panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
         api_details = yaml.load(panoptes_file)
+
+        self.rollbar_token = None
+        if "rollbar" in panoptes_file[self.environment]:
+            self.rollbar_token = panoptes_file[self.environment]["rollbar"]
+            print "raising error"
+            rollbar.init(self.rollbar_token,"production")
+            rollbar.report_message('Greg is testing rollbar', 'warning')
+            assert False
+
 
         if project is None:
             return
@@ -800,7 +810,7 @@ class AggregationAPI:
                 pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
 
             # shutdown the connection to Cassandra and remove the lock so other aggregation instances
-            # can run
+            # can run, regardless of whether an error occurred
             self.cassandra_session.shutdown()
             os.remove(expanduser("~")+"/aggregation.lock")
 
