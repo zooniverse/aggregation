@@ -223,7 +223,7 @@ class AggregationAPI:
             database_details = yaml.load(database_file)
             # if we are running on Greg's computer(s), connect to a local (and slightly out of date) DB instance
             # tries to avoid causing problems with the production DB
-            if expanduser("~") == "/home/greg":
+            if expanduser("~") in ["/home/greg","/home/ggdhines"]:
                 self.__postgres_connect__(database_details["local_host"])
                 self.__cassandra_connect__("local_host")
             else:
@@ -243,16 +243,14 @@ class AggregationAPI:
         api_details = yaml.load(panoptes_file)
 
         self.rollbar_token = None
-        if "rollbar" in panoptes_file[self.environment]:
-            self.rollbar_token = panoptes_file[self.environment]["rollbar"]
+        if "rollbar" in api_details[self.environment]:
+            self.rollbar_token = api_details[self.environment]["rollbar"]
             print "raising error"
             rollbar.init(self.rollbar_token,"production")
-            rollbar.report_message('Greg is testing rollbar', 'warning')
+            rollbar.report_message('Greg is testing rollbar', 'error')
             assert False
 
-
-        if project is None:
-            return
+        assert False
 
         print "connecting to Panoptes http api"
         # todo - allow for public connections where user_id and password are not needed
