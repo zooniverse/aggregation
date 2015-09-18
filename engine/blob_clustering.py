@@ -76,10 +76,8 @@ class QuadTree:
                 assert isinstance(c,QuadTree)
                 c.__plot__(ax)
 
-    def __aggregate__(self):
+    def __aggregate__(self,total_area):
         if self.children is None:
-            all_colours = {1: "blue",2: "green",3:"yellow",4:"black"}
-
             if len(self.polygons) >= 3:
                 # what is the majority vote for what type of "kind" this box outlines
                 # for example, some people might say broad leave tree while others say it is a needle leaf tree
@@ -108,7 +106,19 @@ class QuadTree:
                 if len(self.polygons) == 0:
                     return {},{},0
                 else:
-                    return {},{},self.bounding_box.area
+                    # we have come polygons inside this box which amount to noise
+                    # find out the area of these polygons - with respect to inside this box
+                    # for smaller boxes, we could just use the area of the box as an approximation
+                    # but for larger boxes, especially if we are the root, we need to do better
+                    if (self.bounding_box.area/float(total_area)) > 0.02:
+                        noise_polygons = []
+                        for poly_list in self.polygons.values():
+                            noise_polygons.extend(zip(*poly_list)[0])
+                        combined_polygon = cascaded_union(noise_polygons).intersection(self.bounding_box)
+
+                        return {},{},combined_polygon.area
+                    else:
+                        return {},{},self.bounding_box.area
         else:
             return_polygons = {}
             return_stats = {}
@@ -120,7 +130,7 @@ class QuadTree:
             for c in self.children:
                 # get all the polygons that are in c's bounding boxes plus stats about which tools made
                 # which reasons
-                c_polygons,c_stats,incorrect_area = c.__aggregate__()
+                c_polygons,c_stats,incorrect_area = c.__aggregate__(total_area)
                 total_incorrect_area += incorrect_area
 
                 # go through the
@@ -288,7 +298,12 @@ class BlobClustering(clustering.Cluster):
                 else:
                     poly_dictionary[u].append((poly,t))
 
-        box = [[0,0],[800,0],[800,500],[0,500]]
+        # if dimensions have been provided, use those as our initial bounding box
+        # otherwise, use some default values - I have NO idea how well those will work in practice
+        if dimensions is None:
+            box = [[0,0],[800,0],[800,500],[0,500]]
+        else:
+            box = [[0,0],[dimensions[1],0],[dimensions[1],dimensions[0]],[0,dimensions[1]]]
 
         quad_root = QuadTree((box[0],box[2]))
 
@@ -302,8 +317,8 @@ class BlobClustering(clustering.Cluster):
             node = to_process.pop(-1)
             assert isinstance(node,QuadTree)
 
-
-            # if we have parent != the root => need to read in
+            # if (we have parent =>  !the root) => need to read in parent's polygons
+            # some of which will become ours
             if node.parent is not None:
                 for user,(poly,poly_type) in node.parent.__poly_iteration__():
                     node.__add_polygon__(user,poly,poly_type)
@@ -312,21 +327,17 @@ class BlobClustering(clustering.Cluster):
 
             to_process.extend(new_children)
 
-        # results.append({"users":merged_users,"cluster members":merged_points,"tools":merged_tools,"num users":num_users})
         # total incorrect area is the total area which at least one person marked/outlined by not enough people
         # so typically just 1 or 2 (unless we change the threshold)
-        aggregate_polygons,aggregate_stats,total_incorrect_area = quad_root.__aggregate__()
+        image_area = dimensions[0]*dimensions[1]
 
-        incorrect_area_as_percent = None
+        aggregate_polygons,aggregate_stats,total_incorrect_area = quad_root.__aggregate__(image_area)
 
-        # if we have  been provided the dimensions we can express blob area as a % of total area
-        if dimensions is not None:
-            image_area = dimensions[0]*dimensions[1]
-            for tool_id in aggregate_stats:
-                vote_percentage,tool_area = aggregate_stats[tool_id]
-                aggregate_stats[tool_id] = vote_percentage,tool_area/float(image_area)
+        for tool_id in aggregate_stats:
+            vote_percentage,tool_area = aggregate_stats[tool_id]
+            aggregate_stats[tool_id] = vote_percentage,tool_area/float(image_area)
 
-            incorrect_area_as_percent = total_incorrect_area/image_area
+        incorrect_area_as_percent = total_incorrect_area/image_area
 
         results = []
         # a lot of this stuff is done in the classification code for other tool types but it makes more
@@ -370,5 +381,11 @@ class BlobClustering(clustering.Cluster):
             next_result["certainty"] = aggregate_stats[tool_id][0]
 
             results.append(next_result)
+
+        if results == []:
+            # add in a dummy polygon so that we can report back the size of
+            # the incorrect area
+            results = [{"area":0,"incorrect area":incorrect_area_as_percent,"certain": -1},]
+            print "  " + str(incorrect_area_as_percent)
 
         return results,0
