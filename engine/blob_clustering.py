@@ -6,6 +6,7 @@ import math
 from shapely.validation import explain_validity
 import matplotlib
 from shapely.ops import cascaded_union
+import numpy
 
 def findsubsets(S,m):
     return set(itertools.combinations(S, m))
@@ -14,107 +15,6 @@ def findsubsets(S,m):
 def nCr(n,r):
     f = math.factorial
     return f(n) / f(r) / f(n-r)
-
-
-class Controller:
-    def __init__(self):
-        self.generator = None
-
-    def __register__(self,generator):
-        assert isinstance(generator,SubsetGenerator)
-        self.generator = generator
-
-    def __skip__(self,branch_to_skip):
-        self.generator.__skip__(branch_to_skip)
-
-
-class SubsetGenerator:
-    def __init__(self,elements,subset_size,controller):
-        assert len(elements) >= subset_size
-        assert isinstance(controller,Controller)
-        self.elements = elements
-        self.num_elements = len(elements)
-        self.subset_size = subset_size
-
-        self.curr_subset_indices = None
-
-        # start off assuming that we can increment to another subset, but don't specify which one
-        self.can_increment = -1
-        self.saved_subset = None
-
-        controller.__register__(self)
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        return self.next()
-
-    # todo - REFACTOR!!!
-    def __skip__(self,branch_to_skip):
-        """
-        skip a given branch - because of the way Python works, this change can happen immediately
-        for example we could have
-        print a => [0,1,2]
-        __skip__(0)
-        print a=> [1,2,3]
-        without having to go through the loop again - don't want this
-        so we will save the results and the next "next" call will return those saved results
-        :param branch_to_skip:
-        :return:
-        """
-        self.saved_subset = self.curr_subset_indices[:]
-
-        self.can_increment = None
-        for i in range(len(branch_to_skip)):
-            if i == (len(branch_to_skip)-1):
-                if branch_to_skip[i] < (self.num_elements -1):
-                    self.can_increment = i
-                else:
-                    if (branch_to_skip[i]+1) < branch_to_skip[i]:
-                        self.can_increment = i
-
-        # if we have found a place to increment, do it
-        # otherwise, the next call to "next" should raise a StopIncrement error
-        if self.can_increment is not None:
-            self.saved_subset[self.can_increment] += 1
-            # reset all the indices to the right of the one we just updated (even if they weren't
-            # explicity mentioned in the branch_to_skip
-            for i in range(self.can_increment+1,len(self.curr_subset_indices)):
-                self.saved_subset[i] = self.saved_subset[i-1] + 1
-
-    def next(self):
-        # check if a skip call resulted in us finishing the iteration
-        # we can probably get away with just checking once after we've updated (in which case the update
-        # is invalid and irrelevant) but I want to make sure that such an update doesn't do anything funny
-        if self.can_increment is None:
-            raise StopIteration()
-
-        # if we have stored values as the results of skipping some branches
-        if self.saved_subset is not None:
-            self.curr_subset_indices = self.saved_subset[:]
-            self.saved_subset = None
-        else:
-            if self.curr_subset_indices is None:
-                self.curr_subset_indices = range(self.subset_size)
-            else:
-                can_increment = None
-                for i in range(len(self.curr_subset_indices)):
-                    if i == (len(self.curr_subset_indices)-1):
-                        if self.curr_subset_indices[i] < (self.num_elements-1):
-                            can_increment = i
-                    else:
-                        if (self.curr_subset_indices[i]+1) < self.curr_subset_indices[i+1]:
-                            can_increment = i
-
-                if can_increment is None:
-                    raise StopIteration()
-
-                self.curr_subset_indices[can_increment] += 1
-                for i in range(can_increment+1,len(self.curr_subset_indices)):
-                    self.curr_subset_indices[i] = self.curr_subset_indices[i-1] + 1
-
-        return [self.elements[j] for j in self.curr_subset_indices]
 
 
 class QuadTree:
@@ -134,13 +34,14 @@ class QuadTree:
         self.user_ids = []
 
     def __get_splits__(self):
-        if (self.bounding_box.area < 5) or (len(self.polygons) <= 2):
+        if (self.bounding_box.area < 25) or (len(self.polygons) <= 2):
             return []
 
         complete_agreement = 0
 
         for user in self.polygons:
-            u = cascaded_union(self.polygons[user])
+            # extract just the polygons - don't worry about type
+            u = cascaded_union(zip(*self.polygons[user])[0])
             if math.fabs(self.bounding_box.intersection(u).area - self.bounding_box.area) < 1:
                 complete_agreement += 1
 
@@ -175,29 +76,90 @@ class QuadTree:
                 assert isinstance(c,QuadTree)
                 c.__plot__(ax)
 
+    def __aggregate__(self):
+        if self.children is None:
+            all_colours = {1: "blue",2: "green",3:"yellow",4:"black"}
 
+            if len(self.polygons) >= 3:
+                # what is the majority vote for what type of "kind" this box outlines
+                # for example, some people might say broad leave tree while others say it is a needle leaf tree
+                # technically speaking, people could outline this region with different polygons
+                # if so, we'll ignore such users, under the assumption that we don't really know
+                vote_counts = {}
+                for u in self.polygons:
+                    polys,types = zip(*self.polygons[u])
+                    if min(types) == max(types):
+                        vote = min(types)
+                        if vote not in vote_counts:
+                            vote_counts[vote] = 1
+                        else:
+                            vote_counts[vote] += 1
 
-    def __add_polygon__(self,user,polygon,debug=False):
+                # extract the most likely type according to pluraity voting
+                # ties will get resolved in an arbitrary fashion
+                most_likely,num_votes = sorted(vote_counts.items(),key = lambda x:x[1],reverse=True)[0]
+                percentage = num_votes/float(sum(vote_counts.values()))
+
+                # return two sets of values - one with the bounding box
+                # the other with the voting results
+
+                return {most_likely:self.bounding_box},{most_likely:(percentage,self.bounding_box.area)},0
+            else:
+                if len(self.polygons) == 0:
+                    return {},{},0
+                else:
+                    return {},{},self.bounding_box.area
+        else:
+            return_polygons = {}
+            return_stats = {}
+            new_area = {}
+            new_percentage = {}
+
+            total_incorrect_area = 0
+
+            for c in self.children:
+                # get all the polygons that are in c's bounding boxes plus stats about which tools made
+                # which reasons
+                c_polygons,c_stats,incorrect_area = c.__aggregate__()
+                total_incorrect_area += incorrect_area
+
+                # go through the
+                for tool_id in c_polygons:
+                    # first time we've seen this polygon
+                    if tool_id not in return_polygons:
+                        return_polygons[tool_id] = c_polygons[tool_id]
+                        # return_stats[tool_id] = c_stats[tool_id]
+
+                        new_area[tool_id] = [c_stats[tool_id][1],]
+                        new_percentage[tool_id] = [c_stats[tool_id][0],]
+                    else:
+                        # we need to merge (yay!!)
+                        # note this will probably result in more than one polygon
+                        return_polygons[tool_id] = return_polygons[tool_id].union(c_polygons[tool_id])
+                        # I think I could fold these values in as I go, but just to be careful (don't want to mess
+                        # with the stats) save the values until end
+                        new_area[tool_id].append(c_stats[tool_id][1])
+                        new_percentage[tool_id].append(c_stats[tool_id][0])
+
+            # now that we've gone through all of the children
+            # calculate the weighted values
+            for tool_id in new_area:
+                # print new_percentage[tool_id]
+                return_stats[tool_id] = numpy.average(new_percentage[tool_id],weights=new_area[tool_id]),sum(new_area[tool_id])
+
+            return return_polygons,return_stats,total_incorrect_area
+
+    def __add_polygon__(self,user,polygon,poly_type):
         assert isinstance(polygon,Polygon)
         # don't add it if there is no intersection
         if self.bounding_box.intersection(polygon).is_empty:
-
             return
 
-        if debug:
-            plt.plot((self.lb_x,self.ub_x,self.ub_x,self.lb_x,self.lb_x),(self.lb_y,self.lb_y,self.ub_y,self.ub_y,self.lb_y))
-            x,y = polygon.exterior.xy
-            plt.plot(x,y)
-            # box = [[0,0],[800,0],[800,500],[0,500]]
-            plt.xlim((0,800))
-            plt.ylim((0,500))
-            plt.show()
-
         if user not in self.polygons:
-            self.polygons[user] = [polygon]
+            self.polygons[user] = [(polygon,poly_type)]
             self.user_ids.append(user)
         else:
-            self.polygons[user].append(polygon)
+            self.polygons[user].append((polygon,poly_type))
 
     def __poly_iteration__(self):
         class Iterator:
@@ -301,9 +263,9 @@ class BlobClustering(clustering.Cluster):
 
         return fixed_polygons
 
-    def __inner_fit__(self,markings,user_ids,tools,reduced_markings):
+    def __inner_fit__(self,markings,user_ids,tools,reduced_markings,dimensions):
         poly_dictionary = {}
-        for polygon_pts,u in zip(markings,user_ids):
+        for polygon_pts,u,t in zip(markings,user_ids,tools):
             # we need at least 3 points to made a valid polygon
             if len(polygon_pts) < 3:
                 continue
@@ -313,29 +275,25 @@ class BlobClustering(clustering.Cluster):
 
             if validity != "Valid Geometry":
                 corrected_polygon = self.__fix_polygon__(polygon_pts)
-                # if isinstance(polygon_collection,Polygon):
-                #     valid_polygons = polygon_collection]
-                # else:
-                #     # if the valid polygon is actually a group of polygon add them separately
-                #     valid_polygons = []
-                #     for p in polygon_collection:
-                #         valid_polygons.append(p)
+                if isinstance(corrected_polygon,Polygon):
+                    if u not in poly_dictionary:
+                        poly_dictionary[u] = [(corrected_polygon,t),]
+                    else:
+                        for p in corrected_polygon:
+                            poly_dictionary[u].append((p,t))
             else:
-                corrected_polygon = [poly]
-
-            if u not in poly_dictionary:
-                poly_dictionary[u] = corrected_polygon
-            else:
-                # update the user's polygon by taking the union
-                poly_dictionary[u].extend(corrected_polygon)
+                if u not in poly_dictionary:
+                    poly_dictionary[u] = [(poly,t)]
+                else:
+                    poly_dictionary[u].append((poly,t))
 
         box = [[0,0],[800,0],[800,500],[0,500]]
 
         quad_root = QuadTree((box[0],box[2]))
 
         for user,polygon_list in poly_dictionary.items():
-            for polygon in polygon_list:
-                quad_root.__add_polygon__(user,polygon)
+            for polygon,poly_type in polygon_list:
+                quad_root.__add_polygon__(user,polygon,poly_type)
 
         to_process = [quad_root]
 
@@ -346,36 +304,54 @@ class BlobClustering(clustering.Cluster):
 
             # if we have parent != the root => need to read in
             if node.parent is not None:
-                for user,poly in node.parent.__poly_iteration__():
-                    node.__add_polygon__(user,poly,debug=False)
+                for user,(poly,poly_type) in node.parent.__poly_iteration__():
+                    node.__add_polygon__(user,poly,poly_type)
 
             new_children = node.__get_splits__()
 
             to_process.extend(new_children)
 
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        quad_root.__plot__(ax)
-        plt.show()
-        assert False
+        # results.append({"users":merged_users,"cluster members":merged_points,"tools":merged_tools,"num users":num_users})
+        # total incorrect area is the total area which at least one person marked/outlined by not enough people
+        # so typically just 1 or 2 (unless we change the threshold)
+        aggregate_polygons,aggregate_stats,total_incorrect_area = quad_root.__aggregate__()
 
-    def __put_markings_in_boxes__(self,bounding_box):
-        for polygons in poly_dictionary.values():
-            for p in polygons:
-                print bounding_box.intersection(p).is_empty
+        incorrect_area_as_percent = None
 
-                x,y = p.exterior.xy
-                plt.plot(x,y)
-        plt.show()
-        assert False
+        # if we have  been provided the dimensions we can express blob area as a % of total area
+        if dimensions is not None:
+            image_area = dimensions[0]*dimensions[1]
+            for tool_id in aggregate_stats:
+                vote_percentage,tool_area = aggregate_stats[tool_id]
+                aggregate_stats[tool_id] = vote_percentage,tool_area/float(image_area)
 
+            incorrect_area_as_percent = total_incorrect_area/image_area
 
+        results = []
+        # a lot of this stuff is done in the classification code for other tool types but it makes more
+        # sense for polygons to do it here
+        for tool_id in aggregate_polygons:
+            assert len(aggregate_polygons[tool_id]) == len(aggregate_stats[tool_id])
+            for poly,stats in zip(aggregate_polygons[tool_id],aggregate_stats[tool_id]):
+                # None -> not really relevant to polygon aggregation
+                # or really hard to keep track of
+                assert isinstance(poly,Polygon)
+                next_result = dict()
+                next_result["center"] = zip(poly.exterior.xy[0],poly.exterior.xy[0])
+                next_result["users"] = None
+                next_result["num users"] = None
+                next_result["cluster_members"] = None
+                next_result["tool classification"] = tool_id
 
-if __name__ == "__main__":
-    c = Controller()
-    for a in SubsetGenerator(range(5),3,c):
-        print a
-        if a[0] == 0:
-            c.__skip__([0])
-        print a
-        print
+                next_result["area"] = stats[1]
+                next_result["certainty"] = stats[0]
+
+                # these are global values which are not really specific to any one polygon
+                # but this seems to be the best place to store the values
+                next_result["incorrect area"] = incorrect_area_as_percent
+                # todo - don't hard code this
+                next_result["minimum users"] = 3
+
+                results.append(next_result)
+
+        return results,0
