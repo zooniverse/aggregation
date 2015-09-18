@@ -385,7 +385,6 @@ class BlobClustering(clustering.Cluster):
         if results == []:
             # add in a dummy polygon so that we can report back the size of
             # the incorrect area
-            results = [{"area":0,"incorrect area":incorrect_area_as_percent,"certain": -1},]
-            print "  " + str(incorrect_area_as_percent)
+            results = [{"area":0,"incorrect area":incorrect_area_as_percent,"certainty": -1},]
 
         return results,0

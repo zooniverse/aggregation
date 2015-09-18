@@ -125,11 +125,13 @@ class Cluster:
                     if shape not in aggregation[subject_id][task_id]:
                         # store the set of all users who have seen this subject/task
                         # used for determining false vs. true positives
-                        aggregation[subject_id][task_id][str(shape) + " clusters"] = {"param":"cluster_index","all_users":all_users}
+                        aggregation[subject_id][task_id][str(shape) + " clusters"] = {"all_users":all_users}
 
                     for cluster_index,cluster in enumerate(cluster_results):
                         aggregation[subject_id][task_id][shape+ " clusters"][cluster_index] = cluster
 
+                    if subject_id == 511728:
+                        assert False
         # we should have some results
         # assert aggregation != {"param":"subject_id"}
         return aggregation
