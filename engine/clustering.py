@@ -54,7 +54,7 @@ class Cluster:
 
 
     @abc.abstractmethod
-    def __inner_fit__(self,markings,user_ids,tools,reduced_markings):
+    def __inner_fit__(self,markings,user_ids,tools,reduced_markings,dimensions):
         """
         the main function for clustering
         :param user_ids:
@@ -73,7 +73,7 @@ class Cluster:
 
         return (cluster_centers , markings_per_cluster, users_per_cluster), time_to_cluster
 
-    def __aggregate__(self,raw_markings):
+    def __aggregate__(self,raw_markings,image_dimensions):
         """
         the function to call from outside to do the clustering
         override but call if you want to add additional functionality
@@ -96,6 +96,7 @@ class Cluster:
                     continue
 
                 for subject_id in raw_markings[task_id][shape]:
+                    print subject_id
                     assert raw_markings[task_id][shape][subject_id] != []
 
                     # remove any "markings" which correspond to the user not making a marking
@@ -114,7 +115,7 @@ class Cluster:
                         reduced_markings = self.dim_reduction_alg(markings)
 
                         # do the actual clustering
-                        cluster_results,time_to_cluster = self.__inner_fit__(markings,users,tools,reduced_markings)
+                        cluster_results,time_to_cluster = self.__inner_fit__(markings,users,tools,reduced_markings,image_dimensions[subject_id])
 
                     # store the results - note we need to store even for empty images
                     if subject_id not in aggregation:
