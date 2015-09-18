@@ -472,8 +472,8 @@ class AggregationAPI:
                         # check to see if the metadata contains image size
                         metadata = json.loads(record.metadata)
                         if "subject_dimensions" in metadata:
-                            height = metadata["subject_dimensions"]["naturalHeight"]
-                            width = metadata["subject_dimensions"]["naturalWidth"]
+                            height = metadata["subject_dimensions"][0]["naturalHeight"]
+                            width = metadata["subject_dimensions"][0]["naturalWidth"]
                         else:
                             height = None
                             width = None
@@ -815,6 +815,9 @@ class AggregationAPI:
             # else - the next run will start at the old time stamp (which we want)
             if exc_type is None:
                 pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
+            # we encountered an error - if we have a rollbar_token, report the error
+            elif self.rollbar_token is not None:
+                pass
 
             # shutdown the connection to Cassandra and remove the lock so other aggregation instances
             # can run, regardless of whether an error occurred
