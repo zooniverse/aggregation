@@ -1,6 +1,6 @@
 import clustering
 import matplotlib.pyplot as plt
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon,MultiPolygon
 import itertools
 import math
 from shapely.validation import explain_validity
@@ -147,6 +147,7 @@ class QuadTree:
                 # print new_percentage[tool_id]
                 return_stats[tool_id] = numpy.average(new_percentage[tool_id],weights=new_area[tool_id]),sum(new_area[tool_id])
 
+                assert not isinstance(return_polygons[tool_id],list)
             return return_polygons,return_stats,total_incorrect_area
 
     def __add_polygon__(self,user,polygon,poly_type):
@@ -331,27 +332,43 @@ class BlobClustering(clustering.Cluster):
         # a lot of this stuff is done in the classification code for other tool types but it makes more
         # sense for polygons to do it here
         for tool_id in aggregate_polygons:
-            assert len(aggregate_polygons[tool_id]) == len(aggregate_stats[tool_id])
-            for poly,stats in zip(aggregate_polygons[tool_id],aggregate_stats[tool_id]):
-                # None -> not really relevant to polygon aggregation
-                # or really hard to keep track of
-                assert isinstance(poly,Polygon)
-                next_result = dict()
-                next_result["center"] = zip(poly.exterior.xy[0],poly.exterior.xy[0])
-                next_result["users"] = None
-                next_result["num users"] = None
-                next_result["cluster_members"] = None
-                next_result["tool classification"] = tool_id
+            # have one set of results per tool type
+            # the center will be a list of all polygons
+            next_result = dict()
 
-                next_result["area"] = stats[1]
-                next_result["certainty"] = stats[0]
 
-                # these are global values which are not really specific to any one polygon
-                # but this seems to be the best place to store the values
-                next_result["incorrect area"] = incorrect_area_as_percent
-                # todo - don't hard code this
-                next_result["minimum users"] = 3
+            # we will either have a multi-polygon as our aggregation result - or if we are really
+            # lucky, a single polygon
+            if isinstance(aggregate_polygons[tool_id],Polygon):
+                poly = aggregate_polygons[tool_id]
+                next_result["center"] = [zip(poly.exterior.xy[0],poly.exterior.xy[0])]
+            elif isinstance(aggregate_polygons[tool_id], MultiPolygon):
+                next_result["center"] = []
+                for poly in aggregate_polygons[tool_id]:
 
-                results.append(next_result)
+                    # go through each of the individual polygons making up this multipolygon
+                    if isinstance(poly,Polygon):
+                        next_result["center"].append(zip(poly.exterior.xy[0],poly.exterior.xy[0]))
+            else:
+                # unknown type
+                print type(aggregate_polygons[tool_id])
+                assert False
+
+            # a value of None -> not really relevant to polygon aggregation
+            # or really hard to keep track of
+            next_result["users"] = None
+            next_result["num users"] = None
+            next_result["cluster_members"] = None
+            next_result["tool classification"] = tool_id
+
+            # these are global values which are not really specific to any one polygon
+            # but this seems to be the best place to store the values
+            next_result["incorrect area"] = incorrect_area_as_percent
+            # todo - don't hard code this
+            next_result["minimum users"] = 3
+            next_result["area"] = aggregate_stats[tool_id][1]
+            next_result["certainty"] = aggregate_stats[tool_id][0]
+
+            results.append(next_result)
 
         return results,0
