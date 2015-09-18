@@ -81,8 +81,10 @@ def relevant_line_params(marking,image_dimensions):
     if min(x1,x2,y1,y2) < 0:
         raise InvalidMarking(marking)
 
-    if (max(x1,x2) >= image_dimensions[0]) or (max(y1,y2) >= image_dimensions[1]):
-        raise InvalidMarking(marking)
+    # only do this part if we have been provided dimensions
+    if image_dimensions is not None:
+        if (max(x1,x2) >= image_dimensions[0]) or (max(y1,y2) >= image_dimensions[1]):
+            raise InvalidMarking(marking)
 
     if x1 <= x2:
         return x1,y1,x2,y2
@@ -118,8 +120,12 @@ def relevant_rectangle_params(marking,image_dimensions):
     x2 = x + marking["width"]
     y2 = y + marking["height"]
 
-    if (x<0)or(y<0)or(x2 > image_dimensions[0]) or(y2>image_dimensions[1]):
+    if (x<0)or(y<0):
         raise InvalidMarking(marking)
+
+    if image_dimensions is not None:
+        if(x2 > image_dimensions[0]) or(y2>image_dimensions[1]):
+            raise InvalidMarking(marking)
 
     # return x,y,x2,y2
     return (x,y),(x,y2),(x2,y2),(x2,y)
@@ -245,10 +251,10 @@ class AggregationAPI:
         self.rollbar_token = None
         if "rollbar" in api_details[self.environment]:
             self.rollbar_token = api_details[self.environment]["rollbar"]
-            print "raising error"
-            rollbar.init(self.rollbar_token,"production")
-            rollbar.report_message('Greg is testing rollbar', 'error')
-            assert False
+            # print "raising error"
+            # rollbar.init(self.rollbar_token,"production")
+            # rollbar.report_message('testing rollbar again', 'error')
+            # assert False
 
         print "connecting to Panoptes http api"
         # todo - allow for public connections where user_id and password are not needed
@@ -367,16 +373,14 @@ class AggregationAPI:
             clustering_aggregations = None
             classification_aggregations = None
 
-            # if we have provided a clustering algorithm and there are marking tasks
-            # ideally if there are no marking tasks, then we shouldn't have provided a clustering algorithm
-            # but nice sanity check
-            # print sorted(subject_set)
-            raw_classifications,raw_markings = self.__sort_annotations__(workflow_id,subject_set,expert)
+            # image_dimensions can be used by some clustering approaches - ie. for blob clustering
+            # to give area as percentage of the total image area
+            raw_classifications,raw_markings,image_dimensions = self.__sort_annotations__(workflow_id,subject_set,expert)
 
             # do we have any marking tasks?
             if marking_tasks != {}:
                 print "clustering"
-                clustering_aggregations = self.__cluster__(raw_markings)
+                clustering_aggregations = self.__cluster__(raw_markings,image_dimensions)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
             if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
@@ -434,9 +438,9 @@ class AggregationAPI:
                 statements_and_params = []
 
                 if ignore_versions:
-                    select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ?")
+                    select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ?")
                 else:
-                    select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
+                    select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
 
                 for subject_id in s:
                     if ignore_versions:
@@ -464,9 +468,17 @@ class AggregationAPI:
                             print "too early"
                             print record.created_at
                             continue
-                        # else:
-                        #     print record.created_at
-                        yield int(subject_id),int(record.user_id),record.annotations
+
+                        # check to see if the metadata contains image size
+                        metadata = json.loads(record.metadata)
+                        if "subject_dimensions" in metadata:
+                            height = metadata["subject_dimensions"]["naturalHeight"]
+                            width = metadata["subject_dimensions"]["naturalWidth"]
+                        else:
+                            height = None
+                            width = None
+
+                        yield int(subject_id),int(record.user_id),record.annotations,(height,width)
 
             raise StopIteration()
         return annotation_generator
@@ -517,7 +529,7 @@ class AggregationAPI:
         # assert False
         return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations,gold_standard_classifications)
 
-    def __cluster__(self,raw_markings):
+    def __cluster__(self,raw_markings,image_dimensions):
         """
         run the clustering algorithm for a given workflow
         need to have already checked that the workflow requires clustering
@@ -542,7 +554,7 @@ class AggregationAPI:
         # will store the aggregations for all clustering
         cluster_aggregation = {}
         for shape in self.cluster_algs:
-            shape_aggregation = self.cluster_algs[shape].__aggregate__(raw_markings)
+            shape_aggregation = self.cluster_algs[shape].__aggregate__(raw_markings,image_dimensions)
 
             if cluster_aggregation == {}:
                 cluster_aggregation = shape_aggregation
@@ -2214,13 +2226,14 @@ class AggregationAPI:
         raw_classifications = {}
         raw_markings = {}
 
-        # todo - do this part better
-        width = 2000
-        height = 2000
+        image_dimensions = {}
 
-        for subject_id,user_id,annotation in annotation_generator(workflow_id,subject_set):
+        for subject_id,user_id,annotation,dimensions in annotation_generator(workflow_id,subject_set):
             if user_id == expert:
                 continue
+
+            if dimensions is not None:
+                image_dimensions[subject_id] = dimensions
 
             # todo - maybe having user_id=="" would be useful for penguins
             if (user_id == -1):
@@ -2282,7 +2295,7 @@ class AggregationAPI:
 
                         try:
                             # extract the params specifically relevant to the given shape
-                            relevant_params = self.marking_params_per_shape[shape](marking,(width,height))
+                            relevant_params = self.marking_params_per_shape[shape](marking,dimensions)
                         except InvalidMarking as e:
                             # print e
                             continue
@@ -2349,7 +2362,7 @@ class AggregationAPI:
         #             print subject_id
         #             assert raw_markings[task_id][shape][subject_id] != []
 
-        return raw_classifications,raw_markings
+        return raw_classifications,raw_markings,image_dimensions
 
     def __subject_ids_in_set__(self,set_id):
         # request = urllib2.Request(self.host_api+"aggregations?workflow_id="+str(2)+"&subject_id="+str(458021)+"&admin=true")
