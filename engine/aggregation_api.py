@@ -2050,12 +2050,16 @@ class AggregationAPI:
                         print tool
                         assert False
 
-                    if task_id not in classification_tasks:
-                        classification_tasks[task_id] = {}
-                    if "shapes" not in classification_tasks[task_id]:
-                        classification_tasks[task_id]["shapes"] = []
+                    # polygons are done differently, so shouldn't be handled at all by
+                    # the classification algorithms
+                    # todo - how should rectangles be handled?
+                    if tool["type"] not in ["polygon"]:
+                        if task_id not in classification_tasks:
+                            classification_tasks[task_id] = {}
+                        if "shapes" not in classification_tasks[task_id]:
+                            classification_tasks[task_id]["shapes"] = []
 
-                    classification_tasks[task_id]["shapes"].append(shape)
+                        classification_tasks[task_id]["shapes"].append(shape)
 
             else:
                 # self.marking_params_per_task[task_id] = []
