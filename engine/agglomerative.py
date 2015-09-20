@@ -68,7 +68,7 @@ class Agglomerative(clustering.Cluster):
     #
     #     return results
 
-    def __inner_fit__(self,markings,user_ids,tools,reduced_markings):
+    def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions):
         """
         the actual clustering algorithm
         markings and user_ids should be the same length - a one to one mapping

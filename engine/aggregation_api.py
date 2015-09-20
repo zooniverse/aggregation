@@ -340,7 +340,6 @@ class AggregationAPI:
         # retire => self.only_retired_subjects = True
         self.only_recent_subjects = False
 
-
     def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[]),expert=None,store_values=True):
         """
         you can provide a list of clusters - hopefully examples of both true positives and false positives
@@ -1452,22 +1451,22 @@ class AggregationAPI:
 
         # uncomment this code if this is the first time you've run migration on whatever machine
         # will create the necessary cassandra tables for you - also useful if you need to reset
-        try:
-            self.cassandra_session.execute("drop table classifications")
-            self.cassandra_session.execute("drop table subjects")
-            print "tables dropped"
-        except cassandra.InvalidRequest:
-            print "tables did not already exist"
-
-        try:
-            self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
-        except cassandra.AlreadyExists:
-            pass
-
-        try:
-            self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
-        except cassandra.AlreadyExists:
-            pass
+        # try:
+        #     self.cassandra_session.execute("drop table classifications")
+        #     self.cassandra_session.execute("drop table subjects")
+        #     print "tables dropped"
+        # except cassandra.InvalidRequest:
+        #     print "tables did not already exist"
+        #
+        # try:
+        #     self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
+        # except cassandra.AlreadyExists:
+        #     pass
+        #
+        # try:
+        #     self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
+        # except cassandra.AlreadyExists:
+        #     pass
 
         subject_listing = set()
 
@@ -2315,8 +2314,14 @@ class AggregationAPI:
 
             if subject_id in r:
                 # we are updating
-                update_str += ","+postgres_cursor.mogrify("(%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregations[subject_id])))
-                update_counter += 1
+                try:
+                    update_str += ","+postgres_cursor.mogrify("(%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregations[subject_id])))
+                    update_counter += 1
+                except UnicodeDecodeError:
+                    print workflow_id
+                    print subject_id
+                    print aggregations[subject_id]
+                    raise
             else:
                 # we are inserting a brand new aggregation
                 insert_str += ","+postgres_cursor.mogrify("(%s,%s,%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregations[subject_id]),str(datetime.datetime.now()),str(datetime.datetime.now())))

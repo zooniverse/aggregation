@@ -54,7 +54,7 @@ class Cluster:
 
 
     @abc.abstractmethod
-    def __inner_fit__(self,markings,user_ids,tools,reduced_markings,dimensions):
+    def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions):
         """
         the main function for clustering
         :param user_ids:
@@ -115,7 +115,7 @@ class Cluster:
                         reduced_markings = self.dim_reduction_alg(markings)
 
                         # do the actual clustering
-                        cluster_results,time_to_cluster = self.__inner_fit__(markings,users,tools,reduced_markings,image_dimensions[subject_id])
+                        cluster_results,time_to_cluster = self.__cluster__(markings,users,tools,reduced_markings,image_dimensions[subject_id])
 
                     # store the results - note we need to store even for empty images
                     if subject_id not in aggregation:

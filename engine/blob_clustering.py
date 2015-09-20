@@ -79,6 +79,7 @@ class QuadTree:
     def __aggregate__(self,total_area):
         if self.children is None:
             if len(self.polygons) >= 3:
+                print len(self.polygons)
                 # what is the majority vote for what type of "kind" this box outlines
                 # for example, some people might say broad leave tree while others say it is a needle leaf tree
                 # technically speaking, people could outline this region with different polygons
@@ -274,7 +275,7 @@ class BlobClustering(clustering.Cluster):
 
         return fixed_polygons
 
-    def __inner_fit__(self,markings,user_ids,tools,reduced_markings,dimensions):
+    def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions):
         poly_dictionary = {}
         for polygon_pts,u,t in zip(markings,user_ids,tools):
             # we need at least 3 points to made a valid polygon
