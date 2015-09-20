@@ -125,6 +125,7 @@ def lowest_common_ancestor(node1,node2):
 
     return node1.height
 
+
 def create_clusters(ordering,maxima):
     if maxima == []:
         return [ordering,]
@@ -355,6 +356,23 @@ class TextCluster(clustering.Cluster):
 
         return lower_text,text
 
+    def __reset_special_characters__(self,text):
+        """
+        python/postgres seem have a bit of a problem with non-standard ascii code
+        not sure why - but the easiest way to deal with this seems to be reset each non-standard ascii code
+        to the tag it corresponds to
+        :param text:
+        :return:
+        """
+        # use a 'reverse dictionary' to reset
+        for (t,c) in self.tags.items():
+            text = re.sub(c,t,text)
+
+        # also go with something different for "not sure"
+        text = re.sub(chr(200),chr(27),text)
+
+        return text
+
     def __merge_aligned_text__(self,aligned_text):
         """
         once we have aligned the text using MAFFT, use this function to actually decide on an aggregate
@@ -427,7 +445,7 @@ class TextCluster(clustering.Cluster):
 
         return aligned_nf_text_list
 
-    def __inner_fit__(self,markings,user_ids,tools,reduced_markings):
+    def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions):
         # we want to first cluster first just on dist and theta - ignoring the text contents
         # dist_list,theta_list,text_list,raw_pts_list = zip(*markings)
         # mapped_markings = zip(dist_list,theta_list)
@@ -435,7 +453,7 @@ class TextCluster(clustering.Cluster):
         # cluster just on points, not on text
         dist_l,theta_l,text_l = zip(*reduced_markings)
         reduced_markings_without_text = zip(dist_l,theta_l)
-        ordering  = self.__fit2__(reduced_markings_without_text,user_ids)
+        ordering  = self.__preliminarily__clustering__(reduced_markings_without_text,user_ids)
 
         # use the below 2 to build up each cluster
         current_lines = {}
@@ -478,7 +496,7 @@ class TextCluster(clustering.Cluster):
             # save these values for later use
             non_fasta_text[(raw_pt,user)] = nf_text
 
-            # if we have an empty cluster, just add the line
+            # if we currently have an empty cluster, just add the line
             if current_lines == {}:
                 current_lines[user] = text
                 # adding the user id is slightly redundant but makes doing the actual clustering easier
@@ -543,7 +561,7 @@ class TextCluster(clustering.Cluster):
         # remove any clusters which have only one user - treat those as noise
         for cluster_index in range(len(clusters)-1,-1,-1):
             # print len(clusters[cluster_index][0])
-            if len(clusters[cluster_index][0]) <= 1: #2
+            if len(clusters[cluster_index][0]) <= 4: #2
                 # assert len(clusters[cluster_index][1]) == 1
                 clusters.pop(cluster_index)
 
@@ -656,7 +674,10 @@ class TextCluster(clustering.Cluster):
 
             # aggregate the lines - looking for character spots where there is mostly consensus
             aggregate_text,character_agreement,per_user_agreement = self.__merge_aligned_text__(nf_aligned_text)
-            print str(len(users)) + "\t" + aggregate_text
+            # print str(len(users)) + "\t" + aggregate_text
+
+            aggregate_text = self.__reset_special_characters__(aggregate_text)
+            # print "\t" + aggregate_text
 
             cluster_centers.append((x1,x2,y1,y2,aggregate_text))
             cluster_pts.append(zip(pts,lines))
@@ -667,14 +688,16 @@ class TextCluster(clustering.Cluster):
             # use this if you want to keep track of stats
             # self.line_agreement[-1].append((character_agreement,len(users)))
 
-        print
         results = []
         for center,pts,users,lines,a in zip(cluster_centers,cluster_pts,cluster_users,cluster_members,agreement):
             results.append({"center":center,"cluster members":lines,"tools":[],"num users":len(users),"agreement":a})
 
         return results,0
 
-    def __fit2__(self,markings,user_ids,jpeg_file=None,debug=False):
+    def __preliminarily__clustering__(self,markings,user_ids):
+        """
+        do an initial clustering based just on user ids and line coordinates (so ignore the text values)
+        """
         # l = [[(u,m[0]) for m in marking] for u,marking in zip(user_ids,markings)]
         user_list,pts_list = user_ids,markings
         # assert len(pts_list) == len(list(set(pts_list)))
@@ -939,8 +962,8 @@ if __name__ == "__main__":
         # pass
         # subject_id = int(project.__subject_ids_in_set__(905)[1])
         # subject_id = 603303
-        project.__migrate__()
-        project.__aggregate__()
+        # project.__migrate__()
+        project.__aggregate__(subject_set=[662859])
         # project.__aggregate__(workflows=[121],subject_set=[subject_id])
         # print project.cluster_algs["text"].line_agreement
         # project.__migrate__()
