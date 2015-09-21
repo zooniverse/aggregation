@@ -4,13 +4,9 @@ import os
 import tarfile
 import yaml
 import urllib2
-import psycopg2
 import cookielib
 import re
 import json
-import cassandra
-from cassandra.cluster import Cluster
-from cassandra.concurrent import execute_concurrent
 import urllib
 import datetime
 import classification
@@ -22,24 +18,27 @@ import agglomerative
 import clustering
 import blob_clustering
 from collections import OrderedDict
-import numpy
 import random
 import cPickle as pickle
-import csv
-import zipfile
 from os.path import expanduser
-import rollbar
 import csv_output
-# setup(
-#     name = "Zooniverse Aggregation",
-#     version = "0.1",
-#     packages = find_packages(),
-# )
+
+# these are libraries which are only needed if you are working directly with the db
+# so if they are not on your computer - we'll just skip them
+try:
+    import cassandra
+    from cassandra.cluster import Cluster
+    from cassandra.concurrent import execute_concurrent
+    import psycopg2
+    import rollbar
+except:
+    pass
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
 else:
     base_directory = "/home/greg"
+
 
 class InvalidMarking(Exception):
     def __init__(self,pt):
@@ -67,6 +66,7 @@ class InstanceAlreadyRunning(Exception):
         pass
     def __str__(self):
         return "aggregation engine already running"
+
 
 # extract the relevant params for different shapes from the json blob
 # todo - do a better job of checking to make sure that the marking lies within the image dimension
@@ -210,6 +210,8 @@ class AggregationAPI:
             self.environment = environment
 
         self.host_api = None
+        # just for when we are treating an ouroboros project like a panoptes one
+        # in which the subject ids will be zooniverse_ids, which are strings
         self.subject_id_type = "int"
 
         self.experts = []
@@ -219,9 +221,38 @@ class AggregationAPI:
 
         self.postgres_session = None
         self.cassandra_session = None
-        # only try to connect to the databases if we haven't been provided the csv files
-        # don't try connecting to the db if we are using a public connection to panopes
-        if (csv_classification_file is None) and (public_panoptes_connection is False):
+
+        # load in the project id (a number)
+        # if one isn't provided, tried reading it from the yaml config file
+        # todo - if we are not using a secure connection, this forces the project_id
+        # todo - to be provided as a param (since we don't read in the yaml file)
+        # todo - probably want to change that at some point as there is value in
+        # todo - non logged in users having a yaml file (where they can give csv classification files etc.)
+        self.project_id = None
+        try:
+            self.project_id = int(project)
+        except ValueError:
+            pass
+
+
+
+        # if we are using a public panoptes connection
+        # we won't be able to connect to the back end databases, so might as well exit here
+        if public_panoptes_connection:
+            # go with the very basic connection
+            print "trying public Panoptes connection - no login"
+            self.host = "https://panoptes.zooniverse.org/"
+            self.host_api = self.host+"api/"
+            self.token = None
+            return
+
+        #########
+        # everything that follows assumes you have a secure connection to Panoptes
+        # plus the DBs (either production or staging)
+
+        # todo - (csv_classification_file != None) => shouldn't make it this far
+        # todo - so refactor
+        if csv_classification_file is None:
 
             try:
                 database_file = open("config/database.yml")
@@ -242,7 +273,7 @@ class AggregationAPI:
             # use for Cassandra connection - can override for Ourboros projects
             self.classification_table = "classifications"
 
-        # get my userID and password
+        # get Greg's userID and password
         # purely for testing, if this file does not exist, try opening on Greg's computer
         try:
             panoptes_file = open("config/aggregation.yml","rb")
@@ -250,36 +281,9 @@ class AggregationAPI:
             panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
         api_details = yaml.load(panoptes_file)
 
-        self.rollbar_token = None
-        if "rollbar" in api_details[self.environment]:
-            self.rollbar_token = api_details[self.environment]["rollbar"]
-            # print "raising error"
-            rollbar.init(self.rollbar_token,"production")
-            # rollbar.report_message('testing rollbar again', 'error')
-            # assert False
-
-        print "connecting to Panoptes http api"
-        if public_panoptes_connection:
-            # go with the very basic connection
-            print "trying public connection - no login"
-            self.host = "https://panoptes.zooniverse.org/"
-            self.host_api = self.host+"api/"
-            self.token = None
-        else:
-            print "trying secure connection"
-            if user_id is None:
-                user_id = api_details[self.environment]["name"]
-            if password is None:
-                password = api_details[self.environment]["password"]
-            self.__panoptes_connect__(api_details[self.environment],user_id,password)
-
-        # if project id is given, connect using basic values - assume we are in production space
-        # if project id is given as an int, assume that it is referring to the Panoptes id
-        try:
-            self.project_id = int(project)
-        except ValueError:
-            # we were given a project string name - so try looking for the number in either config file
-            # or connect to panoptes to fine out
+        # if we had been previously unable to load the numerical project_id
+        # try again now that we have the yaml file
+        if self.project_id is None:
             if "project_id" in api_details[project]:
                 self.project_id = int (api_details[project]["project_id"])
             else:
@@ -288,13 +292,24 @@ class AggregationAPI:
                 self.project_name = api_details[project]["project_name"]
                 self.project_id = self.__get_project_id()
 
-        # the rest of what follows needs a secure connection to Panoptes
-        # to obtain
-        # todo - refactor so that the below stuff only runs if we have a secure connection
-        # todo i.e. we are actually running the aggregation engine
-        if public_panoptes_connection:
-            return
+        # load in rollbar stuff - for reporting errors/stats when running on AWS
+        self.rollbar_token = None
+        if "rollbar" in api_details[self.environment]:
+            self.rollbar_token = api_details[self.environment]["rollbar"]
+            # print "raising error"
+            rollbar.init(self.rollbar_token,"production")
+            # rollbar.report_message('testing rollbar again', 'error')
+            # assert False
 
+        # make the actual connection to Panoptes
+        print "trying secure Panoptes connection"
+        if user_id is None:
+            user_id = api_details[self.environment]["name"]
+        if password is None:
+            password = api_details[self.environment]["password"]
+        self.__panoptes_connect__(api_details[self.environment],user_id,password)
+
+        # todo - refactor all this?
         # there may be more than one workflow associated with a project - read them all in
         # and set up the associated tasks
         self.workflows,self.versions,self.instructions,self.updated_at_timestamps = self.__get_workflow_details__()
@@ -341,8 +356,6 @@ class AggregationAPI:
         self.ignore_versions = False
 
         self.starting_date = datetime.datetime(2000,1,1)
-
-
 
         # bit of a stop gap measure - stores how many people have classified a given subject
         self.classifications_per_subject = {}
