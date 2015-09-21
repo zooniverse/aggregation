@@ -11,7 +11,8 @@ import numpy
 
 class CsvOut:
     def __init__(self,project):
-        assert isinstance(project,aggregation_api.project)
+        print type(project)
+        # assert isinstance(project,aggregation_api.AggregationAPI)
         self.project = project
 
         self.project_id = project.project_id
@@ -23,6 +24,10 @@ class CsvOut:
         self.__count_check__ = project.__count_check__
         self.retirement_thresholds = project.retirement_thresholds
         self.versions = project.versions
+
+        # dictionaries to hold the output files
+        self.marking_csv_files = {}
+        self.classification_csv_files = {}
 
     def __csv_classification_output__(self,workflow_id,task_id,subject_id,aggregations):
         """
@@ -72,7 +77,7 @@ class CsvOut:
         """
         open csv files for each output and write headers for each file
         """
-        # close any previously opened files - needed when we have multiple workflows per porject
+        # close any previously opened files - needed when we have multiple workflows per project
         for f in self.marking_csv_files.values():
             assert isinstance(f,file)
             f.close()
@@ -125,13 +130,14 @@ class CsvOut:
         #     header += ",num_users"
         #     self.classification_csv_files[task].write(header+"\n")
 
-
-    def __csv_output__(self):
+    def __write_out__(self,subject_set = None):
         """
         create the csv outputs for a given set of workflows
         the workflows are specified by self.workflows which is determined when the aggregation engine starts
         a zipped file is created in the end
         """
+        assert (subject_set is None) or isinstance(subject_set,int)
+
         for workflow_id in self.workflows:
             print "csv output for workflow - " + str(workflow_id)
             self.__csv_file_setup__(workflow_id)
@@ -139,19 +145,20 @@ class CsvOut:
             print classification_tasks
             print marking_tasks
 
-            # retired_subjects = self.__get_subjects__(workflow_id,only_retired_subjects=True,only_recent_subjects=False)
-            for subject_id,task_id,aggregations in self.__yield_aggregations__(workflow_id):
+            for subject_id,task_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
                 # check to see if the correct number of classifications were received
                 # todo - this is only a stop gap measure until we figure out why some subjects are being
                 # todo - retired early. Once that is done, we can remove this
                 if self.__count_check__(workflow_id,subject_id) < self.retirement_thresholds[workflow_id]:
+                    print "skipping"
                     continue
 
                 # are there markings associated with this task?
                 if task_id in marking_tasks:
                     for shape in set(marking_tasks[task_id]):
                         if shape == "polygon":
-                            self.__csv_polygon_output__(workflow_id,task_id,subject_id,aggregations)
+                            self.__polygon_summary_output__(workflow_id,task_id,subject_id,aggregations)
+                            self.__polygon_heatmap_output__(workflow_id,task_id,subject_id,aggregations)
                     # self.__csv_marking__output__(workflow_id,task_id,subject_id,aggregations,marking_tasks[task_id])
 
                 # are there any classifications associated with this task
@@ -161,43 +168,40 @@ class CsvOut:
         # finally zip everything (over all workflows) into one zip file
         self.__csv_to_zip__()
 
-    def __csv_annotations__(self,workflow_id_filter,subject_set):
-        # find the major id of the workflow we are filtering
-        version_filter = int(math.floor(float(self.versions[workflow_id_filter])))
-
-        if subject_set is None:
-            subject_set = self.__load_subjects__(workflow_id_filter)
-
-        with open(self.csv_classification_file, 'rb') as csvfile:
-            reader = csv.reader(csvfile, delimiter=',', quotechar='|')
-
-            for row in reader:
-                subject_data = row[8]
-                annotations = row[7]
-                workflow_id = row[2]
-                workflow_version = row[4]
-
-                # convert to json form
-                subject_data = json.loads(subject_data)
-                subject_id = subject_data.keys()[0]
-
-                # csv file contains classifications from every workflow - so make sure we find
-                # only the one we currently want
-                if int(workflow_id) != workflow_id_filter:
-                    continue
-
-                # if these are not one of the subjects we are looking for
-                if subject_id not in subject_set:
-                    continue
-
-                # convert to float
-                workflow_version = float(workflow_version)
-                # if we are not at the correct major version id, skip
-                if workflow_version < version_filter:
-                    continue
-
-
-
+    # def __csv_annotations__(self,workflow_id_filter,subject_set):
+    #     # find the major id of the workflow we are filtering
+    #     version_filter = int(math.floor(float(self.versions[workflow_id_filter])))
+    #
+    #     if subject_set is None:
+    #         subject_set = self.__load_subjects__(workflow_id_filter)
+    #
+    #     with open(self.csv_classification_file, 'rb') as csvfile:
+    #         reader = csv.reader(csvfile, delimiter=',', quotechar='|')
+    #
+    #         for row in reader:
+    #             subject_data = row[8]
+    #             annotations = row[7]
+    #             workflow_id = row[2]
+    #             workflow_version = row[4]
+    #
+    #             # convert to json form
+    #             subject_data = json.loads(subject_data)
+    #             subject_id = subject_data.keys()[0]
+    #
+    #             # csv file contains classifications from every workflow - so make sure we find
+    #             # only the one we currently want
+    #             if int(workflow_id) != workflow_id_filter:
+    #                 continue
+    #
+    #             # if these are not one of the subjects we are looking for
+    #             if subject_id not in subject_set:
+    #                 continue
+    #
+    #             # convert to float
+    #             workflow_version = float(workflow_version)
+    #             # if we are not at the correct major version id, skip
+    #             if workflow_version < version_filter:
+    #                 continue
 
     def __csv_marking_header_setup__(self,workflow_id,task,tools,output_directory):
         """
@@ -206,13 +210,20 @@ class CsvOut:
         be slightly overwhelming, but then we could make the column headers more understandable
         """
         if "polygon" in tools:
-            self.marking_csv_files[task+"polygon"] = open(output_directory+task+"_polygons.csv","wb")
+            key = task+"polygon_summary"
+            self.marking_csv_files[key] = open(output_directory+task+"_polygons_summary.csv","wb")
             header = "subject_id,num_users,minimum_users_per_cluster,area(noise),tool_certainity"
             for tool_id in sorted(self.instructions[workflow_id][task]["tools"].keys()):
                 tool = self.instructions[workflow_id][task]["tools"][tool_id]["marking tool"]
                 tool = re.sub(" ","_",tool)
                 header += ",area("+tool+")"
-            self.marking_csv_files[task+"polygon"].write(header+"\n")
+            self.marking_csv_files[key].write(header+"\n")
+
+            key = task+"polygon_heatmap"
+            self.marking_csv_files[key] = open(output_directory+task+"_polygons_heatmap.csv","wb")
+            header = "subject_id,num_users,pts"
+            self.marking_csv_files[key].write(header+"\n")
+
 
         # print workflow_id
         # print task
@@ -225,9 +236,36 @@ class CsvOut:
         # header += ",mean probability,median probability,mean tool likelihood,median tool likelihood,number of users"
         # self.marking_csv_files[task].write(header+"\n")
 
-    def __csv_polygon_output__(self,workflow_id,task_id,subject_id,aggregations):
+    def __polygon_heatmap_output__(self,workflow_id,task_id,subject_id,aggregations):
         """
-        need to know the workdlow and task id so we can look up the instructions
+        print out regions according to how many users selected that user - so we can a heatmap
+        of the results
+        :param workflow_id:
+        :param task_id:
+        :param subject_id:
+        :param aggregations:
+        :return:
+        """
+        key = task_id+"polygon_heatmap"
+        for cluster_index,cluster in aggregations["polygon clusters"].items():
+            # each cluster refers to a specific tool type - so there can actually be multiple blobs
+            # (or clusters) per cluster
+            # not actually clusters
+
+            if cluster_index in ["param","all_users"]:
+                continue
+
+            if cluster["tool classification"] is not None:
+                # this result is not relevant to the heatmap
+                continue
+
+            row = str(subject_id) + "," + str(cluster["num users"]) + ",\"" + str(cluster["center"]) + "\""
+            self.marking_csv_files[key].write(row+"\n")
+
+    def __polygon_summary_output__(self,workflow_id,task_id,subject_id,aggregations):
+        """
+        print out a csv summary of the polygon aggregations (so not the individual xy points)
+        need to know the workflow and task id so we can look up the instructions
         that way we can know if there is no output for a given tool - that tool wouldn't appear
         at all in the aggregations
         """
@@ -251,6 +289,10 @@ class CsvOut:
                 continue
 
             if cluster_index in ["param","all_users"]:
+                continue
+
+            if cluster["tool classification"] is None:
+                # this result is not relevant to the summary stats
                 continue
 
             # this value will just get repeatedly read in - which is fine
@@ -284,7 +326,8 @@ class CsvOut:
             else:
                 row += ",0"
 
-        self.marking_csv_files[task_id+"polygon"].write(row+"\n")
+        key = task_id+"polygon_summary"
+        self.marking_csv_files[key].write(row+"\n")
 
     def __csv_to_zip__(self):
         """

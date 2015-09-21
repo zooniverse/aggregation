@@ -34,7 +34,7 @@ class QuadTree:
         self.user_ids = []
 
     def __get_splits__(self):
-        if (self.bounding_box.area < 25) or (len(self.polygons) <= 2):
+        if (self.bounding_box.area < 5) or (len(self.polygons) <= 2):
             return []
 
         complete_agreement = 0
@@ -414,13 +414,12 @@ class BlobClustering(clustering.Cluster):
                 for single_poly in polygons:
                     assert  isinstance(single_poly,Polygon)
                     x,y = single_poly.exterior.xy
-                    # close the loop
-                    x.append(x[0])
-                    y.append(y[0])
                     pts = zip(x,y)
 
                     next_result = {"users":None,"num users": num_users,"tool classification" : None, "area":single_poly.area, "certainty":None}
                     next_result["center"] = pts
+
+                    results.append(next_result)
 
         if results == []:
             # add in a dummy polygon so that we can report back the size of

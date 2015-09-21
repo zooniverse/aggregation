@@ -29,6 +29,7 @@ import csv
 import zipfile
 from os.path import expanduser
 import rollbar
+import csv_output
 # setup(
 #     name = "Zooniverse Aggregation",
 #     version = "0.1",
@@ -180,7 +181,7 @@ def hesse_line_reduction(line_segments):
 
 
 class AggregationAPI:
-    def __init__(self,project=None,environment=None,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None)):#,user_threshold= None, score_threshold= None): #Supernovae
+    def __init__(self,project=None,environment=None,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None),public_panoptes_connection=False):
 
         self.cluster_algs = None
         self.classification_alg = None
@@ -219,7 +220,8 @@ class AggregationAPI:
         self.postgres_session = None
         self.cassandra_session = None
         # only try to connect to the databases if we haven't been provided the csv files
-        if csv_classification_file is None:
+        # don't try connecting to the db if we are using a public connection to panopes
+        if (csv_classification_file is None) and (public_panoptes_connection is False):
 
             try:
                 database_file = open("config/database.yml")
@@ -257,12 +259,19 @@ class AggregationAPI:
             # assert False
 
         print "connecting to Panoptes http api"
-        # todo - allow for public connections where user_id and password are not needed
-        if user_id is None:
-            user_id = api_details[self.environment]["name"]
-        if password is None:
-            password = api_details[self.environment]["password"]
-        self.__panoptes_connect__(api_details[self.environment],user_id,password)
+        if public_panoptes_connection:
+            # go with the very basic connection
+            print "trying public connection - no login"
+            self.host = "https://panoptes.zooniverse.org/"
+            self.host_api = self.host+"api/"
+            self.token = None
+        else:
+            print "trying secure connection"
+            if user_id is None:
+                user_id = api_details[self.environment]["name"]
+            if password is None:
+                password = api_details[self.environment]["password"]
+            self.__panoptes_connect__(api_details[self.environment],user_id,password)
 
         # if project id is given, connect using basic values - assume we are in production space
         # if project id is given as an int, assume that it is referring to the Panoptes id
@@ -278,6 +287,13 @@ class AggregationAPI:
                 self.owner = api_details[project]["owner"]
                 self.project_name = api_details[project]["project_name"]
                 self.project_id = self.__get_project_id()
+
+        # the rest of what follows needs a secure connection to Panoptes
+        # to obtain
+        # todo - refactor so that the below stuff only runs if we have a secure connection
+        # todo i.e. we are actually running the aggregation engine
+        if public_panoptes_connection:
+            return
 
         # there may be more than one workflow associated with a project - read them all in
         # and set up the associated tasks
@@ -326,9 +342,7 @@ class AggregationAPI:
 
         self.starting_date = datetime.datetime(2000,1,1)
 
-        # dictionaries to hold the output files
-        self.marking_csv_files = {}
-        self.classification_csv_files = {}
+
 
         # bit of a stop gap measure - stores how many people have classified a given subject
         self.classifications_per_subject = {}
@@ -703,38 +717,6 @@ class AggregationAPI:
     #             print tasks[task_id]["tools"]
     #     # self. description
 
-    def __yield_aggregations__(self,workflow_id):
-        """
-        generator for giving aggregation results per subject id/task
-        """
-        # if workflows is None:
-        #     workflows = self.workflows
-        # elif isinstance(workflows,int):
-        #     # just in case we didn't provide the workflows as a list, be nice and convert
-        #     workflows = [workflows]
-
-        stmt = "select subject_id,aggregation,updated_at from aggregations where workflow_id = " + str(workflow_id)
-        cursor = self.postgres_session.cursor()
-
-        cursor.execute(stmt)
-
-        for r in cursor.fetchall():
-            aggregation = r[1]
-
-            if isinstance(aggregation,str):
-                aggregation = json.loads(aggregation)
-            elif not isinstance(aggregation,dict):
-                print type(aggregation)
-            assert isinstance(aggregation,dict)
-
-
-            for task_id in aggregation:
-                if task_id in [" instructions"," metadata","param"]:
-                    continue
-
-                # we have an instance of marking
-                # if isinstance(aggregation[task_id],dict):
-                yield r[0],task_id,aggregation[task_id]
 
     def __get_classifications__(self,subject_id,task_id,cluster_index=None,question_id=None):
         # either both of these variables are None or neither of them are
@@ -909,29 +891,31 @@ class AggregationAPI:
         :param workflow_id:
         :return:
         """
-        request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
-        # request = urllib2.Request(self.host_api+"workflows/project_id="+str(self.project_id))
-        request.add_header("Accept","application/vnd.api+json; version=1")
-        request.add_header("Authorization","Bearer "+self.token)
-
-        # request
-        try:
-            response = urllib2.urlopen(request)
-        except urllib2.HTTPError as e:
-            sys.stderr.write('The server couldn\'t fulfill the request.\n')
-            sys.stderr.write('Error code: ' + str(e.code) + "\n")
-            sys.stderr.write('Error response body: ' + str(e.read()) + "\n")
-            raise
-        except urllib2.URLError as e:
-            sys.stderr.write('We failed to reach a server.\n')
-            sys.stderr.write('Reason: ' + str(e.reason) + "\n")
-            raise
-        else:
-            # everything is fine
-            body = response.read()
-
-        # put it in json structure and extract id
-        data = json.loads(body)
+        # request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
+        # # request = urllib2.Request(self.host_api+"workflows/project_id="+str(self.project_id))
+        # request.add_header("Accept","application/vnd.api+json; version=1")
+        # request.add_header("Authorization","Bearer "+self.token)
+        #
+        # # request
+        # try:
+        #     response = urllib2.urlopen(request)
+        # except urllib2.HTTPError as e:
+        #     sys.stderr.write('The server couldn\'t fulfill the request.\n')
+        #     sys.stderr.write('Error code: ' + str(e.code) + "\n")
+        #     sys.stderr.write('Error response body: ' + str(e.read()) + "\n")
+        #     raise
+        # except urllib2.URLError as e:
+        #     sys.stderr.write('We failed to reach a server.\n')
+        #     sys.stderr.write('Reason: ' + str(e.reason) + "\n")
+        #     raise
+        # else:
+        #     # everything is fine
+        #     body = response.read()
+        #
+        # # put it in json structure and extract id
+        # data = json.loads(body)
+        request = "workflows?project_id="+str(self.project_id)
+        data = self.__panoptes_call__(request)
 
         instructions = {}
         workflows = {}
@@ -1088,30 +1072,31 @@ class AggregationAPI:
         :return:
         """
 
-        request = urllib2.Request(self.host_api+"subjects/"+str(subject_id)+"?")
-        request.add_header("Accept","application/vnd.api+json; version=1")
-        request.add_header("Authorization","Bearer "+self.token)
-        # request
-        try:
-            response = urllib2.urlopen(request)
-            body = response.read()
-        except urllib2.HTTPError as e:
-            print self.host_api+"subjects/"+str(subject_id)
-            print 'The server couldn\'t fulfill the request.'
-            print 'Error code: ', e.code
-            print 'Error response body: ', e.read()
-            raise
-        except urllib2.URLError as e:
-            print 'We failed to reach a server.'
-            print 'Reason: ', e.reason
-            raise
+        # request = urllib2.Request(self.host_api+"subjects/"+str(subject_id)+"?")
+        # request.add_header("Accept","application/vnd.api+json; version=1")
+        # request.add_header("Authorization","Bearer "+self.token)
+        # # request
+        # try:
+        #     response = urllib2.urlopen(request)
+        #     body = response.read()
+        # except urllib2.HTTPError as e:
+        #     print self.host_api+"subjects/"+str(subject_id)
+        #     print 'The server couldn\'t fulfill the request.'
+        #     print 'Error code: ', e.code
+        #     print 'Error response body: ', e.read()
+        #     raise
+        # except urllib2.URLError as e:
+        #     print 'We failed to reach a server.'
+        #     print 'Reason: ', e.reason
+        #     raise
+        #
+        # data = json.loads(body)
 
-        data = json.loads(body)
-        print data
+        data = self.__panoptes_call__("subjects/"+str(subject_id)+"?")
+
         url = str(data["subjects"][0]["locations"][0]["image/jpeg"])
 
         slash_index = url.rfind("/")
-        print url
         fname = url[slash_index+1:]
         url = "http://zooniverse-static.s3.amazonaws.com/panoptes-uploads.zooniverse.org/production/subject_location/"+url[slash_index+1:]
 
@@ -1121,7 +1106,6 @@ class AggregationAPI:
         if not(os.path.isfile(image_path)):
             if download:
                 print "downloading"
-                print url
                 urllib.urlretrieve(url, image_path)
             # raise ImageNotDownloaded()
 
@@ -1288,7 +1272,9 @@ class AggregationAPI:
         """
         request = urllib2.Request(self.host_api+url)
         request.add_header("Accept","application/vnd.api+json; version=1")
-        request.add_header("Authorization","Bearer "+self.token)
+        # only add the token if we have a secure connection
+        if self.token is not None:
+            request.add_header("Authorization","Bearer "+self.token)
 
         # request
         try:
@@ -1571,6 +1557,7 @@ class AggregationAPI:
     #         raise
 
     def __postgres_connect__(self,database_details):
+        print "connecting to postgres db -" + database_details["host"]
 
         details = ""
 
@@ -2072,6 +2059,42 @@ class AggregationAPI:
             postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
         self.postgres_session.commit()
 
+    def __yield_aggregations__(self,workflow_id,subject_set=None):
+        """
+        generator for giving aggregation results per subject id/task
+        """
+        # if workflows is None:
+        #     workflows = self.workflows
+        # elif isinstance(workflows,int):
+        #     # just in case we didn't provide the workflows as a list, be nice and convert
+        #     workflows = [workflows]
+
+        stmt = "select subject_id,aggregation,updated_at from aggregations where workflow_id = " + str(workflow_id)
+        if subject_set != None:
+            stmt += " and subject_id = " + str(subject_set)
+        cursor = self.postgres_session.cursor()
+
+        cursor.execute(stmt)
+
+        for r in cursor.fetchall():
+            aggregation = r[1]
+
+            if isinstance(aggregation,str):
+                aggregation = json.loads(aggregation)
+            elif not isinstance(aggregation,dict):
+                print type(aggregation)
+            assert isinstance(aggregation,dict)
+
+
+            for task_id in aggregation:
+                if task_id in [" instructions"," metadata","param"]:
+                    continue
+
+                # we have an instance of marking
+                # if isinstance(aggregation[task_id],dict):
+                yield r[0],task_id,aggregation[task_id]
+
+
 
 # class CountingAggregation:
 #     def __csv_marking_header_setup__(self,workflow_id,task):
@@ -2105,4 +2128,7 @@ if __name__ == "__main__":
         project.__aggregate__(subject_set = subject_set)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
         # project.__panoptes_aggregation__()
         # project.__csv_output__()#workflow_ids =[84],subject_id=494900)
-    # project.__get_workflow_details__(84)
+        c = csv_output.CsvOut(project)
+        c.__write_out__(subject_set[0])
+
+
