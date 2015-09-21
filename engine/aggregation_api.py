@@ -252,7 +252,7 @@ class AggregationAPI:
         if "rollbar" in api_details[self.environment]:
             self.rollbar_token = api_details[self.environment]["rollbar"]
             # print "raising error"
-            # rollbar.init(self.rollbar_token,"production")
+            rollbar.init(self.rollbar_token,"production")
             # rollbar.report_message('testing rollbar again', 'error')
             # assert False
 
@@ -924,9 +924,10 @@ class AggregationAPI:
             # else - the next run will start at the old time stamp (which we want)
             if exc_type is None:
                 pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
+                rollbar.report_message("everything worked fine","info")
             # we encountered an error - if we have a rollbar_token, report the error
             elif self.rollbar_token is not None:
-                pass
+                rollbar.report_exc_info()
 
             # shutdown the connection to Cassandra and remove the lock so other aggregation instances
             # can run, regardless of whether an error occurred
