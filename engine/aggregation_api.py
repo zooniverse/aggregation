@@ -2361,9 +2361,9 @@ if __name__ == "__main__":
             csv_classification_file = sys.argv[2]
 
     with AggregationAPI(project_identifier,environment) as project:
-        # project.__migrate__()
+        project.__migrate__()
         # print json.dumps(project.__aggregate__(store_values=False)[464952], sort_keys=True, indent=4, separators=(',', ': '))
-        # project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+        project.__aggregate__()#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
         # project.__panoptes_aggregation__()
-        project.__csv_output__()#workflow_ids =[84],subject_id=494900)
+        # project.__csv_output__()#workflow_ids =[84],subject_id=494900)
     # project.__get_workflow_details__(84)
