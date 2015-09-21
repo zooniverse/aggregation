@@ -77,16 +77,20 @@ class QuadTree:
                 c.__plot__(ax)
 
     def __aggregate__(self,total_area):
+        """
+        total_area is needed for calculating the "noise" area
+        :param total_area:
+        :return:
+        """
         if self.children is None:
             if len(self.polygons) >= 3:
-                print len(self.polygons)
                 # what is the majority vote for what type of "kind" this box outlines
                 # for example, some people might say broad leave tree while others say it is a needle leaf tree
                 # technically speaking, people could outline this region with different polygons
                 # if so, we'll ignore such users, under the assumption that we don't really know
                 vote_counts = {}
                 for u in self.polygons:
-                    polys,types = zip(*self.polygons[u])
+                    polys, types = zip(*self.polygons[u])
                     if min(types) == max(types):
                         vote = min(types)
                         if vote not in vote_counts:
@@ -101,11 +105,13 @@ class QuadTree:
 
                 # return two sets of values - one with the bounding box
                 # the other with the voting results
+                # last value is the noise area
 
-                return {most_likely:self.bounding_box},{most_likely:(percentage,self.bounding_box.area)},0
+                polygons_by_user_density = {i:[self.bounding_box] for i in range(3,len(self.polygons)+1)}
+                return {most_likely:self.bounding_box},{most_likely:(percentage,self.bounding_box.area)},0,polygons_by_user_density
             else:
                 if len(self.polygons) == 0:
-                    return {},{},0
+                    return {},{},0,{}
                 else:
                     # we have come polygons inside this box which amount to noise
                     # find out the area of these polygons - with respect to inside this box
@@ -117,9 +123,9 @@ class QuadTree:
                             noise_polygons.extend(zip(*poly_list)[0])
                         combined_polygon = cascaded_union(noise_polygons).intersection(self.bounding_box)
 
-                        return {},{},combined_polygon.area
+                        return {},{},combined_polygon.area,{}
                     else:
-                        return {},{},self.bounding_box.area
+                        return {},{},self.bounding_box.area,{}
         else:
             return_polygons = {}
             return_stats = {}
@@ -128,10 +134,19 @@ class QuadTree:
 
             total_incorrect_area = 0
 
+            total_polygons_user_density = {}
+
             for c in self.children:
                 # get all the polygons that are in c's bounding boxes plus stats about which tools made
                 # which reasons
-                c_polygons,c_stats,incorrect_area = c.__aggregate__(total_area)
+                c_polygons,c_stats,incorrect_area,polygons_by_user_density = c.__aggregate__(total_area)
+
+                for u in polygons_by_user_density:
+                    if u not in total_polygons_user_density:
+                        total_polygons_user_density[u] = polygons_by_user_density[u]
+                    else:
+                        total_polygons_user_density[u].extend(polygons_by_user_density[u])
+
                 total_incorrect_area += incorrect_area
 
                 # go through the
@@ -159,7 +174,12 @@ class QuadTree:
                 return_stats[tool_id] = numpy.average(new_percentage[tool_id],weights=new_area[tool_id]),sum(new_area[tool_id])
 
                 assert not isinstance(return_polygons[tool_id],list)
-            return return_polygons,return_stats,total_incorrect_area
+
+            if self.parent == None:
+                for u in total_polygons_user_density:
+                    total_polygons_user_density[u] = cascaded_union(total_polygons_user_density[u])
+
+            return return_polygons,return_stats,total_incorrect_area,total_polygons_user_density
 
     def __add_polygon__(self,user,polygon,poly_type):
         assert isinstance(polygon,Polygon)
@@ -332,7 +352,7 @@ class BlobClustering(clustering.Cluster):
         # so typically just 1 or 2 (unless we change the threshold)
         image_area = dimensions[0]*dimensions[1]
 
-        aggregate_polygons,aggregate_stats,total_incorrect_area = quad_root.__aggregate__(image_area)
+        aggregate_polygons,aggregate_stats,total_incorrect_area,polygons_by_user_density = quad_root.__aggregate__(image_area)
 
         for tool_id in aggregate_stats:
             vote_percentage,tool_area = aggregate_stats[tool_id]
@@ -382,6 +402,25 @@ class BlobClustering(clustering.Cluster):
             next_result["certainty"] = aggregate_stats[tool_id][0]
 
             results.append(next_result)
+
+        # these results might get really big so I don't want to waste space repeatedly storing the values
+        # so with slight abuse of setup ...
+        for num_users,polygons in polygons_by_user_density.items():
+            # probably never going to wind up a just a single polygon
+            # but we can always hope
+            if isinstance(polygons,Polygon):
+                assert False
+            else:
+                for single_poly in polygons:
+                    assert  isinstance(single_poly,Polygon)
+                    x,y = single_poly.exterior.xy
+                    # close the loop
+                    x.append(x[0])
+                    y.append(y[0])
+                    pts = zip(x,y)
+
+                    next_result = {"users":None,"num users": num_users,"tool classification" : None, "area":single_poly.area, "certainty":None}
+                    next_result["center"] = pts
 
         if results == []:
             # add in a dummy polygon so that we can report back the size of
