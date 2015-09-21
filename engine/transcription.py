@@ -16,7 +16,8 @@ import os
 import requests
 from aggregation_api import hesse_line_reduction
 from scipy import spatial
-import cPickle as pickle
+from termcolor import colored
+import warnings
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -176,7 +177,7 @@ class TextCluster(clustering.Cluster):
         clustering.Cluster.__init__(self,shape,dim_reduction_alg)
         self.line_agreement = []
 
-        self.tags = {}
+        self.tags = dict()
         self.tags["\[deletion\]"] = chr(150)
         self.tags["\[/deletion\]"] = chr(151)
         self.tags["\[illegible\]"] = chr(152)
@@ -185,6 +186,19 @@ class TextCluster(clustering.Cluster):
         self.tags["\[/insertion\]"] = chr(155)
         self.tags["\[notenglish\]"] = chr(156)
         self.tags["\[/notenglish\]"] = chr(157)
+
+        # self.tags = dict()
+        # self.tags["\[deletion\].*\[/deletion\]"] = chr(150)
+        # # self.tags["\[/deletion\]"] = chr(151)
+        # self.tags["\[illegible\].*\[/illegible\]*"] = chr(152)
+        # # self.tags["\[/illegible\]"] = chr(153)
+        # self.tags["\[insertion\].*\[/insertion\]"] = chr(154)
+        # # self.tags["\[/insertion\]"] = chr(155)
+        # self.tags["\[notenglish\].*\[notenglish\]"] = chr(156)
+        # # self.tags["\[/notenglish\]"] = chr(157)
+
+        self.erroneous_tags = dict()
+        # self.erroneous_tags["[illegible]"] = chr(152)
 
     def __line_alignment__(self,lines):
         """
@@ -216,7 +230,7 @@ class TextCluster(clustering.Cluster):
                     print unicodedata.normalize('NFKD', line).encode('ascii','ignore')
                     raise
 
-        t = "mafft --text /tmp/transcribe"+id_+".fasta> /tmp/transcribe"+id_+".out 2> /dev/null"
+        t = "mafft --op 0.5 --text /tmp/transcribe"+id_+".fasta> /tmp/transcribe"+id_+".out 2> /dev/null"
         os.system(t)
 
         aligned_text = []
@@ -313,8 +327,20 @@ class TextCluster(clustering.Cluster):
 
         # first we need to replace each tag with a one character representation
         for tag,chr_representation in self.tags.items():
+            p = re.compile(tag)
+            matches = p.search(text)
+
+            # if matches is not None:
+            #     print matches.group(0)
+            #     for m in matches.groups():
+            #         print m
             text = re.sub(tag,chr_representation,text)
             # lower_text = re.sub(tag,chr_representation,lower_text)
+
+        # re.sub()
+
+        for tag,chr_representation in self.erroneous_tags.items():
+            text = re.sub(tag,chr_representation,text)
 
         # we can do this afterwards because non-alphabet characters are not affected by .lower
         lower_text = text.lower()
@@ -366,10 +392,20 @@ class TextCluster(clustering.Cluster):
         """
         # use a 'reverse dictionary' to reset
         for (t,c) in self.tags.items():
+            # start by removing the backslashes in the text
+            # they are useful for regular expressions - but they will
+            # mess things up otherwise
+            # according to https://docs.python.org/2/howto/regex.html
+            # I could just use r"\" but that does not seem to work - too tired
+            # so will go with the ugly solution that I know works
+            t = re.sub("\\\\","",t)
             text = re.sub(c,t,text)
 
         # also go with something different for "not sure"
+        # this matter when the function is called on the aggregate text
         text = re.sub(chr(200),chr(27),text)
+        # and for gaps inserted by MAFFT
+        text = re.sub(chr(201),chr(28),text)
 
         return text
 
@@ -398,9 +434,10 @@ class TextCluster(clustering.Cluster):
             # who "voted" for it
             most_likely_char,vote_percentage = max(char_vote.items(),key=lambda x:x[1])
 
-            # chr 201 - is for inserted spaces to align text. I don't think the most likely character is allowed
-            # to be 201, but just to be safe
-            if (vote_percentage > 0.75) and (most_likely_char != chr(201)):
+            # note that the most likely char can be 201 - which corresponds to inserted gaps
+            # this corresponds to the case where one or more users gave some text but the rest of
+            # of the users say there wasn't anything there
+            if (vote_percentage > 0.75):
                 num_agreed += 1
                 aggregate_text += most_likely_char
 
@@ -669,30 +706,48 @@ class TextCluster(clustering.Cluster):
             # align the text
             aligned_text = self.__line_alignment__(lines)
 
+
+
             # align the non-fasta version of the text lines
-            nf_aligned_text = self.__add_alignment_spaces__(aligned_text,non_fasta_text,pts_and_users)
+            nf_aligned_lines = self.__add_alignment_spaces__(aligned_text,non_fasta_text,pts_and_users)
 
             # aggregate the lines - looking for character spots where there is mostly consensus
-            aggregate_text,character_agreement,per_user_agreement = self.__merge_aligned_text__(nf_aligned_text)
-            # print str(len(users)) + "\t" + aggregate_text
+            aggregate_text,character_agreement,per_user_agreement = self.__merge_aligned_text__(nf_aligned_lines)
 
+            for t in aligned_text:
+                print t
+
+            print aggregate_text
+            print
+
+            # deal with characters that python/postgres has trouble with
             aggregate_text = self.__reset_special_characters__(aggregate_text)
-            # print "\t" + aggregate_text
+
 
             cluster_centers.append((x1,x2,y1,y2,aggregate_text))
-            cluster_pts.append(zip(pts,lines))
+
+            # and deal with special characters for each individual lines
+            temp_pts_lines = []
+            for p,l in zip(pts,nf_aligned_lines):
+                l = self.__reset_special_characters__(l)
+                temp_pts_lines.append((p,l))
+
+            cluster_pts.append(temp_pts_lines)
+
             cluster_users.append(users)
             agreement.append(character_agreement)
-            cluster_members.append(aligned_text)
+            # cluster_members.append(aligned_text)
 
             # use this if you want to keep track of stats
             # self.line_agreement[-1].append((character_agreement,len(users)))
 
         results = []
-        for center,pts,users,lines,a in zip(cluster_centers,cluster_pts,cluster_users,cluster_members,agreement):
-            results.append({"center":center,"cluster members":lines,"tools":[],"num users":len(users),"agreement":a})
+        for center,pts,users,a in zip(cluster_centers,cluster_pts,cluster_users,agreement):
+            results.append({"center":center,"cluster members":pts,"tools":[],"num users":len(users),"agreement":a})
 
         return results,0
+
+
 
     def __preliminarily__clustering__(self,markings,user_ids):
         """
@@ -912,6 +967,68 @@ class Tate(AggregationAPI):
 
         return workflows,versions,instructions,updated_at_timestamps
 
+    def __cluster_output_with_colour__(self,workflow_id,subject_id):
+        """
+        use colour to show where characters match and don't match between different transcriptions of
+        the same text
+        :param subject_id:
+        :return:
+        """
+        selection_stmt = "SELECT aggregation FROM aggregations WHERE workflow_id = " + str(workflow_id) + " AND subject_id = " + str(subject_id)
+        cursor = self.postgres_session.cursor()
+        cursor.execute(selection_stmt)
+
+        aggregated_text = cursor.fetchone()[0]["T2"]["text clusters"].values()
+        assert isinstance(aggregated_text,list)
+        # remove the list of all users
+        aggregated_text = [a for a in aggregated_text if isinstance(a,dict)]
+
+        # sort the text by y coordinates (should give the order in which the text is supposed to appear)
+        aggregated_text.sort(key = lambda x:x["center"][2])
+
+        for text in aggregated_text:
+            actual_text = text["center"][-1]
+            atomic_text = self.cluster_algs["text"].__set_special_characters__(actual_text)[1]
+            print actual_text
+            for c in atomic_text:
+                if ord(c) == 27:
+                    # no agreement was reached
+                    print chr(8) + unicode(u"\u2224"),
+                elif ord(c) == 28:
+                    # the agreement was that nothing was here
+                    # technically not a space but close enough
+                    print chr(8) + " ",
+                else:
+                    print chr(8) + c,
+            print
+            print"===="
+
+            for m in text["cluster members"]:
+                actual_text = m[-1]
+                print actual_text
+                # atomic text is where tags are represented by atomic characters (that is
+                # each tag is a single character) - makes matching things up a lot easier
+                atomic_text = self.cluster_algs["text"].__set_special_characters__(actual_text)[1]
+                for ii in range(len(atomic_text)):
+                    c = atomic_text[ii]
+
+                    # some warnings are produced as the result of trying to compare unicode against
+                    # standard ascii
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        if c == text["center"][-1][ii]:
+                            colour = "green"
+                        else:
+                            colour = "red"
+
+                    if ord(c) == 28:
+                        print colored(chr(8) + unicode(u"\u254D"),colour),
+                    else:
+                        print colored(chr(8) + c,colour),
+                print
+            print
+
+
     def __readin_tasks__(self,workflow_id):
         marking_tasks = {"T2":["text"]}
         classification_tasks = {"T3" : True}
@@ -957,20 +1074,11 @@ class Tate(AggregationAPI):
 
         return aggregations
 
+subject_id = 671179
+
 if __name__ == "__main__":
     with Tate() as project:
-        # pass
-        # subject_id = int(project.__subject_ids_in_set__(905)[1])
-        # subject_id = 603303
         # project.__migrate__()
-        project.__aggregate__(subject_set=[662859])
-        # project.__aggregate__(workflows=[121],subject_set=[subject_id])
-        # print project.cluster_algs["text"].line_agreement
-        # project.__migrate__()
-        # project.__aggregate__(workflows=[121])
-        # pickle.dump(project.cluster_algs["text"].line_agreement,open("/home/greg/agg.out","wb"))
-        # ll = [l for (a,l) in project.cluster_algs["text"].line_agreement]
-        # print max(ll),np.mean(ll),np.median(ll)
-        # agreement_with_3 = [a for (a,l) in project.cluster_algs["text"].line_agreement if l >= 3]
-        # print len(agreement_with_3)
-        # print np.mean(agreement_with_3), np.median(agreement_with_3)
+        project.__aggregate__(subject_set=[subject_id])
+
+        # project.__cluster_output_with_colour__(project.workflows.keys()[0],subject_id=subject_id)
