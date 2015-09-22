@@ -298,6 +298,7 @@ class AggregationAPI:
             self.rollbar_token = api_details[self.environment]["rollbar"]
             # print "raising error"
             rollbar.init(self.rollbar_token,"production")
+            rollbar.report_message("starting off","info")
             # rollbar.report_message('testing rollbar again', 'error')
             # assert False
 
@@ -543,6 +544,17 @@ class AggregationAPI:
         """Yield successive n-sized chunks from l."""
         for i in xrange(0, len(l), n):
             yield l[i:i+n]
+
+    def __classification_json_dump__(self):
+        annotation_generator = self.__cassandra_annotations__()
+        for workflow_id in self.workflows:
+            subject_set = self.__get_subjects__(workflow_id,only_retired_subjects=False)
+
+            for subject_id,user_id,annotation,dimensions in annotation_generator(workflow_id,subject_set):
+                print annotation
+                assert False
+
+
 
     def __classify__(self,raw_classifications,clustering_aggregations,workflow_id,gold_standard_classifications=None):
         # get the raw classifications for the given workflow
@@ -1123,6 +1135,8 @@ class AggregationAPI:
             # raise ImageNotDownloaded()
 
         return image_path
+
+
 
     def __load_subjects__(self,workflow_id):
         """
@@ -2125,7 +2139,6 @@ if __name__ == "__main__":
 
     csv_classification_file = None
 
-
     if len(sys.argv) > 2:
         subject_set = [int(sys.argv[2]),]
     else:
@@ -2138,10 +2151,11 @@ if __name__ == "__main__":
     with AggregationAPI(project_identifier,csv_classification_file) as project:
         # project.__migrate__()
         # print json.dumps(project.__aggregate__(store_values=False)[464952], sort_keys=True, indent=4, separators=(',', ': '))
-        project.__aggregate__(subject_set = subject_set)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+        # project.__aggregate__(subject_set = subject_set)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
         # project.__panoptes_aggregation__()
         # project.__csv_output__()#workflow_ids =[84],subject_id=494900)
-        c = csv_output.CsvOut(project)
-        c.__write_out__(subject_set[0])
+        # c = csv_output.CsvOut(project)
+        # c.__write_out__(subject_set[0])
+        project.__classification_json_dump__()
 
 
