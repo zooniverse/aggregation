@@ -19,6 +19,10 @@ try:
     from scipy import spatial
     from termcolor import colored
     import warnings
+
+    import matplotlib.pyplot as plt
+    import matplotlib.cbook as cbook
+
 except:
     # if any errors were raised - probably because Greg thought
     # that some Python library was standard when it actually isn't
@@ -983,7 +987,7 @@ class Tate(AggregationAPI):
 
         return workflows,versions,instructions,updated_at_timestamps
 
-    def __cluster_output_with_colour__(self,workflow_id,subject_id):
+    def __cluster_output_with_colour__(self,workflow_id,ax,subject_id):
         """
         use colour to show where characters match and don't match between different transcriptions of
         the same text
@@ -1003,9 +1007,11 @@ class Tate(AggregationAPI):
         aggregated_text.sort(key = lambda x:x["center"][2])
 
         for text in aggregated_text:
+            # print text["center"][:-1]
+            ax.plot([text["center"][0],text["center"][1]],[text["center"][2],text["center"][3]],color="red")
             actual_text = text["center"][-1]
             atomic_text = self.cluster_algs["text"].__set_special_characters__(actual_text)[1]
-            print actual_text
+
             for c in atomic_text:
                 if ord(c) == 27:
                     # no agreement was reached
@@ -1017,32 +1023,32 @@ class Tate(AggregationAPI):
                 else:
                     print chr(8) + c,
             print
-            print"===="
-
-            for m in text["cluster members"]:
-                actual_text = m[-1]
-                print actual_text
-                # atomic text is where tags are represented by atomic characters (that is
-                # each tag is a single character) - makes matching things up a lot easier
-                atomic_text = self.cluster_algs["text"].__set_special_characters__(actual_text)[1]
-                for ii in range(len(atomic_text)):
-                    c = atomic_text[ii]
-
-                    # some warnings are produced as the result of trying to compare unicode against
-                    # standard ascii
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore")
-                        if c == text["center"][-1][ii]:
-                            colour = "green"
-                        else:
-                            colour = "red"
-
-                    if ord(c) == 28:
-                        print colored(chr(8) + unicode(u"\u254D"),colour),
-                    else:
-                        print colored(chr(8) + c,colour),
-                print
-            print
+            # print"===="
+            #
+            # for m in text["cluster members"]:
+            #     actual_text = m[-1]
+            #     print actual_text
+            #     # atomic text is where tags are represented by atomic characters (that is
+            #     # each tag is a single character) - makes matching things up a lot easier
+            #     atomic_text = self.cluster_algs["text"].__set_special_characters__(actual_text)[1]
+            #     for ii in range(len(atomic_text)):
+            #         c = atomic_text[ii]
+            #
+            #         # some warnings are produced as the result of trying to compare unicode against
+            #         # standard ascii
+            #         with warnings.catch_warnings():
+            #             warnings.simplefilter("ignore")
+            #             if c == text["center"][-1][ii]:
+            #                 colour = "green"
+            #             else:
+            #                 colour = "red"
+            #
+            #         if ord(c) == 28:
+            #             print colored(chr(8) + unicode(u"\u254D"),colour),
+            #         else:
+            #             print colored(chr(8) + c,colour),
+            #     print
+            # print
 
 
     def __readin_tasks__(self,workflow_id):
@@ -1090,11 +1096,18 @@ class Tate(AggregationAPI):
 
         return aggregations
 
-subject_id = 671179
+subject_id = 662619
 
 if __name__ == "__main__":
     with Tate() as project:
         # project.__migrate__()
         project.__aggregate__(subject_set=[subject_id])
 
-        # project.__cluster_output_with_colour__(project.workflows.keys()[0],subject_id=subject_id)
+
+        subject_image = project.__image_setup__(subject_id)
+        fig, ax = plt.subplots()
+        project.__cluster_output_with_colour__(project.workflows.keys()[0],ax,subject_id=subject_id)
+        image_file = cbook.get_sample_data(subject_image)
+        image = plt.imread(image_file)
+        im = ax.imshow(image)
+        plt.show()

@@ -404,11 +404,14 @@ class AggregationAPI:
             # to give area as percentage of the total image area
             raw_classifications,raw_markings,image_dimensions = self.__sort_annotations__(workflow_id,subject_set,expert)
 
+
             # do we have any marking tasks?
             if marking_tasks != {}:
                 print "clustering"
                 clustering_aggregations = self.__cluster__(raw_markings,image_dimensions)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
+            print classification_tasks
+            print marking_tasks
             if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
                 print "classifying"
@@ -1693,7 +1696,7 @@ class AggregationAPI:
                     # polygons are done differently, so shouldn't be handled at all by
                     # the classification algorithms
                     # todo - how should rectangles be handled?
-                    if tool["type"] not in ["polygon"]:
+                    if tool["type"] not in ["polygon","rectangle"]:
                         if task_id not in classification_tasks:
                             classification_tasks[task_id] = {}
                         if "shapes" not in classification_tasks[task_id]:
@@ -1708,7 +1711,7 @@ class AggregationAPI:
         # find out if any of the shapes for a given task are "confusing"
         # that is more, there is more than 1 tool which can create that shape
         for task_id in marking_tasks:
-            for shape in ["line","ellipse","point","circle","rectangle"]:
+            for shape in ["line","ellipse","point","circle"]:
                 if sum([1 for s in marking_tasks[task_id] if s == shape]) > 1:
                     # this shape is confusing
                     if task_id not in classification_tasks:
@@ -2151,11 +2154,11 @@ if __name__ == "__main__":
     with AggregationAPI(project_identifier,csv_classification_file) as project:
         # project.__migrate__()
         # print json.dumps(project.__aggregate__(store_values=False)[464952], sort_keys=True, indent=4, separators=(',', ': '))
-        # project.__aggregate__(subject_set = subject_set)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+        project.__aggregate__(subject_set = subject_set)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
         # project.__panoptes_aggregation__()
         # project.__csv_output__()#workflow_ids =[84],subject_id=494900)
-        # c = csv_output.CsvOut(project)
+        c = csv_output.CsvOut(project)
         # c.__write_out__(subject_set[0])
-        project.__classification_json_dump__()
+        # project.__classification_json_dump__()
 
 

@@ -28,8 +28,11 @@ class QuadTree:
         self.parent = parent
         self.polygons = {}
 
-        self.bounding_box = Polygon([(lb_x,lb_y),(ub_x,lb_y),(ub_x,ub_y),(lb_x,ub_y)])
-
+        try:
+            self.bounding_box = Polygon([(lb_x,lb_y),(ub_x,lb_y),(ub_x,ub_y),(lb_x,ub_y)])
+        except:
+            print [(lb_x,lb_y),(ub_x,lb_y),(ub_x,ub_y),(lb_x,ub_y)]
+            raise
 
         self.user_ids = []
 
@@ -60,7 +63,7 @@ class QuadTree:
         self.children = [QuadTree(lower_left,self) ,QuadTree(lower_right,self),QuadTree(upper_left,self),QuadTree(upper_right,self)]
         for c in self.children:
             assert isinstance(c,QuadTree)
-            assert c.bounding_box.area == self.bounding_box.area/4.
+            assert math.fabs((c.bounding_box.area - self.bounding_box.area/4.) < 0.0001)
 
         return self.children
 
@@ -259,7 +262,13 @@ class BlobClustering(clustering.Cluster):
 
             # the equation from a point to the nearest place on a line is from
             # https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line
-            dist = math.fabs((y_2-y_1)*x_0-(x_2-x_1)*y_0+x_2*y_1-y_2*x_1)/math.sqrt((y_2-y_1)**2+(x_2-x_1)**2)
+            try:
+                dist = math.fabs((y_2-y_1)*x_0-(x_2-x_1)*y_0+x_2*y_1-y_2*x_1)/math.sqrt((y_2-y_1)**2+(x_2-x_1)**2)
+            except ZeroDivisionError:
+                print points
+                print line_index
+                raise
+
             if dist < 0.01:
                 splits.append(line_index)
 
@@ -305,8 +314,11 @@ class BlobClustering(clustering.Cluster):
             poly = Polygon(polygon_pts)
             validity = explain_validity(poly)
 
-            if validity != "Valid Geometry":
+            if "Too few points" in validity:
+                continue
+            elif validity != "Valid Geometry":
                 corrected_polygon = self.__fix_polygon__(polygon_pts)
+
                 if isinstance(corrected_polygon,Polygon):
                     if u not in poly_dictionary:
                         poly_dictionary[u] = [(corrected_polygon,t),]
@@ -320,11 +332,30 @@ class BlobClustering(clustering.Cluster):
                     poly_dictionary[u].append((poly,t))
 
         # if dimensions have been provided, use those as our initial bounding box
-        # otherwise, use some default values - I have NO idea how well those will work in practice
-        if dimensions is None:
-            box = [[0,0],[800,0],[800,500],[0,500]]
+        # otherwise, use the minimum and maximum values actually found
+        # todo - might this be best in any case - even if we have the image dimensions?
+        if dimensions == (None,None):
+            max_x = -float("inf")
+            max_y = -float("inf")
+            min_x = float("inf")
+            min_y = float("inf")
+            for m in markings:
+                X,Y = zip(*m)
+
+                max_x = max(max_x,max(X))
+                max_y = max(max_y,max(Y))
+                min_x = min(min_x,min(X))
+                min_y = min(min_y,min(Y))
+
+            assert max_x != min_x
+            assert max_y != min_y
+
+            box = [[min(X),min(Y)],[max(X),min(Y)],[max(X),max(Y)],[min(X),max(Y)]]
+            # bit of a proxy
+            image_area = max(X)*max(Y)
         else:
             box = [[0,0],[dimensions[1],0],[dimensions[1],dimensions[0]],[0,dimensions[1]]]
+            image_area = dimensions[0]*dimensions[1]
 
         quad_root = QuadTree((box[0],box[2]))
 
@@ -350,7 +381,7 @@ class BlobClustering(clustering.Cluster):
 
         # total incorrect area is the total area which at least one person marked/outlined by not enough people
         # so typically just 1 or 2 (unless we change the threshold)
-        image_area = dimensions[0]*dimensions[1]
+
 
         aggregate_polygons,aggregate_stats,total_incorrect_area,polygons_by_user_density = quad_root.__aggregate__(image_area)
 
@@ -368,19 +399,28 @@ class BlobClustering(clustering.Cluster):
             # the center will be a list of all polygons
             next_result = dict()
 
-
             # we will either have a multi-polygon as our aggregation result - or if we are really
             # lucky, a single polygon
             if isinstance(aggregate_polygons[tool_id],Polygon):
                 poly = aggregate_polygons[tool_id]
-                next_result["center"] = [zip(poly.exterior.xy[0],poly.exterior.xy[0])]
+                # if we are doing rectangles, make sure to keep them as rectangles
+                if self.rectangle:
+                    x,y = poly.exterior.xy
+                    next_result["center"] = [(max(x),max(y)),(min(x),min(y))]
+                else:
+                    next_result["center"] = [zip(poly.exterior.xy[0],poly.exterior.xy[0])]
+
             elif isinstance(aggregate_polygons[tool_id], MultiPolygon):
                 next_result["center"] = []
+                # todo - how to aggregate for multiple rectangles?
+                # todo - important to figure this out for rectangles
                 for poly in aggregate_polygons[tool_id]:
 
                     # go through each of the individual polygons making up this multipolygon
                     if isinstance(poly,Polygon):
                         next_result["center"].append(zip(poly.exterior.xy[0],poly.exterior.xy[0]))
+                    else:
+                        assert False
             else:
                 # unknown type
                 print type(aggregate_polygons[tool_id])
@@ -409,7 +449,8 @@ class BlobClustering(clustering.Cluster):
             # probably never going to wind up a just a single polygon
             # but we can always hope
             if isinstance(polygons,Polygon):
-                assert False
+                # todo - this will matter for rectangle aggregation
+                pass
             else:
                 for single_poly in polygons:
                     assert  isinstance(single_poly,Polygon)

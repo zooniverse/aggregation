@@ -9,34 +9,39 @@ from aggregation_api import AggregationAPI
 import matplotlib.cbook as cbook
 import sys
 
-subject_id = int(sys.argv[1])
-minimum_users = int(sys.argv[2])
+# subject_id = int(sys.argv[1])
+# minimum_users = int(sys.argv[2])
+
+subject_id = 511723
 
 project = AggregationAPI(348,public_panoptes_connection=True)
 subject_image = project.__image_setup__(subject_id)
 
-fig, ax = plt.subplots()
+for minimum_users in [8]:
+    print minimum_users
 
-image_file = cbook.get_sample_data(subject_image)
-image = plt.imread(image_file)
-# fig, ax = plt.subplots()
-im = ax.imshow(image)
+    fig, ax = plt.subplots()
 
-all_vertices = []
+    image_file = cbook.get_sample_data(subject_image)
+    image = plt.imread(image_file)
+    # fig, ax = plt.subplots()
+    im = ax.imshow(image)
 
-with open("/tmp/348/4_ComplexAMOS/vegetation_polygons_heatmap.csv","rb") as f:
-    polygon_reader = csv.reader(f)
-    next(polygon_reader, None)
-    for row in polygon_reader:
-        if int(row[1]) == minimum_users:
-            vertices = json.loads(row[2])
-            all_vertices.append(vertices)
+    all_vertices = []
+
+    with open("/tmp/348/4_ComplexAMOS/vegetation_polygons_heatmap.csv","rb") as f:
+        polygon_reader = csv.reader(f)
+        next(polygon_reader, None)
+        for row in polygon_reader:
+            if int(row[1]) == minimum_users:
+                vertices = json.loads(row[2])
+                all_vertices.append(vertices)
 
 
 
-all_vertices = np.asarray(all_vertices)
-coll = PolyCollection(all_vertices,alpha=0.3)
-ax.add_collection(coll)
-ax.autoscale_view()
+    all_vertices = np.asarray(all_vertices)
+    coll = PolyCollection(all_vertices,alpha=0.3)
+    ax.add_collection(coll)
+    ax.autoscale_view()
 
-plt.show()
+    plt.show()
