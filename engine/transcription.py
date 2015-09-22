@@ -1,23 +1,39 @@
 #!/usr/bin/env python
 __author__ = 'greg'
-from aggregation_api import AggregationAPI,InvalidMarking
-from classification import Classification
-import clustering
-import math
-import pandas as pd
-import numpy as np
-from scipy.spatial.distance import pdist,squareform
-from scipy.cluster.hierarchy import linkage
-import abc
-import re
-import random
-import unicodedata
-import os
-import requests
-from aggregation_api import hesse_line_reduction
-from scipy import spatial
-from termcolor import colored
-import warnings
+try:
+    from aggregation_api import AggregationAPI,InvalidMarking
+    from classification import Classification
+    import clustering
+    import math
+    import pandas as pd
+    import numpy as np
+    from scipy.spatial.distance import pdist,squareform
+    from scipy.cluster.hierarchy import linkage
+    import abc
+    import re
+    import random
+    import unicodedata
+    import os
+    import requests
+    from aggregation_api import hesse_line_reduction
+    from scipy import spatial
+    from termcolor import colored
+    import warnings
+except:
+    # if any errors were raised - probably because Greg thought
+    # that some Python library was standard when it actually isn't
+    # report it with rollbar (which should hopefully be installed)
+    import yaml
+    import rollbar
+
+    panoptes_file = open("config/aggregation.yml","rb")
+    api_details = yaml.load(panoptes_file)
+    rollbar_token = api_details["default"]["rollbar"]
+    rollbar.init(rollbar_token,"production")
+    rollbar.report_exc_info()
+
+    raise
+
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
