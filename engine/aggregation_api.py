@@ -286,6 +286,16 @@ class AggregationAPI:
             panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
         api_details = yaml.load(panoptes_file)
 
+        # load in rollbar stuff - for reporting errors/stats when running on AWS
+        self.rollbar_token = None
+        if "rollbar" in api_details[self.environment]:
+            self.rollbar_token = api_details[self.environment]["rollbar"]
+            # print "raising error"
+            rollbar.init(self.rollbar_token,"production")
+            rollbar.report_message("starting off","info")
+            # rollbar.report_message('testing rollbar again', 'error')
+            # assert False
+
         # if we had been previously unable to load the numerical project_id
         # try again now that we have the yaml file
         if self.project_id is None:
@@ -297,15 +307,7 @@ class AggregationAPI:
                 self.project_name = api_details[project]["project_name"]
                 self.project_id = self.__get_project_id()
 
-        # load in rollbar stuff - for reporting errors/stats when running on AWS
-        self.rollbar_token = None
-        if "rollbar" in api_details[self.environment]:
-            self.rollbar_token = api_details[self.environment]["rollbar"]
-            # print "raising error"
-            rollbar.init(self.rollbar_token,"production")
-            rollbar.report_message("starting off","info")
-            # rollbar.report_message('testing rollbar again', 'error')
-            # assert False
+
 
         # make the actual connection to Panoptes
         print "trying secure Panoptes connection"
@@ -415,8 +417,9 @@ class AggregationAPI:
                 print "clustering"
                 clustering_aggregations = self.__cluster__(raw_markings,image_dimensions)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
+            print raw_markings
+            print clustering_aggregations
             print classification_tasks
-            print marking_tasks
             if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
                 print "classifying"
@@ -567,11 +570,6 @@ class AggregationAPI:
     def __classify__(self,raw_classifications,clustering_aggregations,workflow_id,gold_standard_classifications=None):
         # get the raw classifications for the given workflow
         # raw_classifications = self.__sort_classifications__(workflow_id,subject_set)
-        if raw_classifications == {}:
-            print "returning empty"
-            empty_aggregation = {"param":"subject_id"}
-            # for subject_set in empty_aggregation
-            return empty_aggregation
         # assert False
         return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations,gold_standard_classifications)
 
@@ -1669,14 +1667,13 @@ class AggregationAPI:
                     tool_id = int(label_words[2])
 
                     # are there any classification questions associated with this marking?
-
                     if ("details" in tool) and (tool["details"] is not None) and (tool["details"] != []):
                         if task_id not in classification_tasks:
                             classification_tasks[task_id] = {}
-                        if "subtask" not in classification_tasks[task_id]:
-                            classification_tasks[task_id]["subtask"] = {}
-                        if tool_id not in classification_tasks[task_id]["subtask"]:
-                            classification_tasks[task_id]["subtask"][tool_id] = range(len(tool["details"]))
+                        # if "subtask" not in classification_tasks[task_id]:
+                        #     classification_tasks[task_id]["subtask"] = {}
+                        if tool_id not in classification_tasks[task_id]:
+                            classification_tasks[task_id][tool_id] = range(len(tool["details"]))
                         # if tool_id not in self.classification_tasks[task_id]:
                         #     self.classification_tasks[task_id][tool_id] = {}
                         # classification_tasks[task_id][tool_id]= [i for i in range(len(tool["details"]))]
@@ -1698,16 +1695,16 @@ class AggregationAPI:
                         print tool
                         assert False
 
-                    # polygons are done differently, so shouldn't be handled at all by
-                    # the classification algorithms
-                    # todo - how should rectangles be handled?
-                    if tool["type"] not in ["polygon","rectangle","text"]:
-                        if task_id not in classification_tasks:
-                            classification_tasks[task_id] = {}
-                        if "shapes" not in classification_tasks[task_id]:
-                            classification_tasks[task_id]["shapes"] = []
-
-                        classification_tasks[task_id]["shapes"].append(shape)
+                    # # polygons are done differently, so shouldn't be handled at all by
+                    # # the classification algorithms
+                    # # todo - how should rectangles be handled?
+                    # if tool["type"] not in ["polygon","rectangle","text"]:
+                    #     if task_id not in classification_tasks:
+                    #         classification_tasks[task_id] = {}
+                    #     if "shapes" not in classification_tasks[task_id]:
+                    #         classification_tasks[task_id]["shapes"] = []
+                    #
+                    #     classification_tasks[task_id]["shapes"].append(shape)
 
             else:
                 # self.marking_params_per_task[task_id] = []
@@ -1715,16 +1712,16 @@ class AggregationAPI:
 
         # find out if any of the shapes for a given task are "confusing"
         # that is more, there is more than 1 tool which can create that shape
-        for task_id in marking_tasks:
-            for shape in ["line","ellipse","point","circle"]:
-                if sum([1 for s in marking_tasks[task_id] if s == shape]) > 1:
-                    # this shape is confusing
-                    if task_id not in classification_tasks:
-                        classification_tasks[task_id] = {}
-                    if "confusing shapes" not in classification_tasks[task_id]:
-                        classification_tasks[task_id]["confusing shapes"] = []
-
-                    classification_tasks[task_id]["confusing shapes"].append(shape)
+        # for task_id in marking_tasks:
+        #     for shape in ["line","ellipse","point","circle"]:
+        #         if sum([1 for s in marking_tasks[task_id] if s == shape]) > 1:
+        #             # this shape is confusing
+        #             if task_id not in classification_tasks:
+        #                 classification_tasks[task_id] = {}
+        #             if "confusing shapes" not in classification_tasks[task_id]:
+        #                 classification_tasks[task_id]["confusing shapes"] = []
+        #
+        #             classification_tasks[task_id]["confusing shapes"].append(shape)
 
 
         return classification_tasks,marking_tasks
