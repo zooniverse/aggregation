@@ -229,9 +229,9 @@ class Classification:
 
         for subject_id,cluster_index in existence_results:
             if subject_id not in aggregations:
-                aggregations[subject_id] = {"param":"task_id"}
+                aggregations[subject_id] = {}
             if task_id not in aggregations[subject_id]:
-                aggregations[subject_id][task_id] = {"param":"clusters"}
+                aggregations[subject_id][task_id] = {}
             if (shape + " clusters") not in aggregations[subject_id][task_id]:
                 aggregations[subject_id][task_id][shape+ " clusters"] = {}
             # this part is probably redundant
@@ -340,21 +340,22 @@ class Classification:
         for task_id in marking_tasks:
             for shape in set(marking_tasks[task_id]):
                 if shape not in ["polygon","rectangle"]:
-                    results = self.__existence_classification__(task_id,shape,clustering_results,gold_standard_clustering)
+                    exist_results = self.__existence_classification__(task_id,shape,clustering_results,gold_standard_clustering)
+                    aggregations = self.__merge_results__(aggregations,exist_results)
 
                     # can more than one tool create this shape?
                     if sum([1 for s in marking_tasks[task_id] if s == shape]) > 1:
                         tool_results = self.__tool_classification__(task_id,classification_tasks,raw_classifications,clustering_results)
                         # merge the tool results into the overall results
-                        results = self.__merge_results__(results,tool_results)
+                        aggregations = self.__merge_results__(aggregations,tool_results)
 
-                    # now merge the results
-                    for subject_id in results:
-                        if subject_id not in aggregations:
-                            aggregations[subject_id] = {}
-                        # we have results from other tasks, so we need to merge in the results
-                        assert isinstance(results[subject_id],dict)
-                        aggregations[subject_id] = self.__merge_results__(aggregations[subject_id],results[subject_id])
+                    # # now merge the results
+                    # for subject_id in results:
+                    #     if subject_id not in aggregations:
+                    #         aggregations[subject_id] = {}
+                    #     # we have results from other tasks, so we need to merge in the results
+                    #     assert isinstance(results[subject_id],dict)
+                    #     aggregations[subject_id] = self.__merge_results__(aggregations[subject_id],results[subject_id])
 
         # now go through the normal classification aggregation stuff
         # which can include follow up questions
@@ -363,25 +364,28 @@ class Classification:
             if task_id == "param":
                 continue
 
-            task_results = {}
+            # task_results = {}
             # just a normal classification question
             if isinstance(classification_tasks[task_id],bool):
                 # did anyone actually do this classification?
                 if task_id in raw_classifications:
                     classification_results = self.__task_aggregation__(raw_classifications[task_id])
 
-                # now merge the results
-                    for subject_id in results:
-                        if subject_id not in aggregations:
-                            aggregations[subject_id] = {}
-                        # we have results from other tasks, so we need to merge in the results
-                        assert isinstance(results[subject_id],dict)
-                        aggregations[subject_id] = self.__merge_results__(aggregations[subject_id],results[subject_id])
+                    aggregations = self.__merge_results__(aggregations,classification_results)
+
+                # # now merge the results
+                #     for subject_id in results:
+                #         if subject_id not in aggregations:
+                #             aggregations[subject_id] = {}
+                #         # we have results from other tasks, so we need to merge in the results
+                #         assert isinstance(results[subject_id],dict)
+                #         aggregations[subject_id] = self.__merge_results__(aggregations[subject_id],results[subject_id])
             else:
                 # we have a follow up classification
                 subtask_results = self.__subtask_classification__(task_id,classification_tasks,raw_classifications,clustering_results)
-                print subtask_results
-                assert False
+                aggregations = self.__merge_results__(aggregations,subtask_results)
+                # print subtask_results
+                # assert False
 
             # if isinstance(classification_tasks[task_id],bool):
             #     # we have a basic classification task
@@ -421,7 +425,7 @@ class Classification:
             #         subtask_results = self.__subtask_classification__(task_id,classification_tasks,raw_classifications,clustering_results)
             #         task_results = self.__merge_results__(task_results,subtask_results)
 
-            assert isinstance(task_results,dict)
+            #assert isinstance(task_results,dict)
 
                 # aggregations[subject_id][task_id] = task_results[subject_id]
 
