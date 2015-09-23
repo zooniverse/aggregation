@@ -254,10 +254,12 @@ class AggregationAPI:
         # todo - so refactor
         if csv_classification_file is None:
 
-            try:
-                database_file = open("config/database.yml")
-            except IOError:
-                database_file = open(base_directory+"/Databases/database.yml")
+            if os.path.isfile("config/database"):
+                database_file = open("config/database.yml","rb")
+            elif os.path.isfile(base_directory+"/Databases/database.yml"):
+                database_file = open(base_directory+"/Databases/database.yml","rb")
+            else:
+                assert False
 
             database_details = yaml.load(database_file)
             # if we are running on Greg's computer(s), connect to a local (and slightly out of date) DB instance
@@ -1696,7 +1698,7 @@ class AggregationAPI:
                     # polygons are done differently, so shouldn't be handled at all by
                     # the classification algorithms
                     # todo - how should rectangles be handled?
-                    if tool["type"] not in ["polygon","rectangle"]:
+                    if tool["type"] not in ["polygon","rectangle","text"]:
                         if task_id not in classification_tasks:
                             classification_tasks[task_id] = {}
                         if "shapes" not in classification_tasks[task_id]:

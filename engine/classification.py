@@ -30,7 +30,7 @@ class Classification:
         self.candidates = self.species.keys()
 
     @abc.abstractmethod
-    def __task_aggregation__(self,classifications,aggregations,task_id,gold_standard={}):
+    def __task_aggregation__(self,classifications,task_id,aggregations):
         return []
 
     # def __add_new_results__(self,current_aggregations,keyword_list,new_aggregations,maps_to_list=()):
@@ -401,7 +401,7 @@ class Classification:
         # handle some of this themselves
         for task_id in marking_tasks:
             for shape in set(marking_tasks[task_id]):
-                if shape not in ["polygon","rectangle"]:
+                if shape not in ["polygon","rectangle","text"]:
                     aggregations = self.__existence_classification__(task_id,shape,clustering_results,aggregations,gold_standard_clustering)
                     # aggregations = self.__merge_results__(aggregations,exist_results)
 
@@ -528,7 +528,7 @@ class VoteCount(Classification):
     def __init__(self,param_dict):
         Classification.__init__(self)
 
-    def __task_aggregation__(self,raw_classifications,aggregations,task_id,gold_standard=False):
+    def __task_aggregation__(self,raw_classifications,task_id,aggregations):
         """
         question_id is not None if and only if the classification relates to a marking
         :param subject_ids:

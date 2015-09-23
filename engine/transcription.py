@@ -933,7 +933,7 @@ class SubjectRetirement(Classification):
 
         assert (self.host_api is not None) and (self.project_id is not None) and (self.token is not None) and (self.workflow_id is not None)
 
-    def __task_aggregation__(self,classifications,gold_standard={}):
+    def __task_aggregation__(self,classifications,task_id,aggregations):
         to_retire = []
         for subject_id in classifications:
             users,everything_transcribed = zip(*classifications[subject_id])
@@ -948,7 +948,7 @@ class SubjectRetirement(Classification):
         params = {"retired_subjects":to_retire}
         r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
         
-        return []
+        return aggregations
 
 
 class Tate(AggregationAPI):
@@ -1104,10 +1104,10 @@ if __name__ == "__main__":
         project.__aggregate__(subject_set=[subject_id])
 
 
-        subject_image = project.__image_setup__(subject_id)
-        fig, ax = plt.subplots()
-        project.__cluster_output_with_colour__(project.workflows.keys()[0],ax,subject_id=subject_id)
-        image_file = cbook.get_sample_data(subject_image)
-        image = plt.imread(image_file)
-        im = ax.imshow(image)
-        plt.show()
+        # subject_image = project.__image_setup__(subject_id)
+        # fig, ax = plt.subplots()
+        # project.__cluster_output_with_colour__(project.workflows.keys()[0],ax,subject_id=subject_id)
+        # image_file = cbook.get_sample_data(subject_image)
+        # image = plt.imread(image_file)
+        # im = ax.imshow(image)
+        # plt.show()
