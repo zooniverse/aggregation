@@ -254,7 +254,7 @@ class AggregationAPI:
         # todo - so refactor
         if csv_classification_file is None:
 
-            if os.path.isfile("config/database"):
+            if os.path.isfile("config/database.yml"):
                 database_file = open("config/database.yml","rb")
             elif os.path.isfile(base_directory+"/Databases/database.yml"):
                 database_file = open(base_directory+"/Databases/database.yml","rb")
