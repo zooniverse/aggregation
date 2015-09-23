@@ -77,17 +77,11 @@ class Classification:
         :return:
         """
 
-        # todo: implement this
-        assert task_id != "param"
-        assert "subtask" in classification_tasks[task_id]
-
-        # aggregations = {}
-
         # go through the tools which actually have the followup questions
-        for tool in classification_tasks[task_id]["subtask"]:
+        for tool in classification_tasks[task_id]:
 
             # now go through the individual followup questions
-            for followup_question_index in classification_tasks[task_id]["subtask"][tool]:
+            for followup_question_index in classification_tasks[task_id][tool]:
                 global_index = str(task_id)+"_" +str(tool)+"_"+str(followup_question_index)
 
                 followup_classification = {}
@@ -278,11 +272,11 @@ class Classification:
                     if dist < 1:
                         mapped_gold_standard[(subject_id,local_cluster_index)] = 1
 
-        existence_results = self.__task_aggregation__(existence_classification,mapped_gold_standard)
+        existence_results = self.__task_aggregation__(existence_classification,task_id,{})#,mapped_gold_standard)
         assert isinstance(existence_results,dict)
 
         for subject_id,cluster_index in existence_results:
-            new_results = existence_results[(subject_id,cluster_index)]
+            new_results = existence_results[(subject_id,cluster_index)][task_id]
             new_agg = {subject_id: {task_id: {shape + " clusters": {cluster_index: {"existence": new_results}}}}}
             aggregations = self.__merge_results__(aggregations,new_agg)
 
@@ -365,11 +359,11 @@ class Classification:
 
         # classify
         print "tool results classification"
-        tool_results = self.__task_aggregation__(tool_classifications)
+        tool_results = self.__task_aggregation__(tool_classifications,task_id,{})
         assert isinstance(tool_results,dict)
 
         for subject_id,cluster_index in tool_results:
-            new_results = tool_results[(subject_id,cluster_index)]
+            new_results = tool_results[(subject_id,cluster_index)][task_id]
             new_agg = {subject_id: {task_id: {shape + " clusters": {cluster_index: {"tool_classification": new_results}}}}}
             aggregations = self.__merge_results__(aggregations,new_agg)
 
@@ -407,7 +401,7 @@ class Classification:
 
                     # can more than one tool create this shape?
                     if sum([1 for s in marking_tasks[task_id] if s == shape]) > 1:
-                        aggregations = self.__tool_classification__(task_id,classification_tasks,raw_classifications,clustering_results,aggregations)
+                        aggregations = self.__tool_classification__(task_id,shape,raw_classifications,clustering_results,aggregations)
                         # merge the tool results into the overall results
                         # aggregations = self.__merge_results__(aggregations,tool_results)
 

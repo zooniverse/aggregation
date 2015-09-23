@@ -953,7 +953,7 @@ class SubjectRetirement(Classification):
 
 class Tate(AggregationAPI):
     def __init__(self):
-        AggregationAPI.__init__(self,"tate")#"tate",environment="staging")
+        AggregationAPI.__init__(self,245)#"tate")#"tate",environment="staging")
 
         self.marking_params_per_shape = dict()
 
@@ -964,7 +964,8 @@ class Tate(AggregationAPI):
         self.__set_classification_alg__(SubjectRetirement,{"host":self.host_api,"project_id":self.project_id,"token":self.token,"workflow_id":121})
 
         self.ignore_versions = True
-        self.instructions[683] = {}
+        # self.instructions[683] = {}
+        self.instructions[121] = {}
 
         self.only_retired_subjects = False
         self.only_recent_subjects = True
@@ -977,7 +978,7 @@ class Tate(AggregationAPI):
         :return:
         """
         workflows = dict()
-        workflows[121] = self.__readin_tasks__(683)
+        workflows[121] = self.__readin_tasks__(121)
 
         versions = dict()
         versions[121] = 17

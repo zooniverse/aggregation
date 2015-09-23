@@ -324,8 +324,9 @@ class AggregationAPI:
         self.retirement_thresholds = self.__get_retirement_threshold__()
         self.workflow_names = self.__get_workflow_names__()
 
-        # if a specific workflow id has been provided:
-        if "workflow_id" in api_details[project]:
+        # is there an entry for the project in the yaml file?
+        # if so, has a specific workflow id has been provided?
+        if (project in api_details) and ("workflow_id" in api_details[project]):
             workflow_id = int(api_details[project]["workflow_id"])
             try:
                 self.workflows = {workflow_id: self.workflows[workflow_id]}
@@ -417,9 +418,7 @@ class AggregationAPI:
                 print "clustering"
                 clustering_aggregations = self.__cluster__(raw_markings,image_dimensions)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
-            print raw_markings
-            print clustering_aggregations
-            print classification_tasks
+
             if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
                 print "classifying"
@@ -695,13 +694,13 @@ class AggregationAPI:
     def __exit__(self, exc_type, exc_value, traceback):
         # if another instance is already running - don't do anything, just exit
         if exc_type == InstanceAlreadyRunning:
-            pass
+            rollbar.report_message("previous aggregation run not yet done","info")
         else:
             # if no error happened - update the timestamp
             # else - the next run will start at the old time stamp (which we want)
             if exc_type is None:
                 pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
-                # rollbar.report_message("everything worked fine","info")
+                rollbar.report_message("everything worked fine","info")
             # we encountered an error - if we have a rollbar_token, report the error
             # don't do this if we are running on one of Greg's computers
             elif (self.rollbar_token is not None) and (expanduser("~") not in ["/home/greg","/home/ggdhines"]):
