@@ -259,6 +259,9 @@ class AggregationAPI:
             elif os.path.isfile(base_directory+"/Databases/database.yml"):
                 database_file = open(base_directory+"/Databases/database.yml","rb")
             else:
+                for path, subdirs, files in os.walk("./"):
+                    for name in files:
+                        print >> sys.stderr, os.path.join(path, name)
                 assert False
 
             database_details = yaml.load(database_file)
