@@ -22,4 +22,4 @@ RUN ln -s /app/config/crontab /etc/cron.d/aggregation
 
 EXPOSE 5000
 
-ENTRYPOINT ["/usr/bin/supervisord"]
+ENTRYPOINT ["/app/start.sh"]
