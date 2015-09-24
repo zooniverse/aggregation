@@ -6,6 +6,7 @@ from aggregation_api import base_directory
 import yaml
 import rollbar
 
+
 def rollbar_handler(job, exc_type, exc_value, traceback):
     try:
         panoptes_file = open("config/aggregation.yml","rb")

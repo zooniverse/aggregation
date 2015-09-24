@@ -7,7 +7,7 @@ import math
 import csv
 import json
 import numpy
-
+import tarfile
 
 class CsvOut:
     def __init__(self,project):
@@ -130,13 +130,17 @@ class CsvOut:
         #     header += ",num_users"
         #     self.classification_csv_files[task].write(header+"\n")
 
-    def __write_out__(self,subject_set = None):
+    def __write_out__(self,subject_set = None,compress=True):
         """
         create the csv outputs for a given set of workflows
         the workflows are specified by self.workflows which is determined when the aggregation engine starts
         a zipped file is created in the end
         """
         assert (subject_set is None) or isinstance(subject_set,int)
+
+        tarball = None
+        if compress:
+            tarball = tarfile.open("/tmp/"+str(self.project_id)+"export.tar.gz", "w:gz")
 
         for workflow_id in self.workflows:
             print "csv output for workflow - " + str(workflow_id)
@@ -166,7 +170,10 @@ class CsvOut:
                     self.__csv_classification_output__(workflow_id,task_id,subject_id,aggregations)
 
         # finally zip everything (over all workflows) into one zip file
-        self.__csv_to_zip__()
+        # self.__csv_to_zip__()
+        if compress:
+            tarball.close()
+            return "/tmp/"+str(self.project_id)+"export.tar.gz"
 
     # def __csv_annotations__(self,workflow_id_filter,subject_set):
     #     # find the major id of the workflow we are filtering

@@ -2,19 +2,22 @@ import os
 import requests
 import json
 from aggregation_api import base_directory,AggregationAPI
+from csv_output import CsvOut
 import yaml
 import rollbar
 
 def aggregate(project_id, token, href, metadata, environment):
-    project = AggregationAPI(project_id, environment=environment)
-    project.__aggregate__()
-    tarpath = project.__csv_output__(compress=True)
-    # response = send_uploading(metadata, token, href)
-    # url = response.json()["media"][0]["src"]
-    # with open(tarpath, 'rb') as tarball:
-    #     requests.put(url, headers={'Content-Type': 'application/x-gzip'}, data=tarball)
-    # os.remove(tarpath)
-    send_finished(metadata, token, href)
+    with AggregationAPI(project_id, environment=environment) as project:
+        project.__aggregate__()
+
+        with CsvOut(project) as writer:
+            tarpath = writer.__write_out__(compress=True)
+            response = send_uploading(metadata, token, href)
+            url = response.json()["media"][0]["src"]
+            with open(tarpath, 'rb') as tarball:
+                requests.put(url, headers={'Content-Type': 'application/x-gzip'}, data=tarball)
+            os.remove(tarpath)
+            send_finished(metadata, token, href)
 
 
 
