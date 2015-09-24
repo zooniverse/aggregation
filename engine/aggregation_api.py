@@ -281,7 +281,7 @@ class AggregationAPI:
         # get Greg's userID and password
         # purely for testing, if this file does not exist, try opening on Greg's computer
         try:
-            panoptes_file = open("/app/engine/config/aggregation.yml","rb")
+            panoptes_file = open("/app/config/aggregation.yml","rb")
         except IOError:
             panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
         api_details = yaml.load(panoptes_file)
