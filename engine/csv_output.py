@@ -29,6 +29,12 @@ class CsvOut:
         self.marking_csv_files = {}
         self.classification_csv_files = {}
 
+    def __enter__(self):
+        pass
+
+    def __exit__(self):
+        pass
+
     def __csv_classification_output__(self,workflow_id,task_id,subject_id,aggregations):
         """
         add a row to the classifciation csv output file
