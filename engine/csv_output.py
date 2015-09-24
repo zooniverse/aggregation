@@ -1,5 +1,4 @@
 __author__ = 'greg'
-import aggregation_api
 import re
 import os
 import zipfile
@@ -8,6 +7,7 @@ import csv
 import json
 import numpy
 import tarfile
+import rollbar
 
 class CsvOut:
     def __init__(self,project):
@@ -29,11 +29,21 @@ class CsvOut:
         self.marking_csv_files = {}
         self.classification_csv_files = {}
 
+        self.rollbar_token = project.rollbar_token
+
     def __enter__(self):
         pass
 
-    def __exit__(self):
-        pass
+    def __exit__(self, exc_type, exc_value, traceback):
+        # if another instance is already running - don't do anything, just exit
+        # if no error happened - update the timestamp
+        # else - the next run will start at the old time stamp (which we want)
+        if self.rollbar_token is not None:
+            rollbar.init(self.rollbar_token,"production")
+            if exc_type is None:
+                rollbar.report_message("csv output worked corrected","info")
+            else:
+                rollbar.report_exc_info()
 
     def __csv_classification_output__(self,workflow_id,task_id,subject_id,aggregations):
         """
