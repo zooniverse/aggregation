@@ -281,7 +281,7 @@ class AggregationAPI:
         # get Greg's userID and password
         # purely for testing, if this file does not exist, try opening on Greg's computer
         try:
-            panoptes_file = open("config/aggregation.yml","rb")
+            panoptes_file = open("/app/engine/config/aggregation.yml","rb")
         except IOError:
             panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
         api_details = yaml.load(panoptes_file)
@@ -411,7 +411,6 @@ class AggregationAPI:
             # image_dimensions can be used by some clustering approaches - ie. for blob clustering
             # to give area as percentage of the total image area
             raw_classifications,raw_markings,image_dimensions = self.__sort_annotations__(workflow_id,subject_set,expert)
-
 
             # do we have any marking tasks?
             if marking_tasks != {}:
@@ -1935,10 +1934,10 @@ class AggregationAPI:
                             raw_classifications[task_id][shape][subject_id][(relevant_params[:5],user_id)] = tool
 
                         # are there follow up questions?
-                        if (task_id in classification_tasks) and ("subtask" in classification_tasks[task_id]) and (tool in classification_tasks[task_id]["subtask"]):
+                        if (task_id in classification_tasks) and (tool in classification_tasks[task_id]):
 
                             # there could be multiple follow up questions
-                            for local_subtask_id in classification_tasks[task_id]["subtask"][tool]:
+                            for local_subtask_id in classification_tasks[task_id][tool]:
                                 global_subtask_id = str(task_id)+"_"+str(tool)+"_"+str(local_subtask_id)
                                 if global_subtask_id not in raw_classifications:
                                     raw_classifications[global_subtask_id] = {}

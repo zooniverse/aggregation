@@ -109,8 +109,15 @@ class Classification:
                                 if cluster_index in ["param","all_users"]:
                                     continue
 
-                                user_identifiers = zip([tuple(x) for x in cluster["cluster members"]],cluster["users"])
+                                # polygons and rectangles will pass cluster membership back as indices
+                                # ints => we can't case tuples
+                                if isinstance(cluster["cluster members"][0],int):
+                                    user_identifiers = zip(cluster["cluster members"],cluster["users"])
+                                else:
+                                    user_identifiers = zip([tuple(x) for x in cluster["cluster members"]],cluster["users"])
                                 ballots = []
+                                print user_identifiers
+                                print raw_classifications.keys()
                                 for user_identifiers,tool_used in zip(user_identifiers,cluster["tools"]):
                                     # did the user use the relevant tool - doesn't matter if most people
                                     # used another tool
@@ -123,7 +130,7 @@ class Classification:
                                 shapes_per_cluster[(subject_id,cluster_index)] = shape
 
                 print "follow up aggregaton"
-                followup_results = self.__task_aggregation__(followup_classification)
+                followup_results = self.__task_aggregation__(followup_classification,global_index,{})
                 assert isinstance(followup_results,dict)
 
                 for subject_id,cluster_index in followup_results:
