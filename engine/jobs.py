@@ -7,13 +7,7 @@ import yaml
 import rollbar
 
 def aggregate(project_id, token, href, metadata, environment):
-    try:
-        panoptes_file = open("/app/engine/config/aggregation.yml","rb")
-    except IOError:
-        panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
-    api_details = yaml.load(panoptes_file)
-    rollbar_token = api_details["default"]["rollbar"]
-    rollbar.init(rollbar_token,"production")
+    rollbar.init("0d034f00e28d442b9deec91ef867bc3e","production")
     rollbar.report_message("step1","info")
 
     with AggregationAPI(project_id, environment=environment) as project:
