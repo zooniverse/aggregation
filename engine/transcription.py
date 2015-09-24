@@ -22,6 +22,7 @@ try:
 
     import matplotlib.pyplot as plt
     import matplotlib.cbook as cbook
+    import rollbar
 
 except:
     # if any errors were raised - probably because Greg thought
@@ -944,9 +945,17 @@ class SubjectRetirement(Classification):
             if (count >= 3) and (percent >= 0.6):
                 to_retire.append(subject_id)
 
-        headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+self.token}
-        params = {"retired_subjects":to_retire}
-        r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
+        # having some trouble with the format for submitting retirement requests
+        # so going to try and if we have a problem - just keep on going
+        # also, report back the results so we know what's going
+        try:
+            headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+self.token}
+            params = {"retired_subjects":to_retire}
+            r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
+            rollbar.report_message("results from trying to retire subjects","info",extra_data=r.text)
+
+        except TypeError:
+            rollbar.report_exc_info()
         
         return aggregations
 
