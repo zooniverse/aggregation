@@ -23,6 +23,7 @@ try:
     import matplotlib.pyplot as plt
     import matplotlib.cbook as cbook
     import rollbar
+    import json
 
 except:
     # if any errors were raised - probably because Greg thought
@@ -951,7 +952,8 @@ class SubjectRetirement(Classification):
         try:
             headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+self.token}
             params = {"retired_subjects":to_retire}
-            r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
+            # r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
+            r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,data=json.dumps(params))
             rollbar.report_message("results from trying to retire subjects","info",extra_data=r.text)
 
         except TypeError:
