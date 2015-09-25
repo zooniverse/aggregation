@@ -7,8 +7,8 @@ import yaml
 import rollbar
 import traceback
 
-def aggregate(project_id, token, href, metadata, environment):
 
+def aggregate(project_id, token, href, metadata, environment):
     with AggregationAPI(project_id, environment=environment) as project:
         project.__migrate__()
         project.__aggregate__()

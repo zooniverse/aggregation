@@ -457,10 +457,6 @@ class AggregationAPI:
 
             version = int(math.floor(float(self.versions[workflow_id])))
 
-            # todo - do this better
-            width = 2000
-            height = 2000
-
             # classification_tasks,marking_tasks = self.workflows[workflow_id]
             # raw_classifications = {}
             # raw_markings = {}
@@ -515,6 +511,7 @@ class AggregationAPI:
                         if "subject_dimensions" in metadata:
                             for dimensions in metadata["subject_dimensions"]:
                                 if dimensions is not None:
+                                    assert isinstance(dimensions,dict)
                                     height = dimensions["naturalHeight"]
                                     width = dimensions["naturalWidth"]
 
@@ -707,7 +704,6 @@ class AggregationAPI:
             self.rollbar_token = api_details[self.environment]["rollbar"]
             # print "raising error"
             rollbar.init(self.rollbar_token,"production")
-            rollbar.report_message("starting off","info")
 
         if os.path.isfile(expanduser("~")+"/aggregation.lock"):
             raise InstanceAlreadyRunning()
@@ -726,9 +722,9 @@ class AggregationAPI:
             # print exc_type
             # # if no error happened - update the timestamp
             # # else - the next run will start at the old time stamp (which we want)
-            # if exc_type is None:
-            #     pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
-            #     rollbar.report_message("everything worked fine","info")
+            if exc_type is None:
+                # pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
+                rollbar.report_message("everything worked fine","info",extra_data={"project_id":self.project_id})
             # # we encountered an error - if we have a rollbar_token, report the error
             # # don't do this if we are running on one of Greg's computers
             # elif (self.rollbar_token is not None):# and (expanduser("~") not in ["/home/greg","/home/ggdhines"]):
