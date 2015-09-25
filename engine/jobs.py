@@ -4,9 +4,7 @@ import json
 from aggregation_api import base_directory,AggregationAPI
 from csv_output import CsvOut
 import yaml
-import rollbar
 import traceback
-
 
 def aggregate(project_id, token, href, metadata, environment):
     with AggregationAPI(project_id, environment=environment) as project:
@@ -14,7 +12,6 @@ def aggregate(project_id, token, href, metadata, environment):
         project.__aggregate__()
 
         with CsvOut(project) as writer:
-            rollbar.report_message("step3","info")
             tarpath = writer.__write_out__(compress=True)
             response = send_uploading(metadata, token, href)
             url = response.json()["media"][0]["src"]
@@ -22,7 +19,6 @@ def aggregate(project_id, token, href, metadata, environment):
                 requests.put(url, headers={'Content-Type': 'application/x-gzip'}, data=tarball)
             os.remove(tarpath)
             send_finished(metadata, token, href)
-
 
 def get_etag(href, token):
     response = requests.get(href, headers=headers(token), params={'admin': True})
@@ -49,8 +45,3 @@ def headers(token, etag=False):
 def send_request(body, token, href):
     body['admin'] = True
     return requests.put(href, headers=headers(token, etag=href), data=json.dumps(body))
-
-
-
-
-
