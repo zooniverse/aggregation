@@ -188,11 +188,36 @@ def hesse_line_reduction(line_segments):
 class AggregationAPI:
     def __init__(self,project=None,environment=None,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None),public_panoptes_connection=False):
 
+        self.project = project
+
         self.cluster_algs = None
         self.classification_alg = None
         self.workflows = None
         self.versions = None
         self.classifications = None
+
+        # default value
+        if environment is None:
+            self.environment = "production"
+        else:
+            self.environment = environment
+
+        self.host_api = None
+
+        self.public_panoptes_connection = public_panoptes_connection
+
+        self.postgres_session = None
+        self.cassandra_session = None
+
+        self.user_id = user_id
+        self.password = password
+
+        self.csv_classification_file = csv_classification_file
+        self.csv_subject_file = csv_subject_file
+
+        self.__setup__()
+
+    def __setup__(self):
 
         # functions for converting json instances into values we can actually cluster on
         self.marking_params_per_shape = dict()
@@ -203,18 +228,14 @@ class AggregationAPI:
         self.marking_params_per_shape["circle"] = relevant_circle_params
         self.marking_params_per_shape["polygon"] = relevant_polygon_params
 
-        self.csv_classification_file = csv_classification_file
+        # self.csv_classification_file = csv_classification_file
 
         # in case project wants to have an roi
         self.roi_dict = {}
 
-        # default value
-        if environment is None:
-            self.environment = "production"
-        else:
-            self.environment = environment
 
-        self.host_api = None
+
+
         # just for when we are treating an ouroboros project like a panoptes one
         # in which the subject ids will be zooniverse_ids, which are strings
         self.subject_id_type = "int"
@@ -224,8 +245,7 @@ class AggregationAPI:
         # only continue the set up if the project name is given
         # self.project_short_name = project
 
-        self.postgres_session = None
-        self.cassandra_session = None
+
 
         # load in the project id (a number)
         # if one isn't provided, tried reading it from the yaml config file
@@ -235,7 +255,7 @@ class AggregationAPI:
         # todo - non logged in users having a yaml file (where they can give csv classification files etc.)
         self.project_id = None
         try:
-            self.project_id = int(project)
+            self.project_id = int(self.project)
         except ValueError:
             pass
 
@@ -243,7 +263,7 @@ class AggregationAPI:
 
         # if we are using a public panoptes connection
         # we won't be able to connect to the back end databases, so might as well exit here
-        if public_panoptes_connection:
+        if self.public_panoptes_connection:
             # go with the very basic connection
             print "trying public Panoptes connection - no login"
             self.host = "https://panoptes.zooniverse.org/"
@@ -257,7 +277,7 @@ class AggregationAPI:
 
         # todo - (csv_classification_file != None) => shouldn't make it this far
         # todo - so refactor
-        if csv_classification_file is None:
+        if self.csv_classification_file is None:
 
             if os.path.isfile("config/database.yml"):
                 database_file = open("config/database.yml","rb")
@@ -274,11 +294,14 @@ class AggregationAPI:
             # tries to avoid causing problems with the production DB
             if (self.environment == "production") and (expanduser("~") in ["/home/greg","/home/ggdhines"]):
                 self.__postgres_connect__(database_details["local_host"])
-                self.__cassandra_connect__("local_host")
             else:
                 self.__postgres_connect__(database_details[self.environment])
-                # and to the cassandra db as well
-                self.__cassandra_connect__(self.environment)
+
+            # and to the cassandra db as well
+            if expanduser("~") in ["/home/greg","/home/ggdhines"]:
+                self.__cassandra_connect__("localhost")
+            else:
+                self.__cassandra_connect__(database_details[self.environment]["cassandra"])
 
             # use for Cassandra connection - can override for Ourboros projects
             self.classification_table = "classifications"
@@ -314,11 +337,12 @@ class AggregationAPI:
 
         # make the actual connection to Panoptes
         print "trying secure Panoptes connection"
-        if user_id is None:
-            user_id = api_details[self.environment]["name"]
-        if password is None:
-            password = api_details[self.environment]["password"]
-        self.__panoptes_connect__(api_details[self.environment],user_id,password)
+        if self.user_id is None:
+            self.user_id = api_details[self.environment]["name"]
+        if self.password is None:
+            self.password = api_details[self.environment]["password"]
+        # self.__panoptes_connect__(api_details[self.environment],user_id,password)
+        self.__panoptes_connect__(api_details[self.environment],self.user_id,self.password)
 
         # todo - refactor all this?
         # there may be more than one workflow associated with a project - read them all in
@@ -329,7 +353,7 @@ class AggregationAPI:
 
         # is there an entry for the project in the yaml file?
         # if so, has a specific workflow id has been provided?
-        if (project in api_details) and ("workflow_id" in api_details[project]):
+        if (self.project in api_details) and ("workflow_id" in api_details[self.project]):
             workflow_id = int(api_details[project]["workflow_id"])
             try:
                 self.workflows = {workflow_id: self.workflows[workflow_id]}
@@ -419,15 +443,12 @@ class AggregationAPI:
             if marking_tasks != {}:
                 print "clustering"
                 clustering_aggregations = self.__cluster__(raw_markings,image_dimensions)
-                print clustering_aggregations
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
 
             if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
                 print "classifying"
-                print raw_classifications
                 classification_aggregations = self.__classify__(raw_classifications,clustering_aggregations,workflow_id,gold_standard_clusters)
-                print classification_aggregations
 
             # if we have both markings and classifications - we need to merge the results
             if (clustering_aggregations is not None) and (classification_aggregations is not None):
@@ -526,22 +547,20 @@ class AggregationAPI:
             raise StopIteration()
         return annotation_generator
 
-    def __cassandra_connect__(self,environment):
+    def __cassandra_connect__(self,cassandra_instance):
         """
         connect to the AWS instance of Cassandra - try 10 times and raise an error
         :return:
         """
+
         for i in range(10):
             try:
-                if environment == 'production':
-                    print "connecting to production Cassandra"
-                    self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
-                elif environment in "staging":
-                    print "connecting to staging Cassandra"
-                    self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
-                else:
+                if cassandra_instance == "localhost":
                     print "connecting to local Cassandra instance"
                     self.cluster = Cluster()
+                else:
+                    print "connecting to Cassandra: " + cassandra_instance
+                    self.cluster = Cluster([cassandra_instance])
 
                 try:
                     self.cassandra_session = self.cluster.connect("zooniverse")
@@ -710,27 +729,34 @@ class AggregationAPI:
         if os.path.isfile(expanduser("~")+"/aggregation.lock"):
             raise InstanceAlreadyRunning()
         open(expanduser("~")+"/aggregation.lock","w").close()
+
+
+
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         # if another instance is already running - don't do anything, just exit
+        print "exit code"
         if exc_type == InstanceAlreadyRunning:
             rollbar.report_message("previous aggregation run not yet done","info")
         else:
-
-            # if no error happened - update the timestamp
-            # else - the next run will start at the old time stamp (which we want)
-            if exc_type is None:
-                pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
-                rollbar.report_message("everything worked fine","info")
-            # we encountered an error - if we have a rollbar_token, report the error
-            # don't do this if we are running on one of Greg's computers
-            elif (self.rollbar_token is not None) and (expanduser("~") not in ["/home/greg","/home/ggdhines"]):
-                rollbar.report_exc_info()
+            # print exc_type
+            # # if no error happened - update the timestamp
+            # # else - the next run will start at the old time stamp (which we want)
+            # if exc_type is None:
+            #     pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
+            #     rollbar.report_message("everything worked fine","info")
+            # # we encountered an error - if we have a rollbar_token, report the error
+            # # don't do this if we are running on one of Greg's computers
+            # elif (self.rollbar_token is not None):# and (expanduser("~") not in ["/home/greg","/home/ggdhines"]):
+            #     print "reporting to rollbar"
+            #     rollbar.report_exc_info()
+            #     # rollbar._report_message("error","error",extra_data={"traceback":traceback})
 
             # shutdown the connection to Cassandra and remove the lock so other aggregation instances
             # can run, regardless of whether an error occurred
-            self.cassandra_session.shutdown()
+            if self.cassandra_session is not None:
+                self.cassandra_session.shutdown()
             os.remove(expanduser("~")+"/aggregation.lock")
 
 
@@ -1879,8 +1905,6 @@ class AggregationAPI:
             if user_id == expert:
                 continue
 
-            print annotation
-
             if dimensions is not None:
                 image_dimensions[subject_id] = dimensions
 
@@ -1995,8 +2019,6 @@ class AggregationAPI:
 
                 # we a have a pure classification task
                 else:
-                    print self.instructions[workflow_id]
-                    print task["value"]
                     if task_id not in raw_classifications:
                         raw_classifications[task_id] = {}
                     if subject_id not in raw_classifications[task_id]:
@@ -2086,8 +2108,6 @@ class AggregationAPI:
 
         update_counter = 0
         insert_counter = 0
-
-        print aggregations
 
         # todo - sort the subject ids so that searching is faster
         for subject_id in aggregations:

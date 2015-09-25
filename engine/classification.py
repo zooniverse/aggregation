@@ -433,7 +433,6 @@ class Classification:
             if isinstance(classification_tasks[task_id],bool):
                 # did anyone actually do this classification?
                 if task_id in raw_classifications:
-                    print raw_classifications[task_id]
                     aggregations = self.__task_aggregation__(raw_classifications[task_id],task_id,aggregations)
 
                     # aggregations = self.__merge_results__(aggregations,classification_results)

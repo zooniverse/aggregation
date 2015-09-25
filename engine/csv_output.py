@@ -36,15 +36,16 @@ class CsvOut:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        # if another instance is already running - don't do anything, just exit
-        # if no error happened - update the timestamp
-        # else - the next run will start at the old time stamp (which we want)
-        if self.rollbar_token is not None:
-            rollbar.init(self.rollbar_token,"production")
-            if exc_type is None:
-                rollbar.report_message("csv output worked corrected","info")
-            else:
-                rollbar.report_exc_info()
+        # # if another instance is already running - don't do anything, just exit
+        # # if no error happened - update the timestamp
+        # # else - the next run will start at the old time stamp (which we want)
+        # if self.rollbar_token is not None:
+        #     rollbar.init(self.rollbar_token,self.project.environment)
+        #     if exc_type is None:
+        #         rollbar.report_message("csv output worked corrected","info")
+        #     else:
+        #         rollbar.report_exc_info()
+        pass
 
     def __csv_classification_output__(self,workflow_id,task_id,subject_id,aggregations):
         """

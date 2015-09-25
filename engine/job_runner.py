@@ -19,7 +19,6 @@ def rollbar_handler(job, exc_type, exc_value, traceback):
         rollbar.init(rollbar_token,"production")
         rollbar.report_exc_info()
 
-
 listen = ['high', 'default', 'low']
 env = os.getenv('FLASK_ENV', 'production')
 
