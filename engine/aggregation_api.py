@@ -186,10 +186,10 @@ def hesse_line_reduction(line_segments):
 
 
 class AggregationAPI:
-    def __init__(self,project=None,environment=None,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None),public_panoptes_connection=False):
-        # the project id - either the panoptes id number or the name - which we will use to look up
-        # the number via an api call to panoptes
-        self.project = project
+    def __init__(self,project_id,environment,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None),public_panoptes_connection=False):
+        # the panoptes project id - and the environment are the two main things to set
+        self.project_id = int(project_id)
+        self.environment = environment
 
         # a dictionary of clustering algorithms - one per shape
         # todo - currently all possible algorithms are created for every shape, regardless of whether they are
@@ -205,12 +205,7 @@ class AggregationAPI:
         self.versions = None
         self.classifications = None
 
-        # default value
-        if environment is None:
-            self.environment = "development"
-        else:
-            self.environment = environment
-
+        # which version of panoptes - staging or production to call
         self.host_api = None
 
         self.public_panoptes_connection = public_panoptes_connection
@@ -253,17 +248,6 @@ class AggregationAPI:
         # self.__set_clustering_algs__(default_clustering_algs,reduction_algs)
 
         self.cluster_algs = {}
-        # # assert isinstance(clustering_algorithms,dict)
-        # for shape,alg in default_clustering_algs.items():
-        #     assert shape in self.marking_params_per_shape
-        #
-        #     # if a reduction algorithm is provided, use it
-        #     # otherwise, use the identity reduction - which doesn't do anything
-        #     if shape in reduction_algs:
-        #         self.cluster_algs[shape] = alg(shape,reduction_algs[shape])
-        #     else:
-        #         self.cluster_algs[shape] = alg(shape,identity_mapping)
-        #     assert isinstance(self.cluster_algs[shape],clustering.Cluster)
 
     def __setup__(self):
         # just for when we are treating an ouroboros project like a panoptes one
@@ -279,11 +263,6 @@ class AggregationAPI:
         # todo - to be provided as a param (since we don't read in the yaml file)
         # todo - probably want to change that at some point as there is value in
         # todo - non logged in users having a yaml file (where they can give csv classification files etc.)
-        self.project_id = None
-        try:
-            self.project_id = int(self.project)
-        except ValueError:
-            pass
 
         # if we are using a public panoptes connection
         # we won't be able to connect to the back end databases, so might as well exit here
@@ -295,75 +274,35 @@ class AggregationAPI:
             self.token = None
             return
 
+        # todo - can probably get rid of public_panoptes_connection  - a bit redundant given
+        # todo - csv_classification_file
+        assert self.csv_classification_file is None
         #########
         # everything that follows assumes you have a secure connection to Panoptes
         # plus the DBs (either production or staging)
 
-        # todo - (csv_classification_file != None) => shouldn't make it this far
-        # todo - so refactor
-        if self.csv_classification_file is None:
+        param_file = open("/app/config/aggregation.yml","rb")
+        param_details = yaml.load(param_file)
 
-            if os.path.isfile("config/database.yml"):
-                database_file = open("config/database.yml","rb")
-            else:
-                database_file = open(expanduser("~")+"/Databases/database.yml","rb")
-            # else:
-            #     for path, subdirs, files in os.walk("./"):
-            #         for name in files:
-            #             print >> sys.stderr, os.path.join(path, name)
-            #     assert False
+        # sometimes we want params specific to a project - ie. we are in development but want to read
+        # off the staging postgres db - in such case we just provide an extra yaml file
+        if self.project_id in param_details:
+            project_details = param_details[self.project_id]
+        else:
+            project_details = param_details[self.environment]
 
-            database_details = yaml.load(database_file)
-            # if we are running on Greg's computer(s), connect to a local (and slightly out of date) DB instance
-            # tries to avoid causing problems with the production DB
-            if (self.environment == "production") and (expanduser("~") in ["/home/greg","/home/ggdhines"]):
-                self.__postgres_connect__(database_details["local_host"])
-            else:
-                self.__postgres_connect__(database_details[self.environment])
+        # connect to whatever postgres db we want to
+        self.__postgres_connect__(project_details)
 
-            # connect to the Cassandra DB
-            self.__cassandra_connect__(database_details[self.environment]["cassandra"])
+        # connect to the Cassandra DB
+        self.__cassandra_connect__(project_details["cassandra"])
 
-            # use for Cassandra connection - can override for Ourboros projects
-            self.classification_table = "classifications"
-
-        # get Greg's userID and password
-        # purely for testing, if this file does not exist, try opening on Greg's computer
-        try:
-            panoptes_file = open("/app/config/aggregation.yml","rb")
-        except IOError:
-            panoptes_file = open(expanduser("~")+"/Databases/aggregation.yml","rb")
-        api_details = yaml.load(panoptes_file)
-
-        # # load in rollbar stuff - for reporting errors/stats when running on AWS
-        # self.rollbar_token = None
-        # if "rollbar" in api_details[self.environment]:
-        #     self.rollbar_token = api_details[self.environment]["rollbar"]
-        #     # print "raising error"
-        #     rollbar.init(self.rollbar_token,"production")
-        #     rollbar.report_message("starting off","info")
-        #     # rollbar.report_message('testing rollbar again', 'error')
-        #     # assert False
-
-        # if we had been previously unable to load the numerical project_id
-        # try again now that we have the yaml file
-        if self.project_id is None:
-            if "project_id" in api_details[project]:
-                self.project_id = int (api_details[project]["project_id"])
-            else:
-                # owner and project_id are only relevant if we do not have the project_id
-                self.owner = api_details[project]["owner"]
-                self.project_name = api_details[project]["project_name"]
-                self.project_id = self.__get_project_id()
+        # use for Cassandra connection - can override for Ourboros projects
+        self.classification_table = "classifications"
 
         # make the actual connection to Panoptes
         print "trying secure Panoptes connection"
-        if self.user_id is None:
-            self.user_id = api_details[self.environment]["name"]
-        if self.password is None:
-            self.password = api_details[self.environment]["password"]
-        # self.__panoptes_connect__(api_details[self.environment],user_id,password)
-        self.__panoptes_connect__(api_details[self.environment],self.user_id,self.password)
+        self.__panoptes_connect__(project_details)
 
         # todo - refactor all this?
         # there may be more than one workflow associated with a project - read them all in
@@ -374,12 +313,12 @@ class AggregationAPI:
 
         # is there an entry for the project in the yaml file?
         # if so, has a specific workflow id has been provided?
-        if (self.project in api_details) and ("workflow_id" in api_details[self.project]):
-            workflow_id = int(api_details[project]["workflow_id"])
+        if "workflow_id" in project_details:
+            workflow_id = int(project_details[project]["workflow_id"])
             try:
                 self.workflows = {workflow_id: self.workflows[workflow_id]}
             except KeyError:
-                print "could not given desired workflow: " + str(workflow_id)
+                print "did not have given desired workflow: " + str(workflow_id)
                 print "here's the workflows we do have"
                 print self.workflows
                 raise
@@ -398,7 +337,15 @@ class AggregationAPI:
             self.old_time = datetime.datetime(2000,01,01)
 
         self.current_time = datetime.datetime.now()
-        self.ignore_versions = False
+
+        self.ignore_versions = True
+        self.only_retired_subjects = False
+        # a bit of a sanity check in case I forget to change back up before uploading
+        # production and staging should ALWAYS pay attention to the version and only
+        # aggregate retired subjects
+        if self.environment in ["production","staging"]:
+            self.ignore_versions = False
+            self.only_retired_subjects = True
 
         self.starting_date = datetime.datetime(2000,1,1)
 
@@ -406,10 +353,9 @@ class AggregationAPI:
         self.classifications_per_subject = {}
 
         # do we want to aggregate over only retired subjects?
-        self.only_retired_subjects = True
+
         # do we want to aggregate over only subjects that have been retired/classified since
         # the last time we ran the code?
-        # retire => self.only_retired_subjects = True
         self.only_recent_subjects = False
 
     def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[]),expert=None,store_values=True):
@@ -1419,7 +1365,7 @@ class AggregationAPI:
 
         return data
 
-    def __panoptes_connect__(self,api_details,user_name,password):
+    def __panoptes_connect__(self,api_details):
         """
         make the main connection to Panoptes - through http
         the below code is based heavily on code originally by Margaret Kosmala
@@ -1427,13 +1373,16 @@ class AggregationAPI:
         :return:
         """
         # details for connecting to Panoptes
-        self.host = api_details["host"]
+        self.host = api_details["panoptes"]
         self.host_api = self.host+"api/"
         self.app_client_id = api_details["app_client_id"]
         self.token = None
 
         # the http api for connecting to Panoptes
         self.http_api = None
+
+        user_name = api_details["panoptes_username"]
+        password = api_details["panoptes_password"]
 
         for i in range(20):
             try:
@@ -1680,24 +1629,15 @@ class AggregationAPI:
     #         raise
 
     def __postgres_connect__(self,database_details):
-        print "connecting to postgres db -" + database_details["host"]
+        print "connecting to postgres db -" + database_details["postgres_host"]
 
+        # build up the connection details
         details = ""
+        details += "dbname = '" +database_details["postgres_db"] +"'"
+        details += " user = '" + database_details["postgres_username"] + "'"
+        details += " password = '"+database_details["postgres_password"]+"' "
+        details += " host ='" + database_details["postgres_host"] + "'"
 
-        details += "dbname = '" +database_details["database"] +"'"
-        details += " user = '" + database_details["username"] + "'"
-
-        # if no password is provided - hopefully connecting to the local cluster
-        try:
-            # password = database_details["password"]
-            details += " password = '"+database_details["password"]+"' "
-        except KeyError:
-            pass
-
-        try:
-            details += " host ='" + database_details["host"] +"'"
-        except KeyError:
-            pass
         # host = database_details["host"]
 
         for i in range(20):
