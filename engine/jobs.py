@@ -33,7 +33,9 @@ def aggregate(project_id, token, href, metadata, environment):
                 os.remove(tarpath)
                 send_finished(metadata, token, href)
                 extra = {"project_id":project_id}
-                rollbar.report_message("finished run","info",extra_data=extra)
+
+        rollbar.report_message("finished run","info",extra_data=extra)
+
     except Exception, err:
         print "reporting to rollbar from jobs.py"
         print traceback.format_exc()
