@@ -46,6 +46,11 @@ class InvalidMarking(Exception):
     def __str__(self):
         return "invalid marking: " + str(self.pt)
 
+class WorkflowNotfound(Exception):
+    def __init__(self,workflow_id):
+        self.workflow_id = workflow_id
+    def __str__(self):
+        return "workflow " + str(self.workflow_id) + " not found"
 
 class ImageNotDownloaded(Exception):
     def __init__(self):
@@ -267,7 +272,7 @@ class AggregationAPI:
             database_details = yaml.load(database_file)
             # if we are running on Greg's computer(s), connect to a local (and slightly out of date) DB instance
             # tries to avoid causing problems with the production DB
-            if expanduser("~") in ["/home/greg","/home/ggdhines"]:
+            if (self.environment == "production") and (expanduser("~") in ["/home/greg","/home/ggdhines"]):
                 self.__postgres_connect__(database_details["local_host"])
                 self.__cassandra_connect__("local_host")
             else:
@@ -286,15 +291,15 @@ class AggregationAPI:
             panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
         api_details = yaml.load(panoptes_file)
 
-        # load in rollbar stuff - for reporting errors/stats when running on AWS
-        self.rollbar_token = None
-        if "rollbar" in api_details[self.environment]:
-            self.rollbar_token = api_details[self.environment]["rollbar"]
-            # print "raising error"
-            rollbar.init(self.rollbar_token,"production")
-            rollbar.report_message("starting off","info")
-            # rollbar.report_message('testing rollbar again', 'error')
-            # assert False
+        # # load in rollbar stuff - for reporting errors/stats when running on AWS
+        # self.rollbar_token = None
+        # if "rollbar" in api_details[self.environment]:
+        #     self.rollbar_token = api_details[self.environment]["rollbar"]
+        #     # print "raising error"
+        #     rollbar.init(self.rollbar_token,"production")
+        #     rollbar.report_message("starting off","info")
+        #     # rollbar.report_message('testing rollbar again', 'error')
+        #     # assert False
 
         # if we had been previously unable to load the numerical project_id
         # try again now that we have the yaml file
@@ -306,8 +311,6 @@ class AggregationAPI:
                 self.owner = api_details[project]["owner"]
                 self.project_name = api_details[project]["project_name"]
                 self.project_id = self.__get_project_id()
-
-
 
         # make the actual connection to Panoptes
         print "trying secure Panoptes connection"
@@ -362,7 +365,7 @@ class AggregationAPI:
             self.old_time = datetime.datetime(2000,01,01)
 
         self.current_time = datetime.datetime.now()
-        self.ignore_versions = False
+        self.ignore_versions = True
 
         self.starting_date = datetime.datetime(2000,1,1)
 
@@ -370,7 +373,7 @@ class AggregationAPI:
         self.classifications_per_subject = {}
 
         # do we want to aggregate over only retired subjects?
-        self.only_retired_subjects = True
+        self.only_retired_subjects = False
         # do we want to aggregate over only subjects that have been retired/classified since
         # the last time we ran the code?
         # retire => self.only_retired_subjects = True
@@ -397,7 +400,7 @@ class AggregationAPI:
 
         for workflow_id in workflows:
             if subject_set is None:
-                subject_set = self.__get_subjects__(workflow_id,only_retired_subjects=False)
+                subject_set = self.__get_subjects__(workflow_id)#,only_retired_subjects=False)
                 # subject_set = self.__load_subjects__(workflow_id)
 
             print "workflow id : " + str(workflow_id)
@@ -416,12 +419,15 @@ class AggregationAPI:
             if marking_tasks != {}:
                 print "clustering"
                 clustering_aggregations = self.__cluster__(raw_markings,image_dimensions)
+                print clustering_aggregations
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
 
             if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
                 print "classifying"
+                print raw_classifications
                 classification_aggregations = self.__classify__(raw_classifications,clustering_aggregations,workflow_id,gold_standard_clusters)
+                print classification_aggregations
 
             # if we have both markings and classifications - we need to merge the results
             if (clustering_aggregations is not None) and (classification_aggregations is not None):
@@ -440,11 +446,12 @@ class AggregationAPI:
             # and we don't want to automatically save the results
 
             if store_values:
+                print "upserting results"
                 self.__upsert_results__(workflow_id,aggregations)
             else:
                 return aggregations
 
-    def __cassandra_annotations__(self,ignore_versions=False):
+    def __cassandra_annotations__(self):
         """
         use inner function so param can be set
         get the annotations from Cassandra
@@ -473,13 +480,13 @@ class AggregationAPI:
             for s in self.__chunks__(subject_set,15):
                 statements_and_params = []
 
-                if ignore_versions:
+                if self.ignore_versions:
                     select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ?")
                 else:
                     select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
 
                 for subject_id in s:
-                    if ignore_versions:
+                    if self.ignore_versions:
                         params = (int(self.project_id),subject_id,int(workflow_id))
                     else:
                         params = (int(self.project_id),subject_id,int(workflow_id),version)
@@ -529,9 +536,9 @@ class AggregationAPI:
                 if environment == 'production':
                     print "connecting to production Cassandra"
                     self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
-                elif environment == 'staging':
+                elif environment in "staging":
                     print "connecting to staging Cassandra"
-                    self.cluster = Cluster(['panoptes-cassandra-staging.zooniverse.org'])
+                    self.cluster = Cluster(['panoptes-cassandra.zooniverse.org'])
                 else:
                     print "connecting to local Cassandra instance"
                     self.cluster = Cluster()
@@ -685,6 +692,21 @@ class AggregationAPI:
         # if not, create the lock file to prevent another instance from starting
         # todo - maybe write something to the lock file in case another instance checks at the
         # todo - exact same time. What about instances for different projects?
+
+        try:
+            panoptes_file = open("/app/config/aggregation.yml","rb")
+        except IOError:
+            panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
+        api_details = yaml.load(panoptes_file)
+
+        # load in rollbar stuff - for reporting errors/stats when running on AWS
+        self.rollbar_token = None
+        if "rollbar" in api_details[self.environment]:
+            self.rollbar_token = api_details[self.environment]["rollbar"]
+            # print "raising error"
+            rollbar.init(self.rollbar_token,"production")
+            rollbar.report_message("starting off","info")
+
         if os.path.isfile(expanduser("~")+"/aggregation.lock"):
             raise InstanceAlreadyRunning()
         open(expanduser("~")+"/aggregation.lock","w").close()
@@ -695,6 +717,7 @@ class AggregationAPI:
         if exc_type == InstanceAlreadyRunning:
             rollbar.report_message("previous aggregation run not yet done","info")
         else:
+
             # if no error happened - update the timestamp
             # else - the next run will start at the old time stamp (which we want)
             if exc_type is None:
@@ -843,7 +866,7 @@ class AggregationAPI:
             raise
         # return None
 
-    def __get_subjects__(self,workflow_id,only_retired_subjects=False,only_recent_subjects=True):
+    def __get_subjects__(self,workflow_id):#,only_retired_subjects=False,only_recent_subjects=True):
         """
         gets the subjects to aggregate
         if we need retired subjects, query against the production postgresDB
@@ -875,7 +898,12 @@ class AggregationAPI:
             # stmt = "SELECT subject_id,workflow_version FROM \"classifications\" WHERE \"project_id\" = " + str(self.project_id) + " and \"workflow_id\" = " + str(workflow_id) + " and \"updated_at\" > '" + str(datetime.datetime(2000,1,1)) +"'"
             stmt = "SELECT subject_id,workflow_version FROM classifications WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)# + " and \"updated_at\" > '" + str(datetime.datetime(2000,1,1)) +"'"
             # filter for subjects which have the correct major version number
-            subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt) if int(r.workflow_version) == int(self.versions[workflow_id]) ])
+            if not self.ignore_versions:
+                subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt) if int(r.workflow_version) == int(self.versions[workflow_id]) ])
+                if subjects == set():
+                    print "no subjects found - maybe remove version filter"
+            else:
+                subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt)])
 
         return list(subjects)
 
@@ -1140,8 +1168,6 @@ class AggregationAPI:
 
         return image_path
 
-
-
     def __load_subjects__(self,workflow_id):
         """
         load the list of subject ids from Cassandra
@@ -1233,7 +1259,7 @@ class AggregationAPI:
         statements_and_params = []
         migrated = {}
         for ii,t in enumerate(cur.fetchall()):
-            print ii
+
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
             # can't really handle pairwise comparisons yet
             assert len(subject_ids) == 1
@@ -1264,6 +1290,7 @@ class AggregationAPI:
                 annotations = json.dumps(annotations)
 
             assert isinstance(annotations,str)
+            print ii, project_id,workflow_id
 
             params = (project_id, user_id, workflow_id,created_at, annotations, updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], workflow_version,json.dumps(metadata))
             statements_and_params.append((insert_statement, params))
@@ -1274,11 +1301,13 @@ class AggregationAPI:
 
             if len(statements_and_params) == 100:
                 results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
+                # print results
                 statements_and_params = []
 
         # insert any "left over" classifications
         if statements_and_params != []:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
+            # print results
 
         # now update the subject ids
         statements_and_params = []
@@ -1290,7 +1319,7 @@ class AggregationAPI:
 
             if len(statements_and_params) == 100:
                 results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
-                # statements_and_params = []
+                statements_and_params = []
         if statements_and_params != []:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
             # print results
@@ -1620,7 +1649,7 @@ class AggregationAPI:
         if self.postgres_session is None:
             raise psycopg2.OperationalError()
 
-        cursor = self.postgres_session.cursor()
+        # cursor = self.postgres_session.cursor()
 
     def __readin_tasks__(self,workflow_id):
         """
@@ -1631,8 +1660,13 @@ class AggregationAPI:
         # get the tasks associated with the given workflow
         select = "SELECT tasks from workflows where id = " + str(workflow_id)
         cursor = self.postgres_session.cursor()
+
         cursor.execute(select)
-        tasks = cursor.fetchone()[0]
+        try:
+            tasks = cursor.fetchone()[0]
+        except:
+            raise WorkflowNotfound(workflow_id)
+
 
         # which of these tasks have classifications associated with them?
         classification_tasks = {}
@@ -1845,6 +1879,8 @@ class AggregationAPI:
             if user_id == expert:
                 continue
 
+            print annotation
+
             if dimensions is not None:
                 image_dimensions[subject_id] = dimensions
 
@@ -1959,13 +1995,18 @@ class AggregationAPI:
 
                 # we a have a pure classification task
                 else:
+                    print self.instructions[workflow_id]
+                    print task["value"]
                     if task_id not in raw_classifications:
                         raw_classifications[task_id] = {}
                     if subject_id not in raw_classifications[task_id]:
                         raw_classifications[task_id][subject_id] = []
                     # if task_id == "init":
                     #     print task_id,task["value"]
-                    raw_classifications[task_id][subject_id].append((user_id,task["value"]))
+                    # todo - I think [[]] is an old annotation output
+                    # todo - the value doesn't really make sense, so I'm skipping it (should be rare)
+                    if task["value"] != [[]]:
+                        raw_classifications[task_id][subject_id].append((user_id,task["value"]))
 
 
         return raw_classifications,raw_markings,image_dimensions
@@ -2045,6 +2086,8 @@ class AggregationAPI:
 
         update_counter = 0
         insert_counter = 0
+
+        print aggregations
 
         # todo - sort the subject ids so that searching is faster
         for subject_id in aggregations:

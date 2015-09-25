@@ -9,6 +9,7 @@ import numpy
 import tarfile
 import rollbar
 
+
 class CsvOut:
     def __init__(self,project):
         print type(project)
@@ -32,7 +33,7 @@ class CsvOut:
         self.rollbar_token = project.rollbar_token
 
     def __enter__(self):
-        pass
+        return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         # if another instance is already running - don't do anything, just exit
@@ -87,6 +88,7 @@ class CsvOut:
             answer = re.sub(" ","_",answer)
             header += ",p("+answer+")"
         header += ",num_users"
+
         self.classification_csv_files[task].write(header+"\n")
 
     def __csv_file_setup__(self,workflow_id):
@@ -126,6 +128,7 @@ class CsvOut:
             self.__csv_marking_header_setup__(workflow_id,task,set(marking_tasks[task]),output_directory)
 
         for task in classification_tasks:
+            print "creating header for classification task " + str(task)
             self.__csv_classification_header_setup__(workflow_id,task,output_directory)
         #     # use the instruction label to create the csv file name
         #     # todo - what if the instruction labels are the same?
@@ -162,16 +165,14 @@ class CsvOut:
             print "csv output for workflow - " + str(workflow_id)
             self.__csv_file_setup__(workflow_id)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
-            print classification_tasks
-            print marking_tasks
 
             for subject_id,task_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
                 # check to see if the correct number of classifications were received
                 # todo - this is only a stop gap measure until we figure out why some subjects are being
                 # todo - retired early. Once that is done, we can remove this
-                if self.__count_check__(workflow_id,subject_id) < self.retirement_thresholds[workflow_id]:
-                    print "skipping"
-                    continue
+                # if self.__count_check__(workflow_id,subject_id) < self.retirement_thresholds[workflow_id]:
+                #     print "skipping"
+                #     continue
 
                 # are there markings associated with this task?
                 if task_id in marking_tasks:
@@ -184,6 +185,25 @@ class CsvOut:
                 # are there any classifications associated with this task
                 if task_id in classification_tasks:
                     self.__csv_classification_output__(workflow_id,task_id,subject_id,aggregations)
+
+            for fname,f in self.classification_csv_files.items():
+                assert isinstance(f,file)
+                if compress:
+                    print "writing out " + fname
+                    f.close()
+                    with open(f.name, "rb") as readfile:
+                        tarInfo = tarball.gettarinfo(fileobj=readfile)
+                        tarball.addfile(tarInfo, fileobj=readfile)
+                # f.close()
+
+            for f in self.marking_csv_files.values():
+                assert isinstance(f,file)
+                if compress:
+                    f.close()
+                    with open(f.name, "rb") as readfile:
+                        tarInfo = tarball.gettarinfo(fileobj=readfile)
+                        tarball.addfile(tarInfo, fileobj=readfile)
+
 
         # finally zip everything (over all workflows) into one zip file
         # self.__csv_to_zip__()

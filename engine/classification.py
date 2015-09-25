@@ -116,8 +116,7 @@ class Classification:
                                 else:
                                     user_identifiers = zip([tuple(x) for x in cluster["cluster members"]],cluster["users"])
                                 ballots = []
-                                print user_identifiers
-                                print raw_classifications.keys()
+
                                 for user_identifiers,tool_used in zip(user_identifiers,cluster["tools"]):
                                     # did the user use the relevant tool - doesn't matter if most people
                                     # used another tool
@@ -427,11 +426,14 @@ class Classification:
             if task_id == "param":
                 continue
 
+            print "classifying task " + str(task_id)
+
             # task_results = {}
             # just a normal classification question
             if isinstance(classification_tasks[task_id],bool):
                 # did anyone actually do this classification?
                 if task_id in raw_classifications:
+                    print raw_classifications[task_id]
                     aggregations = self.__task_aggregation__(raw_classifications[task_id],task_id,aggregations)
 
                     # aggregations = self.__merge_results__(aggregations,classification_results)
@@ -566,7 +568,7 @@ class VoteCount(Classification):
             for vote in vote_counts:
                 percentages[vote] = vote_counts[vote]/float(sum(vote_counts.values()))
 
-            results = percentages,sum(vote_counts.values())
+            results = percentages,len(raw_classifications[subject_id])
 
             new_agg = {subject_id: {task_id: results}}
 
