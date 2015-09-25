@@ -187,18 +187,27 @@ def hesse_line_reduction(line_segments):
 
 class AggregationAPI:
     def __init__(self,project=None,environment=None,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None),public_panoptes_connection=False):
-
+        # the project id - either the panoptes id number or the name - which we will use to look up
+        # the number via an api call to panoptes
         self.project = project
 
+        # a dictionary of clustering algorithms - one per shape
+        # todo - currently all possible algorithms are created for every shape, regardless of whether they are
+        # todo actually used
         self.cluster_algs = None
+        # the one classification algorithm
         self.classification_alg = None
+        # a dictionary of workflows - each workflow id number will map to a tuple - marking tasks and
+        # classification tasks
         self.workflows = None
+        # a list of the current workflow versions - so we can filter out any classifications made via a previous
+        # version (which can really mess things up)
         self.versions = None
         self.classifications = None
 
         # default value
         if environment is None:
-            self.environment = "production"
+            self.environment = "development"
         else:
             self.environment = environment
 
@@ -209,16 +218,17 @@ class AggregationAPI:
         self.postgres_session = None
         self.cassandra_session = None
 
+        # user id and password used to connect to the panoptes api
         self.user_id = user_id
         self.password = password
 
+        # todo - allow users to provide their own classification and subject files
         self.csv_classification_file = csv_classification_file
         self.csv_subject_file = csv_subject_file
 
         self.__setup__()
 
-    def __setup__(self):
-
+    def __setup_clustering_algs__(self):
         # functions for converting json instances into values we can actually cluster on
         self.marking_params_per_shape = dict()
         self.marking_params_per_shape["line"] = relevant_line_params
@@ -228,24 +238,40 @@ class AggregationAPI:
         self.marking_params_per_shape["circle"] = relevant_circle_params
         self.marking_params_per_shape["polygon"] = relevant_polygon_params
 
-        # self.csv_classification_file = csv_classification_file
+        # load the default clustering algorithms
+        self.default_clustering_algs = dict()
+        # the following shapes using the basic agglomerative clustering
+        self.default_clustering_algs["point"] = agglomerative.Agglomerative
+        self.default_clustering_algs["circle"] = agglomerative.Agglomerative
+        self.default_clustering_algs["ellipse"] = agglomerative.Agglomerative
+        self.default_clustering_algs["line"] = agglomerative.Agglomerative
+        # these shapes use the blob clustering approach
+        self.default_clustering_algs["rectangle"] = blob_clustering.BlobClustering
+        self.default_clustering_algs["polygon"] = blob_clustering.BlobClustering
+        # and set any reduction algorithms - to reduce the dimensionality of markings
+        self.reduction_algs = {"line":hesse_line_reduction}
+        # self.__set_clustering_algs__(default_clustering_algs,reduction_algs)
 
-        # in case project wants to have an roi
-        self.roi_dict = {}
+        self.cluster_algs = {}
+        # # assert isinstance(clustering_algorithms,dict)
+        # for shape,alg in default_clustering_algs.items():
+        #     assert shape in self.marking_params_per_shape
+        #
+        #     # if a reduction algorithm is provided, use it
+        #     # otherwise, use the identity reduction - which doesn't do anything
+        #     if shape in reduction_algs:
+        #         self.cluster_algs[shape] = alg(shape,reduction_algs[shape])
+        #     else:
+        #         self.cluster_algs[shape] = alg(shape,identity_mapping)
+        #     assert isinstance(self.cluster_algs[shape],clustering.Cluster)
 
-
-
-
+    def __setup__(self):
         # just for when we are treating an ouroboros project like a panoptes one
         # in which the subject ids will be zooniverse_ids, which are strings
         self.subject_id_type = "int"
 
+        # todo - some time in the far future - complete support for expert annotations
         self.experts = []
-
-        # only continue the set up if the project name is given
-        # self.project_short_name = project
-
-
 
         # load in the project id (a number)
         # if one isn't provided, tried reading it from the yaml config file
@@ -258,8 +284,6 @@ class AggregationAPI:
             self.project_id = int(self.project)
         except ValueError:
             pass
-
-
 
         # if we are using a public panoptes connection
         # we won't be able to connect to the back end databases, so might as well exit here
@@ -281,13 +305,13 @@ class AggregationAPI:
 
             if os.path.isfile("config/database.yml"):
                 database_file = open("config/database.yml","rb")
-            elif os.path.isfile(base_directory+"/Databases/database.yml"):
-                database_file = open(base_directory+"/Databases/database.yml","rb")
             else:
-                for path, subdirs, files in os.walk("./"):
-                    for name in files:
-                        print >> sys.stderr, os.path.join(path, name)
-                assert False
+                database_file = open(expanduser("~")+"/Databases/database.yml","rb")
+            # else:
+            #     for path, subdirs, files in os.walk("./"):
+            #         for name in files:
+            #             print >> sys.stderr, os.path.join(path, name)
+            #     assert False
 
             database_details = yaml.load(database_file)
             # if we are running on Greg's computer(s), connect to a local (and slightly out of date) DB instance
@@ -297,11 +321,8 @@ class AggregationAPI:
             else:
                 self.__postgres_connect__(database_details[self.environment])
 
-            # and to the cassandra db as well
-            if expanduser("~") in ["/home/greg","/home/ggdhines"]:
-                self.__cassandra_connect__("localhost")
-            else:
-                self.__cassandra_connect__(database_details[self.environment]["cassandra"])
+            # connect to the Cassandra DB
+            self.__cassandra_connect__(database_details[self.environment]["cassandra"])
 
             # use for Cassandra connection - can override for Ourboros projects
             self.classification_table = "classifications"
@@ -311,7 +332,7 @@ class AggregationAPI:
         try:
             panoptes_file = open("/app/config/aggregation.yml","rb")
         except IOError:
-            panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
+            panoptes_file = open(expanduser("~")+"/Databases/aggregation.yml","rb")
         api_details = yaml.load(panoptes_file)
 
         # # load in rollbar stuff - for reporting errors/stats when running on AWS
@@ -363,20 +384,8 @@ class AggregationAPI:
                 print self.workflows
                 raise
 
-        # load the default clustering algorithms
-        default_clustering_algs = dict()
-        # the following shapes using the basic agglomerative clustering
-        default_clustering_algs["point"] = agglomerative.Agglomerative
-        default_clustering_algs["circle"] = agglomerative.Agglomerative
-        default_clustering_algs["ellipse"] = agglomerative.Agglomerative
-        default_clustering_algs["line"] = agglomerative.Agglomerative
-        # these shapes use the blob clustering approach
-        default_clustering_algs["rectangle"] = blob_clustering.BlobClustering
-        default_clustering_algs["polygon"] = blob_clustering.BlobClustering
-        # and set any reduction algorithms - to reduce the dimensionality of markings
-        reduction_algs = {"line":hesse_line_reduction}
-        self.__set_clustering_algs__(default_clustering_algs,reduction_algs)
-
+        # set up the clustering algorithms
+        self.__setup_clustering_algs__()
         # load the default classification algorithm
         self.__set_classification_alg__(classification.VoteCount)
 
@@ -389,7 +398,7 @@ class AggregationAPI:
             self.old_time = datetime.datetime(2000,01,01)
 
         self.current_time = datetime.datetime.now()
-        self.ignore_versions = True
+        self.ignore_versions = False
 
         self.starting_date = datetime.datetime(2000,1,1)
 
@@ -397,7 +406,7 @@ class AggregationAPI:
         self.classifications_per_subject = {}
 
         # do we want to aggregate over only retired subjects?
-        self.only_retired_subjects = False
+        self.only_retired_subjects = True
         # do we want to aggregate over only subjects that have been retired/classified since
         # the last time we ran the code?
         # retire => self.only_retired_subjects = True
@@ -415,11 +424,10 @@ class AggregationAPI:
         :param gold_standard_clusters:
         :return:
         """
-
         # todo - set things up so that you don't have to redo all of the aggregations just to rerun ibcc
         if workflows is None:
             workflows = self.workflows
-
+        print self.workflows
         given_subject_set = (subject_set != None)
 
         for workflow_id in workflows:
@@ -432,6 +440,26 @@ class AggregationAPI:
             # self.__describe__(workflow_id)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
 
+            # set up the clustering algorithms for the shapes we actually use
+            used_shapes = set()
+            for shapes in marking_tasks.values():
+                used_shapes = used_shapes.union(shapes)
+
+            # for shape in used_shapes:
+            #     algorithm = self.default_clustering_algs[shape]
+            #
+            #         default_clustering_algs.items():
+            #     assert shape in self.marking_params_per_shape
+            #
+            #     # if a reduction algorithm is provided, use it
+            #     # otherwise, use the identity reduction - which doesn't do anything
+            #     if shape in reduction_algs:
+            #         self.cluster_algs[shape] = alg(shape,reduction_algs[shape])
+            #     else:
+            #         self.cluster_algs[shape] = alg(shape,identity_mapping)
+            #
+            # assert False
+
             clustering_aggregations = None
             classification_aggregations = None
 
@@ -442,7 +470,7 @@ class AggregationAPI:
             # do we have any marking tasks?
             if marking_tasks != {}:
                 print "clustering"
-                clustering_aggregations = self.__cluster__(raw_markings,image_dimensions)
+                clustering_aggregations = self.__cluster__(used_shapes,raw_markings,image_dimensions)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
 
             if (self.classification_alg is not None) and (classification_tasks != {}):
@@ -535,12 +563,14 @@ class AggregationAPI:
 
                         # check to see if the metadata contains image size
                         metadata = json.loads(record.metadata)
+                        height = None
+                        width = None
+
                         if "subject_dimensions" in metadata:
-                            height = metadata["subject_dimensions"][0]["naturalHeight"]
-                            width = metadata["subject_dimensions"][0]["naturalWidth"]
-                        else:
-                            height = None
-                            width = None
+                            for dimensions in metadata["subject_dimensions"]:
+                                if dimensions is not None:
+                                    height = dimensions["naturalHeight"]
+                                    width = dimensions["naturalWidth"]
 
                         yield int(subject_id),int(record.user_id),record.annotations,(height,width)
 
@@ -552,10 +582,9 @@ class AggregationAPI:
         connect to the AWS instance of Cassandra - try 10 times and raise an error
         :return:
         """
-
         for i in range(10):
             try:
-                if cassandra_instance == "localhost":
+                if cassandra_instance == "local":
                     print "connecting to local Cassandra instance"
                     self.cluster = Cluster()
                 else:
@@ -570,8 +599,8 @@ class AggregationAPI:
                     self.cassandra_session = self.cluster.connect('zooniverse')
 
                 return
-            except cassandra.cluster.NoHostAvailable:
-                pass
+            except cassandra.cluster.NoHostAvailable as err:
+                print err
 
         assert False
 
@@ -589,15 +618,13 @@ class AggregationAPI:
                 print annotation
                 assert False
 
-
-
     def __classify__(self,raw_classifications,clustering_aggregations,workflow_id,gold_standard_classifications=None):
         # get the raw classifications for the given workflow
         # raw_classifications = self.__sort_classifications__(workflow_id,subject_set)
         # assert False
         return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations,gold_standard_classifications)
 
-    def __cluster__(self,raw_markings,image_dimensions):
+    def __cluster__(self,used_shapes,raw_markings,image_dimensions):
         """
         run the clustering algorithm for a given workflow
         need to have already checked that the workflow requires clustering
@@ -620,10 +647,20 @@ class AggregationAPI:
         # assert False
 
         # will store the aggregations for all clustering
+        # go through the shapes actually used by this project - one at a time
         cluster_aggregation = {}
-        for shape in self.cluster_algs:
-            shape_aggregation = self.cluster_algs[shape].__aggregate__(raw_markings,image_dimensions)
+        for shape in used_shapes:
+            # ware we using a reduction algorithm for this particular shape?
+            if shape in self.reduction_algs:
+                reduction_alg = self.reduction_algs[shape]
+            else:
+                reduction_alg = identity_mapping
 
+            algorithm = self.default_clustering_algs[shape](shape,reduction_alg)
+
+            shape_aggregation = algorithm.__aggregate__(raw_markings,image_dimensions)
+
+            # if this is not the first shape we've aggregated - merge in with previous results
             if cluster_aggregation == {}:
                 cluster_aggregation = shape_aggregation
             else:
@@ -1856,22 +1893,22 @@ class AggregationAPI:
         self.classification_alg = alg(params)
         assert isinstance(self.classification_alg,classification.Classification)
 
-    def __set_clustering_algs__(self,clustering_algorithms,reduction_algs={}):
-
-        # the dictionary allows us to give a different clustering algorithm for different shapes
-
-        self.cluster_algs = {}
-        assert isinstance(clustering_algorithms,dict)
-        for shape in clustering_algorithms:
-            assert shape in self.marking_params_per_shape
-
-            # if a reduction algorithm is provided, use it
-            # otherwise, use the identity reduction - which doesn't do anything
-            if shape in reduction_algs:
-                self.cluster_algs[shape] = clustering_algorithms[shape](shape,reduction_algs[shape])
-            else:
-                self.cluster_algs[shape] = clustering_algorithms[shape](shape,identity_mapping)
-            assert isinstance(self.cluster_algs[shape],clustering.Cluster)
+    # def __set_clustering_algs__(self,clustering_algorithms,reduction_algs={}):
+    #
+    #     # the dictionary allows us to give a different clustering algorithm for different shapes
+    #
+    #     self.cluster_algs = {}
+    #     assert isinstance(clustering_algorithms,dict)
+    #     for shape in clustering_algorithms:
+    #         assert shape in self.marking_params_per_shape
+    #
+    #         # if a reduction algorithm is provided, use it
+    #         # otherwise, use the identity reduction - which doesn't do anything
+    #         if shape in reduction_algs:
+    #             self.cluster_algs[shape] = clustering_algorithms[shape](shape,reduction_algs[shape])
+    #         else:
+    #             self.cluster_algs[shape] = clustering_algorithms[shape](shape,identity_mapping)
+    #         assert isinstance(self.cluster_algs[shape],clustering.Cluster)
 
     def __sort_annotations__(self,workflow_id,subject_set=None,expert=None):
         """
