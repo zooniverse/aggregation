@@ -6,7 +6,7 @@ from aggregation_api import base_directory
 import yaml
 import rollbar
 
-def setup_rollbak(env):
+def setup_rollbar(env):
     try:
         panoptes_file = open("config/aggregation.yml","rb")
     except IOError:
