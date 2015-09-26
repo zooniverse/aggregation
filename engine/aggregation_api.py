@@ -504,7 +504,8 @@ class AggregationAPI:
                             continue
 
                         # check to see if the metadata contains image size
-                        metadata = json.loads(record.metadata)
+                        if isinstance(metadata,str):
+                            metadata = json.loads(record.metadata)
                         height = None
                         width = None
 
