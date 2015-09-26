@@ -1,0 +1,9 @@
+This directory contains the aggregation results that you requested for your Zooniverse project. The file contains important information to help you understand what is in this directory. If you have any questions, please go the Aggregation talk board on the Zooniverse site.
+
+Aggregation is the process of combining classifications/markings from multiple users for a single subject into one answer. A subject is a single image or group of images that the user  views at a time. Users will often disagree with each other - this is why every subject needs to be shown to multiple users. However, an aggregate answer based on multiple users is usually highly accurate.
+
+Our aggregation engine is designed to work with all Panoptes projects. This means that the analysis is not necessarily optimized for your project. Many of the algorithms use values, listed below, which seem to work well in practice. However, you may want to experiment and try to find better settings. You may even want to create your own algorithms. In either case, feel free to fork the the zooniverse/aggregation repo. If you create code that you feel would benefit others, feel free to make a pull request.
+
+The flexibility of Panoptes means that we don’t know exactly how you want to use your data. So we may provide several different files, each with a different type of analysis or summary in them. Not all of the files may be relevant to your project. Use the rest of this readme file to help understand what specific files and values you want.
+
+If you do use any of the aggregation results, please cite Zooniverse. (We are working on publishing the papers and will update this readme accordingly.)
