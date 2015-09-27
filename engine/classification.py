@@ -89,7 +89,6 @@ class Classification:
 
                 # go through each cluster and find the corresponding raw classifications
                 for subject_id in clustering_results:
-                    # print subject_id
                     if subject_id == "param":
                         continue
 
@@ -121,7 +120,6 @@ class Classification:
                                     # did the user use the relevant tool - doesn't matter if most people
                                     # used another tool
                                     if tool_used == tool:
-                                        # print raw_classifications[global_index].keys()
                                         followup_answer = raw_classifications[global_index][subject_id][user_identifiers]
                                         u = user_identifiers[1]
                                         ballots.append((u,followup_answer))
@@ -140,27 +138,6 @@ class Classification:
 
                     # merge the new results into the existing one
                     aggregations = self.__merge_results__(aggregations,new_agg)
-
-                    # maps_to_list = ["followup_questions"]
-                    #
-                    # aggregations = self.__add_new_results__(aggregations,keyword_list,new_results,maps_to_list)
-
-                    # if subject_id not in aggregations:
-                    #     aggregations[subject_id] = {"param":"task_id"}
-                    # if task_id not in aggregations[subject_id]:
-                    #     aggregations[subject_id][task_id] = {"param":"clusters"}
-                    # if (shape+ " clusters") not in aggregations[subject_id][task_id]:
-                    #     aggregations[subject_id][task_id][shape+ " clusters"] = {}
-                    # # this part is probably redundant
-                    #
-                    # if cluster_index not in aggregations[subject_id][task_id][shape+ " clusters"]:
-                    #     aggregations[subject_id][task_id][shape+ " clusters"][cluster_index] = {}
-                    #
-                    # # todo - not compliant
-                    # if "followup_questions" not in aggregations[subject_id][task_id][shape+ " clusters"][cluster_index]:
-                    #     aggregations[subject_id][task_id][shape+ " clusters"][cluster_index]["followup_questions"] = []
-                    #
-                    # aggregations[subject_id][task_id][shape+ " clusters"][cluster_index]["followup_questions"].append(followup_results[(subject_id,cluster_index)])
 
         return aggregations
 
@@ -322,7 +299,6 @@ class Classification:
 
         for subject_id in clustering_results:
             # look at the individual points in the cluster
-            print subject_id
 
             for cluster_index,cluster in clustering_results[subject_id][task_id][shape+ " clusters"].items():
                 # all_users just gives us a list of all of the users who have seen this subject
@@ -335,8 +311,6 @@ class Classification:
                 # which tool each individual user used
                 tools = cluster["tools"]
                 assert len(tools) == len(users)
-                print zip(tools,users)
-                print users
 
                 # in this case, we want to "vote" on the tools
                 ballots = zip(users,tools)
@@ -353,18 +327,6 @@ class Classification:
             new_agg = {subject_id: {task_id: {shape + " clusters": {cluster_index: {"tool_classification": new_results}}}}}
             aggregations = self.__merge_results__(aggregations,new_agg)
 
-            # if subject_id not in aggregations:
-            #     aggregations[subject_id] = {"param":"task_id"}
-            # if task_id not in aggregations[subject_id]:
-            #     aggregations[subject_id][task_id] = {"param":"clusters"}
-            # if (shape+ " clusters") not in aggregations[subject_id][task_id]:
-            #     aggregations[subject_id][task_id][shape+ " clusters"] = {}
-            # # this part is probably redundant
-            # if cluster_index not in aggregations[subject_id][task_id][shape+ " clusters"]:
-            #     aggregations[subject_id][task_id][shape+ " clusters"][cluster_index] = {}
-            #
-            # aggregations[subject_id][task_id][shape+ " clusters"][cluster_index]["tool_classification"] = tool_results[(subject_id,cluster_index)]
-
         return aggregations
 
     def __aggregate__(self,raw_classifications,workflow,clustering_results=None,gold_standard_clustering=([],[])):
@@ -380,10 +342,8 @@ class Classification:
         # note that polygons and rectangles (since they are basically a type of polygon)
         # handle some of this themselves
         for task_id in marking_tasks:
-            print task_id
             for shape in set(marking_tasks[task_id]):
                 # these shapes are dealt with else where
-                print shape
                 if shape not in ["polygon","rectangle","text"]:
                     aggregations = self.__existence_classification__(task_id,shape,clustering_results,aggregations,gold_standard_clustering)
                     # aggregations = self.__merge_results__(aggregations,exist_results)
@@ -397,7 +357,6 @@ class Classification:
         # now go through the normal classification aggregation stuff
         # which can include follow up questions
         for task_id in classification_tasks:
-            # print task_id
             if task_id == "param":
                 continue
 
@@ -411,63 +370,10 @@ class Classification:
 
                     aggregations = self.__task_aggregation__(raw_classifications[task_id],task_id,aggregations)
 
-                    # aggregations = self.__merge_results__(aggregations,classification_results)
-
-                # # now merge the results
-                #     for subject_id in results:
-                #         if subject_id not in aggregations:
-                #             aggregations[subject_id] = {}
-                #         # we have results from other tasks, so we need to merge in the results
-                #         assert isinstance(results[subject_id],dict)
-                #         aggregations[subject_id] = self.__merge_results__(aggregations[subject_id],results[subject_id])
             else:
                 # we have a follow up classification
                 aggregations = self.__subtask_classification__(task_id,classification_tasks,raw_classifications,clustering_results,aggregations)
-                # aggregations = self.__merge_results__(aggregations,subtask_results)
-                # print subtask_results
-                # assert False
 
-            # if isinstance(classification_tasks[task_id],bool):
-            #     # we have a basic classification task
-            #     # todo - double check if this is right
-            #     if task_id in raw_classifications:
-            #         temp_results = self.__task_aggregation__(raw_classifications[task_id])
-            #         # convert everything into a dict and add the the task id
-            #
-            #         for subject_id in temp_results:
-            #             task_results[subject_id] = {task_id:temp_results[subject_id]}
-            # else:
-            #     # we have classifications associated with markings
-            #     # make sure we have clustering results associated with these classifications
-            #     assert clustering_results is not None
-            #
-            #     # not every marking will need existence or tool classification
-            #     # polygons and rectangles can take care of that themselves
-            #     # however, they might have follow up questions
-            #     print classification_tasks[task_id]
-            #
-            #
-            #     # we have to first decide which cluster is a "true positive" and which is a "false positive"
-            #     # so a question of whether or not people marked it - regardless of whether they marked it as the
-            #     # correct "type"
-            #     existence_results = self.__existence_classification__(task_id,marking_tasks,clustering_results,gold_standard_clustering)
-            #
-            #
-            #     # now decide what type each cluster is
-            #     # note that this step does not care whether a cluster is a false positive or not (i.e. the results
-            #     # from the previous step are not taken into account)
-            #     tool_results = self.__tool_classification__(task_id,classification_tasks,raw_classifications,clustering_results)
-            #
-            #     task_results = self.__merge_results__(existence_results,tool_results)
-            #
-            #     # are there any subtasks associated with this task/marking?
-            #     if "subtask" in classification_tasks[task_id]:
-            #         subtask_results = self.__subtask_classification__(task_id,classification_tasks,raw_classifications,clustering_results)
-            #         task_results = self.__merge_results__(task_results,subtask_results)
-
-            #assert isinstance(task_results,dict)
-
-                # aggregations[subject_id][task_id] = task_results[subject_id]
 
 
 
@@ -521,7 +427,6 @@ class VoteCount(Classification):
             vote_counts = {}
             if subject_id == "param":
                 continue
-            # print raw_classifications[subject_id]
             for user,ballot in raw_classifications[subject_id]:
                 if ballot is None:
                     continue

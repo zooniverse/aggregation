@@ -118,7 +118,6 @@ class Agglomerative(clustering.Cluster):
         for merge in row_clusters:
             rchild_index = int(merge[0])
             lchild_index = int(merge[1])
-            # print len(nodes),rchild_index,lchild_index
 
             rnode = results[rchild_index]
             lnode = results[lchild_index]
@@ -173,9 +172,6 @@ class Agglomerative(clustering.Cluster):
             assert "num users" in j
 
         end = time.time()
-        # print [len(r["users"]) for r in results]
-        # results = self.correction_alg.__fix__(results)
-
         return results,end-start
 
     def __check__(self):
