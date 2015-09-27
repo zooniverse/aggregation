@@ -206,19 +206,25 @@ class CsvOut:
 
                 # are there markings associated with this task?
                 if task_id in marking_tasks:
+                    # are there follow up questions?
+                    if task_id in classification_tasks:
+                        has_followup_questions = True
+                    else:
+                        has_followup_questions = False
+
                     for shape in set(marking_tasks[task_id]):
                         if shape == "polygon":
                             self.__polygon_summary_output__(workflow_id,task_id,subject_id,aggregations)
                             self.__polygon_heatmap_output__(workflow_id,task_id,subject_id,aggregations)
                         # the following shapes can basically be dealt with in the same way
                         elif shape in ["point","line"]:
-                            self.__marking_output__(workflow_id,task_id,subject_id,aggregations,shape)
+                            self.__marking_output__(workflow_id,task_id,subject_id,aggregations,shape,has_followup_questions)
                             # if we are only using the point marking for people to count items (and you don't
                             # care about the xy coordinates) - the function below will give you what you want
                             self.__shape_summary_output__(workflow_id,task_id,subject_id,aggregations,shape)
                         elif shape == "rectangle":
                             # todo - finish this part
-                            self.__rectangle_output__(workflow_id,task_id,subject_id,aggregations)
+                            self.__rectangle_output__(workflow_id,task_id,subject_id,aggregations,has_followup_questions)
                         else:
                             print shape
                             assert False
@@ -272,7 +278,7 @@ class CsvOut:
 
         return string
 
-    def __marking_output__(self,workflow_id,task_id,subject_id,aggregations,shape):
+    def __marking_output__(self,workflow_id,task_id,subject_id,aggregations,shape,has_followup_questions=False):
         """
         output for line segments
         :param workflow_id:
@@ -289,6 +295,8 @@ class CsvOut:
             # build up the row bit by bit to have the following structure
             # "subject_id,most_likely_tool,x,y,p(most_likely_tool),p(true_positive),num_users"
             row = str(subject_id)+","
+            # todo for now - always give the cluster index
+            row += str(cluster_index)+","
 
             # extract the most likely tool for this particular marking and convert it to
             # a string label
@@ -311,7 +319,7 @@ class CsvOut:
             row += str(prob_true_positive) + "," + str(num_users)
             self.csv_files[key].write(row+"\n")
 
-    def __rectangle_output__(self,workflow_id,task_id,subject_id,aggregations):
+    def __rectangle_output__(self,workflow_id,task_id,subject_id,aggregations,has_followup_questions = False):
         key = task_id + "rectangle"
         for cluster_index,cluster in aggregations["rectangle clusters"].items():
             if cluster_index == "all_users":
@@ -320,6 +328,8 @@ class CsvOut:
             # build up the row bit by bit to have the following structure
             # "subject_id,most_likely_tool,x,y,p(most_likely_tool),p(true_positive),num_users"
             row = str(subject_id)+","
+            # todo for now - always give the cluster index
+            row += str(cluster_index) + ","
 
             # extract the most likely tool for this particular marking and convert it to
             # a string label
@@ -421,7 +431,7 @@ class CsvOut:
         if "point" in tools:
             key = task + "point"
             self.csv_files[key] = open(output_directory+fname+"_point.csv","wb")
-            header = "subject_id,most_likely_tool,x,y,p(most_likely_tool),p(true_positive),num_users"
+            header = "subject_id,cluster_index,most_likely_tool,x,y,p(most_likely_tool),p(true_positive),num_users"
             self.csv_files[key].write(header+"\n")
 
             self.__summary_header_setup__(output_directory,fname,workflow_id,task,"point")
@@ -429,14 +439,14 @@ class CsvOut:
         if "line" in tools:
             key = task + "line"
             self.csv_files[key] = open(output_directory+fname+"_line.csv","wb")
-            header = "subject_id,most_likely_tool,x1,y1,x2,y2,p(most_likely_tool),p(true_positive),num_users"
+            header = "subject_id,cluster_index,most_likely_tool,x1,y1,x2,y2,p(most_likely_tool),p(true_positive),num_users"
             self.csv_files[key].write(header+"\n")
             self.__summary_header_setup__(output_directory,fname,workflow_id,task,"line")
 
         if "rectangle" in tools:
             key = task + "rectangle"
             self.csv_files[key] = open(output_directory+fname+"_rectangle.csv","wb")
-            header = "subject_id,most_likely_tool,x1,y1,x2,y2,num_users"
+            header = "subject_id,cluster_index,most_likely_tool,x1,y1,x2,y2,num_users"
             self.csv_files[key].write(header+"\n")
             self.__summary_header_setup__(output_directory,fname,workflow_id,task,"rectangle")
 
