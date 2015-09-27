@@ -288,6 +288,8 @@ class AggregationAPI:
         # off the staging postgres db - in such case we just provide an extra yaml file
         if self.project_id in param_details:
             project_details = param_details[self.project_id]
+            if "project_name" in project_details:
+                print "aggregating project: " + project_details["project_name"]
         else:
             project_details = param_details[self.environment]
 
@@ -314,8 +316,9 @@ class AggregationAPI:
         # is there an entry for the project in the yaml file?
         # if so, has a specific workflow id has been provided?
         if "workflow_id" in project_details:
-            workflow_id = int(project_details[project]["workflow_id"])
+            workflow_id = int(project_details["workflow_id"])
             try:
+                print "aggregating only for workflow id : " + str(workflow_id)
                 self.workflows = {workflow_id: self.workflows[workflow_id]}
             except KeyError:
                 print "did not have given desired workflow: " + str(workflow_id)
@@ -338,8 +341,8 @@ class AggregationAPI:
 
         self.current_time = datetime.datetime.now()
 
-        self.ignore_versions = True
-        self.only_retired_subjects = False
+        self.ignore_versions = False
+        self.only_retired_subjects = True
         # a bit of a sanity check in case I forget to change back up before uploading
         # production and staging should ALWAYS pay attention to the version and only
         # aggregate retired subjects
@@ -423,6 +426,7 @@ class AggregationAPI:
                 # we may need the clustering results
                 print "classifying"
                 classification_aggregations = self.__classify__(raw_classifications,clustering_aggregations,workflow_id,gold_standard_clusters)
+                # print classification_aggregations
 
             # if we have both markings and classifications - we need to merge the results
             if (clustering_aggregations is not None) and (classification_aggregations is not None):
@@ -454,7 +458,7 @@ class AggregationAPI:
         """
         def annotation_generator(workflow_id,subject_set):
             assert isinstance(subject_set,list) or isinstance(subject_set,set)
-
+            # filter on only the major version (the whole number part)
             version = int(math.floor(float(self.versions[workflow_id])))
 
             # classification_tasks,marking_tasks = self.workflows[workflow_id]
@@ -463,9 +467,6 @@ class AggregationAPI:
 
             if subject_set is None:
                 subject_set = self.__load_subjects__(workflow_id)
-
-
-            total = 0
 
             # do this in bite sized pieces to avoid overwhelming DB
             for s in self.__chunks__(subject_set,15):
@@ -504,8 +505,10 @@ class AggregationAPI:
                             continue
 
                         # check to see if the metadata contains image size
-                        if isinstance(metadata,str):
-                            metadata = json.loads(record.metadata)
+                        metadata = record.metadata
+                        if isinstance(metadata,str) or isinstance(metadata,unicode):
+                            metadata = json.loads(metadata)
+
                         height = None
                         width = None
 
@@ -716,7 +719,6 @@ class AggregationAPI:
 
     def __exit__(self, exc_type, exc_value, traceback):
         # if another instance is already running - don't do anything, just exit
-        print "exit code"
         if exc_type == InstanceAlreadyRunning:
             rollbar.report_message("previous aggregation run not yet done","info")
         else:
@@ -2059,9 +2061,10 @@ class AggregationAPI:
         except psycopg2.ProgrammingError as e:
             # todo - the table should always be deleted after its use, so this should rarely happen
             # todo - need to reset the connection
-            print e
+            print "temporary table already exists - huh"
             self.postgres_session.rollback()
             postgres_cursor = self.postgres_session.cursor()
+
 
         try:
             postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
@@ -2183,19 +2186,11 @@ if __name__ == "__main__":
         subject_set = [int(sys.argv[2]),]
     else:
         subject_set = None
-        # if sys.argv[2] in ["production","staging"]:
-        #     environment = sys.argv[2]
-        # else:
-        #     csv_classification_file = sys.argv[2]
 
-    with AggregationAPI(project_identifier,csv_classification_file) as project:
-        # project.__migrate__()
-        # print json.dumps(project.__aggregate__(store_values=False)[464952], sort_keys=True, indent=4, separators=(',', ': '))
+    with AggregationAPI(project_identifier,environment="development") as project:
         project.__aggregate__(subject_set = subject_set)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
-        # project.__panoptes_aggregation__()
-        # project.__csv_output__()#workflow_ids =[84],subject_id=494900)
         c = csv_output.CsvOut(project)
-        # c.__write_out__(subject_set[0])
-        # project.__classification_json_dump__()
+        # c.__write_out__()
+
 
 

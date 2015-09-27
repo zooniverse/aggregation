@@ -300,7 +300,7 @@ class Classification:
 
         return aggregations
 
-    def __tool_classification__(self,task_id,shape,raw_classifications,clustering_results,aggregations):
+    def __tool_classification__(self,task_id,shape,clustering_results,aggregations):
         """
         if multiple tools can make the same shape - we need to decide which tool actually corresponds to this cluster
         for example if both the adult penguin and chick penguin make a pt - then for a given point we need to decide
@@ -311,55 +311,35 @@ class Classification:
         :param clustering_results:
         :return:
         """
+        print "tool classification - more than one tool could create " +str(shape) + "s in task " + str(task_id)
 
         if clustering_results == {"param":"subject_id"}:
             print "warning - empty classifications"
             return {}
 
-        # aggregations = {}
-
-        # todo - we should skip such cases but they should also be pretty rare - double check
-        if task_id not in raw_classifications:
-            return {}
-
         # only go through the "uncertain" shapes
         tool_classifications = {}
 
-        for subject_id in raw_classifications[task_id][shape]:
+        for subject_id in clustering_results:
             # look at the individual points in the cluster
+            print subject_id
 
-            # this should only happen if there were badly formed markings
-            if raw_classifications[task_id][shape][subject_id] == {}:
-                continue
-
-            # in either case probably an empty image
-            if subject_id not in clustering_results:
-                continue
-            if task_id not in clustering_results[subject_id]:
-                continue
-
-            for cluster_index in clustering_results[subject_id][task_id][shape+ " clusters"]:
-                if (cluster_index == "param") or (cluster_index == "all_users"):
+            for cluster_index,cluster in clustering_results[subject_id][task_id][shape+ " clusters"].items():
+                # all_users just gives us a list of all of the users who have seen this subject
+                # not relevant here
+                if cluster_index == "all_users":
                     continue
 
-                cluster = clustering_results[subject_id][task_id][shape+ " clusters"][cluster_index]
-                pts = cluster["cluster members"]
+                # which users marked this cluster
                 users = cluster["users"]
-                # users = clustering_results[subject_id][task_id][shape][subject_id]["users"]
+                # which tool each individual user used
+                tools = cluster["tools"]
+                assert len(tools) == len(users)
+                print zip(tools,users)
+                print users
 
                 # in this case, we want to "vote" on the tools
-                ballots = []
-                for (p,user) in zip(pts,users):
-                    try:
-                        tool_index = raw_classifications[task_id][shape][subject_id][(tuple(p),user)]
-                    except KeyError:
-                        print "===----"
-                        print cluster
-                        print raw_classifications[task_id][shape][subject_id].keys()
-                        print (tuple(p),user)
-                        raise
-
-                    ballots.append((user,tool_index))
+                ballots = zip(users,tools)
 
                 tool_classifications[(subject_id,cluster_index)] = ballots
 
@@ -400,24 +380,19 @@ class Classification:
         # note that polygons and rectangles (since they are basically a type of polygon)
         # handle some of this themselves
         for task_id in marking_tasks:
+            print task_id
             for shape in set(marking_tasks[task_id]):
+                # these shapes are dealt with else where
+                print shape
                 if shape not in ["polygon","rectangle","text"]:
                     aggregations = self.__existence_classification__(task_id,shape,clustering_results,aggregations,gold_standard_clustering)
                     # aggregations = self.__merge_results__(aggregations,exist_results)
 
                     # can more than one tool create this shape?
                     if sum([1 for s in marking_tasks[task_id] if s == shape]) > 1:
-                        aggregations = self.__tool_classification__(task_id,shape,raw_classifications,clustering_results,aggregations)
-                        # merge the tool results into the overall results
-                        # aggregations = self.__merge_results__(aggregations,tool_results)
+                        aggregations = self.__tool_classification__(task_id,shape,clustering_results,aggregations)
 
-                    # # now merge the results
-                    # for subject_id in results:
-                    #     if subject_id not in aggregations:
-                    #         aggregations[subject_id] = {}
-                    #     # we have results from other tasks, so we need to merge in the results
-                    #     assert isinstance(results[subject_id],dict)
-                    #     aggregations[subject_id] = self.__merge_results__(aggregations[subject_id],results[subject_id])
+
 
         # now go through the normal classification aggregation stuff
         # which can include follow up questions
@@ -433,6 +408,7 @@ class Classification:
             if isinstance(classification_tasks[task_id],bool):
                 # did anyone actually do this classification?
                 if task_id in raw_classifications:
+
                     aggregations = self.__task_aggregation__(raw_classifications[task_id],task_id,aggregations)
 
                     # aggregations = self.__merge_results__(aggregations,classification_results)

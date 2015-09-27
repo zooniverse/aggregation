@@ -81,7 +81,7 @@ class Cluster:
         :param jpeg_file: for debugging - to show step by step what is happening
         :return:
         """
-        aggregation = {"param":"subject_id"}
+        aggregation = {}
         # start by calling the api to get the annotations along with the list of who made each marking
         # so for this function, we know that annotations = markings
         # all_markings =  self.project_api.__get_markings__(subject_id,gold_standard)
@@ -96,7 +96,6 @@ class Cluster:
                     continue
 
                 for subject_id in raw_markings[task_id][shape]:
-                    print subject_id
                     assert raw_markings[task_id][shape][subject_id] != []
 
                     # remove any "markings" which correspond to the user not making a marking
@@ -119,9 +118,9 @@ class Cluster:
 
                     # store the results - note we need to store even for empty images
                     if subject_id not in aggregation:
-                        aggregation[subject_id] = {"param":"task_id"}
+                        aggregation[subject_id] = {}
                     if task_id not in aggregation[subject_id]:
-                        aggregation[subject_id][task_id] = {"param":"clusters"}
+                        aggregation[subject_id][task_id] = {}
                     if shape not in aggregation[subject_id][task_id]:
                         # store the set of all users who have seen this subject/task
                         # used for determining false vs. true positives
@@ -130,8 +129,6 @@ class Cluster:
                     for cluster_index,cluster in enumerate(cluster_results):
                         aggregation[subject_id][task_id][shape+ " clusters"][cluster_index] = cluster
 
-                    if subject_id == 511728:
-                        assert False
         # we should have some results
         # assert aggregation != {"param":"subject_id"}
         return aggregation

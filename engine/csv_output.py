@@ -208,6 +208,16 @@ class CsvOut:
             tarball.close()
             return "/tmp/"+str(self.project_id)+"export.tar.gz"
 
+    def __point_output__(self,workflow_id,task_id,subject_id,aggregations):
+        for cluster_index,cluster in aggregations["point clusters"].items():
+            if cluster_index in ["param","all_users"]:
+                continue
+
+            print cluster
+
+    def __point_count_output__(self,workflow_id,task_id,subject_id,aggregations):
+        pass
+
     # def __csv_annotations__(self,workflow_id_filter,subject_set):
     #     # find the major id of the workflow we are filtering
     #     version_filter = int(math.floor(float(self.versions[workflow_id_filter])))
@@ -267,7 +277,10 @@ class CsvOut:
         if "point" in tools:
             key = task + "point"
             self.marking_csv_files[key] = open(output_directory+task+"_point.csv","wb")
-            header = "subject_id"
+            header = "subject_id,tool_id,x,y"
+
+            self.marking_csv_files[key].write(header+"\n")
+
 
     def __polygon_heatmap_output__(self,workflow_id,task_id,subject_id,aggregations):
         """
