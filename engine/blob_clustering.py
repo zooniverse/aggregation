@@ -37,7 +37,7 @@ class QuadTree:
         self.user_ids = []
 
     def __get_splits__(self):
-        if (self.bounding_box.area < 5) or (len(self.polygons) <= 2):
+        if (self.bounding_box.area < 25) or (len(self.polygons) <= 2):
             return []
 
         complete_agreement = 0
@@ -329,7 +329,7 @@ class BlobClustering(clustering.Cluster):
     def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions):
         poly_dictionary = {}
         # the polygon dictionary will contain the "processed" polygons for each user along with that
-        # polygon's type so the points stored for those polygons might not actuall correspond to the users
+        # polygon's type so the points stored for those polygons might not actually correspond to the users
         # original points. This means that we cannot use those points as a reference (or pointer if you will ;))
         # when dealing with followup questions
         # so we will also add an index value so that we can look back at the original set of markings
@@ -415,55 +415,58 @@ class BlobClustering(clustering.Cluster):
             vote_percentage,tool_area = aggregate_stats[tool_id]
             aggregate_stats[tool_id] = vote_percentage,tool_area/float(image_area)
 
+        # incorrect_area_as_percent = total_incorrect_area/image_area
+
+        # find which users have a polygon actually intersecting with this particular aggregate one
+        matched_polygons = self.__match_individual_to_aggregate__(poly_dictionary,aggregate_polygons)
+
+        return self.__get_results__(aggregate_polygons,markings,matched_polygons)
+
+    def __match_individual_to_aggregate__(self,poly_dictionary,aggregate_polygons):
+        """
+        find which user polygon maps to which aggregate polygon
+        note that the types might not match up - the user could have said that
+        a polygon outlines a region of one type of tree while the majority
+        said a different kind
+        however, we will ignore such mismatched polygons since that means that the follow up questions must match up
+        """
         # decompose each aggregate polygon into a list of polygons (if we have a multipolygon)
         # or just a singleton list if we have just one polygon
+        # use a dictionary to keep track of type
         # might not be necessary but I want to make sure that the ordering of the individual polygons
-        # inside of a multipolygon don't change
+        # inside of a multipolygon doesn't change
         # also a good moment to set up the cluster members list
-        polygon_members = {}
+
+        # contains which individual polygons are members of which aggregate polygons
+        members_of_aggregate = {}
         for poly_type,agg_poly in aggregate_polygons.items():
-            polygon_members[poly_type] = []
+            members_of_aggregate[poly_type] = []
             if isinstance(agg_poly,Polygon):
                 aggregate_polygons[poly_type] = [agg_poly]
-                polygon_members[poly_type].append([])
+                members_of_aggregate[poly_type].append([])
             else:
                 assert isinstance(agg_poly,MultiPolygon)
                 aggregate_polygons[poly_type] = []
                 for p in agg_poly:
                     aggregate_polygons[poly_type].append(p)
-                    polygon_members[poly_type].append([])
+                    members_of_aggregate[poly_type].append([])
 
-        incorrect_area_as_percent = total_incorrect_area/image_area
-
-        # find the users for each polygon - might be a way to do this when I am making
-        intersecting_users = []
-        # find which users have a polygon actually intersecting with this particular aggregate one
-        # for now - we will make some important assumes
-        # todo - review assumptions
-        # if a user has more than one polygon (or rectangle) inside this aggregate one
-        # those will still count towards the aggregate polygon not being noise
-        # however, if there are any follow up questions associated with this polygon tool
-        # we will not consider ANY of the answers associated with ANY of the polygons
-        # mainly because we don't know which one to use (since we can only really take one answer)
-        # moreover, there is a fundamental difference between this user and the rest
-        # the other
-        # also if the a user's polygon covers (a lot of) more than one aggregate polygon then again we'll
-        # ignore any related follow up questions
-
-        # find which user polygon maps to which aggregate polygon
-        # note that the types might not match up - the user could have said that
-        # a polygon outlines a region of one type of tree while the majority
-        # said a different kind
-        # however, we will ignore such mismatches since that means that the follow up questions must match up
+        # go through each user
         for u in poly_dictionary:
-            for poly_index,(user_poly,poly_type,marking_index) in enumerate(poly_dictionary[u]):
 
+            # go through every polygon that this user drew
+            for user_poly,poly_type,marking_index in poly_dictionary[u]:
+                # covers => all the aggregate polygons which this user's polygon "mostly" covers
+                # so below the threshold is at least half the aggregate polyon
+                # kinda like a superset but a bit relaxed
                 covers = []
+                # belongs_to => all the aggregate polygons which this user's polygon is "mostly" in
+                # again kinda like a subset but a bit relaxed
                 belongs_to = []
 
                 # were there any aggregate polygons of the right type?
                 if poly_type in aggregate_polygons:
-                    for p in aggregate_polygons[poly_type]:
+                    for poly_index,p in enumerate(aggregate_polygons[poly_type]):
                         inter = p.intersection(user_poly)
 
                         if inter.area/p.area > 0.5:
@@ -471,8 +474,22 @@ class BlobClustering(clustering.Cluster):
                         if inter.area/user_poly.area > 0.5:
                             belongs_to.append(poly_index)
 
+                    # we have found a strong and unique mapping from an individual polygon/rectangle
+                    # to an aggregate one
                     if (len(covers) == 1) and (covers == belongs_to):
-                        polygon_members[poly_type][covers[0]].append((u,user_poly,marking_index))
+                        print
+                        print len(members_of_aggregate[poly_type])
+                        print poly_type
+                        print covers
+                        members_of_aggregate[poly_type][covers[0]].append((u,user_poly,marking_index))
+
+        return members_of_aggregate
+
+    def __get_results__(self,aggregate_polygons,markings,polygon_members):
+        """
+        actually combine everything done so far into the results that we will return
+        :return:
+        """
 
         results = []
         # a lot of this stuff is done in the classification code for other tool types but it makes more
@@ -505,85 +522,5 @@ class BlobClustering(clustering.Cluster):
                 next_result["tool classification"] = tool_id
 
                 results.append(next_result)
-
-
-            # # we will either have a multi-polygon as our aggregation result - or if we are really
-            # # lucky, a single polygon
-            # if isinstance(aggregate_polygons[tool_id],Polygon):
-            #     next_result = dict()
-            #
-            #     poly = aggregate_polygons[tool_id]
-            #
-            #     next_result["cluster members"] = None
-            #     next_result["users"] = intersecting_users
-            #     next_result["num users"] = len(intersecting_users)
-            #     next_result["tool classification"] = tool_id
-            #     next_result["area"] = aggregate_stats[tool_id][1]
-            #
-            #     # todo - the certainty calculation should probably be done here instead of just
-            #     # todo relying on the returned value
-            #     next_result["certainty"] = aggregate_stats[tool_id][0]
-            #
-            #     # these are global values which are not really specific to any one polygon
-            #     # but this seems to be the best place to store the values
-            #     next_result["incorrect area"] = incorrect_area_as_percent
-            #
-            #     results.append(next_result)
-            #
-            # elif isinstance(aggregate_polygons[tool_id], MultiPolygon):
-            #     # todo - implement cluster membership here
-            #     assert False
-            #     next_result["center"] = []
-            #     # todo - how to aggregate for multiple rectangles?
-            #     # todo - important to figure this out for rectangles
-            #     for poly in aggregate_polygons[tool_id]:
-            #
-            #         # go through each of the individual polygons making up this multipolygon
-            #         if isinstance(poly,Polygon):
-            #             next_result["center"].append(zip(poly.exterior.xy[0],poly.exterior.xy[0]))
-            #         else:
-            #             assert False
-            # else:
-            #     # unknown type
-            #     print type(aggregate_polygons[tool_id])
-            #     assert False
-
-            # # a value of None -> not really relevant to polygon aggregation
-            # # or really hard to keep track of
-            # next_result["users"] = None
-            # next_result["num users"] = None
-            #
-            #
-            # # todo - don't hard code this
-            # next_result["minimum users"] = 3
-            # next_result["area"] = aggregate_stats[tool_id][1]
-
-
-            # results.append(next_result)
-
-        # todo - find if I really need to use this
-        # # these results might get really big so I don't want to waste space repeatedly storing the values
-        # # so with slight abuse of setup ...
-        # for num_users,polygons in polygons_by_user_density.items():
-        #     # probably never going to wind up a just a single polygon
-        #     # but we can always hope
-        #     if isinstance(polygons,Polygon):
-        #         # todo - this will matter for rectangle aggregation
-        #         pass
-        #     else:
-        #         for single_poly in polygons:
-        #             assert  isinstance(single_poly,Polygon)
-        #             x,y = single_poly.exterior.xy
-        #             pts = zip(x,y)
-        #
-        #             next_result = {"users":None,"num users": num_users,"tool classification" : None, "area":single_poly.area, "certainty":None}
-        #             next_result["center"] = pts
-        #
-        #             results.append(next_result)
-
-        # if results == []:
-        #     # add in a dummy polygon so that we can report back the size of
-        #     # the incorrect area
-        #     results = [{"area":0,"incorrect area":incorrect_area_as_percent,"certainty": -1},]
 
         return results,0
