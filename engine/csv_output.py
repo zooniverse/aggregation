@@ -60,19 +60,35 @@ class CsvOut:
         :param output_directory:
         :return:
         """
-        fname = self.instructions[workflow_id][task]["instruction"][:50]
+        fname = str(task) + self.instructions[workflow_id][task]["instruction"][:50]
         fname = self.__csv_string__(fname)
         fname += ".csv"
         self.csv_files[task] = open(output_directory+fname,"wb")
         header = "subject_id"
         for answer_index in sorted(self.instructions[workflow_id][task]["answers"].keys()):
             answer = self.instructions[workflow_id][task]["answers"][answer_index]
-            answer = re.sub(",","",answer)
-            answer = re.sub(" ","_",answer)
+            answer = self.__csv_string__(answer)
             header += ",p("+answer+")"
         header += ",num_users"
 
         self.csv_files[task].write(header+"\n")
+
+    def __followup_header_setup__(self,workflow_id,task,tool,followup_index,output_directory):
+        followup_question = self.instructions[workflow_id][task]["tools"][tool]["followup_questions"][followup_index]
+
+        fname = str(task) + "_" + str(tool) + "_"+str(followup_index)+followup_question["question"][:25]
+        fname = self.__csv_string__(fname)
+        fname += ".csv"
+        self.csv_files[(task,tool,followup_index)] = open(output_directory+fname,"wb")
+
+        header = "subject_id,cluster_index"
+        for answer_index in sorted(followup_question["answers"].keys()):
+            answer = followup_question["answers"][answer_index]["label"]
+            answer = self.__csv_string__(answer)
+            header += ",p("+answer+")"
+
+        header += ",num_users"
+        self.csv_files[(task,tool,followup_index)].write(header+"\n")
 
     def __files_setup__(self,workflow_id):
         """
@@ -97,8 +113,59 @@ class CsvOut:
             self.__marking_header_setup__(workflow_id,task,set(marking_tasks[task]),output_directory)
 
         for task in classification_tasks:
-            print "creating header for classification task " + str(task)
-            self.__classification_header_setup__(workflow_id,task,output_directory)
+            if isinstance(classification_tasks[task],bool):
+                print "creating header for classification task " + str(task)
+                self.__classification_header_setup__(workflow_id,task,output_directory)
+            else:
+                print "creating headers for followup task " + str(task)
+
+                for tool in classification_tasks[task]:
+                    for followup_index in classification_tasks[task][tool]:
+                        self.__followup_header_setup__(workflow_id,task,tool,followup_index,output_directory)
+
+    def __followup_output__(self,workflow_id,task_id,subject_id,aggregations):
+        classification_tasks,marking_tasks = self.workflows[workflow_id]
+
+        for tool in classification_tasks[task_id]:
+            # what shape does this tool make?
+            shape = marking_tasks[task_id][tool]
+
+            # now go through each of the clusters - and find the relevant ones
+            for cluster_index in sorted(aggregations[shape + " clusters"].keys()):
+                if cluster_index == "all_users":
+                    continue
+                cluster = aggregations[shape + " clusters"][cluster_index]
+                # what tool was this cluster most likely made with? (or should have been made with)
+                most_likely_tool,_ = max(cluster["tool_classification"][0].items(),key = lambda x:x[1])
+
+                # if the tool is the one associated with the follow up questions we are currently interested in
+                if int(most_likely_tool) == int(tool):
+                    # go through each follow up question
+                    for question_index in classification_tasks[task_id][tool]:
+                        # rely on the original instructions since some of th values might not appear in the results
+                        answer_range = sorted(self.instructions[workflow_id][task_id]["tools"][tool]["followup_questions"][question_index]["answers"].keys())
+
+                        row = str(subject_id)+","+str(cluster_index)
+
+                        # now go through each of the possible resposnes
+                        for answer_index in answer_range:
+                            # at some point the integer indices seem to have been converted into strings
+                            # if a value isn't there - use 0
+
+                            if str(answer_index) in cluster["followup_question"][str(question_index)][0]:
+                                row += "," + str(cluster["followup_question"][str(question_index)][0][str(answer_index)])
+                            else:
+                                row += ",0"
+
+                        # add the number of people who saw this subject
+                        row += "," + str(cluster["followup_question"][str(question_index)][1])
+
+                        self.csv_files[(task_id,tool,question_index)].write(row+"\n")
+
+                # print aggregations[subject_id]
+
+
+
 
     def __write_out__(self,subject_set = None,compress=True):
         """
@@ -149,18 +216,25 @@ class CsvOut:
                             # if we are only using the point marking for people to count items (and you don't
                             # care about the xy coordinates) - the function below will give you what you want
                             self.__shape_summary_output__(workflow_id,task_id,subject_id,aggregations,shape)
+                        elif shape == "rectangle":
+                            # todo - finish this part
+                            self.__rectangle_output__(workflow_id,task_id,subject_id,aggregations)
                         else:
                             print shape
                             assert False
 
                 # are there any classifications associated with this task
                 if task_id in classification_tasks:
-                    self.__classification_output__(workflow_id,task_id,subject_id,aggregations)
+                    # normal output
+                    if isinstance(classification_tasks[task_id],bool):
+                        self.__classification_output__(workflow_id,task_id,subject_id,aggregations)
+                    else:
+                        self.__followup_output__(workflow_id,task_id,subject_id,aggregations)
 
             for fname,f in self.csv_files.items():
                 assert isinstance(f,file)
                 if compress:
-                    print "writing out " + fname
+                    print "writing out " + str(fname)
                     f.close()
                     with open(f.name, "rb") as readfile:
                         tarInfo = tarball.gettarinfo(fileobj=readfile)
@@ -192,6 +266,9 @@ class CsvOut:
         string = re.sub("\*","",string)
         string = re.sub("-","",string)
         string = re.sub("/","",string)
+        string = re.sub(":","",string)
+        string = re.sub("\"","",string)
+        string = re.sub("%","",string)
 
         return string
 
@@ -213,7 +290,6 @@ class CsvOut:
             # "subject_id,most_likely_tool,x,y,p(most_likely_tool),p(true_positive),num_users"
             row = str(subject_id)+","
 
-
             # extract the most likely tool for this particular marking and convert it to
             # a string label
             tool_classification = cluster["tool_classification"][0].items()
@@ -234,6 +310,29 @@ class CsvOut:
             num_users = cluster["existence"][1]
             row += str(prob_true_positive) + "," + str(num_users)
             self.csv_files[key].write(row+"\n")
+
+    def __rectangle_output__(self,workflow_id,task_id,subject_id,aggregations):
+        key = task_id + "rectangle"
+        for cluster_index,cluster in aggregations["rectangle clusters"].items():
+            if cluster_index == "all_users":
+                continue
+
+            # build up the row bit by bit to have the following structure
+            # "subject_id,most_likely_tool,x,y,p(most_likely_tool),p(true_positive),num_users"
+            row = str(subject_id)+","
+
+            # extract the most likely tool for this particular marking and convert it to
+            # a string label
+            tool_classification = cluster["tool_classification"][0].items()
+            most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
+            tool_str = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool)]["marking tool"]
+            tool_str = self.__csv_string__(tool_str)
+            row += tool_str + "," + str(cluster["center"][0][0]) + "," + str(cluster["center"][0][1]) + "," + str(cluster["center"][1][0]) + "," + str(cluster["center"][1][1])
+            # get the central coordinates next
+
+            self.csv_files[key].write(row+"\n")
+
+
 
     def __shape_summary_output__(self,workflow_id,task_id,subject_id,aggregations,given_shape):
         """
@@ -301,7 +400,7 @@ class CsvOut:
         we can either give the output for each tool in a completely different csv file - more files, might
         be slightly overwhelming, but then we could make the column headers more understandable
         """
-        fname = self.instructions[workflow_id][task]["instruction"][:50]
+        fname = str(task)+self.instructions[workflow_id][task]["instruction"][:50]
         fname = self.__csv_string__(fname)
 
         if "polygon" in tools:
@@ -332,8 +431,15 @@ class CsvOut:
             self.csv_files[key] = open(output_directory+fname+"_line.csv","wb")
             header = "subject_id,most_likely_tool,x1,y1,x2,y2,p(most_likely_tool),p(true_positive),num_users"
             self.csv_files[key].write(header+"\n")
-
             self.__summary_header_setup__(output_directory,fname,workflow_id,task,"line")
+
+        if "rectangle" in tools:
+            key = task + "rectangle"
+            self.csv_files[key] = open(output_directory+fname+"_rectangle.csv","wb")
+            header = "subject_id,most_likely_tool,x1,y1,x2,y2,num_users"
+            self.csv_files[key].write(header+"\n")
+            self.__summary_header_setup__(output_directory,fname,workflow_id,task,"rectangle")
+
 
     def __summary_header_setup__(self,output_directory,fname,workflow_id,task,shape):
         """

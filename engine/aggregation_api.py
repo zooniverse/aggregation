@@ -409,8 +409,7 @@ class AggregationAPI:
             #
             # assert False
 
-            clustering_aggregations = None
-            classification_aggregations = None
+            aggregations = {}
 
             # image_dimensions can be used by some clustering approaches - ie. for blob clustering
             # to give area as percentage of the total image area
@@ -419,22 +418,23 @@ class AggregationAPI:
             # do we have any marking tasks?
             if marking_tasks != {}:
                 print "clustering"
-                clustering_aggregations = self.__cluster__(used_shapes,raw_markings,image_dimensions)
+                aggregations = self.__cluster__(used_shapes,raw_markings,image_dimensions)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
 
             if (self.classification_alg is not None) and (classification_tasks != {}):
                 # we may need the clustering results
                 print "classifying"
-                classification_aggregations = self.__classify__(raw_classifications,clustering_aggregations,workflow_id,gold_standard_clusters)
+                # aggregations = self.__classify__(raw_classifications,aggregations,workflow_id,gold_standard_clusters)
                 # print classification_aggregations
+                aggregations = self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],aggregations)
 
-            # if we have both markings and classifications - we need to merge the results
-            if (clustering_aggregations is not None) and (classification_aggregations is not None):
-                aggregations = self.__merge_aggregations__(clustering_aggregations,classification_aggregations)
-            elif clustering_aggregations is None:
-                aggregations = classification_aggregations
-            else:
-                aggregations = clustering_aggregations
+            # # if we have both markings and classifications - we need to merge the results
+            # if (clustering_aggregations is not None) and (classification_aggregations is not None):
+            #     aggregations = self.__merge_aggregations__(clustering_aggregations,classification_aggregations)
+            # elif clustering_aggregations is None:
+            #     aggregations = classification_aggregations
+            # else:
+            #     aggregations = clustering_aggregations
 
             # unless we are provided with specific subjects, reset for the extra workflow
             if not given_subject_set:
@@ -565,11 +565,11 @@ class AggregationAPI:
                 print annotation
                 assert False
 
-    def __classify__(self,raw_classifications,clustering_aggregations,workflow_id,gold_standard_classifications=None):
-        # get the raw classifications for the given workflow
-        # raw_classifications = self.__sort_classifications__(workflow_id,subject_set)
-        # assert False
-        return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations,gold_standard_classifications)
+    # def __classify__(self,raw_classifications,clustering_aggregations,workflow_id,gold_standard_classifications=None):
+    #     # get the raw classifications for the given workflow
+    #     # raw_classifications = self.__sort_classifications__(workflow_id,subject_set)
+    #     # assert False
+    #     return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations,gold_standard_classifications)
 
     def __cluster__(self,used_shapes,raw_markings,image_dimensions):
         """
@@ -620,6 +620,7 @@ class AggregationAPI:
         """
         for when we want to double check the number of classifications a subject has received
         """
+        print subject_id
         # check to see if we have previously stored values, hopefully will task on calls to the DB
         if workflow_id in self.classifications_per_subject:
             if subject_id in self.classifications_per_subject[workflow_id]:
@@ -634,60 +635,6 @@ class AggregationAPI:
         self.classifications_per_subject[workflow_id][subject_id] = count
 
         return count
-
-
-    # todo - REFACTOR ths!!!!
-    # def __csv_marking__output__(self,workflow_id,task_id,subject_id,aggregations,tasks):
-    #     """
-    #     print the csv files for each of the marking tasks
-    #     """
-    #
-    #     counts = {i:0 for i in self.instructions[workflow_id][task_id]["tools"].keys()}
-    #     tool_history = []
-    #     existence_history = []
-    #
-    #     # determine how many users classified this image
-    #     # if '0' - a back up way in case "all_users" isn't there
-    #     # todo - figure out why all_users isn't always there and why the back up case sometimes fails too
-    #     if "all_users" in aggregations["point clusters"]:
-    #         num_users = len(aggregations["point clusters"]["all_users"])
-    #     else:
-    #         if '0' in aggregations["point clusters"]:
-    #             num_users = aggregations["point clusters"]['0']["existence"][1]
-    #         else:
-    #             return
-    #
-    #     for cluster_index in aggregations["point clusters"].keys():
-    #         if cluster_index in ["param","all_users"]:
-    #             continue
-    #
-    #         cluster = aggregations["point clusters"][cluster_index]
-    #         existence = cluster["existence"][0]["1"]
-    #         if existence >= 0.5:
-    #             tool_classification = cluster["tool_classification"][0]
-    #             most_likely_tool,tool_likelyhood = max(tool_classification.items(), key = lambda x:x[1])
-    #             most_likely_tool = int(most_likely_tool)
-    #             counts[most_likely_tool] += 1
-    #             tool_history.append(tool_likelyhood)
-    #
-    #             existence_history.append(existence)
-    #
-    #     row = str(subject_id)
-    #     for i in sorted(counts.keys()):
-    #         row += "," + str(counts[i])
-    #
-    #     if tool_history != []:
-    #         row += ","+str(numpy.mean(existence_history)) + "," + str(numpy.median(existence_history)) + ","+ str(numpy.mean(tool_history)) + ","+str(numpy.median(tool_history))+","+str(num_users)
-    #     else:
-    #         row += ",,,,"+str(num_users)
-    #
-    #     self.marking_csv_files[task_id].write(row+"\n")
-    #
-    #     # assert False
-
-
-
-
 
     def __enter__(self):
         # check if another instance of the aggregation engine is already running
@@ -740,43 +687,6 @@ class AggregationAPI:
             if self.cassandra_session is not None:
                 self.cassandra_session.shutdown()
             os.remove(expanduser("~")+"/aggregation.lock")
-
-
-
-    # def __describe__(self,workflow_id):
-    #     select = "SELECT tasks from workflows where id = " + str(workflow_id)
-    #     self.postgres_cursor.execute(select)
-    #     tasks = self.postgres_cursor.fetchone()[0]
-    #
-    #     select = "SELECT strings from workflow_contents where id = " + str(workflow_id)
-    #     self.postgres_cursor.execute(select)
-    #     contents = self.postgres_cursor.fetchone()[0]
-    #
-    #     self.description = {}
-    #     print "===---"
-    #     for task_id in tasks:
-    #         print tasks[task_id].keys()
-    #         # print task_id
-    #         self.description[task_id] = []
-    #         # print tasks[task_id]
-    #         if "question" in tasks[task_id]:
-    #             question = tasks[task_id]["question"]
-    #             self.description[task_id].append(contents[question])
-    #             # print contents[question]
-    #             answers = tasks[task_id]["answers"]
-    #             # print answers
-    #             for ans in answers:
-    #                 # print ans
-    #                 label = ans["label"]
-    #                 labels = label.split(".")
-    #                 # question_index = labels[2]
-    #                 self.description[task_id].append(contents[label])
-    #                 # print self.description[task_id][-1]
-    #         else:
-    #             assert "tools" in tasks[task_id]
-    #             print tasks[task_id]["tools"]
-    #     # self. description
-
 
     def __get_classifications__(self,subject_id,task_id,cluster_index=None,question_id=None):
         # either both of these variables are None or neither of them are
@@ -934,21 +844,6 @@ class AggregationAPI:
         cur.execute(select)
         print cur.fetchall()
 
-    # def __get_subjects_to_aggregate__(self,workflow_id,with_expert_classifications=None):
-    #     retired_subjects = []
-    #
-    #     stmt = """SELECT * FROM "subjects"
-    #         INNER JOIN "set_member_subjects" ON "set_member_subjects"."subject_id" = "subjects"."id"
-    #         INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."set_member_subject_id" = "set_member_subjects"."id"
-    #         WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" > '""" + str(self.updated_at_timestamps[workflow_id]) + """'"""
-    #         # WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" IS NOT NULL"""
-    #
-    #     cursor = self.postgres_session.cursor()
-    #     cursor.execute(stmt)
-    #     for subject in cursor.fetchall():
-    #         retired_subjects.append(subject[0])
-    #
-    #     return retired_subjects
 
     def __get_workflow_details__(self,given_workflow_id=None):
         """
@@ -956,29 +851,6 @@ class AggregationAPI:
         :param workflow_id:
         :return:
         """
-        # request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
-        # # request = urllib2.Request(self.host_api+"workflows/project_id="+str(self.project_id))
-        # request.add_header("Accept","application/vnd.api+json; version=1")
-        # request.add_header("Authorization","Bearer "+self.token)
-        #
-        # # request
-        # try:
-        #     response = urllib2.urlopen(request)
-        # except urllib2.HTTPError as e:
-        #     sys.stderr.write('The server couldn\'t fulfill the request.\n')
-        #     sys.stderr.write('Error code: ' + str(e.code) + "\n")
-        #     sys.stderr.write('Error response body: ' + str(e.read()) + "\n")
-        #     raise
-        # except urllib2.URLError as e:
-        #     sys.stderr.write('We failed to reach a server.\n')
-        #     sys.stderr.write('Reason: ' + str(e.reason) + "\n")
-        #     raise
-        # else:
-        #     # everything is fine
-        #     body = response.read()
-        #
-        # # put it in json structure and extract id
-        # data = json.loads(body)
         request = "workflows?project_id="+str(self.project_id)
         data = self.__panoptes_call__(request)
 
@@ -1094,68 +966,12 @@ class AggregationAPI:
         names = {int(workflow["id"]) : workflow["display_name"] for workflow in data["workflows"]}
         return names
 
-    # def __get_workflow_versions__(self):#,project_id):
-    #     request = urllib2.Request(self.host_api+"workflows?project_id="+str(self.project_id))
-    #     # request = urllib2.Request(self.host_api+"workflows/project_id="+str(self.project_id))
-    #     request.add_header("Accept","application/vnd.api+json; version=1")
-    #     request.add_header("Authorization","Bearer "+self.token)
-    #
-    #     # request
-    #     try:
-    #         response = urllib2.urlopen(request)
-    #     except urllib2.HTTPError as e:
-    #         sys.stderr.write('The server couldn\'t fulfill the request.\n')
-    #         sys.stderr.write('Error code: ' + str(e.code) + "\n")
-    #         sys.stderr.write('Error response body: ' + str(e.read()) + "\n")
-    #         raise
-    #     except urllib2.URLError as e:
-    #         sys.stderr.write('We failed to reach a server.\n')
-    #         sys.stderr.write('Reason: ' + str(e.reason) + "\n")
-    #         raise
-    #     else:
-    #         # everything is fine
-    #         body = response.read()
-    #
-    #     # put it in json structure and extract id
-    #     data = json.loads(body)
-    #
-    #     versions = {}
-    #
-    #     for workflow in data["workflows"]:
-    #         print workflow["version"]
-    #
-    #         # if int(workflows["id"]) == workflow_id:
-    #         versions[int(workflow["id"])] = int(math.floor(float(workflow["version"])))
-    #         # versions[int(w["id"])] = w["version"] #int(math.floor(float(w["version"])))
-    #     print "+==="
-    #     return versions
-
     def __image_setup__(self,subject_id,download=True):
         """
         get the local file name for a given subject id and downloads that image if necessary
         :param subject_id:
         :return:
         """
-
-        # request = urllib2.Request(self.host_api+"subjects/"+str(subject_id)+"?")
-        # request.add_header("Accept","application/vnd.api+json; version=1")
-        # request.add_header("Authorization","Bearer "+self.token)
-        # # request
-        # try:
-        #     response = urllib2.urlopen(request)
-        #     body = response.read()
-        # except urllib2.HTTPError as e:
-        #     print self.host_api+"subjects/"+str(subject_id)
-        #     print 'The server couldn\'t fulfill the request.'
-        #     print 'Error code: ', e.code
-        #     print 'Error response body: ', e.read()
-        #     raise
-        # except urllib2.URLError as e:
-        #     print 'We failed to reach a server.'
-        #     print 'Reason: ', e.reason
-        #     raise
-        #
-        # data = json.loads(body)
 
         data = self.__panoptes_call__("subjects/"+str(subject_id)+"?")
 
@@ -1251,12 +1067,17 @@ class AggregationAPI:
         # except cassandra.AlreadyExists:
         #     pass
 
+
         subject_listing = set()
 
         # only migrate classifications created since we last ran this code
-        select = "SELECT * from classifications where project_id="+str(self.project_id) +" and created_at >= '" + str(self.old_time) +"'"
+        select = "SELECT * from classifications where project_id="+str(self.project_id) + " and created_at >= '" + str(self.old_time) +"'"
         cur = self.postgres_session.cursor()
+        cur.execute("truncate table aggregations")
+        # cur.fetchall()
         cur.execute(select)
+
+
 
         # self.migrated_subjects = set()
         print "trying to migrate " + str(self.project_id)
@@ -1768,39 +1589,6 @@ class AggregationAPI:
         """
         return True
 
-    # def __remove_user_ids__(self,aggregation):
-    #     """
-    #     ids are needed for aggregation but they shouldn't be stored with the results
-    #     NOTE ids are postgres ids, NOT ip or email addresses
-    #     """
-    #     for subject_id in aggregation:
-    #         if subject_id == "param":
-    #             continue
-    #
-    #         for task_id in aggregation[subject_id]:
-    #             if task_id == "param":
-    #                 continue
-    #             if isinstance(aggregation[subject_id][task_id],dict):
-    #                 for shape in aggregation[subject_id][task_id]:
-    #                     if shape == "param":
-    #                         continue
-    #
-    #                     for cluster_index in aggregation[subject_id][task_id][shape]:
-    #                         if cluster_index == "param":
-    #                             continue
-    #
-    #                         assert isinstance(aggregation[subject_id][task_id][shape][cluster_index],dict)
-    #                         #aggregation[subject_id][task_id][shape][cluster_index].pop("users",None)
-    #
-    #                         del aggregation[subject_id][task_id][shape][cluster_index]["users"]
-    #
-    #     return aggregation
-
-    # def __get_results__(self,workflow_id):
-    #     stmt = "select * from aggregations where workflow_id = " + str(workflow_id)
-    #     self.postgres_cursor.execute(stmt)
-    #     for r in self.postgres_cursor.fetchall():
-    #         return r
 
     def __results_to_file__(self,workflow_ids=None,subject_id=None):
         if workflow_ids is None:
@@ -1832,22 +1620,6 @@ class AggregationAPI:
         self.classification_alg = alg(params)
         assert isinstance(self.classification_alg,classification.Classification)
 
-    # def __set_clustering_algs__(self,clustering_algorithms,reduction_algs={}):
-    #
-    #     # the dictionary allows us to give a different clustering algorithm for different shapes
-    #
-    #     self.cluster_algs = {}
-    #     assert isinstance(clustering_algorithms,dict)
-    #     for shape in clustering_algorithms:
-    #         assert shape in self.marking_params_per_shape
-    #
-    #         # if a reduction algorithm is provided, use it
-    #         # otherwise, use the identity reduction - which doesn't do anything
-    #         if shape in reduction_algs:
-    #             self.cluster_algs[shape] = clustering_algorithms[shape](shape,reduction_algs[shape])
-    #         else:
-    #             self.cluster_algs[shape] = clustering_algorithms[shape](shape,identity_mapping)
-    #         assert isinstance(self.cluster_algs[shape],clustering.Cluster)
 
     def __sort_annotations__(self,workflow_id,subject_set=None,expert=None):
         """
@@ -2064,6 +1836,8 @@ class AggregationAPI:
             print "temporary table already exists - huh"
             self.postgres_session.rollback()
             postgres_cursor = self.postgres_session.cursor()
+            postgres_cursor.execute("truncate table newvals")
+            self.postgres_session.commit()
 
 
         try:
@@ -2091,17 +1865,6 @@ class AggregationAPI:
             # todo - maybe get rid of param in subject_ids - end users won't see it anyways
             if subject_id == "param":
                 continue
-
-            # todo - put the pruning back, this is a stop gap measure so I know how many users marked each cluster
-            # aggregation = aggregations[subject_id]
-            # aggregation = self.__prune__(aggregations[subject_id])
-            # aggregation[" metadata"] = metadata
-
-            # try to add instructions, if none are provided, don't worry
-            # try:
-            #     aggregation[" instructions"] = self.instructions[workflow_id]
-            # except KeyError:
-            #     pass
 
             if subject_id in r:
                 # we are updating
@@ -2133,11 +1896,6 @@ class AggregationAPI:
         """
         generator for giving aggregation results per subject id/task
         """
-        # if workflows is None:
-        #     workflows = self.workflows
-        # elif isinstance(workflows,int):
-        #     # just in case we didn't provide the workflows as a list, be nice and convert
-        #     workflows = [workflows]
 
         stmt = "select subject_id,aggregation,updated_at from aggregations where workflow_id = " + str(workflow_id)
         if subject_set != None:
@@ -2164,19 +1922,8 @@ class AggregationAPI:
                 # if isinstance(aggregation[task_id],dict):
                 yield r[0],task_id,aggregation[task_id]
 
-
-
-# class CountingAggregation:
-#     def __csv_marking_header_setup__(self,workflow_id,task):
-#     # build up the header row
-#         header = "subject_id"
-#         for tool_id in sorted(self.instructions[workflow_id][task]["tools"].keys()):
-#             tool = self.instructions[workflow_id][task]["tools"][tool_id]["marking tool"]
-#             header += ","+tool
-#         header += ",mean probability,median probability,mean tool likelihood,median tool likelihood,number of users"
-#         self.marking_csv_files[task].write(header+"\n")
-
 if __name__ == "__main__":
+
     # todo - use getopt
     project_identifier = sys.argv[1]
 
@@ -2188,9 +1935,11 @@ if __name__ == "__main__":
         subject_set = None
 
     with AggregationAPI(project_identifier,environment="development") as project:
-        project.__aggregate__(subject_set = subject_set)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
+        # project.__migrate__()
+        # project.__aggregate__()
+        # project.s__aggregate__(subject_set = subject_set)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
         c = csv_output.CsvOut(project)
-        # c.__write_out__()
+        c.__write_out__()
 
 
 

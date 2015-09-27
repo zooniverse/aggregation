@@ -37,7 +37,7 @@ class QuadTree:
         self.user_ids = []
 
     def __get_splits__(self):
-        if (self.bounding_box.area < 25) or (len(self.polygons) <= 2):
+        if (self.bounding_box.area < 50000) or (len(self.polygons) <= 2):
             return []
 
         complete_agreement = 0
@@ -477,10 +477,6 @@ class BlobClustering(clustering.Cluster):
                     # we have found a strong and unique mapping from an individual polygon/rectangle
                     # to an aggregate one
                     if (len(covers) == 1) and (covers == belongs_to):
-                        print
-                        print len(members_of_aggregate[poly_type])
-                        print poly_type
-                        print covers
                         members_of_aggregate[poly_type][covers[0]].append((u,user_poly,marking_index))
 
         return members_of_aggregate
@@ -509,7 +505,6 @@ class BlobClustering(clustering.Cluster):
 
                 # cluster members are the individual polygons
                 # users are the corresponding user ids
-                # todo - many only store the first few points
                 next_result["cluster members"] = []
                 next_result["users"] = []
                 next_result["tools"] = []
@@ -518,9 +513,12 @@ class BlobClustering(clustering.Cluster):
                     next_result["users"].append(user)
                     next_result["tools"].append(tool_id)
 
+                # put this in the format that is used by the other shapes - 1 for now
+                # todo - if it really matters calculate an actual value instead of 1
+                next_result["tool_classification"] = ({tool_id:1},-1)
 
-                next_result["tool classification"] = tool_id
-
-                results.append(next_result)
+                # such cases correspond to weird unexpected polygons, so just ignore them
+                if next_result["cluster members"] != []:
+                    results.append(next_result)
 
         return results,0
