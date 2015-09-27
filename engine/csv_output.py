@@ -162,9 +162,9 @@ class CsvOut:
                 # check to see if the correct number of classifications were received
                 # todo - this is only a stop gap measure until we figure out why some subjects are being
                 # todo - retired early. Once that is done, we can remove this
-                # if self.__count_check__(workflow_id,subject_id) < self.retirement_thresholds[workflow_id]:
-                #     print "skipping"
-                #     continue
+                if self.__count_check__(workflow_id,subject_id) < self.retirement_thresholds[workflow_id]:
+                    print "skipping"
+                    continue
 
                 # are there markings associated with this task?
                 if task_id in marking_tasks:
@@ -177,7 +177,6 @@ class CsvOut:
                             # if we are only using the point marking for people to count items (and you don't
                             # care about the xy coordinates) - the function below will give you what you want
                             self.__point_count_output__(workflow_id,task_id,subject_id,aggregations)
-
 
                 # are there any classifications associated with this task
                 if task_id in classification_tasks:
@@ -201,57 +200,65 @@ class CsvOut:
                         tarInfo = tarball.gettarinfo(fileobj=readfile)
                         tarball.addfile(tarInfo, fileobj=readfile)
 
-
         # finally zip everything (over all workflows) into one zip file
         # self.__csv_to_zip__()
         if compress:
             tarball.close()
             return "/tmp/"+str(self.project_id)+"export.tar.gz"
 
+    # todo - figure out if this string is necessary
+    def __csv_string__(self,string):
+        """
+        remove or replace all characters which might cause problems in a csv template
+        :param str:
+        :return:
+        """
+        string = re.sub(" ","_",string)
+        return string
+
     def __point_output__(self,workflow_id,task_id,subject_id,aggregations):
+        """
+        for a given workflow_id, task_id and subject_id, print out all of the details
+        for any points (x,y) clusters that have been found
+        :param workflow_id:
+        :param task_id:
+        :param subject_id:
+        :param aggregations:
+        :return:
+        """
+        key = task_id + "point"
         for cluster_index,cluster in aggregations["point clusters"].items():
-            if cluster_index in ["param","all_users"]:
+            if cluster_index == "all_users":
                 continue
 
-            print cluster
+            # build up the row bit by bit to have the following structure
+            # "subject_id,most_likely_tool,x,y,p(most_likely_tool),p(true_positive),num_users"
+            row = str(subject_id)+","
+
+
+            # extract the most likely tool for this particular marking and convert it to
+            # a string label
+            tool_classification = cluster["tool_classification"][0].items()
+            most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
+            tool_str = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool)]["marking tool"]
+            row += tool_str + ","
+
+            # get the x,y coordinates next
+            x,y = cluster["center"]
+            row += str(x) +"," + str(y) + ","
+
+            # add on how likely the most likely tool was
+            row += str(tool_probability) + ","
+            # how likely the cluster is to being a true positive and how many users (out of those who saw this
+            # subject) actually marked it. For the most part p(true positive) is equal to the percentage
+            # of people, so slightly redundant but allows for things like weighted voting and IBCC in the future
+            prob_true_positive = cluster["existence"][0]["1"]
+            num_users = cluster["existence"][1]
+            row += str(prob_true_positive) + "," + str(num_users)
+            self.marking_csv_files[key].write(row+"\n")
 
     def __point_count_output__(self,workflow_id,task_id,subject_id,aggregations):
         pass
-
-    # def __csv_annotations__(self,workflow_id_filter,subject_set):
-    #     # find the major id of the workflow we are filtering
-    #     version_filter = int(math.floor(float(self.versions[workflow_id_filter])))
-    #
-    #     if subject_set is None:
-    #         subject_set = self.__load_subjects__(workflow_id_filter)
-    #
-    #     with open(self.csv_classification_file, 'rb') as csvfile:
-    #         reader = csv.reader(csvfile, delimiter=',', quotechar='|')
-    #
-    #         for row in reader:
-    #             subject_data = row[8]
-    #             annotations = row[7]
-    #             workflow_id = row[2]
-    #             workflow_version = row[4]
-    #
-    #             # convert to json form
-    #             subject_data = json.loads(subject_data)
-    #             subject_id = subject_data.keys()[0]
-    #
-    #             # csv file contains classifications from every workflow - so make sure we find
-    #             # only the one we currently want
-    #             if int(workflow_id) != workflow_id_filter:
-    #                 continue
-    #
-    #             # if these are not one of the subjects we are looking for
-    #             if subject_id not in subject_set:
-    #                 continue
-    #
-    #             # convert to float
-    #             workflow_version = float(workflow_version)
-    #             # if we are not at the correct major version id, skip
-    #             if workflow_version < version_filter:
-    #                 continue
 
     def __csv_marking_header_setup__(self,workflow_id,task,tools,output_directory):
         """
@@ -277,7 +284,7 @@ class CsvOut:
         if "point" in tools:
             key = task + "point"
             self.marking_csv_files[key] = open(output_directory+task+"_point.csv","wb")
-            header = "subject_id,tool_id,x,y"
+            header = "subject_id,most_likely_tool,x,y,p(most_likely_tool),p(true_positive),num_users"
 
             self.marking_csv_files[key].write(header+"\n")
 
