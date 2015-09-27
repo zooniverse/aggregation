@@ -36,15 +36,6 @@ class CsvOut:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        # # if another instance is already running - don't do anything, just exit
-        # # if no error happened - update the timestamp
-        # # else - the next run will start at the old time stamp (which we want)
-        # if self.rollbar_token is not None:
-        #     rollbar.init(self.rollbar_token,self.project.environment)
-        #     if exc_type is None:
-        #         rollbar.report_message("csv output worked corrected","info")
-        #     else:
-        #         rollbar.report_exc_info()
         pass
 
     def __csv_classification_output__(self,workflow_id,task_id,subject_id,aggregations):
@@ -181,7 +172,12 @@ class CsvOut:
                         if shape == "polygon":
                             self.__polygon_summary_output__(workflow_id,task_id,subject_id,aggregations)
                             self.__polygon_heatmap_output__(workflow_id,task_id,subject_id,aggregations)
-                    # self.__csv_marking__output__(workflow_id,task_id,subject_id,aggregations,marking_tasks[task_id])
+                        elif shape == "point":
+                            self.__point_output__(workflow_id,task_id,subject_id,aggregations)
+                            # if we are only using the point marking for people to count items (and you don't
+                            # care about the xy coordinates) - the function below will give you what you want
+                            self.__point_count_output__(workflow_id,task_id,subject_id,aggregations)
+
 
                 # are there any classifications associated with this task
                 if task_id in classification_tasks:
@@ -268,17 +264,10 @@ class CsvOut:
             header = "subject_id,num_users,pts"
             self.marking_csv_files[key].write(header+"\n")
 
-
-        # print workflow_id
-        # print task
-        # assert False
-        # # build up the header row
-        # header = "subject_id"
-        # for tool_id in sorted(self.instructions[workflow_id][task]["tools"].keys()):
-        #     tool = self.instructions[workflow_id][task]["tools"][tool_id]["marking tool"]
-        #     header += ","+tool
-        # header += ",mean probability,median probability,mean tool likelihood,median tool likelihood,number of users"
-        # self.marking_csv_files[task].write(header+"\n")
+        if "point" in tools:
+            key = task + "point"
+            self.marking_csv_files[key] = open(output_directory+task+"_point.csv","wb")
+            header = "subject_id"
 
     def __polygon_heatmap_output__(self,workflow_id,task_id,subject_id,aggregations):
         """
