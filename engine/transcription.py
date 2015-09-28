@@ -197,19 +197,25 @@ def Levenshtein(a,b):
 
 
 class TextCluster(clustering.Cluster):
-    def __init__(self,shape,dim_reduction_alg):
+    def __init__(self,shape,dim_reduction_alg,**kwargs):
         clustering.Cluster.__init__(self,shape,dim_reduction_alg)
         self.line_agreement = []
 
         self.tags = dict()
-        self.tags["\[deletion\]"] = chr(150)
-        self.tags["\[/deletion\]"] = chr(151)
-        self.tags["\[illegible\]"] = chr(152)
-        self.tags["\[/illegible\]"] = chr(153)
-        self.tags["\[insertion\]"] = chr(154)
-        self.tags["\[/insertion\]"] = chr(155)
-        self.tags["\[notenglish\]"] = chr(156)
-        self.tags["\[/notenglish\]"] = chr(157)
+        tag_counter = 149
+
+        with open(kwargs["tag_file"],"rb") as f:
+            for l in f.readlines():
+                self.tags[l[:-1]] = tag_counter
+                tag_counter += 1
+        # self.tags["\[deletion\]"] = chr(150)
+        # self.tags["\[/deletion\]"] = chr(151)
+        # self.tags["\[illegible\]"] = chr(152)
+        # self.tags["\[/illegible\]"] = chr(153)
+        # self.tags["\[insertion\]"] = chr(154)
+        # self.tags["\[/insertion\]"] = chr(155)
+        # self.tags["\[notenglish\]"] = chr(156)
+        # self.tags["\[/notenglish\]"] = chr(157)
 
         # self.tags = dict()
         # self.tags["\[deletion\].*\[/deletion\]"] = chr(150)
