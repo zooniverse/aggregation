@@ -90,24 +90,14 @@ class CsvOut:
         header += ",num_users"
         self.csv_files[(task,tool,followup_index)].write(header+"\n")
 
-    def __files_setup__(self,workflow_id):
+    def __files_setup__(self,workflow_id,output_directory):
         """
         open csv files for each output and write headers for each file
         """
         # and reset
         self.csv_files = {}
 
-        # now make the directory specific to the workflow
-        # first - remove any bad characters
-        workflow_name = self.workflow_names[workflow_id]
-        workflow_name = self.__csv_string__(workflow_name)
-
-        output_directory = "/tmp/"+str(self.project_id)+"/"
-        output_directory += workflow_name +"/"
-        if not os.path.exists(output_directory):
-            os.makedirs(output_directory)
-
-        # create headers to eachcsv file
+        # create headers to each csv file
         classification_tasks,marking_tasks = self.workflows[workflow_id]
         for task in marking_tasks:
             self.__marking_header_setup__(workflow_id,task,set(marking_tasks[task]),output_directory)
@@ -192,8 +182,16 @@ class CsvOut:
             tarball.addfile(tarInfo, fileobj=readfile)
 
         for workflow_id in self.workflows:
-            print "csv output for workflow - " + str(workflow_id)
-            self.__files_setup__(workflow_id)
+            # create the output directory for this workflow
+            workflow_name = self.workflow_names[workflow_id]
+            workflow_name = self.__csv_string__(workflow_name)
+            output_directory = "/tmp/"+str(self.project_id)+"/" +str(workflow_id) + "_" + workflow_name + "/"
+
+            if not os.path.exists(output_directory):
+                os.makedirs(output_directory)
+
+            # create the files and setup for headers for each task in this workflow
+            self.__files_setup__(workflow_id,output_directory)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
 
             for subject_id,task_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
@@ -264,6 +262,7 @@ class CsvOut:
         """
         assert isinstance(string,str) or isinstance(string,unicode)
         string = re.sub(" ","_",string)
+        string = re.sub(",","",string)
         string = re.sub("\.","",string)
         string = re.sub("#","",string)
         string = re.sub("\(","",string)
