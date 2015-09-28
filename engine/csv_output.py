@@ -263,6 +263,7 @@ class CsvOut:
         assert isinstance(string,str) or isinstance(string,unicode)
         string = re.sub(" ","_",string)
         string = re.sub(",","",string)
+        string = re.sub("!","",string)
         string = re.sub("\.","",string)
         string = re.sub("#","",string)
         string = re.sub("\(","",string)
