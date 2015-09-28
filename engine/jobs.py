@@ -30,7 +30,7 @@ def send_uploading(metadata, token, href):
     return send_request(body, token, href)
 
 def send_finished(metadata, token, href):
-    metadata['state'] = 'finished'
+    metadata['state'] = 'ready'
     body = { 'media': { 'metadata': metadata } }
     return send_request(body, token, href)
 
