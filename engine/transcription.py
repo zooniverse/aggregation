@@ -24,6 +24,8 @@ try:
     import matplotlib.cbook as cbook
     import rollbar
     import json
+    import sys
+    import yaml
 
 except:
     # if any errors were raised - probably because Greg thought
@@ -32,7 +34,7 @@ except:
     import yaml
     import rollbar
 
-    panoptes_file = open("config/aggregation.yml","rb")
+    panoptes_file = open("/app/config/aggregation.yml","rb")
     api_details = yaml.load(panoptes_file)
     rollbar_token = api_details["default"]["rollbar"]
     rollbar.init(rollbar_token,"production")
@@ -963,16 +965,16 @@ class SubjectRetirement(Classification):
 
 
 class Tate(AggregationAPI):
-    def __init__(self):
-        AggregationAPI.__init__(self,245)#"tate")#"tate",environment="staging")
-
-        self.marking_params_per_shape = dict()
-
+    def __init__(self,environment):
+        AggregationAPI.__init__(self,245,environment)#"tate")#"tate",environment="staging")
+        # the code to extract the relevant params froma  text json file
         self.marking_params_per_shape["text"] = relevant_text_params
+        # the code to cluster lines together
+        self.default_clustering_algs["text"] = TextCluster
+        # the code for reducing a line segment (4d) into a 2d object
+        # todo - can probably replace this with the standard for line segments
+        self.reduction_algs["text"] = text_line_reduction
 
-        reduction_algs = {"text":text_line_reduction}
-        self.__set_clustering_algs__({"text":TextCluster},reduction_algs)
-        self.__set_classification_alg__(SubjectRetirement,{"host":self.host_api,"project_id":self.project_id,"token":self.token,"workflow_id":121})
 
         self.ignore_versions = True
         # self.instructions[683] = {}
@@ -980,6 +982,12 @@ class Tate(AggregationAPI):
 
         self.only_retired_subjects = False
         self.only_recent_subjects = True
+
+        self.rollbar_token = None
+
+    def __setup__(self):
+        AggregationAPI.__setup__(self)
+        self.__set_classification_alg__(SubjectRetirement,{"host":self.host_api,"project_id":self.project_id,"token":self.token,"workflow_id":121})
 
     def __get_workflow_details__(self,given_workflow_id=None):
         """
@@ -998,6 +1006,18 @@ class Tate(AggregationAPI):
         updated_at_timestamps = {}
 
         return workflows,versions,instructions,updated_at_timestamps
+
+    def __enter__(self):
+        panoptes_file = open("/app/config/aggregation.yml","rb")
+        api_details = yaml.load(panoptes_file)
+        self.rollbar_token = api_details["default"]["rollbar"]
+        rollbar.init(self.rollbar_token,"production")
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if (self.rollbar_token is not None) and (self.environment != "development") and (exc_type is not None):
+            rollbar.report_exc_info()
+
+            return True
 
     def __cluster_output_with_colour__(self,workflow_id,ax,subject_id):
         """
@@ -1111,8 +1131,8 @@ class Tate(AggregationAPI):
 subject_id = 662619
 
 if __name__ == "__main__":
-    with Tate() as project:
-        # project.__migrate__()
+    with Tate(sys.argv[1]) as project:
+        project.__migrate__()
         project.__aggregate__(subject_set=[subject_id])
 
 
