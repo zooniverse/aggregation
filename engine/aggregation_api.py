@@ -187,6 +187,7 @@ def hesse_line_reduction(line_segments):
 
 class AggregationAPI:
     def __init__(self,project_id,environment,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None),public_panoptes_connection=False):
+        assert False
         # the panoptes project id - and the environment are the two main things to set
         self.project_id = int(project_id)
         self.environment = environment
@@ -1935,8 +1936,8 @@ if __name__ == "__main__":
         subject_set = None
 
     with AggregationAPI(project_identifier,environment="development") as project:
-        # project.__migrate__()
-        # project.__aggregate__()
+        project.__migrate__()
+        project.__aggregate__()
         # project.s__aggregate__(subject_set = subject_set)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
         c = csv_output.CsvOut(project)
         c.__write_out__()
