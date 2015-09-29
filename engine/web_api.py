@@ -10,7 +10,8 @@ import logging
 
 app = Flask(__name__)
 env = os.getenv('FLASK_ENV', 'production')
-q = Queue(connection=configure_redis(env))
+#30 mins - http://python-rq.org/docs/results/
+q = Queue('default', connection=configure_redis(env), default_timeout=1800)
 apis = {
     'development': "http://"+str(os.getenv('HOST_IP', '172.17.42.1'))+":3000",
     'staging': "https://panoptes-staging.zooniverse.org",
