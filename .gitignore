@@ -55,3 +55,4 @@ docs/_build/
 *~
 *.txt
 .idea/workspace.xml
+config/*.yml
