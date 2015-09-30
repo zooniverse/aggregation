@@ -23,6 +23,9 @@ class CsvOut:
 
         # dictionary to hold the output files
         self.csv_files = {}
+        # stores the file names
+        self.file_names = {}
+        self.workflow_directories = {}
 
         self.rollbar_token = project.rollbar_token
 
@@ -73,6 +76,87 @@ class CsvOut:
 
         self.csv_files[task].write(header+"\n")
 
+    def __classification_fname__(self,workflow_id,task):
+        """
+        create a file name for this given workflow,task
+        :param workflow_id:
+        :param task:
+        :return:
+        """
+        fname = str(task) + self.instructions[workflow_id][task]["instruction"][:50]
+        fname = self.__csv_string__(fname)
+        fname += ".csv"
+
+        return fname
+
+    def __make_files__(self,workflow_id):
+        """
+        create all of the files necessary for this workflow
+        :param workflow_id:
+        :return:
+        """
+        # start by creating a directory specific to this project - if one does not already exist
+        output_directory = "/tmp/"+str(self.project_id)+"/"
+        if not os.path.exists(output_directory):
+            os.makedirs(output_directory)
+
+        # now create a sub directory specific to the workflow
+        workflow_name = self.workflow_names[workflow_id]
+        workflow_name = self.__csv_string__(workflow_name)
+        output_directory = "/tmp/"+str(self.project_id)+"/" +str(workflow_id) + "_" + workflow_name + "/"
+
+        if not os.path.exists(output_directory):
+            os.makedirs(output_directory)
+        self.workflow_directories[workflow_id] = output_directory
+
+        classification_tasks,marking_tasks = self.workflows[workflow_id]
+
+        for task_id in self.instructions[workflow_id].keys():
+            # is this task a simple classification task?
+                if (task_id in classification_tasks) and isinstance(classification_tasks[task_id],bool):
+                    fname = str(task_id) + self.instructions[workflow_id][task_id]["instruction"][:50]
+                    fname = self.__csv_string__(fname)
+                    fname += ".csv"
+
+                    self.file_names[(workflow_id,task_id,"classification")] = fname
+                    self.csv_files[(workflow_id,task_id,"classification")] = open(output_directory+fname,"wb")
+                elif task_id in classification_tasks:
+                    # todo - complete for follow up questions
+                    pass
+
+                # we have a marking task (possible in addition to a follow up classification question)
+                if task_id in marking_tasks:
+                    # we have marking question
+                    # add to the read me instance for each shape
+                    for shape in set(marking_tasks[task_id]):
+                        fname = str(task_id) + self.instructions[workflow_id][task_id]["instruction"][:50]
+                        fname = self.__csv_string__(fname)
+                        # fname += ".csv"
+
+                        self.file_names[(workflow_id,task_id,(shape,"details"))] = fname + "_" + shape + ".csv"
+                        self.file_names[(workflow_id,task_id,(shape,"summary"))] = fname + "_" + shape + "_summary.csv"
+
+                        self.csv_files[(workflow_id,task_id,(shape,"details"))] = open(output_directory+fname + "_" + shape + ".csv","wb")
+                        self.csv_files[(workflow_id,task_id,(shape,"summary"))] = open(output_directory+fname + "_" + shape + "_summary.csv","wb")
+
+
+
+
+
+
+
+    def __marking_fname__(self,workflow_id,task,shape):
+        """
+        create a file name for the given workflow, task and shape
+        :param workflow_id:
+        :param task:
+        :param shape:
+        :return:
+        """
+        fname = str(task) + self.instructions[workflow_id][task]["instruction"][:50]
+        fname = self.__csv_string__(fname)
+        fname += ".csv"
+
     def __followup_header_setup__(self,workflow_id,task,tool,followup_index,output_directory):
         followup_question = self.instructions[workflow_id][task]["tools"][tool]["followup_questions"][followup_index]
 
@@ -90,12 +174,12 @@ class CsvOut:
         header += ",num_users"
         self.csv_files[(task,tool,followup_index)].write(header+"\n")
 
-    def __files_setup__(self,workflow_id,output_directory):
+    def __setup_files__(self,workflow_id):
         """
         open csv files for each output and write headers for each file
         """
         # and reset
-        self.csv_files = {}
+        output_directory = self.workflow_directories[workflow_id]
 
         # create headers to each csv file
         classification_tasks,marking_tasks = self.workflows[workflow_id]
@@ -155,6 +239,108 @@ class CsvOut:
                 # print aggregations[subject_id]
 
 
+    def __readme_text__(self,workflow_id):
+        """
+        add text to the readme file for this workflow
+        :param workflow_id:
+        :return:
+        """
+        with open("/tmp/"+str(self.project_id)+"/readme.md", "a") as readme_file:
+            readme_file.write("Summary of the csv files found in this directory\n")
+            classification_tasks,marking_tasks = self.workflows[workflow_id]
+
+            readme_file.write("Workflow id: " + str(workflow_id) + "\n")
+            workflow_name = self.workflow_names[workflow_id]
+            workflow_name = self.__csv_string__(workflow_name)
+            readme_file.write("Workflow title: " + workflow_name + "\n ----- \n")
+
+            for task_id in self.instructions[workflow_id].keys():
+                # is this task a simple classification task?
+                readme_file.write("Task id: " + str(task_id) + "\n")
+                if (task_id in classification_tasks) and isinstance(classification_tasks[task_id],bool):
+                    # create the name were this is going to be stored
+                    self.file_names[(workflow_id,task_id,"classification")] = self.__classification_fname__(workflow_id,task_id)
+                    instructions = self.instructions[workflow_id][task_id]["instruction"]
+                    instructions = re.sub("\n"," ",instructions)
+                    readme_file.write("Instructions: " + instructions + "\n")
+                    readme_file.write("File name: " + self.file_names[(workflow_id,task_id,"classification")] + "\n")
+                    readme_file.write("Csv column descriptions:\n")
+
+                    readme_file.write("subject_id\n")
+
+                    for answer_index in sorted(self.instructions[workflow_id][task_id]["answers"].keys()):
+                        answer = self.instructions[workflow_id][task_id]["answers"][answer_index]
+                        # answer = self.__csv_string__(answer)
+                        readme_file.write("p("+self.__csv_string__(answer)+") - percentage of people who said - " + answer + "\n")
+
+                    readme_file.write("num_users - number of users who completed the task for the given subject\n\n")
+                elif task_id in classification_tasks:
+                    # todo - complete for follow up questions
+                    pass
+
+                # we have a marking task - possible in addition to a follow up classification question
+                if task_id in marking_tasks:
+                    # we have marking question
+                    # add to the read me instance for each shape
+                    for shape in set(marking_tasks[task_id]):
+                        print "***"
+                        file_id = (workflow_id,task_id,(shape,"details"))
+
+                        # read in the instructions and remove any and all new line characters
+                        instructions = self.instructions[workflow_id][task_id]["instruction"]
+                        instructions = re.sub("\n"," ",instructions)
+
+                        readme_file.write("Instructions: " + instructions + "\n")
+                        readme_file.write("CSV file for all " + str(shape) + " clusters with detailed output\n")
+                        print self.file_names.keys()
+                        readme_file.write("File name: " + self.file_names[file_id] + "\n")
+                        readme_file.write("Csv column descriptions:\n")
+
+                        readme_file.write("subject_id\ncluster_index\nmost_likely_tool - most likely tool for this cluster\n")
+                        if shape == "point":
+                            readme_file.write("x,y - median center of cluster\n")
+                        elif shape == "ellipse":
+                            readme_file.write("x,y,r1,r2,theta - median center of ellipse cluster with major and minor axes radius plus rotation\n")
+                        else:
+                            assert False
+                        readme_file.write("p(most_likely_tool) - probability that most likely tool is correct\n")
+                        readme_file.write("p(true_positive) - probability that cluster actually exists (as opposed to noise)\n")
+                        readme_file.write("num_users - number of users who have marks in this cluster\n\n")
+
+                        # now repeat for summary
+                        file_id = (workflow_id,task_id,(shape,"summary"))
+                        readme_file.write("CSV file for all " + str(shape) + " clusters with summary output\n")
+                        readme_file.write("File name: " + self.file_names[file_id] + "\n")
+                        readme_file.write("Csv column descriptions:\n")
+
+                        for tool_id in sorted(self.instructions[workflow_id][task_id]["tools"].keys()):
+                            tool_id = int(tool_id)
+                            # self.workflows[workflow_id][0] is the list of classification tasks
+                            # we want [1] which is the list of marking tasks
+
+                            found_shape = self.workflows[workflow_id][1][task_id][tool_id]
+                            if found_shape == shape:
+                                tool_label = self.instructions[workflow_id][task_id]["tools"][tool_id]["marking tool"]
+                                tool_label = self.__csv_string__(tool_label)
+
+                                readme_file.write(tool_label + " - number of clusters of this type\n")
+
+                        readme_file.write("mean_probability - average probability of clusters being true positives\n")
+                        readme_file.write("median_probability\n")
+                        readme_file.write("mean_tool - average probability of most likely tool being correct\n")
+                        readme_file.write("median_tool\n\n")
+
+
+            readme_file.write("\n\n\n")
+
+
+
+
+
+
+
+
+
 
 
     def __write_out__(self,subject_set = None,compress=True):
@@ -169,32 +355,22 @@ class CsvOut:
         if compress:
             tarball = tarfile.open("/tmp/"+str(self.project_id)+"export.tar.gz", "w:gz")
 
-        # start by creating a directory specific to this project
-        output_directory = "/tmp/"+str(self.project_id)+"/"
-        if not os.path.exists(output_directory):
-            os.makedirs(output_directory)
-
-        # move over the readme and add it to the tar file
-        curr_dir = os.path.dirname(os.path.realpath(__file__))
-        shutil.copy(curr_dir+"/readme.txt","/tmp/"+str(self.project_id)+"/")
-        with open("/tmp/"+str(self.project_id)+"/readme.txt", "rb") as readfile:
-            tarInfo = tarball.gettarinfo(fileobj=readfile)
-            tarball.addfile(tarInfo, fileobj=readfile)
-
         for workflow_id in self.workflows:
-            # create the output directory for this workflow
-            workflow_name = self.workflow_names[workflow_id]
-            workflow_name = self.__csv_string__(workflow_name)
-            output_directory = "/tmp/"+str(self.project_id)+"/" +str(workflow_id) + "_" + workflow_name + "/"
+            print workflow_id
+            # create the output files for this workflow
+            self.__make_files__(workflow_id)
+            # setup for headers for each task in this workflow
+            self.__setup_files__(workflow_id)
+            # add the readme text for this workflow
+            self.__readme_text__(workflow_id)
 
-            if not os.path.exists(output_directory):
-                os.makedirs(output_directory)
-
-            # create the files and setup for headers for each task in this workflow
-            self.__files_setup__(workflow_id,output_directory)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
 
+            print marking_tasks
+
             for subject_id,task_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
+                print task_id
+                print aggregations
                 # check to see if the correct number of classifications were received
                 # todo - this is only a stop gap measure until we figure out why some subjects are being
                 # todo - retired early. Once that is done, we can remove this
@@ -211,11 +387,12 @@ class CsvOut:
                         has_followup_questions = False
 
                     for shape in set(marking_tasks[task_id]):
+                        print shape
                         if shape == "polygon":
                             self.__polygon_summary_output__(workflow_id,task_id,subject_id,aggregations)
                             self.__polygon_heatmap_output__(workflow_id,task_id,subject_id,aggregations)
                         # the following shapes can basically be dealt with in the same way
-                        elif shape in ["point","line"]:
+                        elif shape in ["point","line","ellipse"]:
                             self.__marking_output__(workflow_id,task_id,subject_id,aggregations,shape,has_followup_questions)
                             # if we are only using the point marking for people to count items (and you don't
                             # care about the xy coordinates) - the function below will give you what you want
@@ -245,7 +422,13 @@ class CsvOut:
                         tarball.addfile(tarInfo, fileobj=readfile)
                 f.close()
 
-
+        # add some final details to the read me file
+        with open("/tmp/"+str(self.project_id)+"/readme.md", "a") as readme_file:
+            readme_file.write("Details and food for thought:\n")
+            with open("readme.txt","rb") as f:
+                text = f.readlines()
+                for l in text:
+                    readme_file.write(l)
 
         # finally zip everything (over all workflows) into one zip file
         # self.__csv_to_zip__()
@@ -341,8 +524,6 @@ class CsvOut:
             # get the central coordinates next
 
             self.csv_files[key].write(row+"\n")
-
-
 
     def __shape_summary_output__(self,workflow_id,task_id,subject_id,aggregations,given_shape):
         """
@@ -450,6 +631,12 @@ class CsvOut:
             self.csv_files[key].write(header+"\n")
             self.__summary_header_setup__(output_directory,fname,workflow_id,task,"rectangle")
 
+        if "ellipse" in tools:
+            key = task + "ellipse"
+            self.csv_files[key] = open(output_directory+fname+"_ellipse.csv","wb")
+            header = "subject_id,cluster_index,most_likely_tool,x1,y1,r1,r2,p(most_likely_tool),p(true_positive),theta,num_users"
+            self.csv_files[key].write(header+"\n")
+            self.__summary_header_setup__(output_directory,fname,workflow_id,task,"ellipse")
 
     def __summary_header_setup__(self,output_directory,fname,workflow_id,task,shape):
         """
