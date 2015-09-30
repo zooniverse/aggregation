@@ -7,7 +7,6 @@ import shutil
 
 class CsvOut:
     def __init__(self,project):
-        print type(project)
         # assert isinstance(project,aggregation_api.AggregationAPI)
         self.project = project
 
@@ -283,31 +282,37 @@ class CsvOut:
                     # we have marking question
                     # add to the read me instance for each shape
                     for shape in set(marking_tasks[task_id]):
-                        print "***"
                         file_id = (workflow_id,task_id,(shape,"details"))
 
                         # read in the instructions and remove any and all new line characters
                         instructions = self.instructions[workflow_id][task_id]["instruction"]
                         instructions = re.sub("\n"," ",instructions)
 
+                        # start with a summary explanation for this particular file
                         readme_file.write("Instructions: " + instructions + "\n")
                         readme_file.write("CSV file for all " + str(shape) + " clusters with detailed output\n")
-                        print self.file_names.keys()
                         readme_file.write("File name: " + self.file_names[file_id] + "\n")
                         readme_file.write("Csv column descriptions:\n")
 
+                        # now explain each of the columsn - the first few columns are common to all shapes
                         readme_file.write("subject_id\ncluster_index\nmost_likely_tool - most likely tool for this cluster\n")
+                        # now list the columns that are specific to each shape
                         if shape == "point":
                             readme_file.write("x,y - median center of cluster\n")
                         elif shape == "ellipse":
                             readme_file.write("x,y,r1,r2,theta - median center of ellipse cluster with major and minor axes radius plus rotation\n")
+                        elif shape == "line":
+                            readme_file.write("x1,y1,x2,y2 - median start and end of line segments in cluster\n")
+                        elif shape =="rectangle":
+                            readme_file.write("x1,y1,x2,y2 - median upper and lower corners of all rectangles in cluster\n")
                         else:
                             assert False
                         readme_file.write("p(most_likely_tool) - probability that most likely tool is correct\n")
                         readme_file.write("p(true_positive) - probability that cluster actually exists (as opposed to noise)\n")
                         readme_file.write("num_users - number of users who have marks in this cluster\n\n")
 
-                        # now repeat for summary
+                        # now repeat for summary file
+                        # this is where each subject is summarized in one line
                         file_id = (workflow_id,task_id,(shape,"summary"))
                         readme_file.write("CSV file for all " + str(shape) + " clusters with summary output\n")
                         readme_file.write("File name: " + self.file_names[file_id] + "\n")
@@ -366,11 +371,7 @@ class CsvOut:
 
             classification_tasks,marking_tasks = self.workflows[workflow_id]
 
-            print marking_tasks
-
             for subject_id,task_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
-                print task_id
-                print aggregations
                 # check to see if the correct number of classifications were received
                 # todo - this is only a stop gap measure until we figure out why some subjects are being
                 # todo - retired early. Once that is done, we can remove this
@@ -387,19 +388,18 @@ class CsvOut:
                         has_followup_questions = False
 
                     for shape in set(marking_tasks[task_id]):
-                        print shape
                         if shape == "polygon":
                             self.__polygon_summary_output__(workflow_id,task_id,subject_id,aggregations)
                             self.__polygon_heatmap_output__(workflow_id,task_id,subject_id,aggregations)
                         # the following shapes can basically be dealt with in the same way
-                        elif shape in ["point","line","ellipse"]:
-                            self.__marking_output__(workflow_id,task_id,subject_id,aggregations,shape,has_followup_questions)
+                        elif shape in ["point","line","ellipse","rectangle"]:
+                            self.__marking_output__(workflow_id,task_id,subject_id,aggregations,shape)
                             # if we are only using the point marking for people to count items (and you don't
                             # care about the xy coordinates) - the function below will give you what you want
                             self.__shape_summary_output__(workflow_id,task_id,subject_id,aggregations,shape)
-                        elif shape == "rectangle":
-                            # todo - finish this part
-                            self.__rectangle_output__(workflow_id,task_id,subject_id,aggregations,has_followup_questions)
+                        # elif shape == "rectangle":
+                        #     todo - finish this part
+                        #     self.__rectangle_output__(workflow_id,task_id,subject_id,aggregations,has_followup_questions)
                         else:
                             print shape
                             assert False
@@ -486,11 +486,14 @@ class CsvOut:
             tool_classification = cluster["tool_classification"][0].items()
             most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
             tool_str = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool)]["marking tool"]
-            row += tool_str + ","
+            row += self.__csv_string__(tool_str) + ","
 
             # get the central coordinates next
             for center_param in cluster["center"]:
-                row += str(center_param) + ","
+                if isinstance(center_param,list) or isinstance(center_param,tuple):
+                    row += "\"" + str(tuple(center_param)) + "\","
+                else:
+                    row += str(center_param) + ","
 
             # add on how likely the most likely tool was
             row += str(tool_probability) + ","
@@ -627,7 +630,7 @@ class CsvOut:
         if "rectangle" in tools:
             key = task + "rectangle"
             self.csv_files[key] = open(output_directory+fname+"_rectangle.csv","wb")
-            header = "subject_id,cluster_index,most_likely_tool,x1,y1,x2,y2,num_users"
+            header = "subject_id,cluster_index,most_likely_tool,\"(x1,y1)\",\"(x2,y2)\",p(most_likely_tool),p(true_positive),num_users"
             self.csv_files[key].write(header+"\n")
             self.__summary_header_setup__(output_directory,fname,workflow_id,task,"rectangle")
 
