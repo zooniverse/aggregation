@@ -184,7 +184,7 @@ def hesse_line_reduction(line_segments):
 
 
 class AggregationAPI:
-    def __init__(self,project_id,environment,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None),public_panoptes_connection=False):
+    def __init__(self,project_id,environment,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None),public_panoptes_connection=False,report_rollbar=False):
         # the panoptes project id - and the environment are the two main things to set
         self.project_id = int(project_id)
         self.environment = environment
@@ -218,6 +218,10 @@ class AggregationAPI:
         # todo - allow users to provide their own classification and subject files
         self.csv_classification_file = csv_classification_file
         self.csv_subject_file = csv_subject_file
+
+        # aggregations runs called through the crontab will want this code to report errors to rollbar
+        # as opposed to via rq (which is what happens when someone presses the aggregation button)
+        self.report_roll = report_rollbar
 
         self.__setup__()
 
@@ -392,21 +396,6 @@ class AggregationAPI:
             for shapes in marking_tasks.values():
                 used_shapes = used_shapes.union(shapes)
 
-            # for shape in used_shapes:
-            #     algorithm = self.default_clustering_algs[shape]
-            #
-            #         default_clustering_algs.items():
-            #     assert shape in self.marking_params_per_shape
-            #
-            #     # if a reduction algorithm is provided, use it
-            #     # otherwise, use the identity reduction - which doesn't do anything
-            #     if shape in reduction_algs:
-            #         self.cluster_algs[shape] = alg(shape,reduction_algs[shape])
-            #     else:
-            #         self.cluster_algs[shape] = alg(shape,identity_mapping)
-            #
-            # assert False
-
             aggregations = {}
 
             # image_dimensions can be used by some clustering approaches - ie. for blob clustering
@@ -425,14 +414,6 @@ class AggregationAPI:
                 # aggregations = self.__classify__(raw_classifications,aggregations,workflow_id,gold_standard_clusters)
                 # print classification_aggregations
                 aggregations = self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],aggregations)
-
-            # # if we have both markings and classifications - we need to merge the results
-            # if (clustering_aggregations is not None) and (classification_aggregations is not None):
-            #     aggregations = self.__merge_aggregations__(clustering_aggregations,classification_aggregations)
-            # elif clustering_aggregations is None:
-            #     aggregations = classification_aggregations
-            # else:
-            #     aggregations = clustering_aggregations
 
             # unless we are provided with specific subjects, reset for the extra workflow
             if not given_subject_set:
@@ -576,20 +557,10 @@ class AggregationAPI:
         :param workflow_id:
         :return:
         """
-        # assert (self.cluster_algs != {}) and (self.cluster_algs is not None)
-        # print "workflow id is " + str(workflow_id)
-        # get the raw classifications for the given workflow
-        # if subject_set is None:
-        #     subject_set = self.__load_subjects__(workflow_id)
-
-        # raw_markings = self.__sort_markings__(workflow_id,subject_set)
-
         if raw_markings == {}:
             print "warning - empty set of images"
             # print subject_set
             return {}
-        # assert raw_markings != {}
-        # assert False
 
         # will store the aggregations for all clustering
         # go through the shapes actually used by this project - one at a time
@@ -641,49 +612,33 @@ class AggregationAPI:
         # todo - maybe write something to the lock file in case another instance checks at the
         # todo - exact same time. What about instances for different projects?
 
-        try:
-            panoptes_file = open("/app/config/aggregation.yml","rb")
-        except IOError:
-            panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
-        api_details = yaml.load(panoptes_file)
-
-        # load in rollbar stuff - for reporting errors/stats when running on AWS
-        self.rollbar_token = None
-        if ("rollbar" in api_details[self.environment]) and (self.environment != "development"):
-            self.rollbar_token = api_details[self.environment]["rollbar"]
-            # print "raising error"
-            rollbar.init(self.rollbar_token,self.environment)
-
         if os.path.isfile(expanduser("~")+"/aggregation.lock"):
             raise InstanceAlreadyRunning()
         open(expanduser("~")+"/aggregation.lock","w").close()
 
-
-
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        # if another instance is already running - don't do anything, just exit
-        if exc_type == InstanceAlreadyRunning:
-            rollbar.report_message("previous aggregation run not yet done","info")
-        else:
-            # print exc_type
-            # # if no error happened - update the timestamp
-            # # else - the next run will start at the old time stamp (which we want)
-            # if exc_type is None:
-            #     # pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
-            #     rollbar.report_message("everything worked fine","info",extra_data={"project_id":self.project_id})
-            # # we encountered an error - if we have a rollbar_token, report the error
-            # # don't do this if we are running on one of Greg's computers
-            # elif (self.rollbar_token is not None):# and (expanduser("~") not in ["/home/greg","/home/ggdhines"]):
-            #     print "reporting to rollbar"
-            #     rollbar.report_exc_info()
-            #     # rollbar._report_message("error","error",extra_data={"traceback":traceback})
+        # only report to rollbar if we are not in development
+        if (exc_type is not None) and self.report_roll and (self.environment != "development"):
+            # load in the yml file - again - this time to get the rollbar token
+            try:
+                panoptes_file = open("/app/config/aggregation.yml","rb")
+            except IOError:
+                panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
+            api_details = yaml.load(panoptes_file)
 
-            # shutdown the connection to Cassandra and remove the lock so other aggregation instances
-            # can run, regardless of whether an error occurred
-            if self.cassandra_session is not None:
-                self.cassandra_session.shutdown()
+            rollbar_token = api_details[self.environment]["rollbar"]
+            rollbar.init(rollbar_token,self.environment)
+            rollbar.report_exc_info()
+
+        # shutdown the connection to Cassandra and remove the lock so other aggregation instances
+        # can run, regardless of whether an error occurred
+        if self.cassandra_session is not None:
+            self.cassandra_session.shutdown()
+
+        # remove the lock only if we created the lock
+        if exc_type != InstanceAlreadyRunning:
             os.remove(expanduser("~")+"/aggregation.lock")
 
     def __get_classifications__(self,subject_id,task_id,cluster_index=None,question_id=None):
@@ -729,16 +684,6 @@ class AggregationAPI:
                     retirement_thresholds[workflow_id] = threshold["classification_count"]["count"]
 
         return retirement_thresholds
-
-    def __get_subject_dimension__(self,subject_id):
-        """
-        get the x and y size of the subject
-        useful for plotting and also for checking if we have any bad points
-        if no dimension is founds, return None,None
-        :param subject_id:
-        :return:
-        """
-        return None
 
     def __get_project_id(self):
         """
@@ -1850,11 +1795,6 @@ class AggregationAPI:
             postgres_cursor.execute("create table aggregations(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation json,created_at timestamp, updated_at timestamp)")
             r = []
 
-        # if self.host_api is not None:
-        #     workflow_details = self.__get_workflow_details__(workflow_id)
-        # else:
-        #     workflow_details = ""
-
         update_str = ""
         insert_str = ""
 
@@ -1924,18 +1864,15 @@ class AggregationAPI:
                 yield r[0],task_id,aggregation[task_id]
 
 if __name__ == "__main__":
-
     # todo - use getopt
     project_identifier = sys.argv[1]
 
-    csv_classification_file = None
-
     if len(sys.argv) > 2:
-        subject_set = [int(sys.argv[2]),]
+        environment = sys.argv[1]
     else:
-        subject_set = None
+        environment = "development"
 
-    with AggregationAPI(project_identifier,environment="development") as project:
+    with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
         # project.__migrate__()
         # project.__aggregate__()
         # project.s__aggregate__(subject_set = subject_set)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
