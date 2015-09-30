@@ -40,9 +40,10 @@ def text_line_mappings(line_segments):
 
     return reduced_markings
 
+
 class Agglomerative(clustering.Cluster):
-    def __init__(self,shape,dim_reduction_alg,**kwargs):
-        clustering.Cluster.__init__(self,shape,dim_reduction_alg)
+    def __init__(self,shape,**kwargs):
+        clustering.Cluster.__init__(self,shape,kwargs)
         self.all_distances = []
         self.max = 0
 

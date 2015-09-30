@@ -37,7 +37,7 @@ class QuadTree:
         self.user_ids = []
 
     def __get_splits__(self):
-        if (self.bounding_box.area < 50000) or (len(self.polygons) <= 2):
+        if (self.bounding_box.area < 50000) or (len(self.polygons) < 8):
             return []
 
         complete_agreement = 0
@@ -67,7 +67,7 @@ class QuadTree:
 
                 complete_agreement += 1
 
-        if complete_agreement >= 3:
+        if complete_agreement >= 8:
             return []
 
         # calculate the height and width of the new children nodes
@@ -105,7 +105,7 @@ class QuadTree:
         :return:
         """
         if self.children is None:
-            if len(self.polygons) >= 3:
+            if len(self.polygons) >= 8:
                 # what is the majority vote for what type of "kind" this box outlines
                 # for example, some people might say broad leave tree while others say it is a needle leaf tree
                 # technically speaking, people could outline this region with different polygons
@@ -249,9 +249,9 @@ class QuadTree:
 
 
 class BlobClustering(clustering.Cluster):
-    def __init__(self,shape,dim_reduction_alg,**kwargs):
+    def __init__(self,shape,**kwargs):
         assert shape != "point"
-        clustering.Cluster.__init__(self,shape,dim_reduction_alg)
+        clustering.Cluster.__init__(self,shape,kwargs)
         self.rectangle = (shape == "rectangle")
 
     def __fix_polygon__(self,points):

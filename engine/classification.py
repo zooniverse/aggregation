@@ -321,17 +321,23 @@ class Classification:
         for task_id in marking_tasks:
             for shape in set(marking_tasks[task_id]):
                 # these shapes are dealt with else where
-                if shape not in ["polygon","rectangle","text"]:
-                    aggregations = self.__existence_classification__(task_id,shape,aggregations)
+                # if shape not in ["polygon","text"]:
+                aggregations = self.__existence_classification__(task_id,shape,aggregations)
 
+                # tool classification for rectangles/polygon is handled by the actual clustering algorithm
+                # technically, that clustering algorithm could also take care of existence as well
+                # but that would really mess up the code
+                if shape not in ["rectangle","polygon"]:
                     # can more than one tool create this shape?
-                    if sum([1 for s in marking_tasks[task_id] if s == shape]) > 1:
-                        aggregations = self.__tool_classification__(task_id,shape,aggregations)
+                    # if only one tool could create this shape, this is slightly silly to do but
+                    # it does mean that the aggregation json is correctly structured
+                    aggregations = self.__tool_classification__(task_id,shape,aggregations)
 
-                    for subject_id in aggregations:
-                        for cluster_index in aggregations[subject_id][task_id][shape + " clusters"]:
-                            if cluster_index != "all_users":
-                                assert "tool_classification" in aggregations[subject_id][task_id][shape + " clusters"][cluster_index]
+
+                    # for subject_id in aggregations:
+                    #     for cluster_index in aggregations[subject_id][task_id][shape + " clusters"]:
+                    #         if cluster_index != "all_users":
+                    #             assert "tool_classification" in aggregations[subject_id][task_id][shape + " clusters"][cluster_index]
 
         # now go through the normal classification aggregation stuff
         # which can include follow up questions

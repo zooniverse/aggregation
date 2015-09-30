@@ -38,20 +38,25 @@ def chunk_it(seq, num):
     return out
 
 
+# mappings are for use in dimension reduction
+def identity_mapping(markings):
+    return markings
 
 
 class Cluster:
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self,shape,dim_reduction_alg,**kwargs):
+    def __init__(self,shape,param_dict):
         """
         :param project_api: how to talk to whatever project we are clustering for (Panoptes/Ouroboros shouldn't matter)
         :param min_cluster_size: minimum number of points in a cluster to not be considered noise
         :return:
         """
         self.shape = shape
-        self.dim_reduction_alg = dim_reduction_alg
-
+        if "reduction" in param_dict:
+            self.dim_reduction_alg = param_dict["reduction"]
+        else:
+            self.dim_reduction_alg = identity_mapping
 
     @abc.abstractmethod
     def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions):

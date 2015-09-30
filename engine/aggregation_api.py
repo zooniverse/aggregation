@@ -151,9 +151,7 @@ def relevant_polygon_params(marking,image_dimensions):
 
 
 
-# mappings are for use in dimension reduction
-def identity_mapping(markings):
-    return markings
+
 
 
 def hesse_line_reduction(line_segments):
@@ -244,7 +242,7 @@ class AggregationAPI:
         self.default_clustering_algs["rectangle"] = blob_clustering.BlobClustering
         self.default_clustering_algs["polygon"] = blob_clustering.BlobClustering
         # and set any reduction algorithms - to reduce the dimensionality of markings
-        self.reduction_algs = {"line":hesse_line_reduction}
+        self.additional_clustering_args = {"line": {"reduction":hesse_line_reduction}}
         # self.__set_clustering_algs__(default_clustering_algs,reduction_algs)
 
         self.cluster_algs = {}
@@ -342,7 +340,7 @@ class AggregationAPI:
         self.current_time = datetime.datetime.now()
 
         self.ignore_versions = False
-        self.only_retired_subjects = True
+        self.only_retired_subjects = False
         # a bit of a sanity check in case I forget to change back up before uploading
         # production and staging should ALWAYS pay attention to the version and only
         # aggregate retired subjects
@@ -597,13 +595,13 @@ class AggregationAPI:
         # go through the shapes actually used by this project - one at a time
         cluster_aggregation = {}
         for shape in used_shapes:
-            # ware we using a reduction algorithm for this particular shape?
-            if shape in self.reduction_algs:
-                reduction_alg = self.reduction_algs[shape]
+            # were any additional params provided?
+            if shape in self.additional_clustering_args:
+                algorithm = self.default_clustering_algs[shape](shape,self.additional_clustering_args[shape])
             else:
-                reduction_alg = identity_mapping
+                algorithm = self.default_clustering_algs[shape](shape)
 
-            algorithm = self.default_clustering_algs[shape](shape,reduction_alg)
+
 
             shape_aggregation = algorithm.__aggregate__(raw_markings,image_dimensions)
 
@@ -651,10 +649,10 @@ class AggregationAPI:
 
         # load in rollbar stuff - for reporting errors/stats when running on AWS
         self.rollbar_token = None
-        if "rollbar" in api_details[self.environment]:
+        if ("rollbar" in api_details[self.environment]) and (self.environment != "development"):
             self.rollbar_token = api_details[self.environment]["rollbar"]
             # print "raising error"
-            rollbar.init(self.rollbar_token,"production")
+            rollbar.init(self.rollbar_token,self.environment)
 
         if os.path.isfile(expanduser("~")+"/aggregation.lock"):
             raise InstanceAlreadyRunning()
@@ -672,9 +670,9 @@ class AggregationAPI:
             # print exc_type
             # # if no error happened - update the timestamp
             # # else - the next run will start at the old time stamp (which we want)
-            if exc_type is None:
-                # pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
-                rollbar.report_message("everything worked fine","info",extra_data={"project_id":self.project_id})
+            # if exc_type is None:
+            #     # pickle.dump(self.current_time,open("/tmp/"+str(self.project_id)+".time","wb"))
+            #     rollbar.report_message("everything worked fine","info",extra_data={"project_id":self.project_id})
             # # we encountered an error - if we have a rollbar_token, report the error
             # # don't do this if we are running on one of Greg's computers
             # elif (self.rollbar_token is not None):# and (expanduser("~") not in ["/home/greg","/home/ggdhines"]):
@@ -1087,6 +1085,9 @@ class AggregationAPI:
 
         statements_and_params = []
         migrated = {}
+
+
+
         for ii,t in enumerate(cur.fetchall()):
 
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
@@ -1449,7 +1450,7 @@ class AggregationAPI:
     #         raise
 
     def __postgres_connect__(self,database_details):
-        print "connecting to postgres db -" + database_details["postgres_host"]
+        print "connecting to postgres db: " + database_details["postgres_host"]
 
         # build up the connection details
         details = ""
@@ -1935,8 +1936,8 @@ if __name__ == "__main__":
         subject_set = None
 
     with AggregationAPI(project_identifier,environment="development") as project:
-        project.__migrate__()
-        project.__aggregate__()
+        # project.__migrate__()
+        # project.__aggregate__()
         # project.s__aggregate__(subject_set = subject_set)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
         c = csv_output.CsvOut(project)
         c.__write_out__()
