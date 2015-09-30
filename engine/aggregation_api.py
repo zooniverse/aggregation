@@ -39,6 +39,16 @@ if os.path.exists("/home/ggdhines"):
 else:
     base_directory = "/home/greg"
 
+# see below for a discussion of inserting date times into casssandra - code is taken from there
+# http://stackoverflow.com/questions/16532566/how-to-insert-a-datetime-into-a-cassandra-1-2-timestamp-column
+def unix_time(dt):
+    epoch = datetime.datetime.utcfromtimestamp(0)
+    delta = dt - epoch
+    return delta.total_seconds()
+
+def unix_time_millis(dt):
+    return long(unix_time(dt) * 1000.0)
+
 
 class InvalidMarking(Exception):
     def __init__(self,pt):
@@ -650,6 +660,16 @@ class AggregationAPI:
         else:
             return self.classifications[subject_id][task_id][cluster_index][question_id]
 
+    def __get_most_recent_cassandra_classification__(self):
+        select_statement = "select created_at from classifications where project_id = " + str(self.project_id) + " order by created_at"
+        classification_timestamps = self.cassandra_session.execute(select_statement)
+
+        most_recent_date = datetime.datetime(2000,1,1)
+        for r in classification_timestamps:
+            print classification_timestamps
+            most_recent_date = max(most_recent_date,r.created_at)
+        print most_recent_date
+
     def __get_raw_classifications__(self,subject_id,workflow_id):
         version = int(math.floor(float(self.versions[workflow_id])))
         select_statement = self.cassandra_session.prepare("select annotations from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
@@ -991,6 +1011,11 @@ class AggregationAPI:
         if self.csv_classification_file is not None:
             return
 
+        try:
+            self.cassandra_session.execute("CREATE TABLE most_recent (project_id int, classification timestamp, PRIMARY KEY(project_id))")
+        except cassandra.AlreadyExists:
+            pass
+
         # uncomment this code if this is the first time you've run migration on whatever machine
         # will create the necessary cassandra tables for you - also useful if you need to reset
         # try:
@@ -1010,17 +1035,13 @@ class AggregationAPI:
         # except cassandra.AlreadyExists:
         #     pass
 
-
         subject_listing = set()
 
         # only migrate classifications created since we last ran this code
-        select = "SELECT * from classifications where project_id="+str(self.project_id) + " and created_at >= '" + str(self.old_time) +"'"
+        # todo - see end of function for trying to use most_recent
+        select = "SELECT * from classifications where project_id="+str(self.project_id)# + " and created_at >= '" + str(most_recent_classification) +"'"
         cur = self.postgres_session.cursor()
-        cur.execute("truncate table aggregations")
-        # cur.fetchall()
         cur.execute(select)
-
-
 
         # self.migrated_subjects = set()
         print "trying to migrate " + str(self.project_id)
@@ -1031,11 +1052,14 @@ class AggregationAPI:
         statements_and_params = []
         migrated = {}
 
-
+        most_recent_classification = datetime.datetime(2000,1,1)
 
         for ii,t in enumerate(cur.fetchall()):
 
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
+
+            most_recent_classification = max(most_recent_classification,updated_at)
+
             # can't really handle pairwise comparisons yet
             assert len(subject_ids) == 1
             # self.migrated_subjects.add(subject_ids[0])
@@ -1098,6 +1122,10 @@ class AggregationAPI:
         if statements_and_params != []:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
             # print results
+
+        # code based on from http://stackoverflow.com/questions/16532566/how-to-insert-a-datetime-into-a-cassandra-1-2-timestamp-column
+        # todo - get this to work. I've tired every combination I can think of
+        # self.cassandra_session.execute("UPDATE most_recent SET classification=:ts WHERE project_id=:id;", dict(ts=most_recent_classification.isoformat(), id=self.project_id))
 
     def __panoptes_call__(self,url):
         """
@@ -1873,11 +1901,11 @@ if __name__ == "__main__":
         environment = "development"
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
-        # project.__migrate__()
+        project.__migrate__()
         # project.__aggregate__()
         # project.s__aggregate__(subject_set = subject_set)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
-        c = csv_output.CsvOut(project)
-        c.__write_out__()
+        # c = csv_output.CsvOut(project)
+        # c.__write_out__()
 
 
 
