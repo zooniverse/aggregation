@@ -120,10 +120,16 @@ class QuadTree:
                         else:
                             vote_counts[vote] += 1
 
-                # extract the most likely type according to pluraity voting
-                # ties will get resolved in an arbitrary fashion
-                most_likely,num_votes = sorted(vote_counts.items(),key = lambda x:x[1],reverse=True)[0]
-                percentage = num_votes/float(sum(vote_counts.values()))
+                # in the very rare case where vote_counts == -1 - that means everyone outlined with more than
+                # one polygon/rectangle. Use mostlikely = -1 to denote
+                if vote_counts == {}:
+                    most_likely = -1
+                    percentage = -1
+                else:
+                    # extract the most likely type according to pluraity voting
+                    # ties will get resolved in an arbitrary fashion
+                    most_likely,num_votes = sorted(vote_counts.items(),key = lambda x:x[1],reverse=True)[0]
+                    percentage = num_votes/float(sum(vote_counts.values()))
 
                 # return two sets of values - one with the bounding box
                 # the other with the voting results
@@ -207,7 +213,7 @@ class QuadTree:
             return return_polygons,return_stats,total_incorrect_area,total_polygons_user_density
 
     def __add_polygon__(self,user,polygon,poly_type):
-        assert isinstance(polygon,Polygon)
+        assert isinstance(polygon,Polygon) or isinstance(polygon,MultiPolygon)
         # don't add it if there is no intersection
         if self.bounding_box.intersection(polygon).is_empty:
             return
@@ -347,6 +353,7 @@ class BlobClustering(clustering.Cluster):
             # which we will keep as one object and NOT split into individual polygons
             elif validity != "Valid Geometry":
                 corrected_polygon = self.__fix_polygon__(polygon_pts)
+                corrected_polygon = cascaded_union(corrected_polygon)
 
                 if u not in poly_dictionary:
                     poly_dictionary[u] = [(corrected_polygon,t,marking_index),]
