@@ -137,7 +137,6 @@ class CsvOut:
         workflow_name = self.workflow_names[workflow_id]
         workflow_name = self.__csv_string__(workflow_name)
         output_directory = "/tmp/"+str(self.project_id)+"/" +str(workflow_id) + "_" + workflow_name + "/"
-        print output_directory
 
         if not os.path.exists(output_directory):
             os.makedirs(output_directory)
@@ -502,12 +501,26 @@ class CsvOut:
                 # not every task have been done for every aggregation
                 if task_id in aggregations:
                     if shape == "polygon":
-                        self.__polygon_row__(workflow_id,task_id,subject_id,aggregations[task_id],shape)
+                        self.__polygon_row__(workflow_id,task_id,subject_id,aggregations[task_id])
+                        self.__polygon_summary_output__(workflow_id,task_id,subject_id,aggregations[task_id])
                     else:
                         self.__marking_row__(workflow_id,task_id,subject_id,aggregations[task_id],shape)
                         self.__shape_summary_output__(workflow_id,task_id,subject_id,aggregations,shape)
-    def __polygon_row__(self,workflow_id,task_id,subject_id,aggregations,shape):
-        pass
+
+    def __polygon_row__(self,workflow_id,task_id,subject_id,aggregations):
+        id_ = task_id,"polygon","detailed"
+        for p_index,cluster in aggregations["polygon clusters"].items():
+            if p_index == "all_users":
+                continue
+
+            tool_classification = cluster["tool_classification"][0].items()
+            most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
+            tool = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool)]["marking tool"]
+            tool = self.__csv_string__(tool)
+
+            for polygon in cluster["center"]:
+                row = str(subject_id) + ","+ tool +",\"" + str(polygon) + "\""
+                self.csv_files[id_].write(row+"\n")
 
     def __write_out__(self,subject_set = None,compress=True):
         """
@@ -594,6 +607,9 @@ class CsvOut:
             #             tarball.addfile(tarInfo, fileobj=readfile)
             #     f.close()
 
+        for f in self.csv_files.values():
+            f.close()
+
         # add some final details to the read me file
         with open("/tmp/"+str(self.project_id)+"/readme.md", "a") as readme_file:
             readme_file.write("Details and food for thought:\n")
@@ -643,7 +659,6 @@ class CsvOut:
         :return:
         """
         key = task_id,shape,"detailed"
-        print key
         for cluster_index,cluster in aggregations[shape + " clusters"].items():
             if cluster_index == "all_users":
                 continue
@@ -678,28 +693,28 @@ class CsvOut:
             row += str(prob_true_positive) + "," + str(num_users)
             self.csv_files[key].write(row+"\n")
 
-    def __rectangle_output__(self,workflow_id,task_id,subject_id,aggregations,has_followup_questions = False):
-        key = task_id + "rectangle"
-        for cluster_index,cluster in aggregations["rectangle clusters"].items():
-            if cluster_index == "all_users":
-                continue
-
-            # build up the row bit by bit to have the following structure
-            # "subject_id,most_likely_tool,x,y,p(most_likely_tool),p(true_positive),num_users"
-            row = str(subject_id)+","
-            # todo for now - always give the cluster index
-            row += str(cluster_index) + ","
-
-            # extract the most likely tool for this particular marking and convert it to
-            # a string label
-            tool_classification = cluster["tool_classification"][0].items()
-            most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
-            tool_str = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool)]["marking tool"]
-            tool_str = self.__csv_string__(tool_str)
-            row += tool_str + "," + str(cluster["center"][0][0]) + "," + str(cluster["center"][0][1]) + "," + str(cluster["center"][1][0]) + "," + str(cluster["center"][1][1])
-            # get the central coordinates next
-
-            self.csv_files[key].write(row+"\n")
+    # def __rectangle_output__(self,workflow_id,task_id,subject_id,aggregations,has_followup_questions = False):
+    #     key = task_id + "rectangle"
+    #     for cluster_index,cluster in aggregations["rectangle clusters"].items():
+    #         if cluster_index == "all_users":
+    #             continue
+    #
+    #         # build up the row bit by bit to have the following structure
+    #         # "subject_id,most_likely_tool,x,y,p(most_likely_tool),p(true_positive),num_users"
+    #         row = str(subject_id)+","
+    #         # todo for now - always give the cluster index
+    #         row += str(cluster_index) + ","
+    #
+    #         # extract the most likely tool for this particular marking and convert it to
+    #         # a string label
+    #         tool_classification = cluster["tool_classification"][0].items()
+    #         most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
+    #         tool_str = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool)]["marking tool"]
+    #         tool_str = self.__csv_string__(tool_str)
+    #         row += tool_str + "," + str(cluster["center"][0][0]) + "," + str(cluster["center"][0][1]) + "," + str(cluster["center"][1][0]) + "," + str(cluster["center"][1][1])
+    #         # get the central coordinates next
+    #
+    #         self.csv_files[key].write(row+"\n")
 
     def __shape_summary_output__(self,workflow_id,task_id,subject_id,aggregations,given_shape):
         """
@@ -798,7 +813,7 @@ class CsvOut:
         # else:
         #     row += str(numpy.mean(all_tool_prob)) + "," + str(numpy.median(all_tool_prob))
         #
-        id_ = task_id,given_shape,"_summary"
+        id_ = task_id,given_shape,"summary"
         self.csv_files[id_].write(row+"\n")
 
     def __marking_header_setup__(self,workflow_id,task_id,shapes,output_directory):
@@ -814,25 +829,26 @@ class CsvOut:
 
             self.file_names[(task_id,shape,"detailed")] = fname + "_" + shape + ".csv"
             self.file_names[(task_id,shape,"summary")] = fname + "_" + shape + "_summary.csv"
-
-            self.csv_files[(task_id,shape,"detailed")] = open(output_directory+fname + "_" + shape + ".csv","wb")
-            self.csv_files[(task_id,shape,"summary")] = open(output_directory+fname + "_" + shape + "_summary.csv","wb")
+            #
+            # self.csv_files[(task_id,shape,"detailed")] = open(output_directory+fname + "_" + shape + ".csv","wb")
+            # self.csv_files[(task_id,shape,"summary")] = open(output_directory+fname + "_" + shape + "_summary.csv","wb")
 
             if shape == "polygon":
-                pass
-                # key = task+"polygon_summary"
-                # self.csv_files[key] = open(output_directory+fname+"_polygons_summary.csv","wb")
-                # header = "subject_id,num_users,minimum_users_per_cluster,area(noise),tool_certainity"
-                # for tool_id in sorted(self.instructions[workflow_id][task]["tools"].keys()):
-                #     tool = self.instructions[workflow_id][task]["tools"][tool_id]["marking tool"]
-                #     tool = re.sub(" ","_",tool)
-                #     header += ",area("+tool+")"
-                # self.csv_files[key].write(header+"\n")
-                #
-                # key = task+"polygon_heatmap"
-                # self.csv_files[key] = open(output_directory+fname+"_polygons_heatmap.csv","wb")
-                # header = "subject_id,num_users,pts"
-                # self.csv_files[key].write(header+"\n")
+                id_ = task_id,shape,"detailed"
+                self.csv_files[id_] = open(output_directory+fname+"_"+shape+".csv","wb")
+                self.csv_files[id_].write("subject_id,most_likely_tool,list_of_xy_polygon_coordinates\n")
+
+                id_ = task_id,shape,"summary"
+                self.csv_files[id_] = open(output_directory+fname+"_"+shape+"_summary.csv","wb")
+                # self.csv_files[id_].write("subject_id,\n")
+                polygon_tools = [t_index for t_index,t in enumerate(self.workflows[workflow_id][1][task_id]) if t == "polygon"]
+                header = "subject_id,"
+                for tool_id in polygon_tools:
+                    tool = self.instructions[workflow_id][task_id]["tools"][tool_id]["marking tool"]
+                    tool = self.__csv_string__(tool)
+                    header += "area("+tool+"),"
+                print header
+                self.csv_files[id_].write(header+"\n")
 
             else:
                 id_ = task_id,shape,"detailed"
@@ -861,7 +877,7 @@ class CsvOut:
         :return:
         """
         # the summary file will contain just line per subject
-        id_ = task_id,shape,"_summary"
+        id_ = task_id,shape,"summary"
         self.csv_files[id_] = open(output_directory+fname+"_"+shape+"_summary.csv","wb")
         header = "subject_id"
         # extract only the tools which can actually make point markings
@@ -877,31 +893,31 @@ class CsvOut:
         header += ",mean_probability,median_probability,mean_tool,median_tool"
         self.csv_files[id_].write(header+"\n")
 
-    def __polygon_heatmap_output__(self,workflow_id,task_id,subject_id,aggregations):
-        """
-        print out regions according to how many users selected that user - so we can a heatmap
-        of the results
-        :param workflow_id:
-        :param task_id:
-        :param subject_id:
-        :param aggregations:
-        :return:
-        """
-        key = task_id+"polygon_heatmap"
-        for cluster_index,cluster in aggregations["polygon clusters"].items():
-            # each cluster refers to a specific tool type - so there can actually be multiple blobs
-            # (or clusters) per cluster
-            # not actually clusters
-
-            if cluster_index in ["param","all_users"]:
-                continue
-
-            if cluster["tool classification"] is not None:
-                # this result is not relevant to the heatmap
-                continue
-
-            row = str(subject_id) + "," + str(cluster["num users"]) + ",\"" + str(cluster["center"]) + "\""
-            self.csv_files[key].write(row+"\n")
+    # def __polygon_heatmap_output__(self,workflow_id,task_id,subject_id,aggregations):
+    #     """
+    #     print out regions according to how many users selected that user - so we can a heatmap
+    #     of the results
+    #     :param workflow_id:
+    #     :param task_id:
+    #     :param subject_id:
+    #     :param aggregations:
+    #     :return:
+    #     """
+    #     key = task_id+"polygon_heatmap"
+    #     for cluster_index,cluster in aggregations["polygon clusters"].items():
+    #         # each cluster refers to a specific tool type - so there can actually be multiple blobs
+    #         # (or clusters) per cluster
+    #         # not actually clusters
+    #
+    #         if cluster_index in ["param","all_users"]:
+    #             continue
+    #
+    #         if cluster["tool classification"] is not None:
+    #             # this result is not relevant to the heatmap
+    #             continue
+    #
+    #         row = str(subject_id) + "," + str(cluster["num users"]) + ",\"" + str(cluster["center"]) + "\""
+    #         self.csv_files[key].write(row+"\n")
 
     def __polygon_summary_output__(self,workflow_id,task_id,subject_id,aggregations):
         """
@@ -910,62 +926,84 @@ class CsvOut:
         that way we can know if there is no output for a given tool - that tool wouldn't appear
         at all in the aggregations
         """
-        # find out which tools actually corresponds to polygons - they could correspond to other tools/shapes
-        marking_shapes = self.workflows[workflow_id][1][task_id]
-        polygon_tools = [tool_id for tool_id,shape in enumerate(marking_shapes) if shape == "polygon"]
+        polygon_tools = [t_index for t_index,t in enumerate(self.workflows[workflow_id][1][task_id]) if t == "polygon"]
 
-        area_per_type = {}#t:0 for t in polygon_tools}
-        certainty_per_type = {}#t: -1 for t in polygon_tools}
+        total_area = {t:0 for t in polygon_tools}
+
+        id_ = task_id,"polygon","summary"
+        for p_index,cluster in aggregations["polygon clusters"].items():
+            if p_index == "all_users":
+                continue
+
+            tool_classification = cluster["tool_classification"][0].items()
+            most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
+            total_area[int(most_likely_tool)] += cluster["area"]
 
         row = str(subject_id)
-        # if noise_area stays 0, that means that there wasn't any noise at all :)
-        noise_area = 0
-        num_users = 0
-        for cluster_index,cluster in aggregations["polygon clusters"].items():
-            # each cluster refers to a specific tool type - so there can actually be multiple blobs
-            # (or clusters) per cluster
-            # not actually clusters
-            if cluster_index == "all_users":
-                num_users = len(cluster)
-                continue
+        for t in sorted([int(t) for t in polygon_tools]):
+            row += ","+ str(total_area[t])
 
-            if cluster_index in ["param","all_users"]:
-                continue
+        self.csv_files[id_].write(row+"\n")
 
-            if cluster["tool classification"] is None:
-                # this result is not relevant to the summary stats
-                continue
+        # print polygon_tools
 
-            # this value will just get repeatedly read in - which is fine
-            noise_area = cluster["incorrect area"]
-
-            # cluster = -1 => empty image
-            if cluster["certainty"] >= 0:
-                most_likely_type = cluster["tool classification"]
-                area_per_type[most_likely_type] = cluster["area"]
-                certainty_per_type[most_likely_type] = cluster["certainty"]
-
-        row += ","+str(num_users)
-        # todo - don't hard code this
-        row += ",3"
-        row += "," + str(noise_area)
-
-        # calculate the overall (weighted) certainty
-        area = [area_per_type[t] for t in polygon_tools if t in area_per_type]
-        certainty = [certainty_per_type[t] for t in polygon_tools if t in certainty_per_type]
-        assert len(area) == len(certainty)
-        if area != []:
-            weighted_overall_certainty = numpy.average(certainty,weights =area)
-        else:
-            weighted_overall_certainty = "NA"
-
-        row += ","+str(weighted_overall_certainty)
-
-        for t in polygon_tools:
-            if t in area_per_type:
-                row += ","+str(area_per_type[t])
-            else:
-                row += ",0"
-
-        key = task_id+"polygon_summary"
-        self.csv_files[key].write(row+"\n")
+        # for t in
+        # # find out which tools actually corresponds to polygons - they could correspond to other tools/shapes
+        # marking_shapes = self.workflows[workflow_id][1][task_id]
+        # polygon_tools = [tool_id for tool_id,shape in enumerate(marking_shapes) if shape == "polygon"]
+        #
+        # area_per_type = {}#t:0 for t in polygon_tools}
+        # certainty_per_type = {}#t: -1 for t in polygon_tools}
+        #
+        # row = str(subject_id)
+        # # if noise_area stays 0, that means that there wasn't any noise at all :)
+        # noise_area = 0
+        # num_users = 0
+        # for cluster_index,cluster in aggregations["polygon clusters"].items():
+        #     # each cluster refers to a specific tool type - so there can actually be multiple blobs
+        #     # (or clusters) per cluster
+        #     # not actually clusters
+        #     if cluster_index == "all_users":
+        #         num_users = len(cluster)
+        #         continue
+        #
+        #     if cluster_index in ["param","all_users"]:
+        #         continue
+        #
+        #     if cluster["tool classification"] is None:
+        #         # this result is not relevant to the summary stats
+        #         continue
+        #
+        #     # this value will just get repeatedly read in - which is fine
+        #     noise_area = cluster["incorrect area"]
+        #
+        #     # cluster = -1 => empty image
+        #     if cluster["certainty"] >= 0:
+        #         most_likely_type = cluster["tool classification"]
+        #         area_per_type[most_likely_type] = cluster["area"]
+        #         certainty_per_type[most_likely_type] = cluster["certainty"]
+        #
+        # row += ","+str(num_users)
+        # # todo - don't hard code this
+        # row += ",3"
+        # row += "," + str(noise_area)
+        #
+        # # calculate the overall (weighted) certainty
+        # area = [area_per_type[t] for t in polygon_tools if t in area_per_type]
+        # certainty = [certainty_per_type[t] for t in polygon_tools if t in certainty_per_type]
+        # assert len(area) == len(certainty)
+        # if area != []:
+        #     weighted_overall_certainty = numpy.average(certainty,weights =area)
+        # else:
+        #     weighted_overall_certainty = "NA"
+        #
+        # row += ","+str(weighted_overall_certainty)
+        #
+        # for t in polygon_tools:
+        #     if t in area_per_type:
+        #         row += ","+str(area_per_type[t])
+        #     else:
+        #         row += ",0"
+        #
+        # key = task_id+"polygon_summary"
+        # self.csv_files[key].write(row+"\n")

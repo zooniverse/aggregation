@@ -427,7 +427,7 @@ class BlobClustering(clustering.Cluster):
         # find which users have a polygon actually intersecting with this particular aggregate one
         matched_polygons = self.__match_individual_to_aggregate__(poly_dictionary,aggregate_polygons)
 
-        return self.__get_results__(aggregate_polygons,markings,matched_polygons)
+        return self.__get_results__(aggregate_polygons,markings,matched_polygons,image_area)
 
     def __match_individual_to_aggregate__(self,poly_dictionary,aggregate_polygons):
         """
@@ -488,7 +488,7 @@ class BlobClustering(clustering.Cluster):
 
         return members_of_aggregate
 
-    def __get_results__(self,aggregate_polygons,markings,polygon_members):
+    def __get_results__(self,aggregate_polygons,markings,polygon_members,image_area):
         """
         actually combine everything done so far into the results that we will return
         :return:
@@ -509,6 +509,8 @@ class BlobClustering(clustering.Cluster):
                     next_result["center"] = [(max(x),max(y)),(min(x),min(y))]
                 else:
                     next_result["center"] = [zip(agg_poly.exterior.xy[0],agg_poly.exterior.xy[0])]
+
+                next_result["area"] = agg_poly.area/float(image_area)
 
                 # cluster members are the individual polygons
                 # users are the corresponding user ids
