@@ -77,7 +77,7 @@ class CsvOut:
         fname += ".csv"
 
         self.file_names[(id_,"summary")] = fname
-        self.csv_files[id_] = open(output_directory+fname,"wb")
+        self.csv_files[(id_,"summary")] = open(output_directory+fname,"wb")
 
         # now write the headers
         self.csv_files[(id_,"detailed")].write("subject_id,label,p(label),num_users\n")
@@ -137,6 +137,7 @@ class CsvOut:
         workflow_name = self.workflow_names[workflow_id]
         workflow_name = self.__csv_string__(workflow_name)
         output_directory = "/tmp/"+str(self.project_id)+"/" +str(workflow_id) + "_" + workflow_name + "/"
+        print output_directory
 
         if not os.path.exists(output_directory):
             os.makedirs(output_directory)
@@ -157,7 +158,6 @@ class CsvOut:
                 instructions = self.instructions[workflow_id][task_id]["instruction"]
                 self.__multi_response_csv_header__(output_directory,task_id,instructions)
             else:
-                # print self.instructions
                 for tool_id in classification_tasks[task_id]:
                     for followup_index,answer_type in enumerate(classification_tasks[task_id][tool_id]):
                         instructions = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_index]["question"]
@@ -167,22 +167,21 @@ class CsvOut:
                         else:
                             self.__multi_response_csv_header__(output_directory,id_,instructions)
 
+        # for task_id in marking_tasks:
+        #     # we have a marking task (possible in addition to a follow up classification question)
+        #     for shape in set(marking_tasks[task_id]):
+        #         if shape == "polygon":
+        #             # todo!!
+        #             print "todo !!"
+        #         else:
         for task_id in marking_tasks:
-            # we have a marking task (possible in addition to a follow up classification question)
-            for shape in set(marking_tasks[task_id]):
-                fname = str(task_id) + self.instructions[workflow_id][task_id]["instruction"][:50]
-                fname = self.__csv_string__(fname)
-                # fname += ".csv"
-
-                self.file_names[(task_id,shape,"detailed")] = fname + "_" + shape + ".csv"
-                self.file_names[(task_id,shape,"summary")] = fname + "_" + shape + "_summary.csv"
-
-                self.csv_files[(task_id,shape,"detailed")] = open(output_directory+fname + "_" + shape + ".csv","wb")
-                self.csv_files[(task_id,shape,"summary")] = open(output_directory+fname + "_" + shape + "_summary.csv","wb")
+            shapes = set(marking_tasks[task_id])
+            self.__marking_header_setup__(workflow_id,task_id,shapes,output_directory)
 
 
 
 
+        return output_directory
 
 
     #
@@ -392,6 +391,30 @@ class CsvOut:
     def __shannon_entropy__(self,probabilities):
         return -sum([p*math.log(p) for p in probabilities])
 
+    def __multi_choice_classification_row__(self,answers,task_id,subject_id,results,cluster_index=None):
+        votes,num_users = results
+        if votes == {}:
+            return
+
+        for candidate,percent in votes.items():
+            row = str(subject_id) + ","
+            if cluster_index is not None:
+                row += str(cluster_index) + ","
+            row += self.__csv_string__(answers[int(candidate)]) + "," + str(percent) + "," + str(num_users) + "\n"
+
+            self.csv_files[(task_id,"detailed")].write(row)
+
+        percentages = votes.values()
+        mean_percent = numpy.mean(percentages)
+        median_percent = numpy.median(percentages)
+
+        row = str(subject_id) + ","
+        if cluster_index is not None:
+            row += str(cluster_index) + ","
+
+        row += str(mean_percent) + "," + str(median_percent) + "," + str(num_users) + "\n"
+        self.csv_files[(task_id,"summary")].write(row)
+
     def __single_choice_classification_row__(self,answers,task_id,subject_id,results,cluster_index=None):
         """
         output a row for a classification task which only allowed allowed one answer
@@ -456,7 +479,6 @@ class CsvOut:
 
                             # only consider clusters which most likely correspond to the correct tool
                             if int(most_likely_tool) != int(tool_id):
-                                print most_likely_tool,tool_id
                                 continue
 
                             possible_answers = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_index]["answers"]
@@ -465,21 +487,27 @@ class CsvOut:
                             if answer_type == "single":
                                 self.__single_choice_classification_row__(possible_answers,id_,subject_id,results,cluster_index)
                             else:
-                                assert False
-            elif task_type == "single":
-                answers = self.instructions[workflow_id][task_id]["answers"]
-                self.__single_choice_classification_row__(answers,task_id,subject_id,aggregations[task_id])
+                                self.__multi_choice_classification_row__(possible_answers,id_,subject_id,results,cluster_index)
             else:
-                assert task_type == "multiple"
-                assert False
+                answers = self.instructions[workflow_id][task_id]["answers"]
+                results = aggregations[task_id]
+                if task_type == "single":
+                    answers = self.instructions[workflow_id][task_id]["answers"]
+                    self.__single_choice_classification_row__(answers,task_id,subject_id,results)
+                else:
+                    self.__multi_choice_classification_row__(answers,task_id,subject_id,results)
 
         for task_id,possible_shapes in marking_tasks.items():
             for shape in set(possible_shapes):
                 # not every task have been done for every aggregation
                 if task_id in aggregations:
-                    self.__marking_output__(workflow_id,task_id,subject_id,aggregations[task_id],shape)
-                    self.__shape_summary_output__(workflow_id,task_id,subject_id,aggregations,shape)
-
+                    if shape == "polygon":
+                        self.__polygon_row__(workflow_id,task_id,subject_id,aggregations[task_id],shape)
+                    else:
+                        self.__marking_row__(workflow_id,task_id,subject_id,aggregations[task_id],shape)
+                        self.__shape_summary_output__(workflow_id,task_id,subject_id,aggregations,shape)
+    def __polygon_row__(self,workflow_id,task_id,subject_id,aggregations,shape):
+        pass
 
     def __write_out__(self,subject_set = None,compress=True):
         """
@@ -496,7 +524,7 @@ class CsvOut:
         for workflow_id in self.workflows:
             print workflow_id
             # # create the output files for this workflow
-            self.__make_files__(workflow_id)
+            output_directory = self.__make_files__(workflow_id)
 
 
             # results are going to be ordered by subject id (because that's how the results are stored)
@@ -605,7 +633,7 @@ class CsvOut:
 
         return string
 
-    def __marking_output__(self,workflow_id,task_id,subject_id,aggregations,shape):
+    def __marking_row__(self,workflow_id,task_id,subject_id,aggregations,shape):
         """
         output for line segments
         :param workflow_id:
@@ -615,6 +643,7 @@ class CsvOut:
         :return:
         """
         key = task_id,shape,"detailed"
+        print key
         for cluster_index,cluster in aggregations[shape + " clusters"].items():
             if cluster_index == "all_users":
                 continue
@@ -685,128 +714,168 @@ class CsvOut:
         :param shape:
         :return:
         """
-        key = task_id,given_shape,"summary"
-        all_exist_probability = []
-        all_tool_prob = []
+        relevant_tools = [tool_id for tool_id,tool_shape in enumerate(self.workflows[workflow_id][1][task_id]) if tool_shape == given_shape]
+        counter = {t:{} for t in relevant_tools}
+        aggreement = []
 
-        # start by figuring all the points which correspond to the desired type
-        cluster_count = {}
-        for tool_id in sorted(self.instructions[workflow_id][task_id]["tools"].keys()):
-            tool_id = int(tool_id)
+        prob_true_positive = []#{t:[] for t in relevant_tools}
 
-            assert task_id in self.workflows[workflow_id][1]
-            shape = self.workflows[workflow_id][1][task_id][tool_id]
-            if shape == given_shape:
-                cluster_count[tool_id] = 0
-
-        # now go through the actual clusters and count all which at least half of everyone has marked
-        # or p(existence) >= 0.5 which is basically the same thing unless you've used weighted voting, IBCC etc.
         for cluster_index,cluster in aggregations[task_id][given_shape + " clusters"].items():
             if cluster_index == "all_users":
                 continue
 
-            prob_true_positive = cluster["existence"][0]["1"]
-            if prob_true_positive > 0.5:
-                tool_classification = cluster["tool_classification"][0].items()
-                most_likely_tool,tool_prob = max(tool_classification, key = lambda x:x[1])
-                all_tool_prob.append(tool_prob)
-                cluster_count[int(most_likely_tool)] += 1
+            # how much agreement was their on the most likely tool?
+            tool_classification = cluster["tool_classification"][0].items()
+            most_likely_tool,tool_prob = max(tool_classification, key = lambda x:x[1])
+            aggreement.append(tool_prob)
 
-            # keep track of this no matter what the value is
-            all_exist_probability.append(prob_true_positive)
+            prob_true_positive.append(cluster["existence"][0]["1"])
+
+            for u,t in zip(cluster["users"],cluster["tools"]):
+                if u in counter[t]:
+                    counter[t][u] += 1
+                else:
+                    counter[t][u] = 1
+
+            # print
+
+
+        # # start by figuring all the points which correspond to the desired type
+        # cluster_count = {}
+        # for tool_id in sorted(self.instructions[workflow_id][task_id]["tools"].keys()):
+        #     tool_id = int(tool_id)
+        #
+        #     assert task_id in self.workflows[workflow_id][1]
+        #     shape = self.workflows[workflow_id][1][task_id][tool_id]
+        #     if shape == given_shape:
+        #         cluster_count[tool_id] = 0
+        #
+        # # now go through the actual clusters and count all which at least half of everyone has marked
+        # # or p(existence) >= 0.5 which is basically the same thing unless you've used weighted voting, IBCC etc.
+        # for cluster_index,cluster in aggregations[task_id][given_shape + " clusters"].items():
+        #     if cluster_index == "all_users":
+        #         continue
+        #
+        #     prob_true_positive = cluster["existence"][0]["1"]
+        #     if prob_true_positive > 0.5:
+        #         tool_classification = cluster["tool_classification"][0].items()
+        #         most_likely_tool,tool_prob = max(tool_classification, key = lambda x:x[1])
+        #         all_tool_prob.append(tool_prob)
+        #         cluster_count[int(most_likely_tool)] += 1
+        #
+        #     # keep track of this no matter what the value is
+        #     all_exist_probability.append(prob_true_positive)
 
         row = str(subject_id) + ","
-        for tool_id in sorted(cluster_count.keys()):
-            row += str(cluster_count[tool_id]) + ","
+        for tool_id in sorted(counter.keys()):
+            tool_count = counter[tool_id].values()
+            if tool_count == []:
+                row += "0,"
+            else:
+                row += str(numpy.median(tool_count)) + ","
 
-        # if there were no clusters found (at least which met the threshold) use empty columns
-        if all_exist_probability == []:
-            row += ",,"
+        if prob_true_positive == []:
+            row += "NA,NA,"
         else:
-            row += str(numpy.mean(all_exist_probability)) + "," + str(numpy.median(all_exist_probability)) + ","
+            row += str(numpy.mean(prob_true_positive)) + "," + str(numpy.median(prob_true_positive)) + ","
 
-        if all_tool_prob == []:
-            row += ","
+        if aggreement == []:
+            row += "NA,NA"
         else:
-            row += str(numpy.mean(all_tool_prob)) + "," + str(numpy.median(all_tool_prob))
 
-        self.csv_files[key].write(row+"\n")
+            row += str(numpy.mean(aggreement)) + "," + str(numpy.median(aggreement))
 
-    def __marking_header_setup__(self,workflow_id,task,tools,output_directory):
+
+
+        # # if there were no clusters found (at least which met the threshold) use empty columns
+        # if all_exist_probability == []:
+        #     row += ",,"
+        # else:
+        #     row += str(numpy.mean(all_exist_probability)) + "," + str(numpy.median(all_exist_probability)) + ","
+        #
+        # if all_tool_prob == []:
+        #     row += ","
+        # else:
+        #     row += str(numpy.mean(all_tool_prob)) + "," + str(numpy.median(all_tool_prob))
+        #
+        id_ = task_id,given_shape,"_summary"
+        self.csv_files[id_].write(row+"\n")
+
+    def __marking_header_setup__(self,workflow_id,task_id,shapes,output_directory):
         """
         tools - says what sorts of different types of shapes/tools we have to do deal with for this task
         we can either give the output for each tool in a completely different csv file - more files, might
         be slightly overwhelming, but then we could make the column headers more understandable
         """
-        fname = str(task)+self.instructions[workflow_id][task]["instruction"][:50]
-        fname = self.__csv_string__(fname)
+        for shape in shapes:
+            fname = str(task_id) + self.instructions[workflow_id][task_id]["instruction"][:50]
+            fname = self.__csv_string__(fname)
+            # fname += ".csv"
 
-        if "polygon" in tools:
-            key = task+"polygon_summary"
-            self.csv_files[key] = open(output_directory+fname+"_polygons_summary.csv","wb")
-            header = "subject_id,num_users,minimum_users_per_cluster,area(noise),tool_certainity"
-            for tool_id in sorted(self.instructions[workflow_id][task]["tools"].keys()):
-                tool = self.instructions[workflow_id][task]["tools"][tool_id]["marking tool"]
-                tool = re.sub(" ","_",tool)
-                header += ",area("+tool+")"
-            self.csv_files[key].write(header+"\n")
+            self.file_names[(task_id,shape,"detailed")] = fname + "_" + shape + ".csv"
+            self.file_names[(task_id,shape,"summary")] = fname + "_" + shape + "_summary.csv"
 
-            key = task+"polygon_heatmap"
-            self.csv_files[key] = open(output_directory+fname+"_polygons_heatmap.csv","wb")
-            header = "subject_id,num_users,pts"
-            self.csv_files[key].write(header+"\n")
+            self.csv_files[(task_id,shape,"detailed")] = open(output_directory+fname + "_" + shape + ".csv","wb")
+            self.csv_files[(task_id,shape,"summary")] = open(output_directory+fname + "_" + shape + "_summary.csv","wb")
 
-        if "point" in tools:
-            key = task + "point"
-            self.csv_files[key] = open(output_directory+fname+"_point.csv","wb")
-            header = "subject_id,cluster_index,most_likely_tool,x,y,p(most_likely_tool),p(true_positive),num_users"
-            self.csv_files[key].write(header+"\n")
+            if shape == "polygon":
+                pass
+                # key = task+"polygon_summary"
+                # self.csv_files[key] = open(output_directory+fname+"_polygons_summary.csv","wb")
+                # header = "subject_id,num_users,minimum_users_per_cluster,area(noise),tool_certainity"
+                # for tool_id in sorted(self.instructions[workflow_id][task]["tools"].keys()):
+                #     tool = self.instructions[workflow_id][task]["tools"][tool_id]["marking tool"]
+                #     tool = re.sub(" ","_",tool)
+                #     header += ",area("+tool+")"
+                # self.csv_files[key].write(header+"\n")
+                #
+                # key = task+"polygon_heatmap"
+                # self.csv_files[key] = open(output_directory+fname+"_polygons_heatmap.csv","wb")
+                # header = "subject_id,num_users,pts"
+                # self.csv_files[key].write(header+"\n")
 
-            self.__summary_header_setup__(output_directory,fname,workflow_id,task,"point")
+            else:
+                id_ = task_id,shape,"detailed"
+                # fname += "_"+shape+".csv"
+                self.csv_files[id_] = open(output_directory+fname+"_"+shape+".csv","wb")
 
-        if "line" in tools:
-            key = task + "line"
-            self.csv_files[key] = open(output_directory+fname+"_line.csv","wb")
-            header = "subject_id,cluster_index,most_likely_tool,x1,y1,x2,y2,p(most_likely_tool),p(true_positive),num_users"
-            self.csv_files[key].write(header+"\n")
-            self.__summary_header_setup__(output_directory,fname,workflow_id,task,"line")
+                header = "subject_id,cluster_index,most_likely_tool,"
+                if shape == "point":
+                    header += "x,y,"
+                elif shape == "rectangle":
+                    # todo - fix this
+                    header += "x1,y1,x2,y2,"
+                elif shape == "line":
+                    header += "x1,y1,x2,y2,"
+                elif shape == "ellipse":
+                    header += "x1,y1,r1,r2,theta,"
 
-        if "rectangle" in tools:
-            key = task + "rectangle"
-            self.csv_files[key] = open(output_directory+fname+"_rectangle.csv","wb")
-            header = "subject_id,cluster_index,most_likely_tool,\"(x1,y1)\",\"(x2,y2)\",p(most_likely_tool),p(true_positive),num_users"
-            self.csv_files[key].write(header+"\n")
-            self.__summary_header_setup__(output_directory,fname,workflow_id,task,"rectangle")
+                header += "p(most_likely_tool),p(true_positive),num_users"
+                self.csv_files[id_].write(header+"\n")
+                # do the summary output else where
+                self.__summary_header_setup__(output_directory,workflow_id,fname,task_id,shape)
 
-        if "ellipse" in tools:
-            key = task + "ellipse"
-            self.csv_files[key] = open(output_directory+fname+"_ellipse.csv","wb")
-            header = "subject_id,cluster_index,most_likely_tool,x1,y1,r1,r2,p(most_likely_tool),p(true_positive),theta,num_users"
-            self.csv_files[key].write(header+"\n")
-            self.__summary_header_setup__(output_directory,fname,workflow_id,task,"ellipse")
-
-    def __summary_header_setup__(self,output_directory,fname,workflow_id,task,shape):
+    def __summary_header_setup__(self,output_directory,workflow_id,fname,task_id,shape):
         """
         all shape aggregation will have a summary file - with one line per subject
         :return:
         """
         # the summary file will contain just line per subject
-        key = task + shape +"_summary"
-        self.csv_files[key] = open(output_directory+fname+"_"+shape+"_summary.csv","wb")
+        id_ = task_id,shape,"_summary"
+        self.csv_files[id_] = open(output_directory+fname+"_"+shape+"_summary.csv","wb")
         header = "subject_id"
         # extract only the tools which can actually make point markings
-        for tool_id in sorted(self.instructions[workflow_id][task]["tools"].keys()):
+        for tool_id in sorted(self.instructions[workflow_id][task_id]["tools"].keys()):
             tool_id = int(tool_id)
             # self.workflows[workflow_id][0] is the list of classification tasks
             # we want [1] which is the list of marking tasks
-            assert task in self.workflows[workflow_id][1]
-            found_shape = self.workflows[workflow_id][1][task][tool_id]
+            found_shape = self.workflows[workflow_id][1][task_id][tool_id]
             if found_shape == shape:
-                tool_label = self.instructions[workflow_id][task]["tools"][tool_id]["marking tool"]
+                tool_label = self.instructions[workflow_id][task_id]["tools"][tool_id]["marking tool"]
                 tool_label = self.__csv_string__(tool_label)
                 header += "," + tool_label
         header += ",mean_probability,median_probability,mean_tool,median_tool"
-        self.csv_files[key].write(header+"\n")
+        self.csv_files[id_].write(header+"\n")
 
     def __polygon_heatmap_output__(self,workflow_id,task_id,subject_id,aggregations):
         """
