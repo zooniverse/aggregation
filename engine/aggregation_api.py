@@ -310,6 +310,26 @@ class AggregationAPI:
 
         # connect to the Cassandra DB
         self.__cassandra_connect__(project_details["cassandra"])
+        # as soon as we have a cassandra connection - check to see when the last time we ran
+        # the aggregation engine for this project - if this query fails for whatever reason
+        # fall back on 2000,1,1
+        self.previous_runtime = datetime.datetime(2000,1,1)
+        # use this one for figuring out the most recent classification read in
+        # we need to use as our runtime value, not the clock (since classifications could still be coming in
+        # if we used datetime.datetime.now() we might skip some classifications)
+        self.new_runtime = datetime.datetime(2000,1,1)
+
+        # try:
+        #     r = self.cassandra_session.execute("select classification from most_recent where project_id = " + str(self.project_id))
+        #     if r != []:
+        #         self.previous_runtime = r[0].classification
+        # except:
+        #     pass
+
+        print "we have already aggregated classifications up to: " + str(self.previous_runtime)
+
+        # use this to determine the time frame for reading in classifications
+        self.old_new_classification = None
 
         # use for Cassandra connection - can override for Ourboros projects
         self.classification_table = "classifications"
@@ -343,18 +363,18 @@ class AggregationAPI:
         # load the default classification algorithm
         self.__set_classification_alg__(classification.VoteCount)
 
-        # todo - do in this in Cassandra
-        # for reading in from classifications only done since the last run
-        # if any trouble - start over from the beginning
-        try:
-            self.old_time = pickle.load(open("/tmp/"+str(self.project_id)+".time","rb"))
-        except:
-            self.old_time = datetime.datetime(2000,01,01)
-
-        self.current_time = datetime.datetime.now()
+        # # todo - do in this in Cassandra
+        # # for reading in from classifications only done since the last run
+        # # if any trouble - start over from the beginning
+        # try:
+        #     self.old_time = pickle.load(open("/tmp/"+str(self.project_id)+".time","rb"))
+        # except:
+        #     self.old_time = datetime.datetime(2000,01,01)
+        #
+        # self.current_time = datetime.datetime.now()
 
         self.ignore_versions = False
-        self.only_retired_subjects = False
+        self.only_retired_subjects = True
         # a bit of a sanity check in case I forget to change back up before uploading
         # production and staging should ALWAYS pay attention to the version and only
         # aggregate retired subjects
@@ -362,7 +382,8 @@ class AggregationAPI:
             self.ignore_versions = False
             self.only_retired_subjects = True
 
-        self.starting_date = datetime.datetime(2000,1,1)
+
+
 
         # bit of a stop gap measure - stores how many people have classified a given subject
         self.classifications_per_subject = {}
@@ -443,6 +464,9 @@ class AggregationAPI:
         """
         use inner function so param can be set
         get the annotations from Cassandra
+
+        note that we may need to read in previously read classifications if there are new classifications for that
+        same subject
         :return:
         """
         def annotation_generator(workflow_id,subject_set):
@@ -488,10 +512,10 @@ class AggregationAPI:
 
 
                     for ii,record in enumerate(record_list):
-                        if record.created_at < self.starting_date:#datetime.datetime(2015,8,27):
-                            print "too early"
-                            print record.created_at
-                            continue
+                        # if record.created_at < self.starting_date:#datetime.datetime(2015,8,27):
+                        #     print "too early"
+                        #     print record.created_at
+                        #     continue
 
                         # check to see if the metadata contains image size
                         metadata = record.metadata
@@ -642,6 +666,13 @@ class AggregationAPI:
             rollbar.init(rollbar_token,self.environment)
             rollbar.report_exc_info()
 
+        # only update time stamp if there were no problems
+        if exc_type is None:
+            statements_and_params = []
+            insert_statement = self.cassandra_session.prepare("insert into most_recent (project_id,classification) values (?,?)")
+            statements_and_params.append((insert_statement, (self.project_id,self.new_runtime)))
+            execute_concurrent(self.cassandra_session, statements_and_params)
+
         # shutdown the connection to Cassandra and remove the lock so other aggregation instances
         # can run, regardless of whether an error occurred
         if self.cassandra_session is not None:
@@ -758,16 +789,17 @@ class AggregationAPI:
         :return:
         """
         subjects = []
-        if self.only_retired_subjects:
-            if self.only_recent_subjects:
-                timestamp = self.updated_at_timestamps[workflow_id]
-            else:
-                timestamp = datetime.datetime(2000,01,01)
+        print "old new"
+        print self.old_new_classification
+        # if we haven't read in any new classifications
+        if self.old_new_classification is None:
+            return []
 
+        if self.only_retired_subjects:
             stmt = """SELECT * FROM "subjects"
             INNER JOIN "set_member_subjects" ON "set_member_subjects"."subject_id" = "subjects"."id"
             INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."set_member_subject_id" = "set_member_subjects"."id"
-            WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" > '""" + str(timestamp) + """'"""
+            WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" >= '""" + str(self.old_new_classification) + """'"""
             # WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" IS NOT NULL"""
 
             cursor = self.postgres_session.cursor()
@@ -834,7 +866,7 @@ class AggregationAPI:
                 for task_id,task in individual_workflow["tasks"].items():
                     instructions[workflow_id][task_id] = {}
                     # classification task
-                    if "question" in task:
+                    if task["type"] in ["single","multiple"]:
                         question = task["question"]
                         instructions[workflow_id][task_id]["instruction"] = re.sub("'","",question)
                         instructions[workflow_id][task_id]["answers"] = {}
@@ -843,11 +875,13 @@ class AggregationAPI:
                             label = re.sub("'","",label)
                             instructions[workflow_id][task_id]["answers"][answer_id] = label
 
-                    else:
+                    elif task["type"] == "drawing":
                         instruct_string = task["instruction"]
                         instructions[workflow_id][task_id]["instruction"] = re.sub("'","",instruct_string)
 
                         instructions[workflow_id][task_id]["tools"] = {}
+
+                        # assert False
                         for tool_index,tool in enumerate(task["tools"]):
                             instructions[workflow_id][task_id]["tools"][tool_index] = {}
                             label = tool["label"]
@@ -862,6 +896,8 @@ class AggregationAPI:
                                     instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"] = {}
                                     for answer_index,answers in enumerate(subtask["answers"]):
                                         instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"][answer_index] = answers
+                    else:
+                        assert False
 
                 # read in when the workflow last went through a major change
                 # real problems with subjects that were retired before that date or classifications
@@ -1038,8 +1074,8 @@ class AggregationAPI:
         subject_listing = set()
 
         # only migrate classifications created since we last ran this code
-        # todo - see end of function for trying to use most_recent
-        select = "SELECT * from classifications where project_id="+str(self.project_id)# + " and created_at >= '" + str(most_recent_classification) +"'"
+        # use >= just in case some classifications have the exact same time stamp - rare but could happen
+        select = "SELECT * from classifications where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
         cur = self.postgres_session.cursor()
         cur.execute(select)
 
@@ -1055,8 +1091,9 @@ class AggregationAPI:
         most_recent_classification = datetime.datetime(2000,1,1)
 
         for ii,t in enumerate(cur.fetchall()):
-
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
+
+            self.new_runtime = max(self.new_runtime,created_at)
 
             most_recent_classification = max(most_recent_classification,updated_at)
 
@@ -1069,6 +1106,9 @@ class AggregationAPI:
 
             if not isinstance(user_group_id,int):
                 user_group_id = -1
+
+            if (self.old_new_classification is None) or (created_at < self.old_new_classification) :
+                self.old_new_classification = created_at
 
             if not isinstance(user_id,int):
                 user_id = -1
@@ -1089,7 +1129,7 @@ class AggregationAPI:
                 annotations = json.dumps(annotations)
 
             assert isinstance(annotations,str)
-            print ii, project_id,workflow_id
+            # print ii, project_id,workflow_id
 
             params = (project_id, user_id, workflow_id,created_at, annotations, updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], workflow_version,json.dumps(metadata))
             statements_and_params.append((insert_statement, params))
@@ -1126,6 +1166,10 @@ class AggregationAPI:
         # code based on from http://stackoverflow.com/questions/16532566/how-to-insert-a-datetime-into-a-cassandra-1-2-timestamp-column
         # todo - get this to work. I've tired every combination I can think of
         # self.cassandra_session.execute("UPDATE most_recent SET classification=:ts WHERE project_id=:id;", dict(ts=most_recent_classification.isoformat(), id=self.project_id))
+
+        print self.new_runtime
+
+
 
     def __panoptes_call__(self,url):
         """
@@ -1472,12 +1516,15 @@ class AggregationAPI:
 
         # convert to json is necessary - not sure why this is necessary but it does happen
         # see https://github.com/zooniverse/aggregation/issues/7
-        if isinstance(tasks,str):
+        if isinstance(tasks,str) or isinstance(tasks,unicode):
             tasks = json.loads(tasks)
 
         for task_id in tasks:
             # self.task_type[task_id] = tasks[task_id]["type"]
             # if the task is a drawing one, get the necessary details for clustering
+            print tasks[task_id]["type"]
+            # print tasks[task_id]
+
             if tasks[task_id]["type"] == "drawing":
                 marking_tasks[task_id] = []
                 # manage marking tools by the marking type and not the index
@@ -1497,16 +1544,16 @@ class AggregationAPI:
 
                     # are there any classification questions associated with this marking?
                     if ("details" in tool) and (tool["details"] is not None) and (tool["details"] != []):
+                        print tool["details"]
+                        # is this the first follow up question associated with this task?
                         if task_id not in classification_tasks:
                             classification_tasks[task_id] = {}
-                        # if "subtask" not in classification_tasks[task_id]:
-                        #     classification_tasks[task_id]["subtask"] = {}
-                        if tool_id not in classification_tasks[task_id]:
-                            classification_tasks[task_id][tool_id] = range(len(tool["details"]))
-                        # if tool_id not in self.classification_tasks[task_id]:
-                        #     self.classification_tasks[task_id][tool_id] = {}
-                        # classification_tasks[task_id][tool_id]= [i for i in range(len(tool["details"]))]
-                        # todo - fix this
+                        classification_tasks[task_id][tool_id] = []
+
+                        # note whether each of these questions are single or multiple response
+                        for followup_question in tool["details"]:
+                            question_type = followup_question["type"]
+                            classification_tasks[task_id][tool_id].append(question_type)
 
                     if tool["type"] == "line":
                         marking_tasks[task_id].append("line")
@@ -1524,76 +1571,18 @@ class AggregationAPI:
                         print tool
                         assert False
 
-                    # # polygons are done differently, so shouldn't be handled at all by
-                    # # the classification algorithms
-                    # # todo - how should rectangles be handled?
-                    # if tool["type"] not in ["polygon","rectangle","text"]:
-                    #     if task_id not in classification_tasks:
-                    #         classification_tasks[task_id] = {}
-                    #     if "shapes" not in classification_tasks[task_id]:
-                    #         classification_tasks[task_id]["shapes"] = []
-                    #
-                    #     classification_tasks[task_id]["shapes"].append(shape)
-
+            elif tasks[task_id]["type"] in ["single","multiple"]:
+                # multiple means that more than one response is allowed
+                classification_tasks[task_id] = tasks[task_id]["type"]
             else:
-                # self.marking_params_per_task[task_id] = []
-                classification_tasks[task_id] = True
-
-        # find out if any of the shapes for a given task are "confusing"
-        # that is more, there is more than 1 tool which can create that shape
-        # for task_id in marking_tasks:
-        #     for shape in ["line","ellipse","point","circle"]:
-        #         if sum([1 for s in marking_tasks[task_id] if s == shape]) > 1:
-        #             # this shape is confusing
-        #             if task_id not in classification_tasks:
-        #                 classification_tasks[task_id] = {}
-        #             if "confusing shapes" not in classification_tasks[task_id]:
-        #                 classification_tasks[task_id]["confusing shapes"] = []
-        #
-        #             classification_tasks[task_id]["confusing shapes"].append(shape)
-
+                # unknown task type
+                assert False
 
         return classification_tasks,marking_tasks
-
-    def __roi_check__(self,marking,subject_id):
-        """
-        some projects may have a region of interest in which all markings are supposed to lie
-        since things never go as planned, some marking may be outside of the roi
-        in which case these markings should be rejected
-        """
-        return True
-
-
-    def __results_to_file__(self,workflow_ids=None,subject_id=None):
-        if workflow_ids is None:
-            workflow_ids = self.workflows.keys()
-        elif isinstance(workflow_ids,int):
-            workflow_ids = [workflow_ids]
-
-        assert isinstance(workflow_ids,list)
-
-        for id_ in workflow_ids:
-            print "storing workflow id :: " + str(id_)
-            stmt = "select * from aggregations where workflow_id = " + str(id_)
-            if subject_id is not None:
-                stmt += " and subject_id = " + str(subject_id)
-            self.postgres_cursor.execute(stmt)
-            all_results = []
-            for r in self.postgres_cursor.fetchall():
-                assert isinstance(r[3],dict)
-
-                ordered_aggregations = OrderedDict(sorted(r[3].items(),key = lambda x:x[0]))
-                results = {r[2]:ordered_aggregations}
-                all_results.append(results)
-            with open('/home/greg/workflow'+str(id_)+'.json', 'w') as outfile:
-                # for reasoning see
-                # http://stackoverflow.com/questions/18871217/python-how-to-custom-sort-a-list-of-dict-to-use-in-json-dumps
-                json.dump(all_results, outfile,sort_keys=True,indent=4, separators=(',', ': '))
 
     def __set_classification_alg__(self,alg,params={}):
         self.classification_alg = alg(params)
         assert isinstance(self.classification_alg,classification.Classification)
-
 
     def __sort_annotations__(self,workflow_id,subject_set=None,expert=None):
         """
@@ -1607,6 +1596,7 @@ class AggregationAPI:
         if self.csv_classification_file is None:
             annotation_generator = self.__cassandra_annotations__()
         else:
+            # todo - add support for csv annotatons
             annotation_generator = self.__csv_annotations__
 
         # keep track of the non-logged in users for each subject
@@ -1715,11 +1705,13 @@ class AggregationAPI:
                             # the [:5] is to make sure that the relevant params don't become any arbitrarly long list of values (which could happen with polygons)
                             raw_classifications[task_id][shape][subject_id][(relevant_params[:5],user_id)] = tool
 
-                        # are there follow up questions?
+                        # are there follow up questions? - check that both this task has any follow ups
+                        # and that this particular tool has a follow up
                         if (task_id in classification_tasks) and (tool in classification_tasks[task_id]):
 
                             # there could be multiple follow up questions
-                            for local_subtask_id in classification_tasks[task_id][tool]:
+                            # need to use range(len()) since the individual values are either "single" or "multiple"
+                            for local_subtask_id in range(len(classification_tasks[task_id][tool])):
                                 global_subtask_id = str(task_id)+"_"+str(tool)+"_"+str(local_subtask_id)
                                 if global_subtask_id not in raw_classifications:
                                     raw_classifications[global_subtask_id] = {}
@@ -1882,30 +1874,31 @@ class AggregationAPI:
                 print type(aggregation)
             assert isinstance(aggregation,dict)
 
+            yield r[0],aggregation
 
-            for task_id in aggregation:
-                if task_id in [" instructions"," metadata","param"]:
-                    continue
-
-                # we have an instance of marking
-                # if isinstance(aggregation[task_id],dict):
-                yield r[0],task_id,aggregation[task_id]
+            # for task_id in aggregation:
+            #     if task_id in [" instructions"," metadata","param"]:
+            #         continue
+            #
+            #     # we have an instance of marking
+            #     # if isinstance(aggregation[task_id],dict):
+            #     yield r[0],task_id,aggregation[task_id]
 
 if __name__ == "__main__":
     # todo - use getopt
     project_identifier = sys.argv[1]
 
     if len(sys.argv) > 2:
-        environment = sys.argv[1]
+        environment = sys.argv[2]
     else:
         environment = "development"
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
-        project.__migrate__()
+        # project.__migrate__()
         # project.__aggregate__()
-        # project.s__aggregate__(subject_set = subject_set)#workflows=[84],subject_set=[494900])#,subject_set=[495225])#subject_set=[460208, 460210, 460212, 460214, 460216])
-        # c = csv_output.CsvOut(project)
-        # c.__write_out__()
+
+        c = csv_output.CsvOut(project)
+        c.__write_out__()
 
 
 

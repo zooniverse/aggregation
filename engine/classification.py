@@ -49,7 +49,8 @@ class Classification:
         for tool in classification_tasks[task_id]:
 
             # now go through the individual followup questions
-            for followup_question_index in classification_tasks[task_id][tool]:
+            # range(len()) - since individual values will be either "single" or "multiple"
+            for followup_question_index in range(len(classification_tasks[task_id][tool])):
                 global_index = str(task_id)+"_" +str(tool)+"_"+str(followup_question_index)
 
 
@@ -91,6 +92,7 @@ class Classification:
                                 # did the user use the relevant tool - doesn't matter if most people
                                 # used another tool
                                 if tool_used == tool:
+
                                     followup_answer = raw_classifications[global_index][subject_id][user_identifiers]
                                     u = user_identifiers[1]
                                     ballots.append((u,followup_answer))
@@ -346,7 +348,7 @@ class Classification:
 
             # task_results = {}
             # just a normal classification question
-            if isinstance(classification_tasks[task_id],bool):
+            if classification_tasks[task_id] in ["single","multiple"]:
                 # did anyone actually do this classification?
                 if task_id in raw_classifications:
 

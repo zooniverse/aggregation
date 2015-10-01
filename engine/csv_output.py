@@ -3,7 +3,7 @@ import re
 import os
 import numpy
 import tarfile
-import shutil
+import math
 
 class CsvOut:
     def __init__(self,project):
@@ -25,8 +25,6 @@ class CsvOut:
         # stores the file names
         self.file_names = {}
         self.workflow_directories = {}
-
-        self.rollbar_token = project.rollbar_token
 
     def __enter__(self):
         return self
@@ -54,39 +52,70 @@ class CsvOut:
         row += "," + str(aggregations[1])
         self.csv_files[task_id].write(row+"\n")
 
-    def __classification_header_setup__(self,workflow_id,task,output_directory):
-        """
-        create the csv headers for classification tasks
-        :param workflow_id:
-        :param task:
-        :param output_directory:
-        :return:
-        """
-        fname = str(task) + self.instructions[workflow_id][task]["instruction"][:50]
-        fname = self.__csv_string__(fname)
-        fname += ".csv"
-        self.csv_files[task] = open(output_directory+fname,"wb")
-        header = "subject_id"
-        for answer_index in sorted(self.instructions[workflow_id][task]["answers"].keys()):
-            answer = self.instructions[workflow_id][task]["answers"][answer_index]
-            answer = self.__csv_string__(answer)
-            header += ",p("+answer+")"
-        header += ",num_users"
-
-        self.csv_files[task].write(header+"\n")
-
-    def __classification_fname__(self,workflow_id,task):
-        """
-        create a file name for this given workflow,task
-        :param workflow_id:
-        :param task:
-        :return:
-        """
-        fname = str(task) + self.instructions[workflow_id][task]["instruction"][:50]
+    def __single_response_csv_header__(self,output_directory,id_,instructions):
+        fname = str(id_) + instructions[:50]
         fname = self.__csv_string__(fname)
         fname += ".csv"
 
-        return fname
+        self.file_names[id_] = fname
+        self.csv_files[id_] = open(output_directory+fname,"wb")
+
+        # now write the header
+        self.csv_files[id_].write("subject_id,most_likely_label,p(most_likely_label),shannon_entropy,num_users\n")
+
+    def __multi_response_csv_header__(self,output_directory,id_,instructions):
+        fname = str(id_) + instructions[:50]
+        fname = self.__csv_string__(fname)
+        fname += ".csv"
+
+        self.file_names[(id_,"detailed")] = fname
+        self.csv_files[(id_,"detailed")] = open(output_directory+fname,"wb")
+
+        # and now the summary now
+        fname = str(id_) + instructions[:50] + "_summary"
+        fname = self.__csv_string__(fname)
+        fname += ".csv"
+
+        self.file_names[(id_,"summary")] = fname
+        self.csv_files[id_] = open(output_directory+fname,"wb")
+
+        # now write the headers
+        self.csv_files[(id_,"detailed")].write("subject_id,label,p(label),num_users\n")
+        self.csv_files[(id_,"summary")].write("subject_id,mean_agreement,median_agreement,num_users\n")
+
+    # def __classification_header_setup__(self,workflow_id,task,output_directory):
+    #     """
+    #     create the csv headers for classification tasks
+    #     :param workflow_id:
+    #     :param task:
+    #     :param output_directory:
+    #     :return:
+    #     """
+    #     fname = str(task) + self.instructions[workflow_id][task]["instruction"][:50]
+    #     fname = self.__csv_string__(fname)
+    #     fname += ".csv"
+    #     self.csv_files[task] = open(output_directory+fname,"wb")
+    #     header = "subject_id"
+    #     for answer_index in sorted(self.instructions[workflow_id][task]["answers"].keys()):
+    #         answer = self.instructions[workflow_id][task]["answers"][answer_index]
+    #         answer = self.__csv_string__(answer)
+    #         header += ",p("+answer+")"
+    #     header += ",num_users"
+    #
+    #     self.csv_files[task].write(header+"\n")
+
+    # def __classification_fname__(self,workflow_id,task):
+    #     """
+    #     create a file name for this given workflow,task
+    #     :param workflow_id:
+    #     :param task:
+    #     :return:
+    #     """
+    #     fname = str(task) + self.instructions[workflow_id][task]["instruction"][:50]
+    #     fname = self.__csv_string__(fname)
+    #     fname += ".csv"
+    #
+    #     return fname
 
     def __make_files__(self,workflow_id):
         """
@@ -94,6 +123,11 @@ class CsvOut:
         :param workflow_id:
         :return:
         """
+        # close any previously used files (and delete their pointers)
+        for f in self.csv_files.values():
+            f.close()
+        self.csv_files = {}
+
         # start by creating a directory specific to this project - if one does not already exist
         output_directory = "/tmp/"+str(self.project_id)+"/"
         if not os.path.exists(output_directory):
@@ -110,132 +144,149 @@ class CsvOut:
 
         classification_tasks,marking_tasks = self.workflows[workflow_id]
 
-        for task_id in self.instructions[workflow_id].keys():
+        # go through the classification tasks - they will either be simple c. tasks (one answer allowed)
+        # multiple c. tasks (more than one answer allowed) and possibly a follow up question to a marking
+        for task_id in classification_tasks:
             # is this task a simple classification task?
-                if (task_id in classification_tasks) and isinstance(classification_tasks[task_id],bool):
-                    fname = str(task_id) + self.instructions[workflow_id][task_id]["instruction"][:50]
-                    fname = self.__csv_string__(fname)
-                    fname += ".csv"
+            if classification_tasks[task_id] == "single":
+                instructions = self.instructions[workflow_id][task_id]["instruction"]
+                self.__single_response_csv_header__(output_directory,task_id,instructions)
 
-                    self.file_names[(workflow_id,task_id,"classification")] = fname
-                    self.csv_files[(workflow_id,task_id,"classification")] = open(output_directory+fname,"wb")
-                elif task_id in classification_tasks:
-                    # todo - complete for follow up questions
-                    pass
-
-                # we have a marking task (possible in addition to a follow up classification question)
-                if task_id in marking_tasks:
-                    # we have marking question
-                    # add to the read me instance for each shape
-                    for shape in set(marking_tasks[task_id]):
-                        fname = str(task_id) + self.instructions[workflow_id][task_id]["instruction"][:50]
-                        fname = self.__csv_string__(fname)
-                        # fname += ".csv"
-
-                        self.file_names[(workflow_id,task_id,(shape,"details"))] = fname + "_" + shape + ".csv"
-                        self.file_names[(workflow_id,task_id,(shape,"summary"))] = fname + "_" + shape + "_summary.csv"
-
-                        self.csv_files[(workflow_id,task_id,(shape,"details"))] = open(output_directory+fname + "_" + shape + ".csv","wb")
-                        self.csv_files[(workflow_id,task_id,(shape,"summary"))] = open(output_directory+fname + "_" + shape + "_summary.csv","wb")
-
-
-
-
-
-
-
-    def __marking_fname__(self,workflow_id,task,shape):
-        """
-        create a file name for the given workflow, task and shape
-        :param workflow_id:
-        :param task:
-        :param shape:
-        :return:
-        """
-        fname = str(task) + self.instructions[workflow_id][task]["instruction"][:50]
-        fname = self.__csv_string__(fname)
-        fname += ".csv"
-
-    def __followup_header_setup__(self,workflow_id,task,tool,followup_index,output_directory):
-        followup_question = self.instructions[workflow_id][task]["tools"][tool]["followup_questions"][followup_index]
-
-        fname = str(task) + "_" + str(tool) + "_"+str(followup_index)+followup_question["question"][:25]
-        fname = self.__csv_string__(fname)
-        fname += ".csv"
-        self.csv_files[(task,tool,followup_index)] = open(output_directory+fname,"wb")
-
-        header = "subject_id,cluster_index"
-        for answer_index in sorted(followup_question["answers"].keys()):
-            answer = followup_question["answers"][answer_index]["label"]
-            answer = self.__csv_string__(answer)
-            header += ",p("+answer+")"
-
-        header += ",num_users"
-        self.csv_files[(task,tool,followup_index)].write(header+"\n")
-
-    def __setup_files__(self,workflow_id):
-        """
-        open csv files for each output and write headers for each file
-        """
-        # and reset
-        output_directory = self.workflow_directories[workflow_id]
-
-        # create headers to each csv file
-        classification_tasks,marking_tasks = self.workflows[workflow_id]
-        for task in marking_tasks:
-            self.__marking_header_setup__(workflow_id,task,set(marking_tasks[task]),output_directory)
-
-        for task in classification_tasks:
-            if isinstance(classification_tasks[task],bool):
-                print "creating header for classification task " + str(task)
-                self.__classification_header_setup__(workflow_id,task,output_directory)
+            elif classification_tasks[task_id] == "multiple":
+                # create both a detailed view and a summary view
+                instructions = self.instructions[workflow_id][task_id]["instruction"]
+                self.__multi_response_csv_header__(output_directory,task_id,instructions)
             else:
-                print "creating headers for followup task " + str(task)
+                # print self.instructions
+                for tool_id in classification_tasks[task_id]:
+                    for followup_index,answer_type in enumerate(classification_tasks[task_id][tool_id]):
+                        instructions = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_index]["question"]
+                        id_ = (task_id,tool_id,followup_index)
+                        if answer_type == "single":
+                            self.__single_response_csv_header__(output_directory,id_,instructions)
+                        else:
+                            self.__multi_response_csv_header__(output_directory,id_,instructions)
 
-                for tool in classification_tasks[task]:
-                    for followup_index in classification_tasks[task][tool]:
-                        self.__followup_header_setup__(workflow_id,task,tool,followup_index,output_directory)
+        for task_id in marking_tasks:
+            # we have a marking task (possible in addition to a follow up classification question)
+            for shape in set(marking_tasks[task_id]):
+                fname = str(task_id) + self.instructions[workflow_id][task_id]["instruction"][:50]
+                fname = self.__csv_string__(fname)
+                # fname += ".csv"
 
-    def __followup_output__(self,workflow_id,task_id,subject_id,aggregations):
-        classification_tasks,marking_tasks = self.workflows[workflow_id]
+                self.file_names[(task_id,shape,"detailed")] = fname + "_" + shape + ".csv"
+                self.file_names[(task_id,shape,"summary")] = fname + "_" + shape + "_summary.csv"
 
-        for tool in classification_tasks[task_id]:
-            # what shape does this tool make?
-            shape = marking_tasks[task_id][tool]
+                self.csv_files[(task_id,shape,"detailed")] = open(output_directory+fname + "_" + shape + ".csv","wb")
+                self.csv_files[(task_id,shape,"summary")] = open(output_directory+fname + "_" + shape + "_summary.csv","wb")
 
-            # now go through each of the clusters - and find the relevant ones
-            for cluster_index in sorted(aggregations[shape + " clusters"].keys()):
-                if cluster_index == "all_users":
-                    continue
-                cluster = aggregations[shape + " clusters"][cluster_index]
-                # what tool was this cluster most likely made with? (or should have been made with)
-                most_likely_tool,_ = max(cluster["tool_classification"][0].items(),key = lambda x:x[1])
 
-                # if the tool is the one associated with the follow up questions we are currently interested in
-                if int(most_likely_tool) == int(tool):
-                    # go through each follow up question
-                    for question_index in classification_tasks[task_id][tool]:
-                        # rely on the original instructions since some of th values might not appear in the results
-                        answer_range = sorted(self.instructions[workflow_id][task_id]["tools"][tool]["followup_questions"][question_index]["answers"].keys())
 
-                        row = str(subject_id)+","+str(cluster_index)
 
-                        # now go through each of the possible resposnes
-                        for answer_index in answer_range:
-                            # at some point the integer indices seem to have been converted into strings
-                            # if a value isn't there - use 0
 
-                            if str(answer_index) in cluster["followup_question"][str(question_index)][0]:
-                                row += "," + str(cluster["followup_question"][str(question_index)][0][str(answer_index)])
-                            else:
-                                row += ",0"
 
-                        # add the number of people who saw this subject
-                        row += "," + str(cluster["followup_question"][str(question_index)][1])
+    #
+    # def __marking_fname__(self,workflow_id,task,shape):
+    #     """
+    #     create a file name for the given workflow, task and shape
+    #     :param workflow_id:
+    #     :param task:
+    #     :param shape:
+    #     :return:
+    #     """
+    #     fname = str(task) + self.instructions[workflow_id][task]["instruction"][:50]
+    #     fname = self.__csv_string__(fname)
+    #     fname += ".csv"
 
-                        self.csv_files[(task_id,tool,question_index)].write(row+"\n")
+    # def __followup_header_setup__(self,workflow_id,task,tool,followup_index,output_directory):
+    #     followup_question = self.instructions[workflow_id][task]["tools"][tool]["followup_questions"][followup_index]
+    #
+    #     fname = str(task) + "_" + str(tool) + "_"+str(followup_index)+followup_question["question"][:25]
+    #     fname = self.__csv_string__(fname)
+    #     fname += ".csv"
+    #     self.csv_files[(task,tool,followup_index)] = open(output_directory+fname,"wb")
+    #
+    #     header = "subject_id,cluster_index"
+    #     for answer_index in sorted(followup_question["answers"].keys()):
+    #         answer = followup_question["answers"][answer_index]["label"]
+    #         answer = self.__csv_string__(answer)
+    #         header += ",p("+answer+")"
+    #
+    #     header += ",num_users"
+    #     self.csv_files[(task,tool,followup_index)].write(header+"\n")
 
-                # print aggregations[subject_id]
+    # def __setup_files__(self,workflow_id):
+    #     """
+    #     open csv files for each output and write headers for each file
+    #     """
+    #     # and reset
+    #     output_directory = self.workflow_directories[workflow_id]
+    #
+    #     # create headers to each csv file
+    #     classification_tasks,marking_tasks = self.workflows[workflow_id]
+    #     for task in marking_tasks:
+    #         self.__marking_header_setup__(workflow_id,task,set(marking_tasks[task]),output_directory)
+    #
+    #     for task_id in classification_tasks:
+    #         if classification_tasks[task_id] == "single":
+    #             # we have a single answer
+    #             self.csv_files[task_id].write("subject_id,most_likely_label,p(most_likely_label),shannon_entropy,num_users\n")
+    #         elif classification_tasks[task_id] == "multiple":
+    #             self.csv_files[(task_id,"detailed")].write("subject_id,label,p(label),num_users\n")
+    #             self.csv_files[(task_id,"summary")].write("subject_id,mean_agreement,median_agreement,num_users\n")
+    #         else:
+    #             assert False
+
+            # if isinstance(classification_tasks[task],bool):
+            #     print "creating header for classification task " + str(task)
+            #     self.__classification_header_setup__(workflow_id,task,output_directory)
+            # else:
+            #     print "creating headers for followup task " + str(task)
+            #
+            #     for tool in classification_tasks[task]:
+            #         for followup_index in classification_tasks[task][tool]:
+            #             self.__followup_header_setup__(workflow_id,task,tool,followup_index,output_directory)
+
+    # def __followup_output__(self,workflow_id,task_id,subject_id,aggregations):
+    #     classification_tasks,marking_tasks = self.workflows[workflow_id]
+    #
+    #     for tool in classification_tasks[task_id]:
+    #         # what shape does this tool make?
+    #         shape = marking_tasks[task_id][tool]
+    #
+    #         # now go through each of the clusters - and find the relevant ones
+    #         for cluster_index in sorted(aggregations[shape + " clusters"].keys()):
+    #             if cluster_index == "all_users":
+    #                 continue
+    #             cluster = aggregations[shape + " clusters"][cluster_index]
+    #             # what tool was this cluster most likely made with? (or should have been made with)
+    #             most_likely_tool,_ = max(cluster["tool_classification"][0].items(),key = lambda x:x[1])
+    #
+    #             # if the tool is the one associated with the follow up questions we are currently interested in
+    #             if int(most_likely_tool) == int(tool):
+    #                 # go through each follow up question
+    #                 for question_index in classification_tasks[task_id][tool]:
+    #                     # rely on the original instructions since some of th values might not appear in the results
+    #                     answer_range = sorted(self.instructions[workflow_id][task_id]["tools"][tool]["followup_questions"][question_index]["answers"].keys())
+    #
+    #                     row = str(subject_id)+","+str(cluster_index)
+    #
+    #                     # now go through each of the possible resposnes
+    #                     for answer_index in answer_range:
+    #                         # at some point the integer indices seem to have been converted into strings
+    #                         # if a value isn't there - use 0
+    #
+    #                         if str(answer_index) in cluster["followup_question"][str(question_index)][0]:
+    #                             row += "," + str(cluster["followup_question"][str(question_index)][0][str(answer_index)])
+    #                         else:
+    #                             row += ",0"
+    #
+    #                     # add the number of people who saw this subject
+    #                     row += "," + str(cluster["followup_question"][str(question_index)][1])
+    #
+    #                     self.csv_files[(task_id,tool,question_index)].write(row+"\n")
+    #
+    #             # print aggregations[subject_id]
 
 
     def __readme_text__(self,workflow_id):
@@ -338,14 +389,96 @@ class CsvOut:
 
             readme_file.write("\n\n\n")
 
+    def __shannon_entropy__(self,probabilities):
+        return -sum([p*math.log(p) for p in probabilities])
 
+    def __single_choice_classification_row__(self,answers,task_id,subject_id,results,cluster_index=None):
+        """
+        output a row for a classification task which only allowed allowed one answer
+        global_task_id => the task might actually be a subtask, in which case the id needs to contain
+        the task id, tool and follow up question id
+        :param global_task_id:
+        :param subject_id:
+        :param results:
+        :return:
+        """
+        # since only one choice is allowed, go for the maximum
+        votes,num_users = results
+        if votes == {}:
+            return
+        most_likely,top_probability = max(votes.items(), key = lambda x:x[1])
 
+        # extract the text corresponding to the most likely answer
+        most_likely_label = answers[int(most_likely)]
+        # this corresponds to when the question is a follow up
+        if isinstance(most_likely_label,dict):
+            most_likely_label = most_likely_label["label"]
+        most_likely_label = self.__csv_string__(most_likely_label)
 
+        probabilities = votes.values()
+        entropy = self.__shannon_entropy__(probabilities)
 
+        row = str(subject_id)+","
+        if cluster_index is not None:
+            row += str(cluster_index) + ","
+        row += most_likely_label+","+str(top_probability)+","+str(entropy)+","+str(num_users)+"\n"
 
+        # finally write the stuff out to file
+        self.csv_files[task_id].write(row)
 
+    def __subject_output__(self,workflow_id,subject_id,aggregations):
+        """
+        add csv rows for all the output related to this particular workflow/subject_id
+        :param workflow_id:
+        :param subject_id:
+        :param aggregations:
+        :return:
+        """
+        classification_tasks,marking_tasks = self.workflows[workflow_id]
 
+        # a subject might not have results for all tasks
+        for task_id,task_type in classification_tasks.items():
+            if task_id not in aggregations:
+                continue
 
+            # we have follow up questions
+            if isinstance(task_type,dict):
+                for tool_id in task_type:
+                    for followup_index,answer_type in enumerate(task_type[tool_id]):
+                        # what sort of shape are we looking for - help us find relevant clusters
+                        shape = self.workflows[workflow_id][1][task_id][tool_id]
+                        for cluster_index,cluster in aggregations[task_id][shape + " clusters"].items():
+                            if cluster_index == "all_users":
+                                continue
+
+                            classification = cluster["tool_classification"][0]
+                            most_likely_tool,_ = max(classification.items(),key = lambda x:x[1])
+
+                            # only consider clusters which most likely correspond to the correct tool
+                            if int(most_likely_tool) != int(tool_id):
+                                print most_likely_tool,tool_id
+                                continue
+
+                            possible_answers = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_index]["answers"]
+                            results = aggregations[task_id][shape + " clusters"][cluster_index]["followup_question"][str(followup_index)]
+                            id_ = task_id,tool_id,followup_index
+                            if answer_type == "single":
+                                self.__single_choice_classification_row__(possible_answers,id_,subject_id,results,cluster_index)
+                            else:
+                                assert False
+            elif task_type == "single":
+                answers = self.instructions[workflow_id][task_id]["answers"]
+                self.__single_choice_classification_row__(answers,task_id,subject_id,aggregations[task_id])
+            else:
+                assert task_type == "multiple"
+                assert False
+
+        for task_id,possible_shapes in marking_tasks.items():
+            for shape in set(possible_shapes):
+                # not every task have been done for every aggregation
+                if task_id in aggregations:
+                    self.__marking_output__(workflow_id,task_id,subject_id,aggregations[task_id],shape)
+                    self.__shape_summary_output__(workflow_id,task_id,subject_id,aggregations,shape)
 
 
     def __write_out__(self,subject_set = None,compress=True):
@@ -362,65 +495,76 @@ class CsvOut:
 
         for workflow_id in self.workflows:
             print workflow_id
-            # create the output files for this workflow
+            # # create the output files for this workflow
             self.__make_files__(workflow_id)
-            # setup for headers for each task in this workflow
-            self.__setup_files__(workflow_id)
-            # add the readme text for this workflow
-            self.__readme_text__(workflow_id)
 
-            classification_tasks,marking_tasks = self.workflows[workflow_id]
 
-            for subject_id,task_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
-                # check to see if the correct number of classifications were received
-                # todo - this is only a stop gap measure until we figure out why some subjects are being
-                # todo - retired early. Once that is done, we can remove this
-                # if self.__count_check__(workflow_id,subject_id) < self.retirement_thresholds[workflow_id]:
-                #     # print "skipping"
-                #     continue
+            # results are going to be ordered by subject id (because that's how the results are stored)
+            # so we can going to be cycling through task_ids. That's why we can't loop through classification_tasks etc.
+            for subject_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
+                self.__subject_output__(workflow_id,subject_id,aggregations)
+            # for task_id,task_type in classification_tasks.items():
+            #     print task_id,task_type
+            #
+            #     # we have follow up questions
+            #     if isinstance(task_type,dict):
+            #         for tool_id in task_type:
+            #             for question_index,answer_type in enumerate(task_type[tool_id]):
+            #                 if answer_type == "single":
+            #
+            #                 print question_index,answer_type
 
-                # are there markings associated with this task?
-                if task_id in marking_tasks:
-                    # are there follow up questions?
-                    if task_id in classification_tasks:
-                        has_followup_questions = True
-                    else:
-                        has_followup_questions = False
 
-                    for shape in set(marking_tasks[task_id]):
-                        if shape == "polygon":
-                            self.__polygon_summary_output__(workflow_id,task_id,subject_id,aggregations)
-                            self.__polygon_heatmap_output__(workflow_id,task_id,subject_id,aggregations)
-                        # the following shapes can basically be dealt with in the same way
-                        elif shape in ["point","line","ellipse","rectangle"]:
-                            self.__marking_output__(workflow_id,task_id,subject_id,aggregations,shape)
-                            # if we are only using the point marking for people to count items (and you don't
-                            # care about the xy coordinates) - the function below will give you what you want
-                            self.__shape_summary_output__(workflow_id,task_id,subject_id,aggregations,shape)
-                        # elif shape == "rectangle":
-                        #     todo - finish this part
-                        #     self.__rectangle_output__(workflow_id,task_id,subject_id,aggregations,has_followup_questions)
-                        else:
-                            print shape
-                            assert False
-
-                # are there any classifications associated with this task
-                if task_id in classification_tasks:
-                    # normal output
-                    if isinstance(classification_tasks[task_id],bool):
-                        self.__classification_output__(workflow_id,task_id,subject_id,aggregations)
-                    else:
-                        self.__followup_output__(workflow_id,task_id,subject_id,aggregations)
-
-            for fname,f in self.csv_files.items():
-                assert isinstance(f,file)
-                if compress:
-                    print "writing out " + str(fname)
-                    f.close()
-                    with open(f.name, "rb") as readfile:
-                        tarInfo = tarball.gettarinfo(fileobj=readfile)
-                        tarball.addfile(tarInfo, fileobj=readfile)
-                f.close()
+            #
+            #     # check to see if the correct number of classifications were received
+            #     # todo - this is only a stop gap measure until we figure out why some subjects are being
+            #     # todo - retired early. Once that is done, we can remove this
+            #     # if self.__count_check__(workflow_id,subject_id) < self.retirement_thresholds[workflow_id]:
+            #     #     # print "skipping"
+            #     #     continue
+            #
+            #     # are there markings associated with this task?
+            #     if task_id in marking_tasks:
+            #         # are there follow up questions?
+            #         if task_id in classification_tasks:
+            #             has_followup_questions = True
+            #         else:
+            #             has_followup_questions = False
+            #
+            #         for shape in set(marking_tasks[task_id]):
+            #             if shape == "polygon":
+            #                 self.__polygon_summary_output__(workflow_id,task_id,subject_id,aggregations)
+            #                 self.__polygon_heatmap_output__(workflow_id,task_id,subject_id,aggregations)
+            #             # the following shapes can basically be dealt with in the same way
+            #             elif shape in ["point","line","ellipse","rectangle"]:
+            #                 self.__marking_output__(workflow_id,task_id,subject_id,aggregations,shape)
+            #                 # if we are only using the point marking for people to count items (and you don't
+            #                 # care about the xy coordinates) - the function below will give you what you want
+            #                 self.__shape_summary_output__(workflow_id,task_id,subject_id,aggregations,shape)
+            #             # elif shape == "rectangle":
+            #             #     todo - finish this part
+            #             #     self.__rectangle_output__(workflow_id,task_id,subject_id,aggregations,has_followup_questions)
+            #             else:
+            #                 print shape
+            #                 assert False
+            #
+            #     # are there any classifications associated with this task
+            #     if task_id in classification_tasks:
+            #         # normal output
+            #         if isinstance(classification_tasks[task_id],bool):
+            #             self.__classification_output__(workflow_id,task_id,subject_id,aggregations)
+            #         else:
+            #             self.__followup_output__(workflow_id,task_id,subject_id,aggregations)
+            #
+            # for fname,f in self.csv_files.items():
+            #     assert isinstance(f,file)
+            #     if compress:
+            #         print "writing out " + str(fname)
+            #         f.close()
+            #         with open(f.name, "rb") as readfile:
+            #             tarInfo = tarball.gettarinfo(fileobj=readfile)
+            #             tarball.addfile(tarInfo, fileobj=readfile)
+            #     f.close()
 
         # add some final details to the read me file
         with open("/tmp/"+str(self.project_id)+"/readme.md", "a") as readme_file:
@@ -461,7 +605,7 @@ class CsvOut:
 
         return string
 
-    def __marking_output__(self,workflow_id,task_id,subject_id,aggregations,shape,has_followup_questions=False):
+    def __marking_output__(self,workflow_id,task_id,subject_id,aggregations,shape):
         """
         output for line segments
         :param workflow_id:
@@ -470,7 +614,7 @@ class CsvOut:
         :param aggregations:
         :return:
         """
-        key = task_id + shape
+        key = task_id,shape,"detailed"
         for cluster_index,cluster in aggregations[shape + " clusters"].items():
             if cluster_index == "all_users":
                 continue
@@ -541,7 +685,7 @@ class CsvOut:
         :param shape:
         :return:
         """
-        key = task_id + given_shape + "_summary"
+        key = task_id,given_shape,"summary"
         all_exist_probability = []
         all_tool_prob = []
 
@@ -557,7 +701,7 @@ class CsvOut:
 
         # now go through the actual clusters and count all which at least half of everyone has marked
         # or p(existence) >= 0.5 which is basically the same thing unless you've used weighted voting, IBCC etc.
-        for cluster_index,cluster in aggregations[given_shape + " clusters"].items():
+        for cluster_index,cluster in aggregations[task_id][given_shape + " clusters"].items():
             if cluster_index == "all_users":
                 continue
 
