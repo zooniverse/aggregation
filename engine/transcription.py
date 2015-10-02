@@ -197,17 +197,18 @@ def Levenshtein(a,b):
 
 
 class TextCluster(clustering.Cluster):
-    def __init__(self,shape,dim_reduction_alg,**kwargs):
-        clustering.Cluster.__init__(self,shape,dim_reduction_alg)
+    def __init__(self,shape,param_dict):
+        clustering.Cluster.__init__(self,shape,param_dict)
         self.line_agreement = []
 
         self.tags = dict()
         tag_counter = 149
 
-        with open(kwargs["tag_file"],"rb") as f:
-            for l in f.readlines():
-                self.tags[l[:-1]] = tag_counter
-                tag_counter += 1
+        if "tag_file" in param_dict:
+            with open(param_dict["tag_file"],"rb") as f:
+                for l in f.readlines():
+                    self.tags[l[:-1]] = tag_counter
+                    tag_counter += 1
         # self.tags["\[deletion\]"] = chr(150)
         # self.tags["\[/deletion\]"] = chr(151)
         # self.tags["\[illegible\]"] = chr(152)
@@ -242,7 +243,7 @@ class TextCluster(clustering.Cluster):
 
         # with open(base_directory+"/Databases/transcribe"+id_+".fasta","wb") as f:
         with open("/tmp/transcribe"+id_+".fasta","wb") as f:
-           for line in lines:
+            for line in lines:
                 if isinstance(line,tuple):
                     # we have a list of text segments which we should join together
                     line = "".join(line)
@@ -260,7 +261,8 @@ class TextCluster(clustering.Cluster):
                     print unicodedata.normalize('NFKD', line).encode('ascii','ignore')
                     raise
 
-        t = "mafft --op 0.5 --text /tmp/transcribe"+id_+".fasta> /tmp/transcribe"+id_+".out 2> /dev/null"
+        # todo - play around with gap penalty --op 0.5
+        t = "mafft  --text /tmp/transcribe"+id_+".fasta> /tmp/transcribe"+id_+".out 2> /dev/null"
         os.system(t)
 
         aligned_text = []
@@ -276,6 +278,7 @@ class TextCluster(clustering.Cluster):
 
             assert cumulative_line != ""
             aligned_text.append(cumulative_line)
+
 
         os.remove("/tmp/transcribe"+id_+".fasta")
         os.remove("/tmp/transcribe"+id_+".out")
@@ -357,20 +360,10 @@ class TextCluster(clustering.Cluster):
 
         # first we need to replace each tag with a one character representation
         for tag,chr_representation in self.tags.items():
-            p = re.compile(tag)
-            matches = p.search(text)
+            text = re.sub(tag,chr(chr_representation),text)
 
-            # if matches is not None:
-            #     print matches.group(0)
-            #     for m in matches.groups():
-            #         print m
-            text = re.sub(tag,chr_representation,text)
-            # lower_text = re.sub(tag,chr_representation,lower_text)
-
-        # re.sub()
-
-        for tag,chr_representation in self.erroneous_tags.items():
-            text = re.sub(tag,chr_representation,text)
+        # for tag,chr_representation in self.erroneous_tags.items():
+        #     text = re.sub(tag,chr_representation,text)
 
         # we can do this afterwards because non-alphabet characters are not affected by .lower
         lower_text = text.lower()
@@ -420,24 +413,50 @@ class TextCluster(clustering.Cluster):
         :param text:
         :return:
         """
-        # use a 'reverse dictionary' to reset
-        for (t,c) in self.tags.items():
-            # start by removing the backslashes in the text
-            # they are useful for regular expressions - but they will
-            # mess things up otherwise
-            # according to https://docs.python.org/2/howto/regex.html
-            # I could just use r"\" but that does not seem to work - too tired
-            # so will go with the ugly solution that I know works
-            t = re.sub("\\\\","",t)
-            text = re.sub(c,t,text)
-
+        reverse_map = {v: k for k, v in self.tags.items()}
         # also go with something different for "not sure"
         # this matter when the function is called on the aggregate text
-        text = re.sub(chr(200),chr(27),text)
+        reverse_map[200] = chr(27)
         # and for gaps inserted by MAFFT
-        text = re.sub(chr(201),chr(28),text)
+        reverse_map[201] = chr(24)
+        # print "--==="
+        # print text
+        ret_text = ""
+        for c in text:
+            if ord(c) > 128:
+                ret_text += reverse_map[ord(c)]
+            else:
+                ret_text += c
+        # print ret_text
+        # matches = []
+        # # use a 'reverse dictionary' to reset
+        # for c in text:
+        #     if (ord(c) > 128) and (ord(c) < 200):
+        #         print ord(c)
+        #         for (t,c2) in self.tags.items():
+        #             if c2 == ord(c):
+        #                 print t
+        #                 matches.append(ord(c))
+        #
+        # for (t,c) in self.tags.items():
+        #     # start by removing the backslashes in the text
+        #     # they are useful for regular expressions - but they will
+        #     # mess things up otherwise
+        #     # according to https://docs.python.org/2/howto/regex.html
+        #     # I could just use r"\" but that does not seem to work - too tired
+        #     # so will go with the ugly solution that I know works
+        #     t = re.sub("\\\\","",t)
+        #     # print t
+        #     if c in matches:
+        #         p = re.compile(chr(c))
+        #         print p.match(text)
+        #
+        #         print [c2 == chr(c) for c2 in text]
+        #     # print p.match(text)
+        #     # print
+        #     text = re.sub(chr(c),t,text)
 
-        return text
+        return ret_text
 
     def __merge_aligned_text__(self,aligned_text):
         """
@@ -519,6 +538,7 @@ class TextCluster(clustering.Cluster):
 
         # cluster just on points, not on text
         dist_l,theta_l,text_l = zip(*reduced_markings)
+
         reduced_markings_without_text = zip(dist_l,theta_l)
         ordering  = self.__preliminarily__clustering__(reduced_markings_without_text,user_ids)
 
@@ -628,7 +648,7 @@ class TextCluster(clustering.Cluster):
         # remove any clusters which have only one user - treat those as noise
         for cluster_index in range(len(clusters)-1,-1,-1):
             # print len(clusters[cluster_index][0])
-            if len(clusters[cluster_index][0]) <= 4: #2
+            if len(clusters[cluster_index][0]) <= 1: #2
                 # assert len(clusters[cluster_index][1]) == 1
                 clusters.pop(cluster_index)
 
@@ -744,14 +764,11 @@ class TextCluster(clustering.Cluster):
             # aggregate the lines - looking for character spots where there is mostly consensus
             aggregate_text,character_agreement,per_user_agreement = self.__merge_aligned_text__(nf_aligned_lines)
 
-            for t in aligned_text:
-                print t
 
-            print aggregate_text
-            print
-
+            # print aggregate_text
             # deal with characters that python/postgres has trouble with
-            aggregate_text = self.__reset_special_characters__(aggregate_text)
+            # aggregate_text = self.__reset_special_characters__(aggregate_text)
+
 
 
             cluster_centers.append((x1,x2,y1,y2,aggregate_text))
@@ -759,7 +776,8 @@ class TextCluster(clustering.Cluster):
             # and deal with special characters for each individual lines
             temp_pts_lines = []
             for p,l in zip(pts,nf_aligned_lines):
-                l = self.__reset_special_characters__(l)
+                # todo - uncomment
+                # l = self.__reset_special_characters__(l)
                 temp_pts_lines.append((p,l))
 
             cluster_pts.append(temp_pts_lines)
@@ -776,8 +794,6 @@ class TextCluster(clustering.Cluster):
             results.append({"center":center,"cluster members":pts,"tools":[],"num users":len(users),"agreement":a})
 
         return results,0
-
-
 
     def __preliminarily__clustering__(self,markings,user_ids):
         """
@@ -971,16 +987,23 @@ class SubjectRetirement(Classification):
 
 
 class Tate(AggregationAPI):
-    def __init__(self,environment):
-        AggregationAPI.__init__(self,245,environment)#"tate")#"tate",environment="staging")
+    def __init__(self,project_id,environment):
+        AggregationAPI.__init__(self,project_id,environment)#"tate")#"tate",environment="staging")
         # the code to extract the relevant params froma  text json file
         self.marking_params_per_shape["text"] = relevant_text_params
         # the code to cluster lines together
         self.default_clustering_algs["text"] = TextCluster
         # the code for reducing a line segment (4d) into a 2d object
         # todo - can probably replace this with the standard for line segments
-        self.reduction_algs["text"] = text_line_reduction
+        # self.reduction_algs["text"] = text_line_reduction
 
+        # load in the tag file
+        api_details = yaml.load(open("/app/config/aggregation.yml","rb"))
+        try:
+            tag_file = api_details[self.project_id]["tags"]
+            self.additional_clustering_args = {"text": {"reduction":text_line_reduction,"tag_file":tag_file}}
+        except:
+            self.additional_clustering_args = {"text": {"reduction":text_line_reduction}}
 
         self.ignore_versions = True
         # self.instructions[683] = {}
@@ -995,35 +1018,39 @@ class Tate(AggregationAPI):
         AggregationAPI.__setup__(self)
         self.__set_classification_alg__(SubjectRetirement,{"host":self.host_api,"project_id":self.project_id,"token":self.token,"workflow_id":121})
 
-    def __get_workflow_details__(self,given_workflow_id=None):
-        """
-        override the basic aggregation_api call to get the details about workflows
-        since tate does things differently
-        :param given_workflow_id:
-        :return:
-        """
-        workflows = dict()
-        workflows[121] = self.__readin_tasks__(121)
-
-        versions = dict()
-        versions[121] = 17
-
-        instructions = dict()
-        updated_at_timestamps = {}
-
-        return workflows,versions,instructions,updated_at_timestamps
+    # def __get_workflow_details__(self,given_workflow_id=None):
+    #     """
+    #     override the basic aggregation_api call to get the details about workflows
+    #     since tate does things differently
+    #     :param given_workflow_id:
+    #     :return:
+    #     """
+    #     workflows = dict()
+    #     workflows[121] = self.__readin_tasks__(121)
+    #
+    #     versions = dict()
+    #     versions[121] = 17
+    #
+    #     instructions = dict()
+    #     updated_at_timestamps = {}
+    #
+    #     return workflows,versions,instructions,updated_at_timestamps
 
     def __enter__(self):
-        panoptes_file = open("/app/config/aggregation.yml","rb")
-        api_details = yaml.load(panoptes_file)
-        self.rollbar_token = api_details["default"]["rollbar"]
-        rollbar.init(self.rollbar_token,"production")
+        if self.environment != "development":
+            panoptes_file = open("/app/config/aggregation.yml","rb")
+            api_details = yaml.load(panoptes_file)
+            self.rollbar_token = api_details[self.environment]["rollbar"]
+            rollbar.init(self.rollbar_token,self.environment)
+
+        return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if (self.rollbar_token is not None) and (self.environment != "development") and (exc_type is not None):
-            rollbar.report_exc_info()
+        # if (self.rollbar_token is not None) and (self.environment != "development") and (exc_type is not None):
+        #     rollbar.report_exc_info()
 
-            return True
+            # return True
+        pass
 
     def __cluster_output_with_colour__(self,workflow_id,ax,subject_id):
         """
@@ -1088,12 +1115,14 @@ class Tate(AggregationAPI):
             #     print
             # print
 
-
     def __readin_tasks__(self,workflow_id):
-        marking_tasks = {"T2":["text"]}
-        classification_tasks = {"T3" : True}
+        if self.project_id == 245:
+            marking_tasks = {"T2":["text"]}
+            classification_tasks = {"T3" : True}
 
-        return classification_tasks,marking_tasks
+            return classification_tasks,marking_tasks
+        else:
+            return AggregationAPI.__readin_tasks__(workflow_id)
 
     def __plot_individual_points__(self,subject_id,task_id,shape):
         print self.cluster_algs["text"]
@@ -1137,15 +1166,8 @@ class Tate(AggregationAPI):
 subject_id = 662619
 
 if __name__ == "__main__":
-    with Tate(sys.argv[1]) as project:
+    with Tate(sys.argv[1],sys.argv[2]) as project:
+        pass
         project.__migrate__()
-        project.__aggregate__(subject_set=[subject_id])
-
-
-        # subject_image = project.__image_setup__(subject_id)
-        # fig, ax = plt.subplots()
-        # project.__cluster_output_with_colour__(project.workflows.keys()[0],ax,subject_id=subject_id)
-        # image_file = cbook.get_sample_data(subject_image)
-        # image = plt.imread(image_file)
-        # im = ax.imshow(image)
-        # plt.show()
+        project.__aggregate__()
+        # print aggregated_text

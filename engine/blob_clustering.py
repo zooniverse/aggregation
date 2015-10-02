@@ -37,7 +37,7 @@ class QuadTree:
         self.user_ids = []
 
     def __get_splits__(self):
-        if (self.bounding_box.area < 50000) or (len(self.polygons) < 8):
+        if (self.bounding_box.area < 5000) or (len(self.polygons) < 8):
             return []
 
         complete_agreement = 0

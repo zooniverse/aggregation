@@ -1102,9 +1102,6 @@ class AggregationAPI:
             if not isinstance(user_group_id,int):
                 user_group_id = -1
 
-            if (self.old_new_classification is None) or (created_at < self.old_new_classification) :
-                self.old_new_classification = created_at
-
             if not isinstance(user_id,int):
                 user_id = -1
             # get only the major version of the workflow
