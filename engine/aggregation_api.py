@@ -319,17 +319,17 @@ class AggregationAPI:
         # if we used datetime.datetime.now() we might skip some classifications)
         self.new_runtime = datetime.datetime(2000,1,1)
 
-        # try:
-        #     r = self.cassandra_session.execute("select classification from most_recent where project_id = " + str(self.project_id))
-        #     if r != []:
-        #         self.previous_runtime = r[0].classification
-        # except:
-        #     pass
+        try:
+            r = self.cassandra_session.execute("select classification from most_recent where project_id = " + str(self.project_id))
+            if r != []:
+                self.previous_runtime = r[0].classification
+        except:
+            pass
 
         print "we have already aggregated classifications up to: " + str(self.previous_runtime)
 
         # use this to determine the time frame for reading in classifications
-        self.old_new_classification = None
+        # self.old_new_classification = None
 
         # use for Cassandra connection - can override for Ourboros projects
         self.classification_table = "classifications"
@@ -789,17 +789,12 @@ class AggregationAPI:
         :return:
         """
         subjects = []
-        print "old new"
-        print self.old_new_classification
-        # if we haven't read in any new classifications
-        if self.old_new_classification is None:
-            return []
 
         if self.only_retired_subjects:
             stmt = """SELECT * FROM "subjects"
             INNER JOIN "set_member_subjects" ON "set_member_subjects"."subject_id" = "subjects"."id"
             INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."set_member_subject_id" = "set_member_subjects"."id"
-            WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" >= '""" + str(self.old_new_classification) + """'"""
+            WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" >= '""" + str(self.previous_runtime) + """'"""
             # WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" IS NOT NULL"""
 
             cursor = self.postgres_session.cursor()
