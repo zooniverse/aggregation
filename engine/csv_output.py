@@ -153,6 +153,8 @@ class CsvOut:
             workflow_name = self.__csv_string__(workflow_name)
             readme_file.write("Workflow title: " + workflow_name + "\n ----- \n")
 
+            readme_file.write()
+
             print classification_tasks
             for task_id,task in classification_tasks.items():
                 if task == "simple":
@@ -192,7 +194,7 @@ class CsvOut:
 
                 else: pass
 
-            
+
 
 
 
@@ -412,7 +414,7 @@ class CsvOut:
             tool = self.__csv_string__(tool)
 
             for polygon in cluster["center"]:
-                row = str(subject_id) + ","+ tool +",\"" + str(polygon) + "\""
+                row = str(subject_id) + ","+ str(p_index)+ ","+ tool +",\"" + str(polygon) + "\""
                 self.csv_files[id_].write(row+"\n")
 
     def __write_out__(self,subject_set = None,compress=True):
@@ -431,7 +433,6 @@ class CsvOut:
             print workflow_id
             # # create the output files for this workflow
             output_directory = self.__make_files__(workflow_id)
-            self.__readme_text__(workflow_id)
 
             # results are going to be ordered by subject id (because that's how the results are stored)
             # so we can going to be cycling through task_ids. That's why we can't loop through classification_tasks etc.
@@ -667,7 +668,7 @@ class CsvOut:
             if shape == "polygon":
                 id_ = task_id,shape,"detailed"
                 self.csv_files[id_] = open(output_directory+fname+"_"+shape+".csv","wb")
-                self.csv_files[id_].write("subject_id,most_likely_tool,list_of_xy_polygon_coordinates\n")
+                self.csv_files[id_].write("subject_id,cluster_index,most_likely_tool,list_of_xy_polygon_coordinates\n")
 
                 id_ = task_id,shape,"summary"
                 self.csv_files[id_] = open(output_directory+fname+"_"+shape+"_summary.csv","wb")
@@ -720,7 +721,7 @@ class CsvOut:
             if found_shape == shape:
                 tool_label = self.instructions[workflow_id][task_id]["tools"][tool_id]["marking tool"]
                 tool_label = self.__csv_string__(tool_label)
-                header += "," + tool_label
+                header += ",median(" + tool_label +")"
         header += ",mean_probability,median_probability,mean_tool,median_tool"
         self.csv_files[id_].write(header+"\n")
 
