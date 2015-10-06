@@ -445,7 +445,7 @@ class CsvOut:
         # add some final details to the read me file
         with open("/tmp/"+str(self.project_id)+"/readme.md", "a") as readme_file:
             readme_file.write("Details and food for thought:\n")
-            with open("readme.txt","rb") as f:
+            with open("/app/engine/readme.txt","rb") as f:
                 text = f.readlines()
                 for l in text:
                     readme_file.write(l)
