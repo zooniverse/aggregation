@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # from setuptools import setup, find_packages
 import os
-import tarfile
 import yaml
 import urllib2
 import cookielib
@@ -1891,6 +1890,3 @@ if __name__ == "__main__":
 
         c = csv_output.CsvOut(project)
         c.__write_out__()
-
-
-
