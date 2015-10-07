@@ -425,9 +425,7 @@ class CsvOut:
         """
         assert (subject_set is None) or isinstance(subject_set,int)
 
-        tarball = None
-        if compress:
-            tarball = tarfile.open("/tmp/"+str(self.project_id)+"export.tar.gz", "w:gz")
+        project_prefix = str(self.project_id)
 
         for workflow_id in self.workflows:
             print workflow_id
@@ -443,18 +441,19 @@ class CsvOut:
             f.close()
 
         # add some final details to the read me file
-        with open("/tmp/"+str(self.project_id)+"/readme.md", "a") as readme_file:
+        with open("/tmp/"+project_prefix+"/readme.md", "a") as readme_file:
             readme_file.write("Details and food for thought:\n")
             with open("/app/engine/readme.txt","rb") as f:
                 text = f.readlines()
                 for l in text:
                     readme_file.write(l)
 
-        # finally zip everything (over all workflows) into one zip file
-        # self.__csv_to_zip__()
         if compress:
-            tarball.close()
-            return "/tmp/"+str(self.project_id)+"export.tar.gz"
+            tar_file_path = "/tmp/" + project_prefix + "_export.tar.gz"
+            with tarfile.open(tar_file_path, "w:gz") as tar:
+                tar.add("/tmp/"+project_prefix+"/")
+
+            return tar_file_path
 
     # todo - figure out if this string is necessary
     def __csv_string__(self,string):
