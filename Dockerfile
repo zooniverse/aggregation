@@ -1,4 +1,4 @@
-FROM ubuntu:14.04
+FROM zooniverse/aggregation-dependencies
 
 ENV DEBIAN_FRONTEND noninteractive
 
@@ -13,7 +13,7 @@ WORKDIR /app/
 
 ADD . /app/
 
-RUN pip install cassandra-driver Flask redis rq requests==2.4.3 rollbar termcolor
+RUN pip install -U cassandra-driver Flask redis rq requests==2.4.3 rollbar termcolor
 RUN pip install .
 
 ADD supervisord.conf /etc/supervisor/conf.d/cron.conf
