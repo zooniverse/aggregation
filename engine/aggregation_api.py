@@ -325,6 +325,9 @@ class AggregationAPI:
         except:
             pass
 
+        self.previous_runtime = datetime.datetime(2000,1,1)
+        self.new_runtime = datetime.datetime(2000,1,1)
+
         print "we have already aggregated classifications up to: " + str(self.previous_runtime)
 
         # use this to determine the time frame for reading in classifications
@@ -790,17 +793,16 @@ class AggregationAPI:
         subjects = []
 
         if self.only_retired_subjects:
-            stmt = """SELECT * FROM "subjects"
-            INNER JOIN "set_member_subjects" ON "set_member_subjects"."subject_id" = "subjects"."id"
-            INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."set_member_subject_id" = "set_member_subjects"."id"
-            WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" >= '""" + str(self.previous_runtime) + """'"""
-            # WHERE "subject_workflow_counts"."workflow_id" = """+str(workflow_id)+ """ AND "subject_workflow_counts"."retired_at" IS NOT NULL"""
+            stmt = """ SELECT * FROM "subjects"
+                    INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."subject_id" = "subjects"."id"
+                    WHERE "subject_workflow_counts"."workflow_id" = """ + str(workflow_id) + """ AND "subject_workflow_counts"."retired_at" >= '""" + str(self.previous_runtime) + """'"""
 
             cursor = self.postgres_session.cursor()
             cursor.execute(stmt)
 
             for subject in cursor.fetchall():
                 subjects.append(subject[0])
+
         else:
             # stmt = "SELECT subject_id,workflow_version FROM \"classifications\" WHERE \"project_id\" = " + str(self.project_id) + " and \"workflow_id\" = " + str(workflow_id) + " and \"updated_at\" > '" + str(datetime.datetime(2000,1,1)) +"'"
             stmt = "SELECT subject_id,workflow_version FROM classifications WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)# + " and \"updated_at\" > '" + str(datetime.datetime(2000,1,1)) +"'"
@@ -1055,15 +1057,15 @@ class AggregationAPI:
         # except cassandra.InvalidRequest:
         #     print "tables did not already exist"
         #
-        # try:
-        #     self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
-        # except cassandra.AlreadyExists:
-        #     pass
-        #
-        # try:
-        #     self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
-        # except cassandra.AlreadyExists:
-        #     pass
+        try:
+            self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
+        except cassandra.AlreadyExists:
+            pass
+
+        try:
+            self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
+        except cassandra.AlreadyExists:
+            pass
 
         subject_listing = set()
 
@@ -1566,6 +1568,7 @@ class AggregationAPI:
                 # multiple means that more than one response is allowed
                 classification_tasks[task_id] = tasks[task_id]["type"]
             else:
+                print tasks[task_id]
                 # unknown task type
                 assert False
 
@@ -1885,8 +1888,8 @@ if __name__ == "__main__":
         environment = "development"
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
-        # project.__migrate__()
-        # project.__aggregate__()
+        project.__migrate__()
+        project.__aggregate__()
 
         c = csv_output.CsvOut(project)
         c.__write_out__()

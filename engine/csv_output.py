@@ -15,6 +15,8 @@ class CsvOut:
         self.workflow_names = project.workflow_names
         self.workflows = project.workflows
 
+        print "workflows are " + str(self.workflows)
+
         self.__yield_aggregations__ = project.__yield_aggregations__
         self.__count_check__ = project.__count_check__
         self.retirement_thresholds = project.retirement_thresholds
@@ -138,146 +140,144 @@ class CsvOut:
 
         return output_directory
 
-    def __readme_text__(self,workflow_id):
-        """
-        add text to the readme file for this workflow
-        :param workflow_id:
-        :return:
-        """
-        with open("/tmp/"+str(self.project_id)+"/readme.md", "a") as readme_file:
-            readme_file.write("Summary of the csv files found in this directory\n")
-            classification_tasks,marking_tasks = self.workflows[workflow_id]
-
-            readme_file.write("Workflow id: " + str(workflow_id) + "\n")
-            workflow_name = self.workflow_names[workflow_id]
-            workflow_name = self.__csv_string__(workflow_name)
-            readme_file.write("Workflow title: " + workflow_name + "\n ----- \n")
-
-            readme_file.write()
-
-            print classification_tasks
-            for task_id,task in classification_tasks.items():
-                if task == "simple":
-                    instructions = self.instructions[workflow_id][task_id]["instruction"]
-                    instructions = re.sub("\n"," ",instructions)
-                    readme_file.write("Instructions: " + instructions + "\n")
-                    print self.file_names.keys()
-                    readme_file.write("File name: " + self.file_names[task_id] + "\n")
-                    readme_file.write("Csv column descriptions:\n")
-
-                    readme_file.write("subject_id\n")
-                    readme_file.write("p(...) - percentage of people who said a particular answer \n\n")
-                elif task == "multiple":
-                    id_ = (task_id,"detailed")
-                    instructions = self.instructions[workflow_id][task_id]["instruction"]
-                    instructions = re.sub("\n"," ",instructions)
-                    readme_file.write("Instructions: " + instructions + "\n")
-                    print self.file_names.keys()
-                    readme_file.write("Detailed results")
-                    readme_file.write("File name: " + self.file_names[id_] + "\n")
-                    readme_file.write("Csv column descriptions:\n")
-                    readme_file.write("subject_id,label,p(label) - percentage of users choose 'label' for subject subject_id\n")
-                    readme_file.write("\n")
-
-                    id_ = (task_id,"summary")
-                    instructions = self.instructions[workflow_id][task_id]["instruction"]
-                    instructions = re.sub("\n"," ",instructions)
-                    readme_file.write("Instructions: " + instructions + "\n")
-                    print self.file_names.keys()
-                    readme_file.write("Summary results")
-                    readme_file.write("File name: " + self.file_names[id_] + "\n")
-                    readme_file.write("Csv column descriptions:\n")
-                    readme_file.write("subject_id\n")
-                    readme_file.write("mean_agreement,median_agreement: average agreement over all labels for subject_id\n")
-                    readme_file.write("num_users - number of users who classified subject_id\n")
-                    readme_file.write("\n")
-
-                else: pass
-
-
-
-
-
-            # for task_id in self.instructions[workflow_id].keys():
-            #     # is this task a simple classification task?
-            #     readme_file.write("Task id: " + str(task_id) + "\n")
-            #     if (task_id in classification_tasks) and isinstance(classification_tasks[task_id],bool):
-            #
-            #
-            #
-            #         for answer_index in sorted(self.instructions[workflow_id][task_id]["answers"].keys()):
-            #             answer = self.instructions[workflow_id][task_id]["answers"][answer_index]
-            #             # answer = self.__csv_string__(answer)
-            #             readme_file.write("p("+self.__csv_string__(answer)+") - percentage of people who said - " + answer + "\n")
-            #
-            #         readme_file.write("num_users - number of users who completed the task for the given subject\n\n")
-            #     elif task_id in classification_tasks:
-            #         # todo - complete for follow up questions
-            #         pass
-            #
-            #     # we have a marking task - possible in addition to a follow up classification question
-            #     if task_id in marking_tasks:
-            #         # we have marking question
-            #         # add to the read me instance for each shape
-            #         for shape in set(marking_tasks[task_id]):
-            #             file_id = (workflow_id,task_id,(shape,"details"))
-            #
-            #             # read in the instructions and remove any and all new line characters
-            #             instructions = self.instructions[workflow_id][task_id]["instruction"]
-            #             instructions = re.sub("\n"," ",instructions)
-            #
-            #             # start with a summary explanation for this particular file
-            #             readme_file.write("Instructions: " + instructions + "\n")
-            #             readme_file.write("CSV file for all " + str(shape) + " clusters with detailed output\n")
-            #             readme_file.write("File name: " + self.file_names[file_id] + "\n")
-            #             readme_file.write("Csv column descriptions:\n")
-            #
-            #             # now explain each of the columsn - the first few columns are common to all shapes
-            #             readme_file.write("subject_id\ncluster_index\nmost_likely_tool - most likely tool for this cluster\n")
-            #             # now list the columns that are specific to each shape
-            #             if shape == "polygon":
-            #                 "- list of coordinates for polygons"
-            #             else:
-            #                 if shape == "point":
-            #                     readme_file.write("x,y - median center of cluster\n")
-            #                 elif shape == "ellipse":
-            #                     readme_file.write("x,y,r1,r2,theta - median center of ellipse cluster with major and minor axes radius plus rotation\n")
-            #                 elif shape == "line":
-            #                     readme_file.write("x1,y1,x2,y2 - median start and end of line segments in cluster\n")
-            #                 elif shape =="rectangle":
-            #                     readme_file.write("x1,y1,x2,y2 - median upper and lower corners of all rectangles in cluster\n")
-            #                 else:
-            #                     assert False
-            #                 readme_file.write("p(most_likely_tool) - probability that most likely tool is correct\n")
-            #                 readme_file.write("p(true_positive) - probability that cluster actually exists (as opposed to noise)\n")
-            #                 readme_file.write("num_users - number of users who have marks in this cluster\n\n")
-            #
-            #             # now repeat for summary file
-            #             # this is where each subject is summarized in one line
-            #             file_id = (workflow_id,task_id,(shape,"summary"))
-            #             readme_file.write("CSV file for all " + str(shape) + " clusters with summary output\n")
-            #             readme_file.write("File name: " + self.file_names[file_id] + "\n")
-            #             readme_file.write("Csv column descriptions:\n")
-            #
-            #             for tool_id in sorted(self.instructions[workflow_id][task_id]["tools"].keys()):
-            #                 tool_id = int(tool_id)
-            #                 # self.workflows[workflow_id][0] is the list of classification tasks
-            #                 # we want [1] which is the list of marking tasks
-            #
-            #                 found_shape = self.workflows[workflow_id][1][task_id][tool_id]
-            #                 if found_shape == shape:
-            #                     tool_label = self.instructions[workflow_id][task_id]["tools"][tool_id]["marking tool"]
-            #                     tool_label = self.__csv_string__(tool_label)
-            #
-            #                     readme_file.write(tool_label + " - number of clusters of this type\n")
-            #
-            #             readme_file.write("mean_probability - average probability of clusters being true positives\n")
-            #             readme_file.write("median_probability\n")
-            #             readme_file.write("mean_tool - average probability of most likely tool being correct\n")
-            #             readme_file.write("median_tool\n\n")
-
-
-            readme_file.write("\n\n\n")
+    # def __readme_text__(self,workflow_id):
+    #     """
+    #     add text to the readme file for this workflow
+    #     :param workflow_id:
+    #     :return:
+    #     """
+    #     with open("/tmp/"+str(self.project_id)+"/readme.md", "a") as readme_file:
+    #         readme_file.write("Summary of the csv files found in this directory\n")
+    #         classification_tasks,marking_tasks = self.workflows[workflow_id]
+    #
+    #         readme_file.write("Workflow id: " + str(workflow_id) + "\n")
+    #         workflow_name = self.workflow_names[workflow_id]
+    #         workflow_name = self.__csv_string__(workflow_name)
+    #         readme_file.write("Workflow title: " + workflow_name + "\n ----- \n")
+    #
+    #         print classification_tasks
+    #         for task_id,task in classification_tasks.items():
+    #             if task == "simple":
+    #                 instructions = self.instructions[workflow_id][task_id]["instruction"]
+    #                 instructions = re.sub("\n"," ",instructions)
+    #                 readme_file.write("Instructions: " + instructions + "\n")
+    #                 print self.file_names.keys()
+    #                 readme_file.write("File name: " + self.file_names[task_id] + "\n")
+    #                 readme_file.write("Csv column descriptions:\n")
+    #
+    #                 readme_file.write("subject_id\n")
+    #                 readme_file.write("p(...) - percentage of people who said a particular answer \n\n")
+    #             elif task == "multiple":
+    #                 id_ = (task_id,"detailed")
+    #                 instructions = self.instructions[workflow_id][task_id]["instruction"]
+    #                 instructions = re.sub("\n"," ",instructions)
+    #                 readme_file.write("Instructions: " + instructions + "\n")
+    #                 print self.file_names.keys()
+    #                 readme_file.write("Detailed results")
+    #                 readme_file.write("File name: " + self.file_names[id_] + "\n")
+    #                 readme_file.write("Csv column descriptions:\n")
+    #                 readme_file.write("subject_id,label,p(label) - percentage of users choose 'label' for subject subject_id\n")
+    #                 readme_file.write("\n")
+    #
+    #                 id_ = (task_id,"summary")
+    #                 instructions = self.instructions[workflow_id][task_id]["instruction"]
+    #                 instructions = re.sub("\n"," ",instructions)
+    #                 readme_file.write("Instructions: " + instructions + "\n")
+    #                 print self.file_names.keys()
+    #                 readme_file.write("Summary results")
+    #                 readme_file.write("File name: " + self.file_names[id_] + "\n")
+    #                 readme_file.write("Csv column descriptions:\n")
+    #                 readme_file.write("subject_id\n")
+    #                 readme_file.write("mean_agreement,median_agreement: average agreement over all labels for subject_id\n")
+    #                 readme_file.write("num_users - number of users who classified subject_id\n")
+    #                 readme_file.write("\n")
+    #
+    #             else: pass
+    #
+    #
+    #
+    #
+    #
+    #         # for task_id in self.instructions[workflow_id].keys():
+    #         #     # is this task a simple classification task?
+    #         #     readme_file.write("Task id: " + str(task_id) + "\n")
+    #         #     if (task_id in classification_tasks) and isinstance(classification_tasks[task_id],bool):
+    #         #
+    #         #
+    #         #
+    #         #         for answer_index in sorted(self.instructions[workflow_id][task_id]["answers"].keys()):
+    #         #             answer = self.instructions[workflow_id][task_id]["answers"][answer_index]
+    #         #             # answer = self.__csv_string__(answer)
+    #         #             readme_file.write("p("+self.__csv_string__(answer)+") - percentage of people who said - " + answer + "\n")
+    #         #
+    #         #         readme_file.write("num_users - number of users who completed the task for the given subject\n\n")
+    #         #     elif task_id in classification_tasks:
+    #         #         # todo - complete for follow up questions
+    #         #         pass
+    #         #
+    #         #     # we have a marking task - possible in addition to a follow up classification question
+    #         #     if task_id in marking_tasks:
+    #         #         # we have marking question
+    #         #         # add to the read me instance for each shape
+    #         #         for shape in set(marking_tasks[task_id]):
+    #         #             file_id = (workflow_id,task_id,(shape,"details"))
+    #         #
+    #         #             # read in the instructions and remove any and all new line characters
+    #         #             instructions = self.instructions[workflow_id][task_id]["instruction"]
+    #         #             instructions = re.sub("\n"," ",instructions)
+    #         #
+    #         #             # start with a summary explanation for this particular file
+    #         #             readme_file.write("Instructions: " + instructions + "\n")
+    #         #             readme_file.write("CSV file for all " + str(shape) + " clusters with detailed output\n")
+    #         #             readme_file.write("File name: " + self.file_names[file_id] + "\n")
+    #         #             readme_file.write("Csv column descriptions:\n")
+    #         #
+    #         #             # now explain each of the columsn - the first few columns are common to all shapes
+    #         #             readme_file.write("subject_id\ncluster_index\nmost_likely_tool - most likely tool for this cluster\n")
+    #         #             # now list the columns that are specific to each shape
+    #         #             if shape == "polygon":
+    #         #                 "- list of coordinates for polygons"
+    #         #             else:
+    #         #                 if shape == "point":
+    #         #                     readme_file.write("x,y - median center of cluster\n")
+    #         #                 elif shape == "ellipse":
+    #         #                     readme_file.write("x,y,r1,r2,theta - median center of ellipse cluster with major and minor axes radius plus rotation\n")
+    #         #                 elif shape == "line":
+    #         #                     readme_file.write("x1,y1,x2,y2 - median start and end of line segments in cluster\n")
+    #         #                 elif shape =="rectangle":
+    #         #                     readme_file.write("x1,y1,x2,y2 - median upper and lower corners of all rectangles in cluster\n")
+    #         #                 else:
+    #         #                     assert False
+    #         #                 readme_file.write("p(most_likely_tool) - probability that most likely tool is correct\n")
+    #         #                 readme_file.write("p(true_positive) - probability that cluster actually exists (as opposed to noise)\n")
+    #         #                 readme_file.write("num_users - number of users who have marks in this cluster\n\n")
+    #         #
+    #         #             # now repeat for summary file
+    #         #             # this is where each subject is summarized in one line
+    #         #             file_id = (workflow_id,task_id,(shape,"summary"))
+    #         #             readme_file.write("CSV file for all " + str(shape) + " clusters with summary output\n")
+    #         #             readme_file.write("File name: " + self.file_names[file_id] + "\n")
+    #         #             readme_file.write("Csv column descriptions:\n")
+    #         #
+    #         #             for tool_id in sorted(self.instructions[workflow_id][task_id]["tools"].keys()):
+    #         #                 tool_id = int(tool_id)
+    #         #                 # self.workflows[workflow_id][0] is the list of classification tasks
+    #         #                 # we want [1] which is the list of marking tasks
+    #         #
+    #         #                 found_shape = self.workflows[workflow_id][1][task_id][tool_id]
+    #         #                 if found_shape == shape:
+    #         #                     tool_label = self.instructions[workflow_id][task_id]["tools"][tool_id]["marking tool"]
+    #         #                     tool_label = self.__csv_string__(tool_label)
+    #         #
+    #         #                     readme_file.write(tool_label + " - number of clusters of this type\n")
+    #         #
+    #         #             readme_file.write("mean_probability - average probability of clusters being true positives\n")
+    #         #             readme_file.write("median_probability\n")
+    #         #             readme_file.write("mean_tool - average probability of most likely tool being correct\n")
+    #         #             readme_file.write("median_tool\n\n")
+    #
+    #
+    #         readme_file.write("\n\n\n")
 
     def __shannon_entropy__(self,probabilities):
         return -sum([p*math.log(p) for p in probabilities])
@@ -427,23 +427,30 @@ class CsvOut:
 
         project_prefix = str(self.project_id)
 
+        # with open("/tmp/"+str(self.project_id)+"/readme.md", "w") as readme_file:
+        #     readme_file.truncate()
+
         for workflow_id in self.workflows:
+            print "===---"
             print workflow_id
+            # self.__readme_text__(workflow_id)
             # # create the output files for this workflow
             output_directory = self.__make_files__(workflow_id)
 
             # results are going to be ordered by subject id (because that's how the results are stored)
             # so we can going to be cycling through task_ids. That's why we can't loop through classification_tasks etc.
             for subject_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
+                print subject_id
                 self.__subject_output__(workflow_id,subject_id,aggregations)
 
         for f in self.csv_files.values():
             f.close()
 
-        # add some final details to the read me file
-        with open("/tmp/"+project_prefix+"/readme.md", "a") as readme_file:
-            readme_file.write("Details and food for thought:\n")
-            with open("/app/engine/readme.txt","rb") as f:
+        # # add some final details to the read me file
+
+        with open("/tmp/"+project_prefix+"/readme.md", "w") as readme_file:
+            # readme_file.write("Details and food for thought:\n")
+            with open("readme.txt","rb") as f:
                 text = f.readlines()
                 for l in text:
                     readme_file.write(l)
