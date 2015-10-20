@@ -173,6 +173,10 @@ class Classification:
             # if task_id not in clustering_results[subject_id]:
             #     continue
 
+            # if no one did this task for this subject
+            if task_id not in aggregations[subject_id]:
+                continue
+
             if (shape+ " clusters") not in aggregations[subject_id][task_id]:
                 # if none of the relevant markings were made on this subject, skip it
                 continue
@@ -277,6 +281,10 @@ class Classification:
 
         for subject_id in aggregations:
             # look at the individual points in the cluster
+
+            # if no one did this task for this subject
+            if task_id not in aggregations[subject_id]:
+                continue
 
             for cluster_index,cluster in aggregations[subject_id][task_id][shape+ " clusters"].items():
                 # all_users just gives us a list of all of the users who have seen this subject
