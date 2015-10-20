@@ -421,6 +421,7 @@ class TextCluster(clustering.Cluster):
         # reverse_map[201] = chr(24)
 
         ret_text = ""
+
         for c in text:
             if ord(c) > 128:
                 ret_text += reverse_map[ord(c)]
@@ -530,6 +531,8 @@ class TextCluster(clustering.Cluster):
             text = markings[user_index][-1]
             raw_pt = markings[user_index][:-1]
 
+            text = text.encode("ascii","ignore")
+
             # skip lines with new lines characters in them
             # Roger has set things up so that new line characters are no longer allowed
             # but we need to be careful with transcriptions submitted before that change
@@ -538,7 +541,7 @@ class TextCluster(clustering.Cluster):
                 continue
 
             # convert from unicode to ascii
-            assert isinstance(text,unicode)
+            assert isinstance(text,str)
 
             # not sure if it is possible to have empty lines, but just in case
             if text == "":
@@ -730,20 +733,21 @@ class TextCluster(clustering.Cluster):
 
             # aggregate the lines - looking for character spots where there is mostly consensus
             aggregate_text,character_agreement,per_user_agreement = self.__merge_aligned_text__(nf_aligned_lines)
-            print aggregate_text
 
+            aggregate_text = self.__reset_special_characters__(aggregate_text)
             cluster_centers.append((x1,x2,y1,y2,aggregate_text))
 
             # and deal with special characters for each individual lines
             temp_pts_lines = []
             for p,l in zip(pts,nf_aligned_lines):
                 # todo - uncomment
+
                 l = self.__reset_special_characters__(l)
                 temp_pts_lines.append((p,l))
 
-                print l
 
-            print
+
+
 
             cluster_pts.append(temp_pts_lines)
 
@@ -1045,8 +1049,13 @@ class Tate(AggregationAPI):
             classification_tasks = {"T3" : True}
 
             return classification_tasks,marking_tasks
+        elif self.project_id == 376:
+            marking_tasks = {"T2":["text"]}
+            classification_tasks = {}
+
+            return classification_tasks,marking_tasks
         else:
-            return AggregationAPI.__readin_tasks__(workflow_id)
+            return AggregationAPI.__readin_tasks__(self,workflow_id)
 
     def __plot_individual_points__(self,subject_id,task_id,shape):
         print self.cluster_algs["text"]
@@ -1092,6 +1101,6 @@ subject_id = 662619
 if __name__ == "__main__":
     with Tate(sys.argv[1],sys.argv[2]) as project:
         pass
-        # project.__migrate__()
-        project.__aggregate__(subject_set=[subject_id])
+        project.__migrate__()
+        project.__aggregate__()
         # print aggregated_text
