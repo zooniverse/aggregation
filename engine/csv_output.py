@@ -291,7 +291,11 @@ class CsvOut:
             row = str(subject_id) + ","
             if cluster_index is not None:
                 row += str(cluster_index) + ","
-            row += self.__csv_string__(answers[int(candidate)]) + "," + str(percent) + "," + str(num_users) + "\n"
+            # todo - figure out if both choices are needed
+            if isinstance(answers[int(candidate)],dict):
+                row += self.__csv_string__(answers[int(candidate)]["label"]) + "," + str(percent) + "," + str(num_users) + "\n"
+            else:
+                row += self.__csv_string__(answers[int(candidate)]) + "," + str(percent) + "," + str(num_users) + "\n"
 
             self.csv_files[(task_id,"detailed")].write(row)
 
@@ -376,7 +380,15 @@ class CsvOut:
                                 continue
 
                             possible_answers = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_index]["answers"]
-                            results = aggregations[task_id][shape + " clusters"][cluster_index]["followup_question"][str(followup_index)]
+                            if "followup_question" not in aggregations[task_id][shape + " clusters"][cluster_index]:
+                                print "missing follow up response"
+                                continue
+
+                            try:
+                                results = aggregations[task_id][shape + " clusters"][cluster_index]["followup_question"][str(followup_index)]
+                            except KeyError:
+                                print aggregations[task_id][shape + " clusters"][cluster_index]
+                                raise
                             id_ = task_id,tool_id,followup_index
                             if answer_type == "single":
                                 self.__single_choice_classification_row__(possible_answers,id_,subject_id,results,cluster_index)
