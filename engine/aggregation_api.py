@@ -22,6 +22,7 @@ import cPickle as pickle
 from os.path import expanduser
 import csv_output
 
+
 # these are libraries which are only needed if you are working directly with the db
 # so if they are not on your computer - we'll just skip them
 try:
@@ -817,7 +818,7 @@ class AggregationAPI:
         return list(subjects)
 
     def __get_subject_metadata__(self,subject_id):
-        print self.host_api+"subjects/"+str(subject_id)+"?"
+        # print self.host_api+"subjects/"+str(subject_id)+"?"
         request = urllib2.Request(self.host_api+"subjects/"+str(subject_id)+"?")
         request.add_header("Accept","application/vnd.api+json; version=1")
         request.add_header("Authorization","Bearer "+self.token)
@@ -826,14 +827,14 @@ class AggregationAPI:
         body = response.read()
 
         data = json.loads(body)
-        print data
+        return data
 
-        select = "SELECT workflow_id from classifications where project_id="+str(6) +" and subject_ids = ARRAY[" + str(subject_id) +"]"
-        select = "SELECT count(*) from classifications where workflow_id=6 AND subject_ids=ARRAY[493554]"
-        print select
-        cur = self.postgres_session.cursor()
-        cur.execute(select)
-        print cur.fetchall()
+        # select = "SELECT workflow_id from classifications where project_id="+str(6) +" and subject_ids = ARRAY[" + str(subject_id) +"]"
+        # select = "SELECT count(*) from classifications where workflow_id=6 AND subject_ids=ARRAY[493554]"
+        # print select
+        # cur = self.postgres_session.cursor()
+        # cur.execute(select)
+        # print cur.fetchall()
 
 
     def __get_workflow_details__(self,given_workflow_id=None):
@@ -852,6 +853,7 @@ class AggregationAPI:
 
         for individual_workflow in data["workflows"]:
             workflow_id = int(individual_workflow["id"])
+
             if (given_workflow_id is None) or (workflow_id == given_workflow_id):
                 # read in the basic structure of the workflow
                 workflows[workflow_id] = self.__readin_tasks__(workflow_id)
