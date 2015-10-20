@@ -416,45 +416,16 @@ class TextCluster(clustering.Cluster):
         reverse_map = {v: k for k, v in self.tags.items()}
         # also go with something different for "not sure"
         # this matter when the function is called on the aggregate text
-        reverse_map[200] = chr(27)
+        # reverse_map[200] = chr(27)
         # and for gaps inserted by MAFFT
-        reverse_map[201] = chr(24)
-        # print "--==="
-        # print text
+        # reverse_map[201] = chr(24)
+
         ret_text = ""
         for c in text:
             if ord(c) > 128:
                 ret_text += reverse_map[ord(c)]
             else:
                 ret_text += c
-        # print ret_text
-        # matches = []
-        # # use a 'reverse dictionary' to reset
-        # for c in text:
-        #     if (ord(c) > 128) and (ord(c) < 200):
-        #         print ord(c)
-        #         for (t,c2) in self.tags.items():
-        #             if c2 == ord(c):
-        #                 print t
-        #                 matches.append(ord(c))
-        #
-        # for (t,c) in self.tags.items():
-        #     # start by removing the backslashes in the text
-        #     # they are useful for regular expressions - but they will
-        #     # mess things up otherwise
-        #     # according to https://docs.python.org/2/howto/regex.html
-        #     # I could just use r"\" but that does not seem to work - too tired
-        #     # so will go with the ugly solution that I know works
-        #     t = re.sub("\\\\","",t)
-        #     # print t
-        #     if c in matches:
-        #         p = re.compile(chr(c))
-        #         print p.match(text)
-        #
-        #         print [c2 == chr(c) for c2 in text]
-        #     # print p.match(text)
-        #     # print
-        #     text = re.sub(chr(c),t,text)
 
         return ret_text
 
@@ -495,7 +466,7 @@ class TextCluster(clustering.Cluster):
                         agreement_per_user[i] += 1
             else:
                 # "Z" represents characters which we are not certain about
-                aggregate_text += chr(200)
+                aggregate_text += chr(27)
 
         # what percentage of characters have we reached consensus on - i.e. we are fairly confident about?
         percent_consensus = num_agreed/float(len(aggregate_text))
@@ -514,8 +485,7 @@ class TextCluster(clustering.Cluster):
         fasta is the format the MAFFT reads in from - so non_fasta_text contains non-alpha-numeric ascii chars
         pts_and_users is used to match text in aligned text with non_fasta_text
         """
-        # for text,nf_text in zip(aligned_text,non_fasta_text):
-        #     print text,nf_text
+
         aligned_nf_text_list = []
         for text,user_ident in zip(aligned_text_list,pts_and_users):
             aligned_nf_text = ""
@@ -523,7 +493,7 @@ class TextCluster(clustering.Cluster):
             i = 0
             for c in text:
                 if c == "-":
-                    aligned_nf_text += chr(201)
+                    aligned_nf_text += chr(24)
                 else:
                     aligned_nf_text += nf_text[i]
                     i += 1
@@ -647,7 +617,6 @@ class TextCluster(clustering.Cluster):
 
         # remove any clusters which have only one user - treat those as noise
         for cluster_index in range(len(clusters)-1,-1,-1):
-            # print len(clusters[cluster_index][0])
             if len(clusters[cluster_index][0]) <= 1: #2
                 # assert len(clusters[cluster_index][1]) == 1
                 clusters.pop(cluster_index)
@@ -756,20 +725,12 @@ class TextCluster(clustering.Cluster):
             # align the text
             aligned_text = self.__line_alignment__(lines)
 
-
-
             # align the non-fasta version of the text lines
             nf_aligned_lines = self.__add_alignment_spaces__(aligned_text,non_fasta_text,pts_and_users)
 
             # aggregate the lines - looking for character spots where there is mostly consensus
             aggregate_text,character_agreement,per_user_agreement = self.__merge_aligned_text__(nf_aligned_lines)
-
-
-            # print aggregate_text
-            # deal with characters that python/postgres has trouble with
-            # aggregate_text = self.__reset_special_characters__(aggregate_text)
-
-
+            print aggregate_text
 
             cluster_centers.append((x1,x2,y1,y2,aggregate_text))
 
@@ -777,8 +738,12 @@ class TextCluster(clustering.Cluster):
             temp_pts_lines = []
             for p,l in zip(pts,nf_aligned_lines):
                 # todo - uncomment
-                # l = self.__reset_special_characters__(l)
+                l = self.__reset_special_characters__(l)
                 temp_pts_lines.append((p,l))
+
+                print l
+
+            print
 
             cluster_pts.append(temp_pts_lines)
 
@@ -959,6 +924,9 @@ class SubjectRetirement(Classification):
 
         assert (self.host_api is not None) and (self.project_id is not None) and (self.token is not None) and (self.workflow_id is not None)
 
+    def __aggregate__(self,raw_classifications,workflow,aggregations):
+        return aggregations
+
     def __task_aggregation__(self,classifications,task_id,aggregations):
         to_retire = []
         for subject_id in classifications:
@@ -1018,24 +986,6 @@ class Tate(AggregationAPI):
         AggregationAPI.__setup__(self)
         self.__set_classification_alg__(SubjectRetirement,{"host":self.host_api,"project_id":self.project_id,"token":self.token,"workflow_id":121})
 
-    # def __get_workflow_details__(self,given_workflow_id=None):
-    #     """
-    #     override the basic aggregation_api call to get the details about workflows
-    #     since tate does things differently
-    #     :param given_workflow_id:
-    #     :return:
-    #     """
-    #     workflows = dict()
-    #     workflows[121] = self.__readin_tasks__(121)
-    #
-    #     versions = dict()
-    #     versions[121] = 17
-    #
-    #     instructions = dict()
-    #     updated_at_timestamps = {}
-    #
-    #     return workflows,versions,instructions,updated_at_timestamps
-
     def __enter__(self):
         if self.environment != "development":
             panoptes_file = open("/app/config/aggregation.yml","rb")
@@ -1088,32 +1038,6 @@ class Tate(AggregationAPI):
                 else:
                     print chr(8) + c,
             print
-            # print"===="
-            #
-            # for m in text["cluster members"]:
-            #     actual_text = m[-1]
-            #     print actual_text
-            #     # atomic text is where tags are represented by atomic characters (that is
-            #     # each tag is a single character) - makes matching things up a lot easier
-            #     atomic_text = self.cluster_algs["text"].__set_special_characters__(actual_text)[1]
-            #     for ii in range(len(atomic_text)):
-            #         c = atomic_text[ii]
-            #
-            #         # some warnings are produced as the result of trying to compare unicode against
-            #         # standard ascii
-            #         with warnings.catch_warnings():
-            #             warnings.simplefilter("ignore")
-            #             if c == text["center"][-1][ii]:
-            #                 colour = "green"
-            #             else:
-            #                 colour = "red"
-            #
-            #         if ord(c) == 28:
-            #             print colored(chr(8) + unicode(u"\u254D"),colour),
-            #         else:
-            #             print colored(chr(8) + c,colour),
-            #     print
-            # print
 
     def __readin_tasks__(self,workflow_id):
         if self.project_id == 245:
@@ -1168,6 +1092,6 @@ subject_id = 662619
 if __name__ == "__main__":
     with Tate(sys.argv[1],sys.argv[2]) as project:
         pass
-        project.__migrate__()
-        project.__aggregate__()
+        # project.__migrate__()
+        project.__aggregate__(subject_set=[subject_id])
         # print aggregated_text
