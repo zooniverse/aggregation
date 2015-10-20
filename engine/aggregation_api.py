@@ -159,16 +159,13 @@ def relevant_polygon_params(marking,image_dimensions):
     return tuple([(p["x"],p["y"]) for p in points])
 
 
-
-
-
-
 def hesse_line_reduction(line_segments):
     """
     use if we want to cluster based on Hesse normal form - but want to retain the original values
     :param line_segment:
     :return:
     """
+
     reduced_markings = []
 
     for line_seg in line_segments:
@@ -185,11 +182,14 @@ def hesse_line_reduction(line_segments):
         except ZeroDivisionError:
             theta = math.pi/2.
 
-        reduced_markings.append((dist,theta))
+        reduced_markings.append([dist,theta])
 
+        # for cases where we have lines of text, don't want to ignore those
+        if len(line_seg) > 4:
+            reduced_markings[-1].append(line_seg[4])
+
+    print reduced_markings
     return reduced_markings
-
-
 
 
 class AggregationAPI:
@@ -1662,12 +1662,16 @@ class AggregationAPI:
 
                     for marking in task["value"]:
                         # what kind of tool made this marking and what was the shape of that tool?
-                        try:
+                        if "tool" in marking:
                             tool = marking["tool"]
                             shape = marking_tasks[task_id][tool]
-                        except KeyError:
+                        elif "type" in marking:
                             tool = None
                             shape = marking["type"]
+                        else:
+                            print "skipping unknown type of marking"
+                            print marking
+                            continue
 
                         if shape ==  "image":
                             # todo - treat image like a rectangle
@@ -1833,8 +1837,12 @@ class AggregationAPI:
                     raise
             else:
                 # we are inserting a brand new aggregation
-                insert_str += ","+postgres_cursor.mogrify("(%s,%s,%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregations[subject_id]),str(datetime.datetime.now()),str(datetime.datetime.now())))
-                insert_counter += 1
+                try:
+                    insert_str += ","+postgres_cursor.mogrify("(%s,%s,%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregations[subject_id]),str(datetime.datetime.now()),str(datetime.datetime.now())))
+                    insert_counter += 1
+                except UnicodeDecodeError:
+                    print aggregations[subject_id]
+                    raise
 
         if update_str != "":
             # are there any updates to actually be done?
@@ -1888,8 +1896,8 @@ if __name__ == "__main__":
         environment = "development"
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
-        project.__migrate__()
-        project.__aggregate__()
+        # project.__migrate__()
+        # project.__aggregate__()
 
         c = csv_output.CsvOut(project)
         c.__write_out__()
