@@ -563,6 +563,8 @@ class AggregationAPI:
 
                 return
             except cassandra.cluster.NoHostAvailable as err:
+                if i == 9:
+                    raise err
                 print err
 
         assert False
