@@ -17,7 +17,7 @@ except IOError:
 
 api_details = yaml.load(panoptes_file)
 rollbar_token = api_details[env]["rollbar"]
-rollbar.init(rollbar_token, env, handler='blocking')
+# rollbar.init(rollbar_token, env, handler='blocking')
 
 conn = configure_redis(env)
 with Connection(conn):
