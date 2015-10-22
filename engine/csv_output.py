@@ -462,7 +462,7 @@ class CsvOut:
 
         with open("/tmp/"+project_prefix+"/readme.md", "w") as readme_file:
             # readme_file.write("Details and food for thought:\n")
-            with open("readme.txt","rb") as f:
+            with open("/app/engine/readme.txt","rb") as f:
                 text = f.readlines()
                 for l in text:
                     readme_file.write(l)
