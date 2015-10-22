@@ -7,6 +7,9 @@ import yaml
 import traceback
 
 def aggregate(project_id, token, href, metadata, environment):
+    with open("/tmp/testing.txt","wb") as f:
+        f.write("hello\n")
+        
     with AggregationAPI(project_id, environment=environment) as project:
         project.__migrate__()
         project.__aggregate__()
