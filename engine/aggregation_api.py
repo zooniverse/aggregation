@@ -528,7 +528,8 @@ class AggregationAPI:
                         height = None
                         width = None
 
-                        if isinstance(metadata,str):
+                        # todo - not sure why this second conversion is needed, but seems to be
+                        if isinstance(metadata,str) or isinstance(metadata,unicode):
                             metadata = json.loads(metadata)
 
                         if "subject_dimensions" in metadata:
