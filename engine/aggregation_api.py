@@ -529,11 +529,15 @@ class AggregationAPI:
                         width = None
 
                         if "subject_dimensions" in metadata:
-                            for dimensions in metadata["subject_dimensions"]:
-                                if dimensions is not None:
-                                    assert isinstance(dimensions,dict)
-                                    height = dimensions["naturalHeight"]
-                                    width = dimensions["naturalWidth"]
+                            try:
+                                for dimensions in metadata["subject_dimensions"]:
+                                    if dimensions is not None:
+                                        assert isinstance(dimensions,dict)
+                                        height = dimensions["naturalHeight"]
+                                        width = dimensions["naturalWidth"]
+                            except TypeError:
+                                print metadata
+                                raise
 
                         yield int(subject_id),int(record.user_id),record.annotations,(height,width)
 
@@ -1900,8 +1904,8 @@ if __name__ == "__main__":
         environment = "development"
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
-        # project.__migrate__()
-        # project.__aggregate__()
+        project.__migrate__()
+        project.__aggregate__()
 
         c = csv_output.CsvOut(project)
         c.__write_out__()
