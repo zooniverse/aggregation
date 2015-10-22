@@ -528,6 +528,9 @@ class AggregationAPI:
                         height = None
                         width = None
 
+                        if isinstance(metadata,str):
+                            metadata = json.loads(metadata)
+
                         if "subject_dimensions" in metadata:
                             try:
                                 for dimensions in metadata["subject_dimensions"]:
