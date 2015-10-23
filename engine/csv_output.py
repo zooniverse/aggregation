@@ -352,8 +352,8 @@ class CsvOut:
         :param aggregations:
         :return:
         """
-        if self.__count_check__(workflow_id,subject_id) < self.retirement_thresholds[workflow_id]:
-            return
+        # if self.__count_check__(workflow_id,subject_id) < self.retirement_thresholds[workflow_id]:
+        #     return
 
         classification_tasks,marking_tasks = self.workflows[workflow_id]
 
