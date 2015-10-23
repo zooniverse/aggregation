@@ -96,11 +96,6 @@ class CsvOut:
             f.close()
         self.csv_files = {}
 
-        # start by creating a directory specific to this project - if one does not already exist
-        output_directory = "/tmp/"+str(self.project_id)+"/"
-        if not os.path.exists(output_directory):
-            os.makedirs(output_directory)
-
         # now create a sub directory specific to the workflow
         workflow_name = self.workflow_names[workflow_id]
         workflow_name = self.__csv_string__(workflow_name)
@@ -442,12 +437,15 @@ class CsvOut:
         # with open("/tmp/"+str(self.project_id)+"/readme.md", "w") as readme_file:
         #     readme_file.truncate()
 
+        if not os.path.exists("/tmp/"+str(self.project_id)):
+            os.makedirs("/tmp/"+str(self.project_id))
+
         for workflow_id in self.workflows:
             print "===---"
             print workflow_id
             # self.__readme_text__(workflow_id)
             # # create the output files for this workflow
-            output_directory = self.__make_files__(workflow_id)
+            self.__make_files__(workflow_id)
 
             # results are going to be ordered by subject id (because that's how the results are stored)
             # so we can going to be cycling through task_ids. That's why we can't loop through classification_tasks etc.
@@ -468,6 +466,7 @@ class CsvOut:
                     for l in text:
                         readme_file.write(l)
         except IOError:
+
             with open("/tmp/"+project_prefix+"/readme.md", "w") as readme_file:
                 readme_file.write("There are no retired subjects for this project")
 
