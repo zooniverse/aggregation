@@ -460,12 +460,16 @@ class CsvOut:
 
         # # add some final details to the read me file
 
-        with open("/tmp/"+project_prefix+"/readme.md", "w") as readme_file:
-            # readme_file.write("Details and food for thought:\n")
-            with open("/app/engine/readme.txt","rb") as f:
-                text = f.readlines()
-                for l in text:
-                    readme_file.write(l)
+        try:
+            with open("/tmp/"+project_prefix+"/readme.md", "w") as readme_file:
+                # readme_file.write("Details and food for thought:\n")
+                with open(os.getcwd()+"/readme.txt","rb") as f:
+                    text = f.readlines()
+                    for l in text:
+                        readme_file.write(l)
+        except IOError:
+            with open("/tmp/"+project_prefix+"/readme.md", "w") as readme_file:
+                readme_file.write("There are no retired subjects for this project")
 
         if compress:
             tar_file_path = "/tmp/" + project_prefix + "_export.tar.gz"

@@ -1911,5 +1911,5 @@ if __name__ == "__main__":
         project.__migrate__()
         project.__aggregate__()
 
-        c = csv_output.CsvOut(project)
-        c.__write_out__()
+        with csv_output.CsvOut(project) as c:
+            c.__write_out__()
