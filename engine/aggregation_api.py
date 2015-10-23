@@ -704,6 +704,13 @@ class AggregationAPI:
         else:
             return self.classifications[subject_id][task_id][cluster_index][question_id]
 
+    def __is_project_live__(self):
+        request = "projects/"+str(self.project_id)
+        data = self.__panoptes_call__(request)
+
+        return data["projects"][0]["live"]
+
+
     def __get_most_recent_cassandra_classification__(self):
         select_statement = "select created_at from classifications where project_id = " + str(self.project_id) + " order by created_at"
         classification_timestamps = self.cassandra_session.execute(select_statement)
@@ -803,7 +810,9 @@ class AggregationAPI:
         """
         subjects = []
 
-        if self.only_retired_subjects:
+        self.__is_project_live__()
+
+        if self.__is_project_live__() and self.only_retired_subjects:
             stmt = """ SELECT * FROM "subjects"
                     INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."subject_id" = "subjects"."id"
                     WHERE "subject_workflow_counts"."workflow_id" = """ + str(workflow_id) + """ AND "subject_workflow_counts"."retired_at" >= '""" + str(self.previous_runtime) + """'"""
@@ -1183,6 +1192,7 @@ class AggregationAPI:
         :return:
         """
         request = urllib2.Request(self.host_api+url)
+        print self.host_api+url
         request.add_header("Accept","application/vnd.api+json; version=1")
         # only add the token if we have a secure connection
         if self.token is not None:
