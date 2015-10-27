@@ -929,32 +929,40 @@ class SubjectRetirement(Classification):
         assert (self.host_api is not None) and (self.project_id is not None) and (self.token is not None) and (self.workflow_id is not None)
 
     def __aggregate__(self,raw_classifications,workflow,aggregations):
-        return aggregations
+        # start by looking for empty subjects
 
-    def __task_aggregation__(self,classifications,task_id,aggregations):
-        to_retire = []
-        for subject_id in classifications:
-            users,everything_transcribed = zip(*classifications[subject_id])
-            # count how many people have said everything is transcribed
-            count = sum([1. for e in everything_transcribed if e == True])
-            # and perent
-            percent = sum([1. for e in everything_transcribed if e == True]) / float(len(everything_transcribed))
-            if (count >= 3) and (percent >= 0.6):
-                to_retire.append(subject_id)
+        to_retire = set()
+        for subject_id in raw_classifications["T0"]:
+            user_ids,is_subject_empty = zip(*raw_classifications["T0"][subject_id])
+            empty_count = sum([1 for i in is_subject_empty if i == True])/float(len(is_subject_empty))
+            if (len(is_subject_empty) > 5) and (empty_count >= 0.8):
+                to_retire.add(subject_id)
 
-        # having some trouble with the format for submitting retirement requests
-        # so going to try and if we have a problem - just keep on going
-        # also, report back the results so we know what's going
-        try:
-            headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+self.token}
-            params = {"retired_subjects":to_retire}
-            # r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
-            r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,data=json.dumps(params))
-            rollbar.report_message("results from trying to retire subjects","info",extra_data=r.text)
+        # now look to see if everything has been transcribed
+        for subject_id in raw_classifications["T3"]:
+            user_ids,completely_transcribed = zip(*raw_classifications["T3"][subject_id])
 
-        except TypeError:
-            rollbar.report_exc_info()
-        
+            # have at least 4/5 of the last 5 people said the subject has been completely transcribed?
+            recent_completely_transcribed = completely_transcribed[:-5]
+            complete_count = sum([1 for i in recent_completely_transcribed if i == True])/float(len(recent_completely_transcribed))
+
+            if (len(recent_completely_transcribed) == 5) and (complete_count >= 0.8):
+                to_retire.add(subject_id)
+
+        print to_retire
+
+        if to_retire != set():
+            try:
+                headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+self.token}
+                params = {"retired_subjects":list(to_retire)}
+                # r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
+                r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,data=json.dumps(params))
+                # rollbar.report_message("results from trying to retire subjects","info",extra_data=r.text)
+
+            except TypeError as e:
+                print e
+                rollbar.report_exc_info()
+
         return aggregations
 
 
@@ -1101,6 +1109,6 @@ subject_id = 662619
 if __name__ == "__main__":
     with Tate(sys.argv[1],sys.argv[2]) as project:
         pass
-        project.__migrate__()
+        # project.__migrate__()
         project.__aggregate__()
         # print aggregated_text
