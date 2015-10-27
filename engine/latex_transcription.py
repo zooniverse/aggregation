@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 __author__ = 'ggdhines'
 from transcription import Tate
 import sys
@@ -14,10 +15,13 @@ latex_header = """
 
 
 """
+
+project_id = 376
+environment = "development"
 with open("/tmp/transcription.tex","w") as f:
     f.write(latex_header)
 
-    with Tate(sys.argv[1],sys.argv[2]) as project:
+    with Tate(project_id,environment) as project:
         for subject_id,aggregations in project.__yield_aggregations__(205):
             print subject_id
 
@@ -47,9 +51,13 @@ with open("/tmp/transcription.tex","w") as f:
 
             empty = True
 
+            num_users = []
+
             for key,line in aggregations["T2"]["text clusters"].items():
                 if key in ["all_users","param"]:
                     continue
+
+                num_users.append(line["num users"])
 
                 x1,x2,y1,y2,text = line["center"]
                 plt.plot([x1,x2],[y1,y2],"-",color="red",linewidth=0.5)
@@ -67,7 +75,7 @@ with open("/tmp/transcription.tex","w") as f:
             if not empty:
                 print "***"
                 f.write("\section{"+str(fname)+"}\n")
-                f.write("\\begin{figure}[t]\centering \includegraphics[scale=0.95]{/tmp/"+str(subject_id)+".pdf} \end{figure}")
+                f.write("\\begin{figure}[t]\centering \includegraphics[scale=1]{/tmp/"+str(subject_id)+".pdf} \end{figure}")
 
 
             for y,l in line_items:
@@ -82,6 +90,7 @@ with open("/tmp/transcription.tex","w") as f:
                 f.write("\\newline\n")
 
             if not empty:
+                f.write("\\newline \\newline Number of transcriptions per line: " + str(num_users) + "\n")
                 f.write("\\newpage\n")
     f.write("\end{document}")
 
