@@ -8,8 +8,10 @@ import matplotlib.cbook as cbook
 
 latex_header = """
 \documentclass[a4paper,10pt]{article}
-\usepackage[utf8]{inputenc}
+%\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
 \usepackage{color}
+\usepackage[margin=0.25in]{geometry}
 \usepackage{graphicx}
 \\begin{document}
 
@@ -34,6 +36,7 @@ with open("/tmp/transcription.tex","w") as f:
                 fname = "subject id " + str(subject_id)
 
             lines = {}
+            individual_lines = {}
 
             fig = plt.figure()
             axes = fig.add_subplot(1, 1, 1)
@@ -63,7 +66,13 @@ with open("/tmp/transcription.tex","w") as f:
                 plt.plot([x1,x2],[y1,y2],"-",color="red",linewidth=0.5)
                 lines[y1] = text
 
+                pt_list,text_list = zip(*line["cluster members"])
+                individual_lines[y1] = text_list
+
                 empty = False
+
+
+
 
             line_items = lines.items()
             line_items.sort(key= lambda x:x[0])
@@ -73,25 +82,57 @@ with open("/tmp/transcription.tex","w") as f:
             plt.close()
 
             if not empty:
-                print "***"
+
                 f.write("\section{"+str(fname)+"}\n")
                 f.write("\\begin{figure}[t]\centering \includegraphics[scale=1]{/tmp/"+str(subject_id)+".pdf} \end{figure}")
 
+                for y,l in line_items:
+                    for c in l:
+                        if c == "&":
+                            f.write("\&")
+                        elif ord(c) not in [24,27]:
+                            f.write(c)
+                        else:
+                            f.write("{\color{red}?}")
 
-            for y,l in line_items:
-                for c in l:
-                    if c == "&":
-                        f.write("\&")
-                    elif ord(c) not in [24,27]:
-                        f.write(c)
-                    else:
-                        f.write("{\color{red}?}")
+                    f.write("\\newline\n")
 
-                f.write("\\newline\n")
-
-            if not empty:
                 f.write("\\newline \\newline Number of transcriptions per line: " + str(num_users) + "\n")
                 f.write("\\newpage\n")
+
+                # now repeat for individual lines
+                for y,l in line_items:
+                    f.write("\\noindent ")
+                    for c in l:
+                        if c == "&":
+                            f.write("\&")
+                        elif ord(c) not in [24,27]:
+                            f.write(c)
+                        else:
+                            f.write("{\color{red}?}")
+
+                    f.write("\\newline\n--- \\newline\n")
+
+                    for i_l in individual_lines[y]:
+                        # if "with" in i_l:
+                        #     print i_l
+                        #     assert False
+                        f.write("\\textit{")
+                        for c in i_l:
+
+                            if c == "&":
+                                f.write("\&")
+                            elif ord(c) not in [24,27]:
+                                f.write(c)
+                            else:
+                                f.write("{\color{red}-}")
+                        f.write("}")
+                        f.write("\\newline\n")
+
+                    f.write("\\newline\n")
+                f.write("\\newpage\n")
+
+
     f.write("\end{document}")
 
 call(["pdflatex","-output-directory=/tmp","/tmp/transcription.tex"])
