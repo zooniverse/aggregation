@@ -934,20 +934,24 @@ class SubjectRetirement(Classification):
         to_retire = set()
         for subject_id in raw_classifications["T0"]:
             user_ids,is_subject_empty = zip(*raw_classifications["T0"][subject_id])
-            empty_count = sum([1 for i in is_subject_empty if i == True])/float(len(is_subject_empty))
-            if (len(is_subject_empty) > 5) and (empty_count >= 0.8):
-                to_retire.add(subject_id)
+            if is_subject_empty != []:
+                empty_count = sum([1 for i in is_subject_empty if i == True])/float(len(is_subject_empty))
+                if (len(is_subject_empty) > 5) and (empty_count >= 0.8):
+                    to_retire.add(subject_id)
+
+        print to_retire
 
         # now look to see if everything has been transcribed
         for subject_id in raw_classifications["T3"]:
             user_ids,completely_transcribed = zip(*raw_classifications["T3"][subject_id])
 
             # have at least 4/5 of the last 5 people said the subject has been completely transcribed?
-            recent_completely_transcribed = completely_transcribed[:-5]
-            complete_count = sum([1 for i in recent_completely_transcribed if i == True])/float(len(recent_completely_transcribed))
+            recent_completely_transcribed = completely_transcribed[-5:]
+            if recent_completely_transcribed != []:
+                complete_count = sum([1 for i in recent_completely_transcribed if i == True])/float(len(recent_completely_transcribed))
 
-            if (len(recent_completely_transcribed) == 5) and (complete_count >= 0.8):
-                to_retire.add(subject_id)
+                if (len(recent_completely_transcribed) == 5) and (complete_count >= 0.8):
+                    to_retire.add(subject_id)
 
         print to_retire
 
