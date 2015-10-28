@@ -45,24 +45,41 @@ with open("/tmp/transcription.json","wb") as f:
 
 
 
-
+                agreement = True
+                differences = {}
                 for c_i,c in enumerate(cluster["center"][-1]):
                     if ord(c) in [24,27]:
-                        options = set([individual_text[c_i] for coord,individual_text in cluster["cluster members"]])
-                        line += "<disagreement>"
-                        for c in options:
-                            line += "<option>"
-                            if ord(c) == 24:
-                                pass
-                            else:
+                        agreement = False
+
+                        char_options = [(ii,individual_text[c_i]) for ii,(coord,individual_text) in enumerate(cluster["cluster members"])]
+
+                        for ii,c in char_options:
+                            if ord(c) != 24:
                                 if c == "\"":
-                                    line += "\\\""
-                                elif c == "\\":
-                                    line += "\\\\"
+                                    c = "\\\""
+                                if c == "\\":
+                                    c = "\\\\"
+
+                                if ii not in differences:
+                                    differences[ii] = c
                                 else:
-                                    line += c
-                        line += "</disagreement>"
+                                    differences[ii] += c
+                            else:
+                                if ii not in differences:
+                                    differences[ii] = ""
+
+                        # options = set([individual_text[c_i] for coord,individual_text in cluster["cluster members"]])
+
                     else:
+                        if not agreement:
+                            line += "<disagreement>"
+                            for c in set(differences.values()):
+                                line += "<option>"+c+"</option>"
+                            line += "</disagreement>"
+                            differences = {}
+
+
+                        agreement = True
                         if c == "\"":
                             line += "\\\""
                         elif c == "\\":
@@ -76,6 +93,7 @@ with open("/tmp/transcription.json","wb") as f:
 
             if not empty:
                 f.write("]}")
+                break
         f.write("]")
 
 with open("/tmp/transcription.json","r") as f:
