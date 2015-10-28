@@ -16,28 +16,28 @@ from scipy.stats import chi2
 import math
 
 client = pymongo.MongoClient()
-db = client['serengeti_2015-06-27']
+db = client['serengeti_2015-08-20']
 subjects = db["serengeti_subjects"]
 classifications = db["serengeti_classifications"]
 
-conn = psycopg2.connect("dbname='serengeti' user='greg' host='localhost' password='apassword'")
+conn = psycopg2.connect("dbname='serengeti' user='ggdhines' host='localhost' password='apassword'")
 cur = conn.cursor()
 
 # cur.execute("drop table serengeti")
-cur.execute("create table serengeti(user_name text,created_at timestamp)")#, PRIMARY KEY (user_name,created_at))")
-cur.execute("create index i1 on serengeti (user_name)")
-cur.execute("create index i2 on serengeti (user_name,created_at)")
-
-for i,c in enumerate(classifications.find().limit(15000000)):
-    if "user_name" in c:
-        user_name = c["user_name"]
-        assert isinstance(user_name,unicode)
-        # print user_name
-        user_name = user_name.replace("'","")
-        cur.execute("insert into serengeti (user_name,created_at) values ('"+user_name+"','"+str(c["created_at"])+"')")
-        if i% 1000 == 0:
-            print i
-conn.commit()
+# cur.execute("create table serengeti(user_name text,created_at timestamp)")#, PRIMARY KEY (user_name,created_at))")
+# cur.execute("create index i1 on serengeti (user_name)")
+# cur.execute("create index i2 on serengeti (user_name,created_at)")
+#
+# for i,c in enumerate(classifications.find().limit(15000000)):
+#     if "user_name" in c:
+#         user_name = c["user_name"]
+#         assert isinstance(user_name,unicode)
+#         # print user_name
+#         user_name = user_name.replace("'","")
+#         cur.execute("insert into serengeti (user_name,created_at) values ('"+user_name+"','"+str(c["created_at"])+"')")
+#         if i% 1000 == 0:
+#             print i
+#conn.commit()
 
 # connect to the mongodb server
 
