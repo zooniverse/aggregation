@@ -12,8 +12,7 @@ with open("/tmp/transcription.json","wb") as f:
     with Tate(project_id,environment) as project:
         f.write("[")
         for subject_id,aggregations in project.__yield_aggregations__(121):
-            if subject_id != 662727:
-                continue
+
             empty = True
 
             if "T2" not in aggregations:
@@ -37,7 +36,9 @@ with open("/tmp/transcription.json","wb") as f:
                 if empty:
                     m = project.__get_subject_metadata__(subject_id)
                     metadata = m["subjects"][0]["metadata"]
-                    f.write("{\"subject_id\": " + str(subject_id) + ", \"metadata\": " + json.dumps(metadata) + ",")
+                    metadata = json.dumps(metadata)
+                    # metadata = metadata.encode('ascii','ignore')
+                    f.write("{\"subject_id\": " + str(subject_id) + ", \"metadata\": " + metadata + ",")
                     f.write("\"individual_transcriptions\":[")
                     transcriptions = project.__sort_annotations__(121,[subject_id])[1]
                     first = True
@@ -46,6 +47,8 @@ with open("/tmp/transcription.json","wb") as f:
                             continue
                         coord = transcription[:-1]
                         individual_text = transcription[-1]
+                        if "\n" in individual_text:
+                            continue
 
                         individual_text = individual_text.replace("\\","\\\\")
                         individual_text = individual_text.replace("\"","\\\"")
@@ -153,7 +156,7 @@ with open("/tmp/transcription.json","wb") as f:
                 f.write("]}")
                 # break
                 count += 1
-                break
+                
         f.write("]")
 
 with open("/tmp/transcription.json","r") as f:
