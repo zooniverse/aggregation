@@ -7,11 +7,13 @@ project_id = 245
 environment = "development"
 
 first = True
-
+count = 0
 with open("/tmp/transcription.json","wb") as f:
     with Tate(project_id,environment) as project:
         f.write("[")
         for subject_id,aggregations in project.__yield_aggregations__(121):
+            if subject_id != 662727:
+                continue
             empty = True
 
             if "T2" not in aggregations:
@@ -35,7 +37,36 @@ with open("/tmp/transcription.json","wb") as f:
                 if empty:
                     m = project.__get_subject_metadata__(subject_id)
                     metadata = m["subjects"][0]["metadata"]
-                    f.write("{\"subject_id\": " + str(subject_id) + ", \"metadata\": " + json.dumps(metadata) + ", \"aggregated_text\":[")
+                    f.write("{\"subject_id\": " + str(subject_id) + ", \"metadata\": " + json.dumps(metadata) + ",")
+                    f.write("\"individual_transcriptions\":[")
+                    transcriptions = project.__sort_annotations__(121,[subject_id])[1]
+                    first = True
+                    for ii,(user_id,transcription,tool) in enumerate(transcriptions["T2"]["text"][subject_id]):
+                        if transcription is None:
+                            continue
+                        coord = transcription[:-1]
+                        individual_text = transcription[-1]
+
+                        individual_text = individual_text.replace("\\","\\\\")
+                        individual_text = individual_text.replace("\"","\\\"")
+
+                        if not first:
+                            f.write(",")
+                        first = False
+                        f.write("{")
+                        f.write("\"user_id\":"+str(user_id)+",")
+                        f.write("\"coordinates\":"+str(list(coord))+",")
+                        try:
+                            individual_text = individual_text.encode('ascii','ignore')
+                            f.write("\"text\": \""+str(individual_text) + "\"")
+                        except UnicodeEncodeError:
+                            print individual_text
+                            raise
+                        f.write("}")
+
+
+
+                    f.write("],\"aggregated_text\":[")
                     f.write("{\"coordinates\":" + str(cluster["center"][:-1])+", \"text\":\"")
                 else:
                     f.write(",{\"coordinates\":" + str(cluster["center"][:-1])+", \"text\":\"")
@@ -89,10 +120,39 @@ with open("/tmp/transcription.json","wb") as f:
 
 
 
-                f.write(line + "\"}")
+                f.write(line + "\"")
+                f.write(",\"individual_transcriptions\":[")
+                for ii,(coords,individual_text) in enumerate(cluster["cluster members"]):
+                    temp_text = individual_text
+                    temp_text = temp_text.replace("\\","\\\\")
+                    temp_text = temp_text.replace("\"","\\\"")
+
+                    skip = 0
+                    is_skip = False
+                    individual_text = ""
+                    for c in temp_text:
+                        if ord(c) in [24,27]:
+                            is_skip = True
+                            skip += 1
+                        else:
+                            if is_skip:
+                                individual_text += "<skip>"+str(skip)+"</skip>"
+                                skip = 0
+                                is_skip = 0
+                            individual_text += c
+
+
+                    if ii > 0:
+                        f.write(",")
+                    f.write("{\"coordinates\":"+str(coords)+",\"text\":\""+individual_text+"\"}")
+
+                f.write("]}")
+
 
             if not empty:
                 f.write("]}")
+                # break
+                count += 1
                 break
         f.write("]")
 
