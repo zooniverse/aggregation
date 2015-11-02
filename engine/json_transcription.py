@@ -2,27 +2,38 @@
 __author__ = 'ggdhines'
 from transcription import Tate
 import json
+from latex_transcription import get_updated_tags
 
 project_id = 245
 environment = "development"
+workflow_id = 121
+transcription_task = "T2"
+
+project_id = 376
+workflow_id = 205
 
 first = True
 count = 0
+
+replacement_tags = get_updated_tags(project_id)
+
 with open("/tmp/transcription.json","wb") as f:
     with Tate(project_id,environment) as project:
         f.write("[")
-        for subject_id,aggregations in project.__yield_aggregations__(121):
+        for subject_id,aggregations in project.__yield_aggregations__(workflow_id):
 
             empty = True
 
             if "T2" not in aggregations:
+                print "skipping"
                 continue
 
             for cluster_index,cluster in aggregations["T2"]["text clusters"].items():
+                print cluster
                 if cluster_index == "all_users":
                     continue
 
-                if cluster["num users"] < 5:
+                if cluster["num users"] < 2:
                     continue
 
                 if empty and not first:
@@ -40,7 +51,7 @@ with open("/tmp/transcription.json","wb") as f:
                     # metadata = metadata.encode('ascii','ignore')
                     f.write("{\"subject_id\": " + str(subject_id) + ", \"metadata\": " + metadata + ",")
                     f.write("\"individual_transcriptions\":[")
-                    transcriptions = project.__sort_annotations__(121,[subject_id])[1]
+                    transcriptions = project.__sort_annotations__(workflow_id,[subject_id])[1]
                     first = True
                     for ii,(user_id,transcription,tool) in enumerate(transcriptions["T2"]["text"][subject_id]):
                         if transcription is None:
@@ -81,7 +92,15 @@ with open("/tmp/transcription.json","wb") as f:
 
                 agreement = True
                 differences = {}
-                for c_i,c in enumerate(cluster["center"][-1]):
+
+                # for folger this will allow us to remove sw- from all of the tags
+                # for both folger and annotate, we will set <unclear>.*</unclear> to just <unclear></unclear>
+                aggregated_line = cluster["center"][-1]
+                assert isinstance(aggregated_line,str)
+                for old,new in replacement_tags.items():
+                    aggregated_line = aggregated_line.replace(old,new)
+
+                for c_i,c in enumerate(aggregated_line):
                     if ord(c) in [24,27]:
                         agreement = False
 
@@ -121,17 +140,25 @@ with open("/tmp/transcription.json","wb") as f:
                         else:
                             line += c
 
-
-
                 f.write(line + "\"")
                 f.write(",\"individual_transcriptions\":[")
                 for ii,(coords,individual_text) in enumerate(cluster["cluster members"]):
+                    # again, convert the tags to the ones needed by Folger or Tate (as opposed to the ones
+                    # zooniverse is using)
+                    assert isinstance(individual_text,str)
+                    for old,new in replacement_tags.items():
+                        individual_text = individual_text.replace(old,new)
+
                     temp_text = individual_text
                     temp_text = temp_text.replace("\\","\\\\")
                     temp_text = temp_text.replace("\"","\\\"")
 
+
                     skip = 0
                     is_skip = False
+
+                    # we need to "rebuild" the individual text so that we can insert <skip>X</skip>
+                    # to denote that MAFFT inserted X spaces into the line
                     individual_text = ""
                     for c in temp_text:
                         if ord(c) in [24,27]:
@@ -156,7 +183,7 @@ with open("/tmp/transcription.json","wb") as f:
                 f.write("]}")
                 # break
                 count += 1
-                
+
         f.write("]")
 
 with open("/tmp/transcription.json","r") as f:

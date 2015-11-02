@@ -6,6 +6,7 @@ from subprocess import call
 import matplotlib.pyplot as plt
 import matplotlib.cbook as cbook
 import re
+import yaml
 
 latex_header = """
 \documentclass[a4paper,10pt]{article}
@@ -19,44 +20,30 @@ latex_header = """
 
 """
 
-folger_tags = {}
+def get_updated_tags(project_id):
+    replacement_tags = {}
+    param_file = open("/app/config/aggregation.yml","rb")
+    param_details = yaml.load(param_file)
 
-# folger_tags["<unclear>[.][*]</unclear>"] = "<unclear></unclear>"
-folger_tags["<ex>"] = "<ex>"
-folger_tags["</ex>"] = "</ex>"
-folger_tags["<del>"] = "<del>"
-folger_tags["</del>"] = "</del>"
-folger_tags["<ins>"] = "<ins>"
-folger_tags["</ins>"] = "</ins>"
-folger_tags["<sup>"] = "<sup>"
-folger_tags["</sup>"] = "</sup>"
-folger_tags["<label>"] = "<label>"
-folger_tags["</label>"] = "</label>"
-folger_tags["<graphic>"] = "<graphic>"
-folger_tags["</graphic>"] = "</graphic>"
-folger_tags["<which></which>"] = "w<ex>hi</ex><sl>ch</sl>"
-folger_tags["<with></with>"] = "w<ex>i</ex><sl>th</sl>"
-folger_tags["<the></the>"] = "<brev-y>th</brev-y><sl>e</sl>"
-folger_tags["<that></that>"] = "<brev-y>th</brev-y><ex>a</ex><sl>t</sl>"
-folger_tags["<them></them>"] = "<brev-y>th</brev-y><ex>e</ex><sl>m</sl>"
-folger_tags["<your></your>"] = "y<ex>ou</ex><sl>r</sl>"
-folger_tags["<maiestie></maiestie>"] = "Ma<ex>ies</ex><sl>tie</sl>"
-folger_tags["<worshipfull></worshipfull>"] = "Wor<ex>shipfu</ex><sl>ll</sl>"
-folger_tags["<lady></lady>"] = "La<ex>dy</ex>"
-folger_tags["<ladyship></ladyship>"] = "La<ex>dyshi</ex><sl>ll</sl>"
-folger_tags["<lord></lord>"] = "L<ex>ord</ex>"
-folger_tags["<lordship></lordship>"] = "L<ex>ordshi</ex>p"
-folger_tags["<sir></sir>"] = "S<ex>i</ex><sl>r</sl>"
-folger_tags["<our></our>"] = "o<ex>u</ex><sl>r</sl>"
-folger_tags["<examinant></examinant>"] = "Exa<ex>m</ex>i<ex>nan</ex>te"
-folger_tags["<item></item>"] = "It<ex>e</ex>m"
-folger_tags["<letter></letter>"] = "l<ex>ett</ex>re"
-folger_tags["<honorable></honorable>"] = "Ho<ex>norable</ex>"
-folger_tags["<esquire></esquire>"] = "Esq<ex>uire</ex>"
-folger_tags["<es></es>"] = "<brev-es>es</brev-es>"
-folger_tags["<ment></ment>"] = "m<ex>en</ex><sl>t</sl>"
-folger_tags["<paid></paid>"] = "p<ex>ai</ex><sl>d</sl>"
-folger_tags["<Anno></Anno>"] = "A<ex>nn</ex><sl>o</sl>"
+    if (project_id not in param_details) or ("tags" not in param_details[project_id]):
+        print "could not find any tag info in the yml file"
+        assert False
+
+    with open(param_details[project_id]["tags"],"rb") as f:
+        for old_tag in f.readlines():
+            assert isinstance(old_tag,str)
+            old_tag = old_tag[:-1]
+            if old_tag == "":
+                break
+            new_tag = old_tag.replace("sw-","")
+            new_tag = new_tag.replace(".*","")
+
+            replacement_tags[old_tag] = new_tag
+
+project_id = 376
+
+folger_tags = get_updated_tags(376)
+
 
 for old_tag,new_tag in folger_tags.items():
     folger_tags[old_tag] = "{\color{blue}" + new_tag + "}"
@@ -92,7 +79,7 @@ def coloured_string(text):
     return text
 
 
-project_id = 376
+
 environment = "development"
 with open("/tmp/transcription.tex","w") as f:
     f.write(latex_header)
@@ -129,6 +116,8 @@ with open("/tmp/transcription.tex","w") as f:
             empty = True
 
             num_users = []
+
+            print aggregations["T2"]["text clusters"].items()
 
             for key,line in aggregations["T2"]["text clusters"].items():
                 if key in ["all_users","param"]:
