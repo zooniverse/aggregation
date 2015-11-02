@@ -15,33 +15,36 @@ import numpy as np
 from scipy.stats import chi2
 import math
 
-client = pymongo.MongoClient()
-db = client['serengeti_2015-08-20']
-subjects = db["serengeti_subjects"]
-classifications = db["serengeti_classifications"]
+db_name = "condor"
+date = "_2014-11-23"
 
-conn = psycopg2.connect("dbname='serengeti' user='ggdhines' host='localhost' password='apassword'")
+client = pymongo.MongoClient()
+db = client[db_name+date]
+subjects = db[db_name+"_subjects"]
+classifications = db[db_name+"_classifications"]
+
+conn = psycopg2.connect("dbname='"+db_name+"' user='greg' host='localhost' password='apassword'")
 cur = conn.cursor()
 
 # cur.execute("drop table serengeti")
-# cur.execute("create table serengeti(user_name text,created_at timestamp)")#, PRIMARY KEY (user_name,created_at))")
-# cur.execute("create index i1 on serengeti (user_name)")
-# cur.execute("create index i2 on serengeti (user_name,created_at)")
-#
-# for i,c in enumerate(classifications.find().limit(15000000)):
-#     if "user_name" in c:
-#         user_name = c["user_name"]
-#         assert isinstance(user_name,unicode)
-#         # print user_name
-#         user_name = user_name.replace("'","")
-#         cur.execute("insert into serengeti (user_name,created_at) values ('"+user_name+"','"+str(c["created_at"])+"')")
-#         if i% 1000 == 0:
-#             print i
-#conn.commit()
+cur.execute("create table "+db_name+"(user_name text,created_at timestamp)")#, PRIMARY KEY (user_name,created_at))")
+cur.execute("create index "+db_name+"1 on "+db_name+" (user_name)")
+cur.execute("create index "+db_name+"2 on "+db_name+" (user_name,created_at)")
+
+for i,c in enumerate(classifications.find().limit(15000000)):
+    if "user_name" in c:
+        user_name = c["user_name"]
+        assert isinstance(user_name,unicode)
+        # print user_name
+        user_name = user_name.replace("'","")
+        cur.execute("insert into "+db_name+" (user_name,created_at) values ('"+user_name+"','"+str(c["created_at"])+"')")
+        if i% 1000 == 0:
+            print i
+conn.commit()
 
 # connect to the mongodb server
 
-cur.execute("select distinct user_name from serengeti")
+cur.execute("select distinct user_name from " + db_name)
 users = [c[0] for c in cur.fetchall()]
 
 all_f = []
@@ -66,7 +69,7 @@ Y = []
 
 for ii,u in enumerate(users):
     # print u
-    cur.execute("select created_at from serengeti where user_name = '" + u + "'")
+    cur.execute("select created_at from " +db_name + " where user_name = '" + u + "'")
 
     timestamps = [c[0] for c in cur.fetchall()]
 
@@ -86,7 +89,7 @@ for ii,u in enumerate(users):
             previous_index = t_index
 
     session_lengths.append(len(timestamps)-previous_index)
-    if (len(session_lengths) < 100):# or (len(session_lengths) >= 40):
+    if (len(session_lengths) < 5):# or (len(session_lengths) >= 40):
         continue
 
     # p = np.percentile(np.asarray(session_lengths),50)
