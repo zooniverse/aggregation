@@ -164,10 +164,8 @@ def create_clusters(ordering,maxima):
     maxima_index = maxima.index(next_maxima)
     left_maximia = maxima[:maxima_index]
     right_maximia = maxima[maxima_index+1:]
-    # print right_maximia
     # need to adjust the indices for the right hand values
     right_maximia = [(i-split,j) for (i,j) in right_maximia]
-    # print right_maximia
 
     retval = create_clusters(left_split,left_maximia)
     retval.extend(create_clusters(right_split,right_maximia))
@@ -209,27 +207,8 @@ class TextCluster(clustering.Cluster):
                 for l in f.readlines():
                     self.tags[l[:-1]] = tag_counter
                     tag_counter += 1
-        # self.tags["\[deletion\]"] = chr(150)
-        # self.tags["\[/deletion\]"] = chr(151)
-        # self.tags["\[illegible\]"] = chr(152)
-        # self.tags["\[/illegible\]"] = chr(153)
-        # self.tags["\[insertion\]"] = chr(154)
-        # self.tags["\[/insertion\]"] = chr(155)
-        # self.tags["\[notenglish\]"] = chr(156)
-        # self.tags["\[/notenglish\]"] = chr(157)
-
-        # self.tags = dict()
-        # self.tags["\[deletion\].*\[/deletion\]"] = chr(150)
-        # # self.tags["\[/deletion\]"] = chr(151)
-        # self.tags["\[illegible\].*\[/illegible\]*"] = chr(152)
-        # # self.tags["\[/illegible\]"] = chr(153)
-        # self.tags["\[insertion\].*\[/insertion\]"] = chr(154)
-        # # self.tags["\[/insertion\]"] = chr(155)
-        # self.tags["\[notenglish\].*\[notenglish\]"] = chr(156)
-        # # self.tags["\[/notenglish\]"] = chr(157)
 
         self.erroneous_tags = dict()
-        # self.erroneous_tags["[illegible]"] = chr(152)
 
     def __line_alignment__(self,lines):
         """
@@ -276,7 +255,9 @@ class TextCluster(clustering.Cluster):
                 else:
                     cumulative_line += line[:-1]
 
-            assert cumulative_line != ""
+            if cumulative_line == "":
+                print lines
+                assert False
             aligned_text.append(cumulative_line)
 
 
@@ -516,6 +497,7 @@ class TextCluster(clustering.Cluster):
         # use the below 2 to build up each cluster
         current_lines = {}
         current_pts = {}
+        current_hessen = {}
         clusters = []
 
         non_fasta_text = {}
@@ -532,6 +514,9 @@ class TextCluster(clustering.Cluster):
             raw_pt = markings[user_index][:-1]
 
             text = text.encode("ascii","ignore")
+            if "bought me" in text:
+                print "****"
+                print text
 
             # skip lines with new lines characters in them
             # Roger has set things up so that new line characters are no longer allowed
@@ -561,6 +546,7 @@ class TextCluster(clustering.Cluster):
                 current_lines[user] = text
                 # adding the user id is slightly redundant but makes doing the actual clustering easier
                 current_pts[user] = (raw_pt,user)
+                current_hessen[user] = a
             else:
                 # need to see if we want to merge the text with the existing cluster or start a new one
                 # do we already have some text from this user for this current cluster?
@@ -569,9 +555,18 @@ class TextCluster(clustering.Cluster):
                 # for the simplified transcription, we will assume that we should automatically start a new
                 # cluster - i.e. we don't deal with split lines
                 if user in current_pts:
+                    # if len(current_pts.keys()) > 2:
+                    #     print current_hessen[user]
+                    #     print a
+                    #     print current_lines.values()
+                    #     print text
+                    #     print
+
                     clusters.append((current_lines.values(),current_pts.values()))
                     current_lines = {user:text} #(text,special_characters)}
                     current_pts = {user:(raw_pt,user)}
+                    current_hessen = {user:a}
+
                 else:
                     # does adding this line to the cluster make sense?
                     # todo - why am I sorting here? doesn't really seem necessary
@@ -609,18 +604,20 @@ class TextCluster(clustering.Cluster):
                     if min(new_accuracy) >= 0.6:
                         current_pts[user] = (raw_pt,user)
                         current_lines[user] = text
+                        current_hessen[user] =a
                     else:
                         # otherwise, start a new cluster
                         clusters.append((current_lines.values(),current_pts.values()))
                         current_lines = {user:text}
                         current_pts = {user:(raw_pt,user)}
+                        current_hessen = {user:a}
 
         # make sure to add the final cluster that we were working on at the end
         clusters.append((current_lines.values(),current_pts.values()))
 
         # remove any clusters which have only one user - treat those as noise
         for cluster_index in range(len(clusters)-1,-1,-1):
-            if len(clusters[cluster_index][0]) <= 1: #2
+            if len(clusters[cluster_index][0]) <= 2: #2
                 # assert len(clusters[cluster_index][1]) == 1
                 clusters.pop(cluster_index)
 
@@ -641,7 +638,6 @@ class TextCluster(clustering.Cluster):
                 x1,x2,y1,y2 = np.median(x1_l),np.median(x2_l),np.median(y1_l),np.median(y2_l)
                 hessen_lines.append(hesse_line_reduction([[x1,x2,y1,y2],])[0])
 
-            # print hessen_lines
             slope_l,angle_l = zip(*hessen_lines)
             max_s,min_s = max(slope_l),min(slope_l)
             max_a,min_a = max(angle_l),min(angle_l)
@@ -683,9 +679,9 @@ class TextCluster(clustering.Cluster):
                                     break
 
                             if not relevant:
-                                to_merge.append(set([l_index,l2_index]))
+                                to_merge.append((l_index, l2_index))
 
-            # might be a better way to do this but will mulitple popping from list, safer
+            # might be a better way to do this but will multiple popping from list, safer
             # to work with a copy
             new_clusters = []
 
@@ -939,8 +935,6 @@ class SubjectRetirement(Classification):
                 if (len(is_subject_empty) > 5) and (empty_count >= 0.8):
                     to_retire.add(subject_id)
 
-        print to_retire
-
         # now look to see if everything has been transcribed
         for subject_id in raw_classifications["T3"]:
             user_ids,completely_transcribed = zip(*raw_classifications["T3"][subject_id])
@@ -952,8 +946,6 @@ class SubjectRetirement(Classification):
 
                 if (len(recent_completely_transcribed) == 5) and (complete_count >= 0.8):
                     to_retire.add(subject_id)
-
-        print to_retire
 
         if to_retire != set():
             try:
@@ -1038,7 +1030,6 @@ class Tate(AggregationAPI):
         aggregated_text.sort(key = lambda x:x["center"][2])
 
         for text in aggregated_text:
-            # print text["center"][:-1]
             ax.plot([text["center"][0],text["center"][1]],[text["center"][2],text["center"][3]],color="red")
             actual_text = text["center"][-1]
             atomic_text = self.cluster_algs["text"].__set_special_characters__(actual_text)[1]
@@ -1113,6 +1104,6 @@ subject_id = 662619
 if __name__ == "__main__":
     with Tate(sys.argv[1],sys.argv[2]) as project:
         pass
-        # project.__migrate__()
+        project.__migrate__()
         project.__aggregate__()
         # print aggregated_text
