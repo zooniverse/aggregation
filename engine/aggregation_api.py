@@ -21,7 +21,7 @@ import random
 import cPickle as pickle
 from os.path import expanduser
 import csv_output
-
+import time
 
 # these are libraries which are only needed if you are working directly with the db
 # so if they are not on your computer - we'll just skip them
@@ -189,7 +189,6 @@ def hesse_line_reduction(line_segments):
         if len(line_seg) > 4:
             reduced_markings[-1].append(line_seg[4])
 
-    print reduced_markings
     return reduced_markings
 
 
@@ -298,12 +297,12 @@ class AggregationAPI:
 
         # sometimes we want params specific to a project - ie. we are in development but want to read
         # off the staging postgres db - in such case we just provide an extra yaml file
-        if self.project_id in param_details:
-            project_details = param_details[self.project_id]
-            if "project_name" in project_details:
-                print "aggregating project: " + project_details["project_name"]
-        else:
-            project_details = param_details[self.environment]
+        # if self.project_id in param_details:
+        #     project_details = param_details[self.project_id]
+        #     if "project_name" in project_details:
+        #         print "aggregating project: " + project_details["project_name"]
+        # else:
+        project_details = param_details[self.environment]
 
         # connect to whatever postgres db we want to
         self.__postgres_connect__(project_details)
@@ -312,7 +311,18 @@ class AggregationAPI:
         self.__cassandra_connect__(project_details["cassandra"])
         # as soon as we have a cassandra connection - check to see when the last time we ran
         # the aggregation engine for this project - if this query fails for whatever reason
-        # fall back on 2000,1,1
+        # fall back a default date
+        # either 2000,1,1 or check if one has been provided by the yml file
+        # (this is really useful if we know that we have some annotations of the incorrect form
+        # i.e. someone has changed something, and we want to exclude those ones)
+        if (self.project_id in param_details) and ("default_date" in param_details[self.project_id]):
+            time_string = param_details[self.project_id]["default_date"]
+            # don't know if this conversion is needed, but playing it safe
+            t = time.strptime(time_string,"%Y %m %d")
+            self.minimum_time = datetime.datetime(t.tm_year,t.tm_mon,t.tm_mday)
+        else:
+            self.minimum_time = datetime.datetime(2000,1,1)
+
         self.previous_runtime = datetime.datetime(2000,1,1)
         # use this one for figuring out the most recent classification read in
         # we need to use as our runtime value, not the clock (since classifications could still be coming in
@@ -422,6 +432,7 @@ class AggregationAPI:
 
             print "workflow id : " + str(workflow_id)
             print "aggregating " + str(len(subject_set)) + " subjects"
+
             # self.__describe__(workflow_id)
             classification_tasks,marking_tasks = self.workflows[workflow_id]
 
@@ -506,7 +517,6 @@ class AggregationAPI:
                         print record_list
                     assert success
 
-
                     # seem to have the occasional "retired" subject with no classifications, not sure
                     # why this is possible but if it can happen, just make a note of the subject id and skip
                     if record_list == []:
@@ -519,6 +529,9 @@ class AggregationAPI:
                         #     print "too early"
                         #     print record.created_at
                         #     continue
+
+                        if record.created_at < self.minimum_time:
+                            continue
 
                         # check to see if the metadata contains image size
                         metadata = record.metadata
@@ -811,6 +824,8 @@ class AggregationAPI:
         subjects = []
 
         self.__is_project_live__()
+
+
 
         if self.__is_project_live__() and self.only_retired_subjects:
             stmt = """ SELECT * FROM "subjects"
