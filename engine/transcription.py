@@ -28,20 +28,43 @@ try:
     import yaml
 
 except:
-    # if any errors were raised - probably because Greg thought
-    # that some Python library was standard when it actually isn't
-    # report it with rollbar (which should hopefully be installed)
-    import yaml
-    import rollbar
-
-    panoptes_file = open("/app/config/aggregation.yml","rb")
-    api_details = yaml.load(panoptes_file)
-    rollbar_token = api_details["default"]["rollbar"]
-    rollbar.init(rollbar_token,"production")
-    rollbar.report_exc_info()
+    # # if any errors were raised - probably because Greg thought
+    # # that some Python library was standard when it actually isn't
+    # # report it with rollbar (which should hopefully be installed)
+    # import yaml
+    # import rollbar
+    #
+    # panoptes_file = open("/app/config/aggregation.yml","rb")
+    # api_details = yaml.load(panoptes_file)
+    # rollbar_token = api_details["default"]["rollbar"]
+    # rollbar.init(rollbar_token,"production")
+    # rollbar.report_exc_info()
 
     raise
 
+folger_replacements = {}
+with open("/home/ggdhines/alpha_folger","rb") as alpha_folger:
+    with open("/home/ggdhines/beta_folger","rb") as beta_folger:
+        for l1,l2 in zip(alpha_folger.readlines(),beta_folger.readlines()):
+            l1 = l1.strip()
+            l2 = l2.strip()
+            folger_replacements[l1] = l2
+
+
+def folger_alpha_tags(text):
+    assert isinstance(text,str)
+    if "with" in text:
+        print text
+        a = True
+    else:
+        a = False
+    for l1,l2 in folger_replacements.items():
+        text = text.replace(l1,l2)
+
+    if a:
+        print text
+        print
+    return text
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -514,9 +537,7 @@ class TextCluster(clustering.Cluster):
             raw_pt = markings[user_index][:-1]
 
             text = text.encode("ascii","ignore")
-            if "bought me" in text:
-                print "****"
-                print text
+            text = folger_alpha_tags(text)
 
             # skip lines with new lines characters in them
             # Roger has set things up so that new line characters are no longer allowed
@@ -1099,11 +1120,8 @@ class Tate(AggregationAPI):
 
         return aggregations
 
-subject_id = 662619
-
 if __name__ == "__main__":
     with Tate(sys.argv[1],sys.argv[2]) as project:
-        pass
         project.__migrate__()
         project.__aggregate__()
         # print aggregated_text

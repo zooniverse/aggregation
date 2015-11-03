@@ -38,7 +38,11 @@ def get_updated_tags(project_id):
             new_tag = old_tag.replace("sw-","")
             new_tag = new_tag.replace(".*","")
 
+            print old_tag,new_tag
+
             replacement_tags[old_tag] = new_tag
+
+    return replacement_tags
 
 project_id = 376
 
@@ -49,6 +53,11 @@ for old_tag,new_tag in folger_tags.items():
     folger_tags[old_tag] = "{\color{blue}" + new_tag + "}"
 
 def coloured_string(text):
+    if "and battles" in text:
+        print text
+        a = True
+    else:
+        a = False
     old_text = text
 
     text = re.sub("<unclear>[.][*]</unclear>","{\color{blue}<unclear></unclear>}",text)
@@ -66,7 +75,7 @@ def coloured_string(text):
     #
     # for ii,new_tag in second_intermediate_dict.items():
     #     text = re.sub(chr(ii),new_tag,text)
-    for tag,new_tag in folger_tags.items():
+    for tag,new_tag in sorted(folger_tags.items(), key = lambda x:len(x[0]),reverse=True):
         # text = re.sub(tag,new_tag,text)
         text = text.replace(tag,new_tag)
 
@@ -76,6 +85,9 @@ def coloured_string(text):
         print text
         assert False
 
+    if a:
+        print text
+        print
     return text
 
 
@@ -89,8 +101,6 @@ with open("/tmp/transcription.tex","w") as f:
             print subject_id
 
             metadata = project.__get_subject_metadata__(subject_id)["subjects"][0]["metadata"]
-            print metadata
-            print "file name" in metadata
             if "file name" in metadata:
                 fname = metadata["file name"]
             else:
@@ -99,15 +109,7 @@ with open("/tmp/transcription.tex","w") as f:
             lines = {}
             individual_lines = {}
 
-            fig = plt.figure()
-            axes = fig.add_subplot(1, 1, 1)
-            #
-            image_fname = project.__image_setup__(subject_id)
 
-            image_file = cbook.get_sample_data(image_fname)
-            image = plt.imread(image_file)
-            # fig, ax = plt.subplots()
-            im = axes.imshow(image)
             #
 
             #
@@ -140,11 +142,25 @@ with open("/tmp/transcription.tex","w") as f:
             line_items = lines.items()
             line_items.sort(key= lambda x:x[0])
 
-            plt.axis('off')
-            plt.savefig("/tmp/"+str(subject_id)+".pdf",bbox_inches='tight', pad_inches=0)
-            plt.close()
+
+
+
+            # if empty:
+            #     plt.close()
 
             if not empty:
+                fig = plt.figure()
+                axes = fig.add_subplot(1, 1, 1)
+                #
+                image_fname = project.__image_setup__(subject_id)
+
+                image_file = cbook.get_sample_data(image_fname)
+                image = plt.imread(image_file)
+                # fig, ax = plt.subplots()
+                im = axes.imshow(image)
+                plt.axis('off')
+                plt.savefig("/tmp/"+str(subject_id)+".pdf",bbox_inches='tight', pad_inches=0,dpi = 500)
+                plt.close()
 
                 f.write("\section{"+str(fname)+"}\n")
                 f.write("\\begin{figure}[t]\centering \includegraphics[scale=1]{/tmp/"+str(subject_id)+".pdf} \end{figure}")

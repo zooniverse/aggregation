@@ -14,25 +14,21 @@ import matplotlib.cbook as cbook
 import math
 import sys
 import agglomerative
-import clustering
 import blob_clustering
-from collections import OrderedDict
 import random
-import cPickle as pickle
 from os.path import expanduser
 import csv_output
 import time
 
 # these are libraries which are only needed if you are working directly with the db
 # so if they are not on your computer - we'll just skip them
-try:
-    import cassandra
-    from cassandra.cluster import Cluster
-    from cassandra.concurrent import execute_concurrent
-    import psycopg2
-    import rollbar
-except:
-    pass
+
+import cassandra
+from cassandra.cluster import Cluster
+from cassandra.concurrent import execute_concurrent
+import psycopg2
+import rollbar
+
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -1107,6 +1103,7 @@ class AggregationAPI:
 
         # only migrate classifications created since we last ran this code
         # use >= just in case some classifications have the exact same time stamp - rare but could happen
+        # select = "SELECT *, classification_subjects.subject_id from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
         select = "SELECT * from classifications where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
         cur = self.postgres_session.cursor()
         cur.execute(select)
@@ -1123,14 +1120,16 @@ class AggregationAPI:
         most_recent_classification = datetime.datetime(2000,1,1)
 
         for ii,t in enumerate(cur.fetchall()):
+            # id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version,subject_id = t
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
+
+            subject_id = subject_ids[0]
 
             self.new_runtime = max(self.new_runtime,created_at)
 
             most_recent_classification = max(most_recent_classification,updated_at)
 
             # can't really handle pairwise comparisons yet
-            assert len(subject_ids) == 1
             # self.migrated_subjects.add(subject_ids[0])
 
             if gold_standard != True:
@@ -1143,13 +1142,13 @@ class AggregationAPI:
                 user_id = -1
             # get only the major version of the workflow
             workflow_version = int(math.floor(float(workflow_version)))
-            id = workflow_id,subject_ids[0]
-            # if subject_ids[0] == 4153:
-            #     print workflow_id,user_ip
-
-            if id not in migrated:
-                migrated[id] = 0
-            migrated[id] += 1
+            # id = workflow_id,subject_id
+            # # if subject_ids[0] == 4153:
+            # #     print workflow_id,user_ip
+            #
+            # if id not in migrated:
+            #     migrated[id] = 0
+            # migrated[id] += 1
 
             # cassandra can only handle json in str format - so convert if necessary
             # "if necessary" - I think annotations should always start off as json format but
@@ -1160,12 +1159,10 @@ class AggregationAPI:
             assert isinstance(annotations,str)
             # print ii, project_id,workflow_id
 
-            params = (project_id, user_id, workflow_id,created_at, annotations, updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_ids[0], workflow_version,json.dumps(metadata))
+            params = (project_id, user_id, workflow_id,created_at, annotations, updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_id, workflow_version,json.dumps(metadata))
             statements_and_params.append((insert_statement, params))
 
-            # params2 = (project_id,workflow_id,workflow_version,subject_ids[0])
-            # statements_and_params.append((insert_statement2,params2))
-            subject_listing.add((project_id,workflow_id,workflow_version,subject_ids[0]))
+            subject_listing.add((project_id,workflow_id,workflow_version,subject_id))
 
             if len(statements_and_params) == 100:
                 results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
