@@ -12,7 +12,7 @@ im2_gray = cv2.cvtColor(im2,cv2.COLOR_BGR2GRAY)
 sz = im1.shape
 
 # Define the motion model
-warp_mode = cv2.MOTION_TRANSLATION
+warp_mode = cv2.MOTION_EUCLIDEAN
 
 # Define 2x3 or 3x3 matrices and initialize the matrix to identity
 if warp_mode == cv2.MOTION_HOMOGRAPHY :

@@ -84,7 +84,6 @@ y_pts = y_dict.items()
 y_pts.sort()
 
 for y_i in range(len(y_pts)):
-    y_range =
 
     if (y_i > 0) and (y_i < (len(y_pts)-1)):
         print y_pts[y_i-1],y_pts[y_i],y_pts[y_i+1]
