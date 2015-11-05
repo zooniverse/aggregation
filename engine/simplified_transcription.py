@@ -4,11 +4,13 @@ import clustering
 import numpy as np
 import re
 import os
-import old_transcription
+import transcription
 from aggregation_api import hesse_line_reduction
 from scipy import spatial
 import datetime
 import cPickle as pickle
+import classification
+import requests
 
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
@@ -16,13 +18,13 @@ else:
     base_directory = "/home/greg"
 
 
-class SimplifiedTextCluster(old_transcription.TextCluster):
+class SimplifiedTextCluster(transcription.TextCluster):
     def __init__(self,shape,dim_reduction_alg):
         clustering.Cluster.__init__(self,shape,dim_reduction_alg)
 
         self.completed_lines = {}
 
-    def __aggregate__(self,raw_markings):
+    def __aggregate__(self,raw_markings,image_dimensions):
         """
         the function to call from outside to do the clustering
         override but call if you want to add additional functionality
@@ -60,6 +62,8 @@ class SimplifiedTextCluster(old_transcription.TextCluster):
                     else:
                         users,markings,tools = zip(*pruned_markings)
 
+                        print markings
+                        print self.dim_reduction_alg
                         reduced_markings = self.dim_reduction_alg(markings)
 
                         # do the actual clustering
@@ -94,6 +98,7 @@ class SimplifiedTextCluster(old_transcription.TextCluster):
         # mapped_markings = zip(dist_list,theta_list)
 
         # cluster just on points, not on text
+        print reduced_markings
         dist_l,theta_l,text_l = zip(*reduced_markings)
         reduced_markings_without_text = zip(dist_l,theta_l)
         ordering  = self.__fit2__(reduced_markings_without_text,user_ids)
@@ -349,12 +354,53 @@ class SimplifiedTextCluster(old_transcription.TextCluster):
         return results,0
 
 
-class SimplifiedTate(old_transcription.Tate):
-    def __init__(self):
-        old_transcription.Tate.__init__(self)
+class SubjectRetirement(classification.Classification):
+    def __init__(self,param_dict):
+        classification.Classification.__init__(self)
+        assert isinstance(param_dict,dict)
 
-        reduction_algs = {"text":old_transcription.text_line_reduction}
-        self.__set_clustering_algs__({"text":SimplifiedTextCluster},reduction_algs)
+        # to retire subjects, we need a connection to the host api, which hopefully is provided
+        self.host_api = None
+        self.project_id = None
+        self.token = None
+        self.workflow_id = None
+        for key,value in param_dict.items():
+            if key == "host":
+                self.host_api = value
+            elif key == "project_id":
+                self.project_id = value
+            elif key == "token":
+                self.token = value
+            elif key == "workflow_id":
+                self.workflow_id = value
+
+        assert (self.host_api is not None) and (self.project_id is not None) and (self.token is not None) and (self.workflow_id is not None)
+
+    def __task_aggregation__(self,raw_classifications,task_id,aggregations):
+        to_retire = []
+        for subject_id in raw_classifications:
+            users,everything_transcribed = zip(*raw_classifications[subject_id])
+            # count how many people have said everything is transcribed
+            count = sum([1. for e in everything_transcribed if e == True])
+            # and perent
+            percent = sum([1. for e in everything_transcribed if e == True]) / float(len(everything_transcribed))
+            if (count >= 3) and (percent >= 0.6):
+                to_retire.append(subject_id)
+
+        headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+self.token}
+        params = {"retired_subjects":to_retire}
+        r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
+
+        return []
+
+class SimplifiedTate(transcription.Tate):
+    def __init__(self):
+        transcription.Tate.__init__(self,245,"development")
+
+        self.default_clustering_algs["text"] = SimplifiedTextCluster
+        self.additional_clustering_args = {"text": {"reduction":hesse_line_reduction}}
+        # reduction_algs = {"text":transcription.text_line_reduction}
+        # self.__set_clustering_algs__({"text":SimplifiedTextCluster},reduction_algs)
 
         # self.old_time = datetime.datetime(2015,8,27)
         self.starting_date = datetime.datetime(2015,8,27)
@@ -369,6 +415,6 @@ class SimplifiedTate(old_transcription.Tate):
 if __name__ == "__main__":
     with SimplifiedTate() as project:
         project.__migrate__()
-        print project.cluster_algs["text"].completed_lines
+        # print project.cluster_algs["text"].completed_lines
         project.__aggregate__(workflows=[121])
         print project.cluster_algs["text"].completed_lines
