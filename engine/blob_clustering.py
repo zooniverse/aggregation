@@ -258,7 +258,7 @@ class BlobClustering(clustering.Cluster):
     def __init__(self,shape,**kwargs):
         assert shape != "point"
         clustering.Cluster.__init__(self,shape,kwargs)
-        self.rectangle = (shape == "rectangle")
+        self.rectangle = (shape == "rectangle") or (shape == "image")
 
     def __fix_polygon__(self,points):
         fixed_polygons = None

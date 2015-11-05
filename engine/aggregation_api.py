@@ -126,20 +126,27 @@ def relevant_point_params(marking,image_dimensions):
 
 
 def relevant_rectangle_params(marking,image_dimensions):
-    x = marking["x"]
-    y = marking["y"]
+    x = float(marking["x"])
+    y = float(marking["y"])
+    x2 = x + float(marking["width"])
+    y2 = y + float(marking["height"])
 
-    x2 = x + marking["width"]
-    y2 = y + marking["height"]
-
-    if (x<0)or(y<0):
+    # not sure how nan can happen but apparently it can
+    if math.isnan(x) or math.isnan(y) or math.isnan(x2) or math.isnan(y2):
+        raise InvalidMarking(marking)
+    if min(x,y,x2,y2) < 0:
         raise InvalidMarking(marking)
 
-    if image_dimensions is not None:
+
+    if (float(marking["width"]) == 0) or (float(marking["height"]) == 0):
+        raise InvalidMarking(marking)
+
+    if (image_dimensions is not None) and (image_dimensions != (None,None)):
         if(x2 > image_dimensions[0]) or(y2>image_dimensions[1]):
             raise InvalidMarking(marking)
 
-    # return x,y,x2,y2
+
+
     return (x,y),(x,y2),(x2,y2),(x2,y)
 
 
@@ -239,6 +246,7 @@ class AggregationAPI:
         self.marking_params_per_shape["rectangle"] = relevant_rectangle_params
         self.marking_params_per_shape["circle"] = relevant_circle_params
         self.marking_params_per_shape["polygon"] = relevant_polygon_params
+        self.marking_params_per_shape["image"] = relevant_rectangle_params
 
         # load the default clustering algorithms
         self.default_clustering_algs = dict()
@@ -250,6 +258,7 @@ class AggregationAPI:
         # these shapes use the blob clustering approach
         self.default_clustering_algs["rectangle"] = blob_clustering.BlobClustering
         self.default_clustering_algs["polygon"] = blob_clustering.BlobClustering
+        self.default_clustering_algs["image"] = blob_clustering.BlobClustering
         # and set any reduction algorithms - to reduce the dimensionality of markings
         self.additional_clustering_args = {"line": {"reduction":hesse_line_reduction}}
         # self.__set_clustering_algs__(default_clustering_algs,reduction_algs)
@@ -1707,8 +1716,9 @@ class AggregationAPI:
                             print marking
                             continue
 
-                        if shape ==  "image":
-                            # todo - treat image like a rectangle
+                        # for development only really - if we are not interested in a certain type of marking
+                        # right now - just skip it
+                        if shape not in self.workflows[workflow_id][1][task_id]:
                             continue
 
                         if shape not in self.marking_params_per_shape:
@@ -1718,8 +1728,9 @@ class AggregationAPI:
                         try:
                             # extract the params specifically relevant to the given shape
                             relevant_params = self.marking_params_per_shape[shape](marking,dimensions)
-                        except InvalidMarking as e:
-                            # print e
+                        except (InvalidMarking,KeyError) as e:
+                            # badly formed marking - or the marking is slightly off the image
+                            # either way - just skip it
                             continue
 
                         spotted_shapes.add(shape)
