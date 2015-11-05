@@ -1112,8 +1112,8 @@ class AggregationAPI:
 
         # only migrate classifications created since we last ran this code
         # use >= just in case some classifications have the exact same time stamp - rare but could happen
-        # select = "SELECT *, classification_subjects.subject_id from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
-        select = "SELECT * from classifications where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
+        select = "SELECT id,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version, classification_subjects.subject_id from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
+        # select = "SELECT * from classifications where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
         cur = self.postgres_session.cursor()
         cur.execute(select)
 
@@ -1129,10 +1129,10 @@ class AggregationAPI:
         most_recent_classification = datetime.datetime(2000,1,1)
 
         for ii,t in enumerate(cur.fetchall()):
-            # id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version,subject_id = t
-            id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
-
-            subject_id = subject_ids[0]
+            id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version,subject_id = t
+            # id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version = t
+            print subject_id
+            # subject_id = subject_ids[0]
 
             self.new_runtime = max(self.new_runtime,created_at)
 
@@ -1603,6 +1603,8 @@ class AggregationAPI:
                         marking_tasks[task_id].append("rectangle")
                     elif tool["type"] == "polygon":
                         marking_tasks[task_id].append("polygon")
+                    elif tool["type"] == "crop":
+                        marking_tasks[task_id].append("crop")
                     else:
                         print tool
                         assert False
@@ -1942,7 +1944,7 @@ if __name__ == "__main__":
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
         project.__migrate__()
-        project.__aggregate__()
+        # project.__aggregate__()
 
-        with csv_output.CsvOut(project) as c:
-            c.__write_out__()
+        # with csv_output.CsvOut(project) as c:
+        #     c.__write_out__()
