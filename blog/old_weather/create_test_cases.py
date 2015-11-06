@@ -3,6 +3,7 @@ from template_align import align
 import numpy as np
 import Image
 import cv2
+from extract_digits import extract
 
 image_directory = "/home/ggdhines/Databases/old_weather/images/"
 template_image = "eastwind-wag-279-1946_0031-0.JPG"
@@ -28,5 +29,8 @@ for f_count,f_name in enumerate(os.listdir(image_directory)):
         sub_image = image[np.ix_(c, r)]
 
         img = Image.fromarray(sub_image, 'RGB')
-        img.save('/home/ggdhines/f/'+str(f_count)+'.png')
-        # raw_input("enter something")
+        img.save('/home/ggdhines/a.png')
+
+
+        extract(sub_image)
+        raw_input("enter something")

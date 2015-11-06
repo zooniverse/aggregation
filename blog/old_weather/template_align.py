@@ -110,7 +110,7 @@ def align(img_fname1,img_fname2):
     #         if y >= Y_2:
     #             continue
     #         for w in range(W):
-    #             im1_aligned[(x,y,w)] = (im1_aligned[(x,y,w)] + img2[(x,y,w)])/2
+    #             im1_aligned[(x,y,w)] = (int(im1_aligned[(x,y,w)]) + int(img2[(x,y,w)]))/2
     #
     # cv2.imwrite("/home/ggdhines/t1.png",im1_aligned)
 
