@@ -55,4 +55,6 @@ docs/_build/
 *~
 *.txt
 .idea/workspace.xml
+.idea/misc.xml
+.idea/reduction.iml
 config/*.yml
