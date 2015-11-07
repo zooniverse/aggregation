@@ -236,7 +236,7 @@ class TextCluster(clustering.Cluster):
 
     def __line_alignment__(self,lines):
         """
-        align the text by using MAFFT
+        align.py the text by using MAFFT
         :param lines:
         :return:
         """
@@ -779,10 +779,10 @@ class TextCluster(clustering.Cluster):
             y1 = np.median(y1_values)
             y2 = np.median(y2_values)
 
-            # align the text
+            # align.py the text
             aligned_text = self.__line_alignment__(lines)
 
-            # align the non-fasta version of the text lines
+            # align.py the non-fasta version of the text lines
             nf_aligned_lines = self.__add_alignment_spaces__(aligned_text,non_fasta_text,pts_and_users)
 
             # aggregate the lines - looking for character spots where there is mostly consensus
