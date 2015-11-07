@@ -22,8 +22,11 @@ def align(p_list1,p_list2):
 
 image_directory = "/home/ggdhines/Databases/old_weather/images/"
 
-fname1 = image_directory+'eastwind-wag-279-1946_0149-0.JPG'
-fname2 = image_directory+'eastwind-wag-279-1946_0382-0.JPG'
+# fname1 = image_directory+'eastwind-wag-279-1946_0149-0.JPG'
+# fname2 = image_directory+'eastwind-wag-279-1946_0382-0.JPG'
+fname1 = "/home/ggdhines/Databases/old_weather/images/Bear-AG-29-1939-0185.JPG"
+fname2 = "/home/ggdhines/Databases/old_weather/images/Bear-AG-29-1939-0177.JPG"
+
 img1 = cv2.imread(fname1)          # queryImage
 img2 = cv2.imread(fname2) # trainImage
 

@@ -2,11 +2,10 @@ import os
 from template_align import align
 import numpy as np
 import Image
-import cv2
 from extract_digits import extract
 
 image_directory = "/home/ggdhines/Databases/old_weather/images/"
-template_image = "eastwind-wag-279-1946_0031-0.JPG"
+template_image = "Bear-AG-29-1939-0175.JPG"
 
 for f_count,f_name in enumerate(os.listdir(image_directory)):
     if f_count == 20:
@@ -24,8 +23,8 @@ for f_count,f_name in enumerate(os.listdir(image_directory)):
         # # break
         # # print type(image)
         # # sub_image = image[162:238,274:326,:]
-        r = range(162,238)
-        c = range(274,326)
+        r = range(1103,1281)
+        c = range(1436,1491)
         sub_image = image[np.ix_(c, r)]
 
         img = Image.fromarray(sub_image, 'RGB')

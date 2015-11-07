@@ -28,7 +28,13 @@ def prune_bad_matches__(P,Q,H,thres):
 
     for p,q in zip(P.transpose(),Q.transpose()):
         # print (p[(0,0)],p[(0,1)]),(q[(0,0)],q[(0,1)])
-        (p_x,p_y),(q_x,q_y) = (p[(0,0)],p[(0,1)]),(q[(0,0)],q[(0,1)])
+        try:
+            p_x,p_y = p[(0,0)],p[(0,1)]
+            q_x,q_y = q[(0,0)],q[(0,1)]
+        except IndexError:
+            print p
+            print q
+            raise
         old_distance = math.sqrt((p_x-q_x)**2+(p_y-q_y)**2)
         # print H
         # print
@@ -50,20 +56,28 @@ def align(img_fname1,img_fname2):
     img2 = cv2.imread(img_fname2)
 
     # Initiate SIFT detector
-    sift = cv2.xfeatures2d.SIFT_create()
+    # sift = cv2.xfeatures2d.SIFT_create()
+    sift = cv2.xfeatures2d.SURF_create()
+    print "a"
 
     # find the keypoints and descriptors with SIFT
     kp1, des1 = sift.detectAndCompute(img1,None)
+
     kp2, des2 = sift.detectAndCompute(img2,None)
-
+    print "c"
     # BFMatcher with default params
-    bf = cv2.BFMatcher()
-    matches = bf.knnMatch(des1,des2, k=2)
+    # bf = cv2.BFMatcher()
+    # matches = bf.knnMatch(des1,des2, k=2)
 
+    index_params = dict(algorithm = 1, trees = 4)
+    search_params = dict(checks=50)
+    flann = cv2.FlannBasedMatcher(index_params,search_params)
+    matches = flann.knnMatch(des1,des2,k=2)
     # Apply ratio test
 
     image1_pts = []
     image2_pts = []
+    print len(matches)
 
     for m,n in matches:
         if m.distance < 0.75*n.distance:
