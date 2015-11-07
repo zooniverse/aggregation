@@ -26,6 +26,7 @@ try:
     import json
     import sys
     import yaml
+    from blob_clustering import BlobClustering
 
 except:
     # # if any errors were raised - probably because Greg thought
@@ -43,12 +44,12 @@ except:
     raise
 
 folger_replacements = {}
-with open("/home/ggdhines/alpha_folger","rb") as alpha_folger:
-    with open("/home/ggdhines/beta_folger","rb") as beta_folger:
-        for l1,l2 in zip(alpha_folger.readlines(),beta_folger.readlines()):
-            l1 = l1.strip()
-            l2 = l2.strip()
-            folger_replacements[l1] = l2
+# with open("/home/ggdhines/alpha_folger","rb") as alpha_folger:
+#     with open("/home/ggdhines/beta_folger","rb") as beta_folger:
+#         for l1,l2 in zip(alpha_folger.readlines(),beta_folger.readlines()):
+#             l1 = l1.strip()
+#             l2 = l2.strip()
+#             folger_replacements[l1] = l2
 
 
 def folger_alpha_tags(text):
@@ -537,7 +538,7 @@ class TextCluster(clustering.Cluster):
             raw_pt = markings[user_index][:-1]
 
             text = text.encode("ascii","ignore")
-            text = folger_alpha_tags(text)
+            # text = folger_alpha_tags(text)
 
             # skip lines with new lines characters in them
             # Roger has set things up so that new line characters are no longer allowed
@@ -651,6 +652,8 @@ class TextCluster(clustering.Cluster):
         # todo - maybe only run this if we have removed any error lines
         if len(clusters) > 1:
 
+            # represent each text cluster by a slope and intercept (using Hessen representation)
+            # based on median values
             hessen_lines = []
 
             for cluster_index in range(len(clusters)):
@@ -668,51 +671,85 @@ class TextCluster(clustering.Cluster):
 
             tree = spatial.KDTree(hessen_lines)
 
+            # might not be the most efficient way of doing things but was a bit easier to reason about
+            # (I think) - to merge clusters, we'll actually create a new list of clusters and copy
+            # values over (and merged as we go)
+            # will_be_merged is the set of clusters which we are going to merge
+            # we're actually using that to keep track of which clusters aren't going to be merged - so they can
+            # be directly copied
             to_merge = []
             will_be_merged = set()
 
+            # go through the clusters in reverse order - that way if we pop something
+            # we don't mess up the ordering for other indices
             for l_index in range(len(hessen_lines)-1,-1,-1):
+                # search for any nearby clusters, i.e. ones that might be reasonable to merge
                 for l2_index in tree.query_ball_point(hessen_lines[l_index],0.15):
+                    # if l_index<l2_index, then we will return to this pair later
+                    # again, so that indices aren't messed up
                     if l2_index > l_index:
+                        # find the users in cluster
+                        # this type of possible merging of clusters only makes
+                        # sense if there is no overlap between the users
+                        _, users_l = zip(*clusters[l_index][1])
+                        _, users_l2 = zip(*clusters[l2_index][1])
+
+                        overlap = [u for u in users_l if u in users_l2]
+                        if overlap != []:
+                            continue
+
+                        # since we now know that there are no overlapping users
+                        # we can combine the individual texts by simply concatenating them
                         t_lines = clusters[l_index][0][:]
                         t_lines.extend(clusters[l2_index][0])
 
+                        # align the texts and get the accuracy (of each individual text compared to
+                        # the aggregate)
                         aligned_text = self.__line_alignment__(t_lines)
                         accuracy = self.__agreement__(aligned_text)
+
+                        # the minimum resulting accuracy is "pretty high" then these clusters should
+                        # probably be merged
                         if min(accuracy) >= 0.5:
                             will_be_merged.add(l_index)
                             will_be_merged.add(l2_index)
 
-                            # make sure that there are not any overlapping users
-                            users_1 = zip(*clusters[l_index][1])[1]
-                            users_2 = zip(*clusters[l2_index][1])[1]
-
-                            if [u for u in users_1 if u in users_2] != []:
-                                continue
-
-                            # is merge "relevant" to any other?
-                            relevant = False
+                            # have we already said that l or l2 should be merged with some other cluster
+                            # (for example, l should be merged with some l3) - then we want to merge all
+                            # three clusters
+                            # todo - maybe look into the accuracy of merging l2 and l3 in the above example
+                            # todo - instead of just inferring it
+                            # todo - probably won't matter but check it at some point (when I have free time - hah!)
+                            already_merged = False
                             for m_index,m in enumerate(to_merge):
                                 if (l_index in m) or (l2_index in m):
-                                    relevant = True
+                                    already_merged = True
                                     m.add(l_index)
                                     m.add(l2_index)
                                     break
 
-                            if not relevant:
-                                to_merge.append((l_index, l2_index))
+                            # if neither of the clusters have already been involved with a merger
+                            # add a brand new entry to the to_merge list
+                            if not already_merged:
+                                # just learnt that {} without : is the notation for creating sets
+                                to_merge.append({l_index, l2_index})
 
             # might be a better way to do this but will multiple popping from list, safer
             # to work with a copy
             new_clusters = []
 
+            # first go through all the clusters which were not merged
             for cluster_index in range(len(clusters)):
                 if cluster_index not in will_be_merged:
                     new_clusters.append(clusters[cluster_index])
+            # now go through all the clusters which need to merged
+            # keep in mind that we might be merging more than 2 clusters at once (although unlikely)
             for merged_clusters in to_merge:
                 t_cluster = [[],[]]
                 for cluster_index in merged_clusters:
+                    # clusters[cluster_index][0] is the list of individual text transcriptions from that cluster
                     t_cluster[0].extend(clusters[cluster_index][0])
+                    # clusters[cluster_index][1] is the list of line segment pts + user ids
                     t_cluster[1].extend(clusters[cluster_index][1])
                 new_clusters.append(t_cluster[:])
 
@@ -987,9 +1024,11 @@ class Tate(AggregationAPI):
     def __init__(self,project_id,environment):
         AggregationAPI.__init__(self,project_id,environment)#"tate")#"tate",environment="staging")
         # the code to extract the relevant params froma  text json file
+
         self.marking_params_per_shape["text"] = relevant_text_params
         # the code to cluster lines together
         self.default_clustering_algs["text"] = TextCluster
+        self.default_clustering_algs["image"] = BlobClustering
         # the code for reducing a line segment (4d) into a 2d object
         # todo - can probably replace this with the standard for line segments
         # self.reduction_algs["text"] = text_line_reduction
@@ -1069,7 +1108,9 @@ class Tate(AggregationAPI):
 
     def __readin_tasks__(self,workflow_id):
         if self.project_id == 245:
-            marking_tasks = {"T2":["text"]}
+            # marking_tasks = {"T2":["text"]}
+            marking_tasks = {"T2":["text","image"]}
+            # todo - where is T1?
             classification_tasks = {"T3" : True}
 
             return classification_tasks,marking_tasks
@@ -1122,6 +1163,6 @@ class Tate(AggregationAPI):
 
 if __name__ == "__main__":
     with Tate(sys.argv[1],sys.argv[2]) as project:
-        project.__migrate__()
+        # project.__migrate__()
         project.__aggregate__()
         # print aggregated_text
