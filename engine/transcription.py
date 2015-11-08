@@ -557,7 +557,7 @@ class TextCluster(clustering.Cluster):
             # handle all characters which MAFFT cannot handle and keep a record of where all
             # the tags are in the string
             # text_with_capitalization is used (at the end) to determine the correct capitalization
-            # of character (since in the mean time capital letters are used for other stuff)
+            # of character (since in the mean time capital letters are used for other stuff
             text, nf_text = self.__set_special_characters__(text)
 
             # save these values for later use
@@ -799,10 +799,6 @@ class TextCluster(clustering.Cluster):
                 l = self.__reset_special_characters__(l)
                 temp_pts_lines.append((p,l))
 
-
-
-
-
             cluster_pts.append(temp_pts_lines)
 
             cluster_users.append(users)
@@ -961,8 +957,8 @@ def text_line_reduction(line_segments):
 
 
 class SubjectRetirement(Classification):
-    def __init__(self,param_dict):
-        Classification.__init__(self)
+    def __init__(self,environment,param_dict):
+        Classification.__init__(self,environment)
         assert isinstance(param_dict,dict)
 
         # to retire subjects, we need a connection to the host api, which hopefully is provided
@@ -1005,7 +1001,8 @@ class SubjectRetirement(Classification):
                 if (len(recent_completely_transcribed) == 5) and (complete_count >= 0.8):
                     to_retire.add(subject_id)
 
-        if to_retire != set():
+        # don't retire if we are in the development environment
+        if (to_retire != set()) and (self.environment != "development"):
             try:
                 headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+self.token}
                 params = {"retired_subjects":list(to_retire)}
@@ -1016,6 +1013,8 @@ class SubjectRetirement(Classification):
             except TypeError as e:
                 print e
                 rollbar.report_exc_info()
+        if self.environment == "development":
+            print "we would have retired " + str(len(to_retire))
 
         return aggregations
 
@@ -1108,7 +1107,7 @@ class Tate(AggregationAPI):
 
     def __readin_tasks__(self,workflow_id):
         if self.project_id == 245:
-            # marking_tasks = {"T2":["text"]}
+            # marking_tasks = {"T2":["image"]}
             marking_tasks = {"T2":["text","image"]}
             # todo - where is T1?
             classification_tasks = {"T3" : True}
@@ -1164,5 +1163,5 @@ class Tate(AggregationAPI):
 if __name__ == "__main__":
     with Tate(sys.argv[1],sys.argv[2]) as project:
         # project.__migrate__()
-        project.__aggregate__()
+        project.__aggregate__(subject_set=[662788])
         # print aggregated_text
