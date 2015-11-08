@@ -816,7 +816,7 @@ class AggregationAPI:
             raise
         # return None
 
-    def __get_subjects__(self,workflow_id):#,only_retired_subjects=False,only_recent_subjects=True):
+    def __get_subjects__(self,workflow_id,only_retired_subjects=False):#,only_recent_subjects=True):
         """
         gets the subjects to aggregate
         if we need retired subjects, query against the production postgresDB
@@ -828,11 +828,11 @@ class AggregationAPI:
         """
         subjects = []
 
-        self.__is_project_live__()
-
-
-
-        if self.__is_project_live__() and self.only_retired_subjects:
+        # for tate/folger we want to aggregate subjects while they are alive (not retired)
+        # so self.only_retired_subjects would be False
+        # but for printing out the json blobs, then we want only retired subjects - which
+        # is where we set only_retired_subjects=True
+        if self.__is_project_live__() and (self.only_retired_subjects or only_retired_subjects):
             stmt = """ SELECT * FROM "subjects"
                     INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."subject_id" = "subjects"."id"
                     WHERE "subject_workflow_counts"."workflow_id" = """ + str(workflow_id) + """ AND "subject_workflow_counts"."retired_at" >= '""" + str(self.previous_runtime) + """'"""
@@ -1620,7 +1620,7 @@ class AggregationAPI:
         return classification_tasks,marking_tasks
 
     def __set_classification_alg__(self,alg,params={}):
-        self.classification_alg = alg(params)
+        self.classification_alg = alg(self.environment,params)
         assert isinstance(self.classification_alg,classification.Classification)
 
     def __sort_annotations__(self,workflow_id,subject_set=None,expert=None):
@@ -1902,14 +1902,14 @@ class AggregationAPI:
             postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
         self.postgres_session.commit()
 
-    def __yield_aggregations__(self,workflow_id,subject_set=None):
+    def __yield_aggregations__(self,workflow_id,subject_id=None):
         """
         generator for giving aggregation results per subject id/task
         """
 
         stmt = "select subject_id,aggregation,updated_at from aggregations where workflow_id = " + str(workflow_id)
-        if subject_set != None:
-            stmt += " and subject_id = " + str(subject_set)
+        if subject_id != None:
+            stmt += " and subject_id = " + str(subject_id)
         cursor = self.postgres_session.cursor()
 
         cursor.execute(stmt)
