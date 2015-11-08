@@ -15,7 +15,7 @@ def findsubsets(S,m):
     return set(itertools.combinations(S, m))
 
 class Classification:
-    def __init__(self):
+    def __init__(self,environment):
         # ,clustering_alg=None
         # assert isinstance(project,ouroboros_api.OuroborosAPI)
 
@@ -28,6 +28,8 @@ class Classification:
 
         self.species = {"lobate":0,"larvaceanhouse":0,"salp":0,"thalasso":0,"doliolidwithouttail":0,"rocketthimble":1,"rockettriangle":1,"siphocorncob":1,"siphotwocups":1,"doliolidwithtail":1,"cydippid":2,"solmaris":2,"medusafourtentacles":2,"medusamorethanfourtentacles":2,"medusagoblet":2,"beroida":3,"cestida":3,"radiolariancolonies":3,"larvacean":3,"arrowworm":3,"shrimp":4,"polychaeteworm":4,"copepod":4}
         self.candidates = self.species.keys()
+
+        self.environment = environment
 
     @abc.abstractmethod
     def __task_aggregation__(self,classifications,task_id,aggregations):
@@ -370,8 +372,8 @@ class Classification:
 
 
 class VoteCount(Classification):
-    def __init__(self,param_dict):
-        Classification.__init__(self)
+    def __init__(self,environment,param_dict):
+        Classification.__init__(self,environment)
 
     def __task_aggregation__(self,raw_classifications,task_id,aggregations):
         """
