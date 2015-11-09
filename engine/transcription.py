@@ -555,7 +555,7 @@ class TextCluster(clustering.Cluster):
             original_text[(raw_pt,user)] = text
             # text = folger_alpha_tags(text)
 
-            print text
+            print str(a) + "\t" + text
 
             # skip lines with new lines characters in them
             # Roger has set things up so that new line characters are no longer allowed
@@ -879,7 +879,7 @@ class TextCluster(clustering.Cluster):
         min_slopes,max_slopes = min(slopes),max(slopes)
 
         if max_intercept > max_intercept:
-            normalized_intercepts = [(i-min_intercept)/(max_intercept-min_intercept) for i in intercepts]
+            normalized_intercepts = [10*(i-min_intercept)/(max_intercept-min_intercept) for i in intercepts]
         else:
             normalized_intercepts = [1 for i in intercepts]
 
