@@ -19,12 +19,13 @@ count = 0
 replacement_tags = get_updated_tags(project_id)
 
 aggregations_to_json = {}
+from transcription import retired_subjects
 
 with Tate(project_id,environment) as project:
     # get the list of all retired subjects
-    retired_subjects = project.__get_subjects__(workflow_id,only_retired_subjects=True)
+    # retired_subjects = project.__get_subjects__(workflow_id,only_retired_subjects=True)
 
-    for subject_id in [662788]:
+    for subject_id in retired_subjects:
         # there will only be one aggregation per subject so a loop would be slightly silly
         # instead I'll just cast to a list and take the first element
         aggregation_list = list(project.__yield_aggregations__(workflow_id,subject_id=subject_id))
@@ -176,5 +177,5 @@ with Tate(project_id,environment) as project:
                 individual_text = individual_text.encode('ascii','ignore')
                 aggregations_to_json[subject_id]["raw transcriptions"].append({"coordinates":coords,"text":individual_text})
 
-
-print json.dumps(aggregations_to_json,indent=4, separators=(',', ': '))
+with open('/home/ggdhines/tate.json', 'w') as outfile:
+    json.dump(aggregations_to_json,outfile)
