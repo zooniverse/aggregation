@@ -1932,6 +1932,7 @@ class AggregationAPI:
             #     # we have an instance of marking
             #     # if isinstance(aggregation[task_id],dict):
             #     yield r[0],task_id,aggregation[task_id]
+        raise StopIteration()
 
 if __name__ == "__main__":
     # todo - use getopt
