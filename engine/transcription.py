@@ -284,7 +284,6 @@ class TextCluster(clustering.Cluster):
                 assert False
             aligned_text.append(cumulative_line)
 
-
         os.remove("/tmp/transcribe"+id_+".fasta")
         os.remove("/tmp/transcribe"+id_+".out")
 
@@ -418,6 +417,17 @@ class TextCluster(clustering.Cluster):
         :param text:
         :return:
         """
+        # undo MAFFT special characters
+        text = re.sub("I"," ",text)
+        text = re.sub("J","=",text)
+        text = re.sub("K","\*",text)
+        text = re.sub("L","\(",text)
+        text = re.sub("M","\)",text)
+        text = re.sub("N","<",text)
+        text = re.sub("O",">",text)
+        text = re.sub("P","-",text)
+        text = re.sub("Q","\'",text)
+
         reverse_map = {v: k for k, v in self.tags.items()}
         # also go with something different for "not sure"
         # this matter when the function is called on the aggregate text
@@ -432,6 +442,8 @@ class TextCluster(clustering.Cluster):
                 ret_text += reverse_map[ord(c)]
             else:
                 ret_text += c
+
+
 
         return ret_text
 
@@ -508,6 +520,7 @@ class TextCluster(clustering.Cluster):
         return aligned_nf_text_list
 
     def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,recusrive=False):
+        print "\nstarting"
         # we want to first cluster first just on dist and theta - ignoring the text contents
         # dist_list,theta_list,text_list,raw_pts_list = zip(*markings)
         # mapped_markings = zip(dist_list,theta_list)
@@ -525,6 +538,7 @@ class TextCluster(clustering.Cluster):
         clusters = []
 
         non_fasta_text = {}
+        original_text = {}
 
         for a,b in ordering:
             # a - line values - "intercept" and slope
@@ -538,7 +552,10 @@ class TextCluster(clustering.Cluster):
             raw_pt = markings[user_index][:-1]
 
             text = text.encode("ascii","ignore")
+            original_text[(raw_pt,user)] = text
             # text = folger_alpha_tags(text)
+
+            print text
 
             # skip lines with new lines characters in them
             # Roger has set things up so that new line characters are no longer allowed
@@ -562,6 +579,7 @@ class TextCluster(clustering.Cluster):
 
             # save these values for later use
             non_fasta_text[(raw_pt,user)] = nf_text
+
 
             # if we currently have an empty cluster, just add the line
             if current_lines == {}:
@@ -623,7 +641,7 @@ class TextCluster(clustering.Cluster):
 
                     # if the minimum accuracy resulted by adding in this line is still reasonably good
                     # add the line to the current cluster
-                    if min(new_accuracy) >= 0.6:
+                    if min(new_accuracy) >= 0.5:
                         current_pts[user] = (raw_pt,user)
                         current_lines[user] = text
                         current_hessen[user] =a
@@ -645,14 +663,22 @@ class TextCluster(clustering.Cluster):
                 # assert len(clusters[cluster_index][1]) == 1
                 error_clusters.append(clusters.pop(cluster_index))
 
+        recursive_results = []
         if not recusrive and (error_clusters != []):
             recursive_marking = []
             recursive_user_ids = []
             recursive_reduced_markings = []
             for c in error_clusters:
-                print c
-                for line,(pt,user_id) in zip(c[0],c[1]):
+
+                # todo - not sure exactly how this could happen
+                if c == [([], [])]:
+                    continue
+
+                for pt,user_id in c[1]:
                     t = list(pt)
+
+                    line = original_text[(pt,user_id)]
+
                     t.append(line)
 
                     recursive_marking.append(tuple(t))
@@ -661,9 +687,12 @@ class TextCluster(clustering.Cluster):
                     reduced.append(line)
                     recursive_reduced_markings.append(reduced)
 
-            print self.__cluster__(recursive_marking,recursive_user_ids,tools,recursive_reduced_markings,image_dimensions,recusrive = True)
-            assert False
+            if recursive_reduced_markings != []:
+                recursive_results = self.__cluster__(recursive_marking,recursive_user_ids,tools,recursive_reduced_markings,image_dimensions,recusrive = True)[0]
 
+        # if recursive_results != []:
+        #     print json.dumps(recursive_results,indent=4, separators=(',', ': '))
+        #     assert False
         if len(clusters) == 0:
             return [],0
 
@@ -833,6 +862,8 @@ class TextCluster(clustering.Cluster):
         for center,pts,users,a in zip(cluster_centers,cluster_pts,cluster_users,agreement):
             results.append({"center":center,"cluster members":pts,"tools":[],"num users":len(users),"agreement":a})
 
+        results.extend(recursive_results)
+
         return results,0
 
     def __preliminarily__clustering__(self,markings,user_ids):
@@ -847,8 +878,15 @@ class TextCluster(clustering.Cluster):
         min_intercept,max_intercept = min(intercepts),max(intercepts)
         min_slopes,max_slopes = min(slopes),max(slopes)
 
-        normalized_intercepts = [(i-min_intercept)/(max_intercept-min_intercept) for i in intercepts]
-        normalized_slopes = [(i-min_slopes)/(max_slopes-min_slopes) for i in slopes]
+        if max_intercept > max_intercept:
+            normalized_intercepts = [(i-min_intercept)/(max_intercept-min_intercept) for i in intercepts]
+        else:
+            normalized_intercepts = [1 for i in intercepts]
+
+        if max_slopes > min_slopes:
+            normalized_slopes = [(i-min_slopes)/(max_slopes-min_slopes) for i in slopes]
+        else:
+            normalized_slopes = [1 for i in slopes]
         pts_list = zip(normalized_intercepts,normalized_slopes)
 
         # so we can "unnormalize" this values
@@ -1030,17 +1068,25 @@ class SubjectRetirement(Classification):
                 if (len(is_subject_empty) > 5) and (empty_count >= 0.8):
                     to_retire.add(subject_id)
 
+        blank_retirement = len(to_retire)
+
+        non_blanks = []
+
         # now look to see if everything has been transcribed
         for subject_id in raw_classifications["T3"]:
             user_ids,completely_transcribed = zip(*raw_classifications["T3"][subject_id])
 
-            # have at least 4/5 of the last 5 people said the subject has been completely transcribed?
-            recent_completely_transcribed = completely_transcribed[-5:]
-            if recent_completely_transcribed != []:
-                complete_count = sum([1 for i in recent_completely_transcribed if i == True])/float(len(recent_completely_transcribed))
+            if sum([1 for i in completely_transcribed]) >= 3:
+                to_retire.add(subject_id)
+                non_blanks.append(subject_id)
 
-                if (len(recent_completely_transcribed) == 5) and (complete_count >= 0.8):
-                    to_retire.add(subject_id)
+            # # have at least 4/5 of the last 5 people said the subject has been completely transcribed?
+            # recent_completely_transcribed = completely_transcribed[-5:]
+            # if recent_completely_transcribed != []:
+            #     complete_count = sum([1 for i in recent_completely_transcribed if i == True])/float(len(recent_completely_transcribed))
+            #
+            #     if (len(recent_completely_transcribed) == 5) and (complete_count >= 0.8):
+            #         to_retire.add(subject_id)
 
         # don't retire if we are in the development environment
         if (to_retire != set()) and (self.environment != "development"):
@@ -1056,7 +1102,8 @@ class SubjectRetirement(Classification):
                 rollbar.report_exc_info()
         if self.environment == "development":
             print "we would have retired " + str(len(to_retire))
-            print to_retire
+            print "with non-blanks " + str(len(to_retire)-blank_retirement)
+            print non_blanks
 
         return aggregations
 
@@ -1210,5 +1257,5 @@ retired_subjects = retired_subjects[:200]
 if __name__ == "__main__":
     with Tate(sys.argv[1],sys.argv[2]) as project:
         # project.__migrate__()
-        project.__aggregate__(subject_set=[662887])
+        project.__aggregate__(subject_set=[671541])
         # print aggregated_text
