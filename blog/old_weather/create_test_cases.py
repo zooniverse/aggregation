@@ -2,10 +2,19 @@ import os
 from template_align import align
 import numpy as np
 import Image
-from extract_digits import extract
+# from extract_digits import extract
 import matplotlib.pyplot as plt
 import matplotlib.cbook as cbook
 import cv2
+import subprocess
+
+import signal
+
+def sig_handler(signum, frame):
+    print "seg fault!!"
+    raise
+
+signal.signal(signal.SIGSEGV, sig_handler)
 
 image_directory = "/home/ggdhines/Databases/old_weather/test_cases/"
 template_image = "Bear-AG-29-1941-0557.JPG"
@@ -19,17 +28,28 @@ cell_rows = [(1226,1320),(1320,1377)]
 
 # s3://zooniverse-static/old-weather-2015/War_in_the_Arctic/Greenland_Patrol/Navy/Bear_AG-29_/
 
-for f_count,f_name in enumerate(os.listdir(image_directory)):
+log_pages = list(os.listdir(image_directory))
 
-    if f_count == 1:
-        break
+# for f_count,f_name in enumerate():
+f_count = 0
+while f_count < min(10,len(log_pages)):
+    f_name = log_pages[f_count]
     if f_name.endswith(".JPG"):
         print image_directory+f_name
 
         # we want to map these new image back to the template image
         # this way we can use the template coordinates without having to do any further transformations
         # image = align(image_directory+template_image,image_directory+f_name)
-        image = align(image_directory+f_name,image_directory+template_image)
+        # image = align(image_directory+f_name,image_directory+template_image)
+        try:
+            t = subprocess.check_output(["python","template_align.py",image_directory+f_name,image_directory+template_image])
+            print type(t)
+            print t
+            f_count += 1
+        except subprocess.CalledProcessError:
+            print "segfault"
+
+        continue
         # cv2.imwrite("/home/ggdhines/t1.png",image)
 
         # # cv2.imwrite('/home/ggdhines/messigray.png',image)
