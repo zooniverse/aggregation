@@ -33,17 +33,21 @@ def get_updated_tags(project_id):
 
     with open(param_details[project_id]["tags"],"rb") as f:
         for old_tag in f.readlines():
+            old_tag = old_tag.strip()
+            print old_tag
             assert isinstance(old_tag,str)
-            old_tag = old_tag[:-1]
+            # old_tag = old_tag[:-1]
             if old_tag == "":
                 break
             new_tag = old_tag.replace("sw-","")
             new_tag = new_tag.replace(".*","")
 
             # this is for annotate
-            new_tag = new_tag.replace("\[","[")
-            new_tag = new_tag.replace("\]","]")
+            new_tag = new_tag.replace("\\","")
+            # new_tag = new_tag.replace("\]","]")
             replacement_tags[old_tag] = new_tag
+            print "^^" +new_tag
+            print "==--"
 
     return replacement_tags
 
@@ -97,6 +101,10 @@ import random
 environment = "development"
 if __name__ == "__main__":
     folger_tags = get_updated_tags(245)
+
+    # print folger_tags
+    # assert False
+    # assert False
     with open("/tmp/transcription.tex","w") as f:
         f.write(latex_header)
 
@@ -124,7 +132,7 @@ if __name__ == "__main__":
 
                 individual_pts = []
 
-                print aggregations
+                # print aggregations
 
                 for key,line in aggregations["T2"]["text clusters"].items():
                     if key in ["all_users","param"]:
@@ -165,14 +173,14 @@ if __name__ == "__main__":
                     f.write("\\begin{figure}[t]\centering \includegraphics[scale=1]{/tmp/"+str(subject_id)+".pdf} \end{figure}")
 
                     for pts,l in line_items:
-                        print l
-                        print [ord(c) for c in l]
+                        # print l
+                        # print [ord(c) for c in l]
                         cumulative_c = ""
 
                         l = l.replace("$","\$")
                         l = l.replace("\\","\\textbackslash")
-                        l = l.replace("[","\[")
-                        l = l.replace("]","\]")
+                        # l = l.replace("[","\[")
+                        # l = l.replace("]","\]")
                         for c in l:
                             if c == "&":
                                 f.write(coloured_string(cumulative_c)+"\&")
