@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 import math
 import Image
 from numpy.linalg import inv
-import matplotlib.cbook as cbook
+import sys
 
 
 def euclidean_least_squares(p_list1,p_list2):
@@ -47,7 +47,6 @@ def prune_bad_matches__(P,Q,H,thres):
             pruned_pts2.append((q_x,q_y,1))
         else:
             bad += 1
-    print " " + str(len(pruned_pts1))
     return pruned_pts1,pruned_pts2,bad
 
 
@@ -58,13 +57,12 @@ def align(img_fname1,img_fname2):
     # Initiate SIFT detector
     # sift = cv2.xfeatures2d.SIFT_create()
     sift = cv2.xfeatures2d.SURF_create()
-    print "a"
 
     # find the keypoints and descriptors with SIFT
     kp1, des1 = sift.detectAndCompute(img1,None)
 
     kp2, des2 = sift.detectAndCompute(img2,None)
-    print "c"
+    # print "c"
     # BFMatcher with default params
     # bf = cv2.BFMatcher()
     # matches = bf.knnMatch(des1,des2, k=2)
@@ -77,7 +75,6 @@ def align(img_fname1,img_fname2):
 
     image1_pts = []
     image2_pts = []
-    print len(matches)
 
     for m,n in matches:
         if m.distance < 0.75*n.distance:
@@ -100,7 +97,6 @@ def align(img_fname1,img_fname2):
         # second pass - remove any bad matches
         image1_pts,image2_pts,bad_count = prune_bad_matches__(P,Q,H,thresholds[t_i])
         P,Q,H = euclidean_least_squares(image1_pts,image2_pts)
-        print bad_count
         if bad_count == 0:
             t_i += 1
 
@@ -128,4 +124,19 @@ def align(img_fname1,img_fname2):
     #
     # cv2.imwrite("/home/ggdhines/t1.png",im1_aligned)
 
-    return im1_aligned
+    return len(matches),im1_aligned
+
+if __name__ == "__main__":
+    to_be_aligned = sys.argv[1]
+    template = sys.argv[2]
+
+    assert isinstance(to_be_aligned,str)
+    slash_index = to_be_aligned.rfind("/")
+    fname = to_be_aligned[slash_index+1:]
+
+    num_matches,image = align(to_be_aligned,template)
+
+    if num_matches < 50000:
+        print "bad match"
+    else:
+        cv2.imwrite("/home/ggdhines/Databases/old_weather/pruned_cases/"+fname,image)
