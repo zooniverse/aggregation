@@ -56,6 +56,10 @@ def extract(image):
                 # plt.plot(r,c,"o",color="black")
                 pts.append((r,c))
 
+    # hopefully corresponds to an empty cell
+    if pts == []:
+        return
+
     rows,columns = zip(*pts)
     min_r =min(rows)
     max_r =max(rows)
@@ -125,13 +129,20 @@ def extract(image):
         y_offset = int(28/2 - height/2)
 
         digit_array = np.asarray(digit_image)
-        print "****"
+
+
         centered_array = [0 for i in range(28**2)]
 
-        darkest_pixel = 0
-        for y in range(len(digit_array)):
-            for x in range(len(digit_array[0])):
-                darkest_pixel = max(darkest_pixel,digit_array[y][x])
+        print digit_array == digit_image
+        print "===----"
+        try:
+            darkest_pixel = 0
+            for y in range(len(digit_array)):
+                for x in range(len(digit_array[0])):
+                    darkest_pixel = max(darkest_pixel,digit_array[y][x])
+        except TypeError:
+            print "problem skipping this one"
+            continue
 
         darkest_pixel = max(darkest_pixel,100)
 
