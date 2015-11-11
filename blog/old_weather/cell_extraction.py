@@ -51,6 +51,7 @@ for f_count,f_name in enumerate(log_pages):
             #
             #
             img = Image.fromarray(sub_image, 'RGB')
+            # img.convert("L")
             img.save("/home/ggdhines/Databases/old_weather/cells/"+base_fname+"_"+str(row_index)+"_"+str(column_index)+".png")
             #
             #

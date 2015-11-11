@@ -1,12 +1,38 @@
 import os
-import numpy as np
-from PIL import Image
-import matplotlib.pyplot as plt
-import math
+# import numpy as np
+# from PIL import Image
+# import matplotlib.pyplot as plt
+# import math
 from skimage.transform import (hough_line, hough_line_peaks,
                                probabilistic_hough_line)
 from skimage.feature import canny
+# from sklearn.cluster import DBSCAN
+import cv2
+import numpy as np
+import math
+import matplotlib.pyplot as plt
+# from scipy import spatial
 from sklearn.cluster import DBSCAN
+import Image
+# import cv2
+from mnist import MNIST
+from sklearn import neighbors
+from sklearn.decomposition import PCA
+
+n_neighbors = 15
+
+mndata = MNIST('/home/ggdhines/Databases/mnist')
+training = mndata.load_training()
+
+weight = "distance"
+clf = neighbors.KNeighborsClassifier(n_neighbors, weights=weight)
+
+pca = PCA(n_components=50)
+T = pca.fit(training[0])
+reduced_training = T.transform(training[0])
+print sum(pca.explained_variance_ratio_)
+# clf.fit(training[0], training[1])
+clf.fit(reduced_training, training[1])
 
 def hesse_line_reduction(line_seg):
     """
@@ -57,31 +83,30 @@ def __normalize_lines__(intercepts,slopes):
 
     return normalized_intercepts,normalized_slopes
 
-for f_count,f_name in enumerate(log_pages):
-    if not f_name.endswith(".png"):
-        continue
 
-    im = Image.open(image_directory+f_name)
-    im = im.convert('L')#.convert('LA')
-    image = np.asarray(im)
+
+
+def __get_bounding_lines__(image):
+    image = image.convert('L')
+    image = np.asarray(image)
 
     edges = canny(image, 2, 1, 25)
     lines = probabilistic_hough_line(edges, threshold=10, line_length=10,
                                      line_gap=0)
 
-    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(8,4), sharex=True, sharey=True)
-
-    ax1.imshow(image, cmap=plt.cm.gray)
-    ax1.set_title('Input image')
-    ax1.set_axis_off()
-    ax1.set_adjustable('box-forced')
-
-    ax2.imshow(edges, cmap=plt.cm.gray)
-    ax2.set_title('Canny edges')
-    ax2.set_axis_off()
-    ax2.set_adjustable('box-forced')
-
-    ax3.imshow(edges * 0)
+    # fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(8,4), sharex=True, sharey=True)
+    #
+    # ax1.imshow(image, cmap=plt.cm.gray)
+    # ax1.set_title('Input image')
+    # ax1.set_axis_off()
+    # ax1.set_adjustable('box-forced')
+    #
+    # ax2.imshow(edges, cmap=plt.cm.gray)
+    # ax2.set_title('Canny edges')
+    # ax2.set_axis_off()
+    # ax2.set_adjustable('box-forced')
+    #
+    # ax3.imshow(edges * 0)
 
     intercepts = []
     slopes = []
@@ -101,8 +126,8 @@ for f_count,f_name in enumerate(log_pages):
     unique_labels = set(labels)
     colors = plt.cm.Spectral(np.linspace(0, 1, len(unique_labels)))
 
-    print unique_labels
-    print labels
+    # print unique_labels
+    # print labels
 
     height,width = image.shape
 
@@ -157,9 +182,9 @@ for f_count,f_name in enumerate(log_pages):
                 print "other"
                 continue
 
-            if percent > 0.5:
-                for ((x1,y1),(x2,y2)) in segments:
-                    ax3.plot((x1,x2), (y1,y2),color=col)
+            # if percent > 0.5:
+            #     for ((x1,y1),(x2,y2)) in segments:
+            #         ax3.plot((x1,x2), (y1,y2),color=col)
 
         # if (math.fabs(theta) < 0.0001) or (math.fabs(theta - math.pi/2.) < 0.0001):
         #     ax3.plot((p0[0], p1[0]), (p0[1], p1[1]))
@@ -189,7 +214,214 @@ for f_count,f_name in enumerate(log_pages):
     print lower_X,upper_X
     print lower_Y,upper_Y
 
-    ax3.set_title('Probabilistic Hough')
-    ax3.set_axis_off()
-    ax3.set_adjustable('box-forced')
-    plt.show()
+    return int(lower_X),int(upper_X),int(lower_Y),int(upper_Y)
+
+    # ax3.set_title('Probabilistic Hough')
+    # ax3.set_axis_off()
+    # ax3.set_adjustable('box-forced')
+    # plt.show()
+
+def __extract__(image):
+    lower_X,upper_X,lower_Y,upper_Y = __get_bounding_lines__(image)
+
+    # im = im.convert('L')#.convert('LA')
+    image = np.asarray(image)
+
+    colours = {}
+
+    # print lower_X,upper_X,lower_Y,upper_Y
+
+    for c in range(lower_X+1,upper_X):
+        for r in range(lower_Y+1,upper_Y):
+            pixel_colour = tuple(image[r,c])
+            # pixel_colour = int(image[r,c])
+            # print pixel_colour
+            if pixel_colour not in colours:
+                colours[pixel_colour] = 1
+            else:
+                colours[pixel_colour] += 1
+
+    most_common_colour,_ = sorted(colours.items(),key = lambda x:x[1],reverse=True)[0]
+    pts = []
+
+    # print colours
+
+    for c in range(lower_X+1,upper_X):
+        for r in range(lower_Y+1,upper_Y):
+            pixel_colour = tuple(image[r,c])
+
+            dist = math.sqrt(sum([(int(a)-int(b))**2 for (a,b) in zip(pixel_colour,most_common_colour)]))
+
+            # print dist
+
+            if dist > 40:
+                # todo - get this flipping figured out
+                pts.append((c,r))
+
+    # print pts
+    # assert False
+    # r,c = zip(*pts)
+    # plt.plot(r,c,".")
+    # cv2.imwrite("/home/ggdhines/debugging.png")
+    # plt.savefig("/home/ggdhines/1.png")
+    # raw_input("debugging")
+    # hopefully corresponds to an empty cell
+    if pts == []:
+        return
+
+    # rows,columns = zip(*pts)
+    # min_r =min(rows)
+    # max_r =max(rows)
+    #
+    # min_c =min(columns)
+    # max_c =max(columns)
+
+    pts = np.asarray(pts)#[(r,c) for (r,c) in pts if (r>(min_r+2))and(r<(max_r-2))and(c>(min_c+2))and(c<(max_c-2))])
+
+    db = DBSCAN(eps=3, min_samples=20).fit(pts)
+    labels = db.labels_
+    unique_labels = set(labels)
+
+    max_probabilities = []
+
+    for k in unique_labels:
+        if k == -1:
+            # Black used for noise.
+            col = 'k'
+            continue
+        else:
+            col = "blue"
+        class_member_mask = (labels == k)
+
+        xy = pts[class_member_mask]
+        X_l,Y_l = zip(*xy)
+        max_x = max(X_l)
+        max_y = max(Y_l)
+
+        min_x = min(X_l)
+        min_y = min(Y_l)
+
+        desired_height = 20.
+
+        width_ratio = (max_x-min_x)/desired_height
+        height_ratio = (max_y-min_y)/desired_height
+
+        if width_ratio > height_ratio:
+            # wider than taller
+            # todo - probably not a digit
+            width = int(desired_height)
+            height = int(desired_height*(max_y-min_y)/float(max_x-min_x))
+        else:
+            height = int(desired_height)
+            # print (max_y-max_y)/float(max_x-min_x)
+            width = int(desired_height*(max_x-min_x)/float(max_y-min_y))
+
+        # # template = [[[1,1,1] for i in range(min_x,max_x+1)] for j in range(min_y,max_y+1)]
+        # template = [[[1,1,1] for i in range(min_y,max_y+1)] for j in range(min_x,max_x+1)]
+        # for x,y in xy:
+        #     # template[y-min_y][x-min_x] = image[y][x]
+        #     template[x][y] = image[x][y]
+
+        r = range(min_y,max_y+1)
+        c = range(min_x,max_x+1)
+
+        print (min_y,max_y+1)
+        print (min_x,max_x+1)
+
+
+        template = image[np.ix_(r, c)]
+
+        digit_image = Image.fromarray(np.uint8(np.asarray(template)))
+        # plt.show()
+        # cv2.imwrite("/home/ggdhines/aa.png",np.uint8(np.asarray(template)))
+        # raw_input("template extracted")
+        # continue
+
+        digit_image = digit_image.resize((width,height),Image.ANTIALIAS)
+        # digit_image = digit_image.convert('L')
+
+        grey_image =  np.asarray(digit_image.convert('L'))
+
+        # # we need to center subject
+        # if height == 28:
+        #     # center width wise
+        #
+        #     y_offset = 0
+        # else:
+        #
+        #     x_offset = 0
+
+        x_offset = int(28/2 - width/2)
+        y_offset = int(28/2 - height/2)
+
+        digit_array = np.asarray(digit_image)
+
+
+        centered_array = [0 for i in range(28**2)]
+
+        # print digit_array == digit_image
+        # print "===----"
+        # try:
+        #     darkest_pixel = 0
+        #     for y in range(len(digit_array)):
+        #         for x in range(len(digit_array[0])):
+        #             darkest_pixel = max(darkest_pixel,digit_array[y][x])
+        # except TypeError:
+        #     print "problem skipping this one"
+        #     continue
+
+        # darkest_pixel = max(darkest_pixel,100)
+
+        for y in range(len(digit_array)):
+            for x in range(len(digit_array[0])):
+                # dist1 = math.sqrt(sum([(a-b)**2 for (a,b) in zip(digit_array[y][x],ref1)]))
+                # if dist1 > 10:
+                # if digit_array[y][x] > 0.4:
+                #     plt.plot(x+x_offset,y+y_offset,"o",color="blue")
+                # digit_array[y][x] = digit_array[y][x]/255.
+                # print digit_array[y][x] - most_common_colour
+                dist = math.sqrt(sum([(int(a)-int(b))**2 for (a,b) in zip(digit_array[y][x],most_common_colour)]))
+
+
+                if dist > 40:#digit_array[y][x] > 10:
+                    centered_array[(y+y_offset)*28+(x+x_offset)] = grey_image[y][x]#/float(darkest_pixel)
+                    print "*",
+                else:
+                    centered_array[(y+y_offset)*28+(x+x_offset)] = 0
+                    print " ",
+            print
+
+        # for index,i in enumerate(centered_array):
+        #     if i > 0:
+        #         x = index%28
+        #         y = index/28
+        #         plt.plot(x,y,"o",color="blue")
+
+        # plt.ylim((28,0))
+        # plt.xlim((0,28))
+        # plt.savefig("/home/ggdhines/tmp.png")
+        # plt.close()
+
+
+        centered_array = np.asarray(centered_array)
+        # print centered_array
+        centered_array = T.transform(centered_array)
+        # print centered_array
+        print clf.predict_proba(centered_array)
+        raw_input("enter something")
+
+
+
+if __name__ == "__main__":
+    for f_count,f_name in enumerate(log_pages):
+        if not f_name.endswith(".png"):
+            continue
+        f_name = "Bear-AG-29-1941-0493_0_4.png"
+
+        im = Image.open(image_directory+f_name)
+        # im = im.convert('L')#.convert('LA')
+        # image = np.asarray(im)
+
+        __extract__(im)
+
+        break
