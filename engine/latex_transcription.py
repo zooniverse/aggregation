@@ -124,6 +124,8 @@ if __name__ == "__main__":
 
                 individual_pts = []
 
+                print aggregations
+
                 for key,line in aggregations["T2"]["text clusters"].items():
                     if key in ["all_users","param"]:
                         continue
