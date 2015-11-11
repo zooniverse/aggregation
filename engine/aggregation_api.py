@@ -30,6 +30,7 @@ import psycopg2
 import rollbar
 
 
+
 if os.path.exists("/home/ggdhines"):
     base_directory = "/home/ggdhines"
 else:
@@ -1888,7 +1889,7 @@ class AggregationAPI:
                     insert_str += ","+postgres_cursor.mogrify("(%s,%s,%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregations[subject_id]),str(datetime.datetime.now()),str(datetime.datetime.now())))
                     insert_counter += 1
                 except UnicodeDecodeError:
-                    print aggregations[subject_id]
+                    print json.dumps(aggregations[subject_id],indent=4, separators=(',', ': '))
                     raise
 
         if update_str != "":
