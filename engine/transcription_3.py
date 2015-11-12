@@ -237,6 +237,9 @@ class TextCluster(clustering.Cluster):
 
         self.erroneous_tags = dict()
 
+
+
+
     def __line_alignment__(self,lines):
         """
         align.py the text by using MAFFT
@@ -478,10 +481,14 @@ class TextCluster(clustering.Cluster):
                 aggregate_text += chr(27)
 
         # what percentage of characters have we reached consensus on - i.e. we are fairly confident about?
-        percent_consensus = num_agreed/float(len(aggregate_text))
+        if len(aggregate_text) == 0:
+            percent_consensus = -1
+            agreement_per_user = -1
+        else:
+            percent_consensus = num_agreed/float(len(aggregate_text))
 
-        # convert the agreement per user to a percentage
-        agreement_per_user = [a/float(len(aggregate_text)) for a in agreement_per_user]
+            # convert the agreement per user to a percentage
+            agreement_per_user = [a/float(len(aggregate_text)) for a in agreement_per_user]
 
         return aggregate_text,percent_consensus,agreement_per_user
 
@@ -518,6 +525,8 @@ class TextCluster(clustering.Cluster):
             if c["num users"] > 2:
                 clusters.append(c)
 
+
+
         return clusters,0
 
     def __create_cluster__(self,markings,index_filter):
@@ -542,12 +551,12 @@ class TextCluster(clustering.Cluster):
 
         aggregate_text = self.__reset_special_characters__(aggregate_text)
 
-        for c in aggregate_text:
-            if ord(c) < 30:
-                print "\b" + colored("?","red"),
-            else:
-                print "\b" + c,
-        print
+        # for c in aggregate_text:
+        #     if ord(c) < 30:
+        #         print "\b" + colored("?","red"),
+        #     else:
+        #         print "\b" + c,
+        # print
 
         x1 = np.median(x1_values)
         x2 = np.median(x2_values)
@@ -566,6 +575,13 @@ class TextCluster(clustering.Cluster):
             text = m[-1]
             cluster["cluster members"].append((coords,text))
         cluster["num users"] = len(cluster["cluster members"])
+
+        if cluster["num users"] >= 3:
+            self.retired_lines_3 += 1
+        if cluster["num users"] >= 4:
+            self.retired_lines_4 += 1
+        if cluster["num users"] >= 5:
+            self.retired_lines_5 += 1
 
         return cluster
 
@@ -629,6 +645,9 @@ class TextCluster(clustering.Cluster):
             if transcription_index in assigned_to_cluster:
                 continue
 
+            if text[transcription_index] == "":
+                continue
+
             assigned_to_cluster.append(transcription_index)
             transcriptions = [text[transcription_index]]
 
@@ -641,26 +660,17 @@ class TextCluster(clustering.Cluster):
 
             distances.sort(key = lambda x:x[1])
 
-            if "money" in text[transcription_index]:
-                print text[transcription_index]
-                for ii,d in distances[1:20]:
-                    print text[ii]
-
-                print "+++---"
-
             # [1:] since the first element will be itself
             skips = 0
             allowable_skips = 5
             for ii,d in distances[1:20]:
                 if ii not in assigned_to_cluster:
+                    if text[ii] == "":
+                        continue
+
                     # create a new temp. set of transcriptions by adding in this next transcription
                     temp_transcriptions = transcriptions[:]
                     temp_transcriptions.append(text[ii])
-
-                    if "money" in text[ii]:
-                        print ii
-                        print temp_transcriptions
-                        print
 
                     # check to see what the minimum accuracy is
                     # if high, go with this new set of transcriptions
@@ -675,8 +685,6 @@ class TextCluster(clustering.Cluster):
                     else:
                         skips += 1
                         if skips == allowable_skips:
-                            if "blacked" in transcriptions[0]:
-                                print indices
                             clusters_by_indices.append(indices)
                             break
             if skips < allowable_skips:
@@ -809,7 +817,8 @@ class SubjectRetirement(Classification):
         if self.environment == "development":
             print "we would have retired " + str(len(to_retire))
             print "with non-blanks " + str(len(to_retire)-blank_retirement)
-            print non_blanks
+            # print non_blanks
+            print str(len(to_retire)-blank_retirement)
 
         return aggregations
 
@@ -963,5 +972,7 @@ retired_subjects = retired_subjects[:200]
 if __name__ == "__main__":
     with Tate(sys.argv[1],sys.argv[2]) as project:
         # project.__migrate__()
-        project.__aggregate__(subject_set=[671541])
+        # project.__aggregate__(subject_set = [671541,663067,664482,662859])
+        project.__aggregate__()
+
         # print aggregated_text
