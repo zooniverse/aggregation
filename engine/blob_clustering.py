@@ -508,7 +508,7 @@ class BlobClustering(clustering.Cluster):
                     x,y = agg_poly.exterior.xy
                     next_result["center"] = [(max(x),max(y)),(min(x),min(y))]
                 else:
-                    next_result["center"] = [zip(agg_poly.exterior.xy[0],agg_poly.exterior.xy[0])]
+                    next_result["center"] = [zip(agg_poly.exterior.xy[0],agg_poly.exterior.xy[1])]
 
                 next_result["area"] = agg_poly.area/float(image_area)
 
