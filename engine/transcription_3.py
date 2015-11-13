@@ -476,6 +476,26 @@ class TextCluster(clustering.Cluster):
                 for i in range(len(aligned_text)):
                     if aligned_text[i][char_index] == most_likely_char:
                         agreement_per_user[i] += 1
+            # check for special cases with double spaces or only differences about capitalization
+            elif len(char_vote) == 2:
+                sorted_keys = [c for c in sorted(char_vote.keys())]
+                # 24 means a gap
+                if (ord(sorted_keys[0]) == 24) and (sorted_keys[1] == " "):
+                    # print most_likely_char,vote_percentage
+                    raw_counts = {c:sum([1 for text in aligned_text if text[char_index] == c]) for c in char_set}
+                    if raw_counts[chr(24)] >= 2:
+                        # if at least two people said there was no space, we will assume that this space is actually
+                        # a double space. So insert a gap - inserting a gap instead of just skipping it means
+                        # that everything should stay the same length
+                        aggregate_text += chr(24)
+                    else:
+                        # this line is probably going to be counted as noise anyways, but just to be sure
+                        aggregate_text += chr(27)
+                # capitalization issues?
+                elif sorted_keys[0].lower() == sorted_keys[1].lower():
+                    aggregate_text += sorted_keys[0].upper()
+                else:
+                    aggregate_text += chr(27)
             else:
                 # "Z" represents characters which we are not certain about
                 aggregate_text += chr(27)
