@@ -1,11 +1,8 @@
 import os
-from template_align import align
 import numpy as np
 import Image
 # from extract_digits import extract
 import matplotlib.pyplot as plt
-import matplotlib.cbook as cbook
-import cv2
 import subprocess
 
 import signal
@@ -32,7 +29,7 @@ log_pages = list(os.listdir(image_directory))
 
 # for f_count,f_name in enumerate():
 f_count = 0
-while f_count < min(10,len(log_pages)):
+while f_count < min(100,len(log_pages)):
     f_name = log_pages[f_count]
     if f_name.endswith(".JPG"):
         print image_directory+f_name
@@ -43,7 +40,7 @@ while f_count < min(10,len(log_pages)):
         # image = align(image_directory+f_name,image_directory+template_image)
         try:
             t = subprocess.check_output(["python","template_align.py",image_directory+f_name,image_directory+template_image])
-            print type(t)
+            # print type(t)
             print t
             f_count += 1
         except subprocess.CalledProcessError:
