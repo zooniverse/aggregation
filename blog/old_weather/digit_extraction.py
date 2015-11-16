@@ -229,8 +229,8 @@ def __extract__(image):
 
     colours = {}
 
-    # print lower_X,upper_X,lower_Y,upper_Y
-
+    # under the assumption that most of the cell is not ink - find the most common pixel colour
+    # any pixel that is "far" enough away is assumed to be ink
     for c in range(lower_X+1,upper_X):
         for r in range(lower_Y+1,upper_Y):
             pixel_colour = tuple(image[r,c])
@@ -244,8 +244,7 @@ def __extract__(image):
     most_common_colour,_ = sorted(colours.items(),key = lambda x:x[1],reverse=True)[0]
     pts = []
 
-    # print colours
-
+    # extract the ink pixels
     for c in range(lower_X+1,upper_X):
         for r in range(lower_Y+1,upper_Y):
             pixel_colour = tuple(image[r,c])
@@ -258,43 +257,36 @@ def __extract__(image):
                 # todo - get this flipping figured out
                 pts.append((c,r))
 
-    # print pts
-    # assert False
-    # r,c = zip(*pts)
-    # plt.plot(r,c,".")
-    # cv2.imwrite("/home/ggdhines/debugging.png")
-    # plt.savefig("/home/ggdhines/1.png")
-    # raw_input("debugging")
-    # hopefully corresponds to an empty cell
+    # return if we have an empty cell
     if pts == []:
         return
 
-    # rows,columns = zip(*pts)
-    # min_r =min(rows)
-    # max_r =max(rows)
-    #
-    # min_c =min(columns)
-    # max_c =max(columns)
+    # convert to an numpy array because ... we have to
+    pts = np.asarray(pts)
 
-    pts = np.asarray(pts)#[(r,c) for (r,c) in pts if (r>(min_r+2))and(r<(max_r-2))and(c>(min_c+2))and(c<(max_c-2))])
-
+    # do dbscan
     db = DBSCAN(eps=3, min_samples=20).fit(pts)
     labels = db.labels_
     unique_labels = set(labels)
 
-    max_probabilities = []
+    # each cluster should hopefully correspond to a different digit
+
+    digit_probabilities = []
 
     for k in unique_labels:
+        # ignore noise
         if k == -1:
-            # Black used for noise.
-            col = 'k'
             continue
-        else:
-            col = "blue"
-        class_member_mask = (labels == k)
 
+        # xy is the set of pixels in this cluster
+        class_member_mask = (labels == k)
         xy = pts[class_member_mask]
+
         X_l,Y_l = zip(*xy)
+
+        # we need to scale the digit so that it is the same size as the MNIST training examples
+        # although the MNIST set is 28x28 pixels - there is a 4 pixel wide border around the digits
+        # why? who knows. Anyways the actual height of the pixels that we want is 20
         max_x = max(X_l)
         max_y = max(Y_l)
 
@@ -306,6 +298,7 @@ def __extract__(image):
         width_ratio = (max_x-min_x)/desired_height
         height_ratio = (max_y-min_y)/desired_height
 
+        # calculate the resulting height or width - we want the maximum of these value to be 20
         if width_ratio > height_ratio:
             # wider than taller
             # todo - probably not a digit
@@ -316,19 +309,17 @@ def __extract__(image):
             # print (max_y-max_y)/float(max_x-min_x)
             width = int(desired_height*(max_x-min_x)/float(max_y-min_y))
 
-        # # template = [[[1,1,1] for i in range(min_x,max_x+1)] for j in range(min_y,max_y+1)]
-        # template = [[[1,1,1] for i in range(min_y,max_y+1)] for j in range(min_x,max_x+1)]
-        # for x,y in xy:
-        #     # template[y-min_y][x-min_x] = image[y][x]
-        #     template[x][y] = image[x][y]
-
+        # the easiest way to do the rescaling is to make a subimage which is a box around the digit
+        # and just get the Python library to do the rescaling - takes care of anti-aliasing for you :)
+        # obviously this box could contain ink that isn't a part of this digit in particular
+        # so we just need to be careful about what pixel we extract from the
         r = range(min_y,max_y+1)
         c = range(min_x,max_x+1)
 
         print (min_y,max_y+1)
         print (min_x,max_x+1)
 
-
+        # todo - this will probably include noise-pixels, so we need to redo this
         template = image[np.ix_(r, c)]
 
         digit_image = Image.fromarray(np.uint8(np.asarray(template)))
@@ -385,11 +376,11 @@ def __extract__(image):
 
                 if dist > 40:#digit_array[y][x] > 10:
                     centered_array[(y+y_offset)*28+(x+x_offset)] = grey_image[y][x]#/float(darkest_pixel)
-                    print "*",
+                    # print "*",
                 else:
                     centered_array[(y+y_offset)*28+(x+x_offset)] = 0
-                    print " ",
-            print
+                    # print " ",
+            # print
 
         # for index,i in enumerate(centered_array):
         #     if i > 0:
@@ -407,16 +398,26 @@ def __extract__(image):
         # print centered_array
         centered_array = T.transform(centered_array)
         # print centered_array
-        print clf.predict_proba(centered_array)
-        raw_input("enter something")
+        # print clf.predict_proba(centered_array)
+        # raw_input("enter something")
+        t = clf.predict_proba(centered_array)
+        # print t
+        # print list(t)
+        # print t[0]
+        # print
 
+        digit_probabilities.append(max(t[0]))
+
+    print digit_probabilities
+    raw_input("enter something")
 
 
 if __name__ == "__main__":
     for f_count,f_name in enumerate(log_pages):
         if not f_name.endswith(".png"):
             continue
-        f_name = "Bear-AG-29-1941-0493_0_4.png"
+        # f_name = "Bear-AG-29-1941-0493_0_4.png"
+        print f_name
 
         im = Image.open(image_directory+f_name)
         # im = im.convert('L')#.convert('LA')
@@ -424,4 +425,4 @@ if __name__ == "__main__":
 
         __extract__(im)
 
-        break
+        # break
