@@ -90,7 +90,7 @@ def align(img_fname1,img_fname2):
     # first pass
     P,Q,H = euclidean_least_squares(image1_pts,image2_pts)
 
-    thresholds = [0.7,0.4,0.3]
+    thresholds = [0.7,0.4,0.3,0.15]
     t_i = 0
 
     for i in range(10):
@@ -136,7 +136,7 @@ if __name__ == "__main__":
 
     num_matches,image = align(to_be_aligned,template)
 
-    if num_matches < 50000:
+    if num_matches < 70000:
         print "bad match"
     else:
         cv2.imwrite("/home/ggdhines/Databases/old_weather/pruned_cases/"+fname,image)
