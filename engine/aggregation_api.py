@@ -1946,7 +1946,7 @@ if __name__ == "__main__":
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
         project.__migrate__()
-        # project.__aggregate__()
+        project.__aggregate__()
 
-        # with csv_output.CsvOut(project) as c:
-        #     c.__write_out__()
+        with csv_output.CsvOut(project) as c:
+            c.__write_out__()
