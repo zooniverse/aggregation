@@ -34,7 +34,7 @@ for f_count,f_name in enumerate(log_pages):
 
     for row_index,(row_lb,row_ub) in enumerate(cell_rows):
         for column_index,(column_lb,column_ub) in enumerate(cell_columns):
-            offset = 3
+            offset = 8
             r = range(row_lb-offset,row_ub+offset)
             c = range(column_lb-offset,column_ub+offset)
 

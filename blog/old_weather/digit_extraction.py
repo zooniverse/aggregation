@@ -1,6 +1,6 @@
 import os
 # import numpy as np
-# from PIL import Image
+from PIL import Image
 # import matplotlib.pyplot as plt
 # import math
 from skimage.transform import (hough_line, hough_line_peaks,
@@ -13,7 +13,7 @@ import math
 import matplotlib.pyplot as plt
 # from scipy import spatial
 from sklearn.cluster import DBSCAN
-import Image
+# import Image
 # import cv2
 from mnist import MNIST
 from sklearn import neighbors
