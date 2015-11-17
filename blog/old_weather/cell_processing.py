@@ -13,14 +13,14 @@ classification_algorithm = NearestNeighbours()
 for f_count,f_name in enumerate(log_pages):
     if not f_name.endswith(".png"):
         continue
-    f_name = "Bear-AG-29-1941-0545_0_6.png"
+    # f_name = "Bear-AG-29-1941-0545_0_6.png"
     print f_name
 
     im = Image.open(image_directory+f_name)
     # im = im.convert('L')#.convert('LA')
     # image = np.asarray(im)
 
-    retval = classification_algorithm.__process_cell__(im)
+    retval = classification_algorithm.__process_cell__(im,plot=True)
 
     if retval == -1:
         break

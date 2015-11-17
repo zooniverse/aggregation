@@ -1,5 +1,5 @@
 import matplotlib
-matplotlib.use('WXAgg')
+# matplotlib.use('WXAgg')
 
 from skimage.transform import probabilistic_hough_line
 from skimage.feature import canny
@@ -15,6 +15,84 @@ except ImportError:
 from mnist import MNIST
 from sklearn import neighbors
 from sklearn.decomposition import PCA
+from lines import __get_bounding_box__
+
+class YGenerator:
+    def __init__(self,x,ll,lr,ul,ur):
+        ll_x,ll_y = ll
+        lr_x,lr_y = lr
+        ur_x,ur_y = ur
+        ul_x,ul_y = ul
+
+        # we can up to three lines which can act as lower bounds
+        # the horizontal lower line (the obvious one) will always be a lower bound
+        # but the vertical rhs and lhs lines can also be lower bounds if they are not completely
+        # vertical - not sure how much this matters but probably good to protect against slightly rotated
+        # cells which seem like a possibility
+
+        lower_bounds = []
+
+        # let's start with the horizontal lower line which goes from ll to lr
+        # for the given x, what values of y does this line give?
+        slope = (lr_y - ll_y)/float(lr_x-ll_x)
+        y = ll_y + slope*(x-ll_x)
+        lower_bounds.append(y)
+
+        # next, let's look t the lhs - this is a lower bound if angling in slightly at the bottom
+        # (probably draw an example to help understand)
+        if ll_x > ul_x:
+            slope = (ul_y - ll_y)/float(ul_x - ll_x)
+            y = ll_y + slope*(x-ll_x)
+            lower_bounds.append(y)
+
+        # the rhs side is a lower bound if is angling in a but at the bottom:
+        if lr_x < ur_x:
+            slope = (ur_y - lr_y)/float(ur_x - lr_x)
+            y = lr_y + slope*(x-lr_x)
+            lower_bounds.append(y)
+
+        # now take the maximum of all these values to be our starting point
+        self.y_lower_bound = max(int(math.ceil(max(lower_bounds))),0)
+
+        # now repeat for upper bound
+        upper_bounds = []
+        slope = (ur_y - ul_y)/float(ur_x-ul_x)
+        y = ul_y + slope*(x-ul_x)
+        upper_bounds.append(y)
+
+        # look at the rhs and lhs lines - this time the inequalities are flipped (definitely draw a slanted
+        # rectangle if that helps)
+        if ll_x < ul_x:
+            slope = (ul_y - ll_y)/float(ul_x - ll_x)
+            y = ll_y + slope*(x-ll_x)
+            upper_bounds.append(y)
+
+        if lr_x > ur_x:
+            slope = (ur_y - lr_y)/float(ur_x - lr_x)
+            y = lr_y + slope*(x-lr_x)
+            upper_bounds.append(y)
+
+
+        self.y_upper_bound = int(math.floor(min(upper_bounds)))
+        self.y = None
+
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        return self.next()
+
+    def next(self):
+        if self.y is None:
+            self.y = self.y_lower_bound
+        else:
+            self.y += 1
+
+        if self.y == self.y_upper_bound:
+            raise StopIteration()
+        else:
+            return self.y
 
 
 class NearestNeighbours:
@@ -43,19 +121,23 @@ class NearestNeighbours:
 
         self.transcribed_digits = {d:[] for d in digits}
 
-    def __process_cell__(self,image):
-        lower_X,upper_X,lower_Y,upper_Y = self.__get_bounding_lines__(image)
+    def __process_cell__(self,image,plot=False):
+        # lower_X,upper_X,lower_Y,upper_Y = self.__get_bounding_lines__(image)
+        (lr_x,lr_y),(ur_x,ur_y),(ul_x,ul_y),(ll_x,ll_y) = __get_bounding_box__(image)
 
         # im = im.convert('L')#.convert('LA')
         image = np.asarray(image)
 
         colours = {}
 
-        # under the assumption that most of the cell is not ink - find the most common pixel colour
-        # any pixel that is "far" enough away is assumed to be ink
-        for c in range(lower_X+1,upper_X):
-            for r in range(lower_Y+1,upper_Y):
-                pixel_colour = tuple(image[r,c])
+        # the lhs will act as the lower bound for x
+        # and we want the smallest integer x value greater than either ul_x,ll_x
+        x_lower_bound = int(math.ceil(min(lr_x,ll_x)))
+        x_upper_bound = int(math.floor(max(ur_x,ul_x)))
+
+        for x in range(x_lower_bound,x_upper_bound):
+            for y in YGenerator(x,(ll_x,ll_y),(lr_x,lr_y),(ul_x,ul_y),(ur_x,ur_y)):
+                pixel_colour = tuple(image[y,x])
                 # pixel_colour = int(image[r,c])
                 # print pixel_colour
                 if pixel_colour not in colours:
@@ -66,21 +148,30 @@ class NearestNeighbours:
         most_common_colour,_ = sorted(colours.items(),key = lambda x:x[1],reverse=True)[0]
         pts = []
 
+
         # extract the ink pixels
-        for c in range(lower_X+1,upper_X):
-            for r in range(lower_Y+1,upper_Y):
-                pixel_colour = tuple(image[r,c])
+        for x in range(x_lower_bound,x_upper_bound):
+            for y in YGenerator(x,(ll_x,ll_y),(lr_x,lr_y),(ul_x,ul_y),(ur_x,ur_y)):
+                pixel_colour = tuple(image[y,x])
 
                 dist = math.sqrt(sum([(int(a)-int(b))**2 for (a,b) in zip(pixel_colour,most_common_colour)]))
 
                 # print dist
 
                 if dist > 30:
-                    pts.append((c,r))
+                    if plot:
+                        plt.plot(x,y,"o",color="blue")
+                    pts.append((x,y))
 
         # return if we have an empty cell
         if pts == []:
             return
+
+        if plot:
+            plt.xlim((min(ll_x,ul_x),max(lr_x,ur_x)))
+            plt.ylim((min(ur_y,ul_y),max(lr_y,ll_y)))
+            plt.show()
+            return 0
 
         # convert to an numpy array because ... we have to
         pts = np.asarray(pts)
