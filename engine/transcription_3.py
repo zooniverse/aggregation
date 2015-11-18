@@ -991,7 +991,7 @@ retired_subjects = retired_subjects[:200]
 
 if __name__ == "__main__":
     with Tate(sys.argv[1],sys.argv[2]) as project:
-        # project.__migrate__()
+        project.__migrate__()
         # project.__aggregate__(subject_set = [671541,663067,664482,662859])
         project.__aggregate__()
 
