@@ -31,9 +31,9 @@ def __get_bounding_box__(img,plot=False):
 
     # img = cv2.imread("/home/ggdhines/Databases/old_weather/cells/Bear-AG-29-1939-0187_1_7.png")
 
-    print type(img)
+    # print type(img)
     img  = np.asarray(img)
-    print img.shape
+    # print img.shape
     # assert False
     colours = {}
 
@@ -91,8 +91,8 @@ def __get_bounding_box__(img,plot=False):
         ax2.imshow(image)#, cmap=plt.cm.gray)
     rows, cols = image.shape
     # for _, angle, dist in zip(*hough_line_peaks(h, theta, d)):
-    print image.shape
-    print 190/float((image.shape[1]))
+    # print image.shape
+    # print 190/float((image.shape[1]))
     for d_index in range(len(d)):
         for theta_index in range(len(theta)):
             votes = h[d_index][theta_index]
@@ -122,7 +122,7 @@ def __get_bounding_box__(img,plot=False):
                     rhs_lines.append(line((x0,0),(x1,rows)))
 
             elif (t2 < 0.05) and (votes /float((image.shape[1])) >= 0.8):
-                print angle,t2
+                # print angle,t2
 
                 y0 = (dist - 0 * np.cos(angle)) / np.sin(angle)
                 y1 = (dist - cols * np.cos(angle)) / np.sin(angle)
@@ -201,7 +201,7 @@ def __get_bounding_box__(img,plot=False):
     ul_x,ul_y = max(X),min(Y)
 
     if lr_corners == []:
-        print "here here"
+        # print "here here"
         assert ll_corners == []
         lr_x = ur_x
         lr_y = -1
@@ -209,7 +209,7 @@ def __get_bounding_box__(img,plot=False):
         ll_x = ul_x
         ll_y = -1
     else:
-        print "there there"
+        # print "there there"
         X,Y = zip(*lr_corners)
         lr_x,lr_y = min(X),max(Y)
 

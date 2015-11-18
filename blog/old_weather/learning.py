@@ -1,5 +1,5 @@
 import matplotlib
-# matplotlib.use('WXAgg')
+matplotlib.use('WXAgg')
 
 from skimage.transform import probabilistic_hough_line
 from skimage.feature import canny
@@ -96,7 +96,7 @@ class YGenerator:
 
 
 class NearestNeighbours:
-    def __init__(self):
+    def __init__(self,collect_gold_standard):
         n_neighbors = 15
 
         mndata = MNIST('/home/ggdhines/Databases/mnist')
@@ -120,8 +120,13 @@ class NearestNeighbours:
         self.clf.fit(reduced_training, training[1])
 
         self.transcribed_digits = {d:[] for d in digits}
+        self.collect_gold_standard = collect_gold_standard
 
-    def __process_cell__(self,image,plot=False):
+        self.cells_to_process = []
+        self.completed_cells = []
+
+    def __process_cell__(self,f_name,plot=False):
+        image = Image.open(f_name)
         # lower_X,upper_X,lower_Y,upper_Y = self.__get_bounding_lines__(image)
         (lr_x,lr_y),(ur_x,ur_y),(ul_x,ul_y),(ll_x,ll_y) = __get_bounding_box__(image)
 
@@ -171,11 +176,17 @@ class NearestNeighbours:
             plt.xlim((min(ll_x,ul_x),max(lr_x,ur_x)))
             plt.ylim((min(ur_y,ul_y),max(lr_y,ll_y)))
             plt.show()
-            return 0
+            # return 0
 
         # convert to an numpy array because ... we have to
         pts = np.asarray(pts)
-        gold_standard_digits = self.__process_digits__(image,pts,most_common_colour)
+        gold_standard_digits,probabilities = self.__process_digits__(image,pts,most_common_colour)
+        # print probabilities
+        if probabilities != []:
+            if min(probabilities) < 0.78:
+                self.cells_to_process.append(f_name)
+            else:
+                self.completed_cells.append(f_name)
 
         if gold_standard_digits is None:
             return -1
@@ -183,7 +194,12 @@ class NearestNeighbours:
             assert isinstance(gold_standard_digits,list)
             for pixels,digits in gold_standard_digits:
                 self.transcribed_digits[digits].append(pixels)
-            return 0
+            if probabilities == []:
+                return None
+            else:
+                return min(probabilities)
+
+
 
     def __process_digits__(self,image,pts,most_common_colour):
         # do dbscan
@@ -198,7 +214,7 @@ class NearestNeighbours:
 
         colours = plt.cm.Spectral(np.linspace(0, 1, len(unique_labels)))
 
-        print image.shape
+        # print image.shape
 
         for k,col in zip(unique_labels,colours):
             # ignore noise
@@ -219,10 +235,10 @@ class NearestNeighbours:
 
             min_x = min(X_l)
             min_y = min(Y_l)
-            print k,(max_x,max_y)
+            # print k,(max_x,max_y)
 
-            plt.plot(X_l,Y_l,"o",color=col)
-            continue
+            # plt.plot(X_l,Y_l,"o",color=col)
+
             #
             # plt.xlim((min_x+0,min_x+28))
             # plt.ylim((min_y+28,min_y+0))
@@ -279,7 +295,7 @@ class NearestNeighbours:
 
             digit_image = digit_image.resize((width,height),Image.ANTIALIAS)
 
-            print zero_template.shape
+            # print zero_template.shape
             if min(digit_image.size) == 0:
                 continue
             digit_image.save("/home/ggdhines/aa.png")
@@ -316,9 +332,10 @@ class NearestNeighbours:
 
             # darkest_pixel = max(darkest_pixel,100)
 
-            print (max_x-min_x),(max_y-min_y)
-            print type(digit_array)
-            print digit_array
+            if self.collect_gold_standard:
+                print (max_x-min_x),(max_y-min_y)
+                print type(digit_array)
+                print digit_array
             for y in range(len(digit_array)):
                 for x in range(len(digit_array[0])):
                     # dist1 = math.sqrt(sum([(a-b)**2 for (a,b) in zip(digit_array[y][x],ref1)]))
@@ -333,11 +350,26 @@ class NearestNeighbours:
 
                     if dist > 30:#digit_array[y][x] > 10:
                         centered_array[(y+y_offset)*28+(x+x_offset)] = grey_image[y][x]#/float(darkest_pixel)
-                        print "*",
+                        if self.collect_gold_standard:
+                            print "*",
                     else:
                         centered_array[(y+y_offset)*28+(x+x_offset)] = 0
-                        print " ",
-                print
+                        if self.collect_gold_standard:
+                            print " ",
+                if self.collect_gold_standard:
+                    print
+
+            # print digit_probabilities
+            if self.collect_gold_standard:
+                digit = raw_input("enter digit - ")
+                if digit == "":
+                    return None
+                elif digit == "u":
+                    # if unknown, assume that the "digit" actually belongs to another cell
+                    # so in practice the user won't transcribe it
+                    pass
+                else:
+                    gold_standard_digits.append((centered_array,int(digit)))
 
             # for index,i in enumerate(centered_array):
             #     if i > 0:
@@ -362,30 +394,23 @@ class NearestNeighbours:
             # print list(t)
             # print t[0]
             # print
-
+            # print t
             digit_probabilities.append(max(t[0]))
+            # print t[0]
 
-            # print digit_probabilities
-            digit = raw_input("enter digit - ")
-            if digit == "":
-                return None
-            elif digit == "u":
-                # if unknown, assume that the "digit" actually belongs to another cell
-                # so in practice the user won't transcribe it
-                pass
-            else:
-                gold_standard_digits.append((centered_array,int(digit)))
+
 
         max_y,max_x,_ = image.shape
-        print image.shape
+        # print image.shape
         plt.xlim((0,max_x))
         plt.ylim((max_y,0))
 
-        if (len(unique_labels) > 0) and (unique_labels != {-1}):
-            plt.show()
-        else:
-            plt.close()
-        return gold_standard_digits
+        # if (len(unique_labels) > 0) and (unique_labels != {-1}):
+        #     print digit_probabilities
+        #     # plt.show()
+        # else:
+        #     plt.close()
+        return gold_standard_digits,digit_probabilities
 
     def hesse_line_reduction(self,line_seg):
         """
@@ -493,7 +518,7 @@ class NearestNeighbours:
                     dist = sum([math.fabs(x2-x1) for ((x1,y1),(x2,y2)) in segments])
                     percent = dist/float(width)
                     avg_Y = np.median([(y1+y2)/2. for ((x1,y1),(x2,y2)) in segments])
-                    print "horiz.",percent,avg_Y < height/2.
+                    # print "horiz.",percent,avg_Y < height/2.
 
                     if percent > threshold:
 
@@ -515,7 +540,7 @@ class NearestNeighbours:
                         avg_X = np.median([(x1+x2)/2. for ((x1,y1),(x2,y2)) in segments])
 
                         if avg_X < width/2.:
-                            print "****====="
+                            # print "****====="
                             lhs_lines.append(segments)
                         else:
                             rhs_lines.append(segments)
