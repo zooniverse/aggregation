@@ -62,6 +62,9 @@ class Cluster:
         self.retired_lines_4 = 0
         self.retired_lines_5 = 0
 
+        self.stats = {}
+
+
     @abc.abstractmethod
     def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions):
         """
@@ -141,10 +144,5 @@ class Cluster:
         # we should have some results
         # assert aggregation != {"param":"subject_id"}
 
-        print "&&&&"
-        print self.retired_lines_3
-        print self.retired_lines_4
-        print self.retired_lines_5
 
         return aggregation
-

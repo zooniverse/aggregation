@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 __author__ = 'greg'
 try:
-    from aggregation_api import AggregationAPI,InvalidMarking
+    from aggregation_api import AggregationAPI,InvalidMarking,hesse_line_reduction
     from classification import Classification
     import clustering
     import math
@@ -15,7 +15,6 @@ try:
     import unicodedata
     import os
     import requests
-    from aggregation_api import hesse_line_reduction
     from scipy import spatial
     from termcolor import colored
     import warnings
@@ -30,6 +29,7 @@ try:
     from copy import deepcopy
 
     import scipy.spatial.distance as ssd
+    import pickle
 
 except:
     # # if any errors were raised - probably because Greg thought
@@ -237,8 +237,13 @@ class TextCluster(clustering.Cluster):
 
         self.erroneous_tags = dict()
 
+        # stats to report back
+        self.stats["capitalized"] = 0
+        self.stats["double_spaces"] = 0
+        self.stats["errors"] = 0
+        self.stats["line_length"] = []
 
-
+        self.stats["retired lines"] = 0
 
     def __line_alignment__(self,lines):
         """
@@ -455,6 +460,10 @@ class TextCluster(clustering.Cluster):
         # with the aggregate
         agreement_per_user = [0 for i in aligned_text]
 
+        self.stats["line_length"].append(len(aligned_text[0]))
+
+        vote_history = []
+
         for char_index in range(len(aligned_text[0])):
             # get all the possible characters
             # todo - we can reduce this down to having to loop over each character once
@@ -462,6 +471,7 @@ class TextCluster(clustering.Cluster):
             char_set = set(text[char_index] for text in aligned_text)
             # get the percentage of votes for each character at this position
             char_vote = {c:sum([1 for text in aligned_text if text[char_index] == c])/float(len(aligned_text)) for c in char_set}
+            vote_history.append(char_vote)
             # get the most common character (also the most likely to be the correct one) and the percentage of users
             # who "voted" for it
             most_likely_char,vote_percentage = max(char_vote.items(),key=lambda x:x[1])
@@ -488,17 +498,22 @@ class TextCluster(clustering.Cluster):
                         # a double space. So insert a gap - inserting a gap instead of just skipping it means
                         # that everything should stay the same length
                         aggregate_text += chr(24)
+                        self.stats["double_spaces"] += 1
                     else:
                         # this line is probably going to be counted as noise anyways, but just to be sure
                         aggregate_text += chr(27)
+                        self.stats["errors"] += 1
                 # capitalization issues?
                 elif sorted_keys[0].lower() == sorted_keys[1].lower():
                     aggregate_text += sorted_keys[0].upper()
+                    self.stats["capitalized"] += 1
                 else:
                     aggregate_text += chr(27)
+                    self.stats["errors"] += 1
             else:
                 # "Z" represents characters which we are not certain about
                 aggregate_text += chr(27)
+                self.stats["errors"] += 1
 
         # what percentage of characters have we reached consensus on - i.e. we are fairly confident about?
         if len(aggregate_text) == 0:
@@ -509,7 +524,6 @@ class TextCluster(clustering.Cluster):
 
             # convert the agreement per user to a percentage
             agreement_per_user = [a/float(len(aggregate_text)) for a in agreement_per_user]
-
         return aggregate_text,percent_consensus,agreement_per_user
 
     def __add_alignment_spaces__(self,aligned_text_list,capitalized_text):
@@ -590,14 +604,16 @@ class TextCluster(clustering.Cluster):
 
 
         cluster["cluster members"] = []
-        for m in markings_in_cluster:
+        for ii,m in enumerate(markings_in_cluster):
             coords = m[:-1]
-            text = m[-1]
+            text = self.__reset_special_characters__(aligned_transcriptions[ii])
+            # text = m[-1]
             cluster["cluster members"].append((coords,text))
         cluster["num users"] = len(cluster["cluster members"])
 
         if cluster["num users"] >= 3:
             self.retired_lines_3 += 1
+            self.stats["retired lines"] += 1
         if cluster["num users"] >= 4:
             self.retired_lines_4 += 1
         if cluster["num users"] >= 5:
@@ -837,7 +853,8 @@ class SubjectRetirement(Classification):
         if self.environment == "development":
             print "we would have retired " + str(len(to_retire))
             print "with non-blanks " + str(len(to_retire)-blank_retirement)
-            # print non_blanks
+            if not os.path.isfile("/home/ggdhines/"+str(self.project_id)+".retired"):
+                pickle.dump(non_blanks,open("/home/ggdhines/"+str(self.project_id)+".retired","wb"))
             print str(len(to_retire)-blank_retirement)
 
         return aggregations

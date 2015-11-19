@@ -623,6 +623,7 @@ class AggregationAPI:
         :param workflow_id:
         :return:
         """
+
         if raw_markings == {}:
             print "warning - empty set of images"
             # print subject_set
@@ -638,8 +639,6 @@ class AggregationAPI:
             else:
                 algorithm = self.default_clustering_algs[shape](shape)
 
-
-
             shape_aggregation = algorithm.__aggregate__(raw_markings,image_dimensions)
 
             # if this is not the first shape we've aggregated - merge in with previous results
@@ -648,6 +647,11 @@ class AggregationAPI:
             else:
                 assert isinstance(cluster_aggregation,dict)
                 cluster_aggregation = self.__merge_aggregations__(cluster_aggregation,shape_aggregation)
+                assert isinstance(cluster_aggregation,dict)
+
+            if (self.environment == "development") and (algorithm.stats != {}):
+                print "stats"
+                json.dump(algorithm.stats,open("/home/ggdhines/"+str(self.project_id)+".stats","wb"))
 
         return cluster_aggregation
 
@@ -1074,6 +1078,8 @@ class AggregationAPI:
                     print agg2
                     print kw
                     assert False
+
+        assert isinstance(agg1,dict)
         return agg1
 
     def __migrate__(self):
