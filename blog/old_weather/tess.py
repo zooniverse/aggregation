@@ -5,9 +5,10 @@ import xmltodict
 # call(["tesseract","/home/ggdhines/Downloads/Hooper_John-Certeine_comfortable_expositions-STC-13743-548_05-p3.tif","/home/ggdhines/tess","hocr"])
 
 def process_page(node):
+    print "page length is " + str(len(node))
     for child in node:
         if child.attrib["class"] == "ocr_carea":
-            return process_carea(child)
+            process_carea(child)
         else:
             assert False
 
@@ -18,12 +19,14 @@ def process_carea(node):
     for child in node:
         print "a"
         if child.attrib["class"] == "ocr_par":
-            paragraphs.append(process_paragraph(child))
+            r = process_paragraph(child)
+            if r is not None:
+                paragraphs.append(r)
         else:
             assert False
 
-    print "****"
-    print paragraphs
+    # print "****"
+    # print paragraphs
     return paragraphs
 
 def process_word(node):
@@ -50,7 +53,8 @@ def process_word(node):
         coords = [int(c) for c in coords]
 
         confidence = int(title_params[-1])
-        return [text + " "],[coords],[confidence]
+        assert text != " "
+        return text,coords,confidence
     else:
         return None
 
@@ -69,34 +73,45 @@ def process_em(node):
 
 def process_line(node):
     line = []
+    print "^^^^"
     for child in node:
         if child.attrib["class"] == "ocrx_word":
+
             word = process_word(child)
             if word is not None:
+                print "a"
+                # print "&&&",word,type(word)
+
                 line.append(word)
         else:
             assert False
-
-
+    print "done " + str(line)
+    # print line
     return line
 
 def process_paragraph(node):
     lines = []
     bounding_boxes = []
     confidence = []
+    # print "****"
     for child in node:
         if child.attrib["class"] == "ocr_line":
             for l,b,c in process_line(child):
+                # print type(l)
+                print l
 
-                lines.extend(l)
-                bounding_boxes.extend(b)
-                confidence.extend(c)
+                if l != []:
+                    lines.append(l)
+                    bounding_boxes.append(b)
+                    confidence.append(c)
         else:
             assert False
 
-    print "---"
-    print lines
-    return lines,bounding_boxes,confidence
+    if lines == []:
+        print lines
+        return lines,bounding_boxes,confidence
+    else:
+        return None
 
 import xml.etree.ElementTree as ET
 
