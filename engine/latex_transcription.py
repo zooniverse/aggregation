@@ -103,7 +103,7 @@ def latex_output(subjects):
 
         with Tate(project_id,environment) as project:
             # for count,(subject_id,aggregations) in enumerate(project.__yield_aggregations__(121,s)):
-            for subject_id in subjects:
+            for subject_id in [671541,662859,649365,653381,672697]:
                 aggregations = list(project.__yield_aggregations__(121,subject_id))
                 if aggregations == []:
                     continue
@@ -213,10 +213,9 @@ def latex_output(subjects):
                     f.write("\\newline \\newline Number of transcriptions per line: " + str(num_users) + "\n")
                     f.write("\\newpage\n")
 
-
-
                     # now repeat for individual lines
                     for y,l in line_items:
+                        print "here here"
                         f.write("\\noindent ")
                         cumulative_c = ""
                         for c in l:
@@ -237,6 +236,11 @@ def latex_output(subjects):
                         f.write("\\newline\n--- \\newline\n")
 
                         for i_l in individual_lines[y]:
+                            i_l = i_l.encode('ascii','ignore')
+                            # i_l = i_l.decode('utf8')
+                            # assert isinstance(i_l,unicode)
+                            # i_l.replace('\u2014',"-")
+
                             # if "with" in i_l:
                             #     print i_l
                             #     assert False
@@ -259,7 +263,13 @@ def latex_output(subjects):
                                     else:
                                         f.write("{\color{red}-}")
                                     cumulative_c = ""
-                            f.write(coloured_string(cumulative_c))
+                            try:
+                                f.write(coloured_string(cumulative_c))
+                            except UnicodeEncodeError:
+                                print cumulative_c
+                                print [(c,ord(c)) for c in cumulative_c]
+                                raise
+
                             f.write("}")
                             f.write("\\newline\n")
 
