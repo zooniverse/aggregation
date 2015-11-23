@@ -49,7 +49,7 @@ def get_updated_tags(project_id):
 
     return replacement_tags
 
-project_id = 245
+# project_id = 245
 
 folger_tags = {}#get_updated_tags(376)
 
@@ -92,7 +92,7 @@ import random
 environment = "development"
 
 
-def latex_output(subjects):
+def latex_output(project_id,workflow_id,subjects):
     folger_tags = get_updated_tags(245)
 
     # print folger_tags
@@ -103,8 +103,8 @@ def latex_output(subjects):
 
         with Tate(project_id,environment) as project:
             # for count,(subject_id,aggregations) in enumerate(project.__yield_aggregations__(121,s)):
-            for subject_id in [671541,662859,649365,653381,672697]:
-                aggregations = list(project.__yield_aggregations__(121,subject_id))
+            for subject_id in subjects:#[671541,662859,649365,653381,672697]:
+                aggregations = list(project.__yield_aggregations__(workflow_id,subject_id))
                 if aggregations == []:
                     continue
                 aggregations = aggregations[0][1]
@@ -196,7 +196,7 @@ def latex_output(subjects):
                         f.write(coloured_string(cumulative_c))
                         f.write("\\newline\n")
 
-                    t_ = project.__sort_annotations__(121,[subject_id])[1]
+                    t_ = project.__sort_annotations__(workflow_id,[subject_id])[1]
                     # print individual_pts
                     for ii,(user_id,transcription,tool) in enumerate(t_["T2"]["text"][subject_id]):
                         if transcription is None:
@@ -215,7 +215,6 @@ def latex_output(subjects):
 
                     # now repeat for individual lines
                     for y,l in line_items:
-                        print "here here"
                         f.write("\\noindent ")
                         cumulative_c = ""
                         for c in l:
