@@ -84,7 +84,7 @@ def json_dump(project,subject_ids):
 
                 # for folger this will allow us to remove sw- from all of the tags
                 # for both folger and annotate, we will set <unclear>.*</unclear> to just <unclear></unclear>
-                aggregated_line = cluster["center"][-1]
+                # aggregated_line = str(cluster["center"][-1])
 
                 # we need to retokenize everything
                 print "**"
@@ -110,7 +110,9 @@ def json_dump(project,subject_ids):
 
                     tokenized_strings.append(l_m)
 
-                aggregated_line = cluster["center"][-1]
+                aggregated_line = str(cluster["center"][-1])
+                # print type(aggregated_line)
+                assert isinstance(aggregated_line,str)
 
                 # convert some special characters and tokenize the disagreements
                 line = ""
@@ -119,7 +121,14 @@ def json_dump(project,subject_ids):
                 differences = {}
 
                 # we need to treat tags as a single character
-
+                # convert the aggregated line to tokenized tags so that it and all
+                # of the individual lines are the same length
+                try:
+                    for chr_representation,tag in reverse_tags.items():
+                        aggregated_line = aggregated_line.replace(chr(chr_representation),tag)
+                except UnicodeDecodeError:
+                    print aggregated_line
+                    raise
 
                 for c_i,c in enumerate(aggregated_line):
                     # if we have a disagreement (represented by either ord(c) = 27), keep on a running tally of
@@ -135,6 +144,8 @@ def json_dump(project,subject_ids):
                             # print "***"
                             char_options = [(ii,individual_text[c_i]) for ii,individual_text in enumerate(tokenized_strings)]
                         except IndexError:
+                            print aggregated_line
+                            print len(aggregated_line)
                             print [len(l[1]) for l in cluster["cluster members"]]
                             for l in cluster["cluster members"]:
                                 print l
@@ -164,7 +175,10 @@ def json_dump(project,subject_ids):
 
                         agreement = True
 
+                        for chr_representation,tag in reverse_tags.items():
+                            c = c.replace(chr(chr_representation),tag)
                         line += c
+
                 # did we end on a disagreement?
                 if not agreement:
                     line += "<disagreement>"
