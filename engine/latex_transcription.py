@@ -92,7 +92,7 @@ import random
 environment = "development"
 
 
-def latex_output(project_id,workflow_id,subjects):
+def latex_output(project,workflow_id,subjects):
     folger_tags = get_updated_tags(245)
 
     # print folger_tags
@@ -101,181 +101,181 @@ def latex_output(project_id,workflow_id,subjects):
     with open("/tmp/transcription.tex","w") as f:
         f.write(latex_header)
 
-        with Tate(project_id,environment) as project:
-            # for count,(subject_id,aggregations) in enumerate(project.__yield_aggregations__(121,s)):
-            for subject_id in subjects:#[671541,662859,649365,653381,672697]:
-                aggregations = list(project.__yield_aggregations__(workflow_id,subject_id))
-                if aggregations == []:
+        # for count,(subject_id,aggregations) in enumerate(project.__yield_aggregations__(121,s)):
+        for subject_id in subjects:#[671541,662859,649365,653381,672697]:
+            print "** " + str(subject_id)
+            aggregations = list(project.__yield_aggregations__(workflow_id,subject_id))
+            if aggregations == []:
+                continue
+            aggregations = aggregations[0][1]
+            # print subject_id
+
+            metadata = project.__get_subject_metadata__(subject_id)["subjects"][0]["metadata"]
+            if "file name" in metadata:
+                fname = metadata["file name"]
+            else:
+                fname = "subject id " + str(subject_id)
+
+            lines = {}
+            individual_lines = {}
+
+            empty = True
+
+            num_users = []
+
+            individual_pts = []
+
+            # print aggregations
+
+            for key,line in aggregations["T2"]["text clusters"].items():
+                if key in ["all_users","param"]:
                     continue
-                aggregations = aggregations[0][1]
-                # print subject_id
 
-                metadata = project.__get_subject_metadata__(subject_id)["subjects"][0]["metadata"]
-                if "file name" in metadata:
-                    fname = metadata["file name"]
-                else:
-                    fname = "subject id " + str(subject_id)
+                num_users.append(line["num users"])
 
-                lines = {}
-                individual_lines = {}
+                x1,x2,y1,y2,text = line["center"]
+                # plt.plot([x1,x2],[y1,y2],"-",color="red",linewidth=0.5)
+                lines[(x1,x2,y1,y2)] = text
 
-                empty = True
+                pt_list,text_list = zip(*line["cluster members"])
+                individual_pts.extend(pt_list)
+                individual_lines[(x1,x2,y1,y2)] = text_list
 
-                num_users = []
+                empty = False
 
-                individual_pts = []
+            line_items = lines.items()
+            line_items.sort(key= lambda x:x[0][2])
 
-                # print aggregations
+            # if empty:
+            #     plt.close()
 
-                for key,line in aggregations["T2"]["text clusters"].items():
-                    if key in ["all_users","param"]:
+            if not empty:
+                fig = plt.figure()
+                axes = fig.add_subplot(1, 1, 1)
+                #
+                image_fname = project.__image_setup__(subject_id)
+
+                image_file = cbook.get_sample_data(image_fname)
+                image = plt.imread(image_file)
+                # fig, ax = plt.subplots()
+                im = axes.imshow(image)
+                plt.axis('off')
+
+
+                f.write("\section{"+str(fname)+"}\n")
+                f.write("\\begin{figure}[t]\centering \includegraphics[scale=1]{/tmp/"+str(subject_id)+".pdf} \end{figure}")
+
+                for pts,l in line_items:
+                    # print l
+                    # print [ord(c) for c in l]
+                    cumulative_c = ""
+
+                    l = l.replace("$","\$")
+                    l = l.replace("\\","\\textbackslash")
+                    # l = l.replace("[","\[")
+                    # l = l.replace("]","\]")
+                    for c in l:
+                        if c == "&":
+                            f.write(coloured_string(cumulative_c)+"\&")
+                            cumulative_c = ""
+                        elif c == "%":
+                            f.write(coloured_string(cumulative_c)+"\%")
+                            cumulative_c = ""
+                        elif ord(c) == 27:
+                            if cumulative_c != "":
+                                f.write(coloured_string(cumulative_c)+"{\color{red}?}")
+                            else:
+                                f.write("{\color{red}?}")
+                            cumulative_c = ""
+                        elif ord(c) != 24:
+                            # f.write(c)
+                            cumulative_c += c
+
+                    plt.plot([pts[0],pts[1]],[pts[2],pts[3]],linewidth=0.5,color="red")
+
+                    f.write(coloured_string(cumulative_c))
+                    f.write("\\newline\n")
+
+                t_ = project.__sort_annotations__(workflow_id,[subject_id])[1]
+                # print individual_pts
+                for ii,(user_id,transcription,tool) in enumerate(t_["T2"]["text"][subject_id]):
+                    if transcription is None:
                         continue
+                    coords = list(transcription[:-1])
+                    # print coords
+                    if not coords in individual_pts:
+                        plt.plot([coords[0],coords[1]],[coords[2],coords[3]],linewidth=0.5,color="blue")
+                # assert False
 
-                    num_users.append(line["num users"])
+                plt.savefig("/tmp/"+str(subject_id)+".pdf",bbox_inches='tight', pad_inches=0,dpi = 500)
+                plt.close()
 
-                    x1,x2,y1,y2,text = line["center"]
-                    # plt.plot([x1,x2],[y1,y2],"-",color="red",linewidth=0.5)
-                    lines[(x1,x2,y1,y2)] = text
+                f.write("\\newline \\newline Number of transcriptions per line: " + str(num_users) + "\n")
+                f.write("\\newpage\n")
 
-                    pt_list,text_list = zip(*line["cluster members"])
-                    individual_pts.extend(pt_list)
-                    individual_lines[(x1,x2,y1,y2)] = text_list
+                # now repeat for individual lines
+                for y,l in line_items:
+                    f.write("\\noindent ")
+                    cumulative_c = ""
+                    for c in l:
+                        if c == "&":
+                            f.write(coloured_string(cumulative_c)+"\&")
+                            cumulative_c = ""
+                        elif ord(c) == 27:
+                            # we are not certain
+                            f.write(coloured_string(cumulative_c)+"{\color{red}?}")
+                            cumulative_c = ""
+                        elif ord(c) != 24:
+                            # f.write(c)
+                            # 24 => gap, in which case we just skip
+                            cumulative_c += c
 
-                    empty = False
+                    f.write(coloured_string(cumulative_c))
 
-                line_items = lines.items()
-                line_items.sort(key= lambda x:x[0][2])
+                    f.write("\\newline\n--- \\newline\n")
 
-                # if empty:
-                #     plt.close()
+                    for i_l in individual_lines[y]:
+                        i_l = i_l.encode('ascii','ignore')
+                        # i_l = i_l.decode('utf8')
+                        # assert isinstance(i_l,unicode)
+                        # i_l.replace('\u2014',"-")
 
-                if not empty:
-                    fig = plt.figure()
-                    axes = fig.add_subplot(1, 1, 1)
-                    #
-                    image_fname = project.__image_setup__(subject_id)
-
-                    image_file = cbook.get_sample_data(image_fname)
-                    image = plt.imread(image_file)
-                    # fig, ax = plt.subplots()
-                    im = axes.imshow(image)
-                    plt.axis('off')
-
-
-                    f.write("\section{"+str(fname)+"}\n")
-                    f.write("\\begin{figure}[t]\centering \includegraphics[scale=1]{/tmp/"+str(subject_id)+".pdf} \end{figure}")
-
-                    for pts,l in line_items:
-                        # print l
-                        # print [ord(c) for c in l]
+                        # if "with" in i_l:
+                        #     print i_l
+                        #     assert False
+                        f.write("\\textit{")
                         cumulative_c = ""
+                        for c in i_l:
 
-                        l = l.replace("$","\$")
-                        l = l.replace("\\","\\textbackslash")
-                        # l = l.replace("[","\[")
-                        # l = l.replace("]","\]")
-                        for c in l:
                             if c == "&":
                                 f.write(coloured_string(cumulative_c)+"\&")
+                                #f.write("\&")
                                 cumulative_c = ""
                             elif c == "%":
                                 f.write(coloured_string(cumulative_c)+"\%")
                                 cumulative_c = ""
-                            elif ord(c) == 27:
+                            elif ord(c) not in [24,27]:
+                                cumulative_c += c
+                            else:
                                 if cumulative_c != "":
-                                    f.write(coloured_string(cumulative_c)+"{\color{red}?}")
+                                    f.write(coloured_string(cumulative_c)+"{\color{red}-}")
                                 else:
-                                    f.write("{\color{red}?}")
+                                    f.write("{\color{red}-}")
                                 cumulative_c = ""
-                            elif ord(c) != 24:
-                                # f.write(c)
-                                cumulative_c += c
+                        try:
+                            f.write(coloured_string(cumulative_c))
+                        except UnicodeEncodeError:
+                            print cumulative_c
+                            print [(c,ord(c)) for c in cumulative_c]
+                            raise
 
-                        plt.plot([pts[0],pts[1]],[pts[2],pts[3]],linewidth=0.5,color="red")
-
-                        f.write(coloured_string(cumulative_c))
+                        f.write("}")
                         f.write("\\newline\n")
 
-                    t_ = project.__sort_annotations__(workflow_id,[subject_id])[1]
-                    # print individual_pts
-                    for ii,(user_id,transcription,tool) in enumerate(t_["T2"]["text"][subject_id]):
-                        if transcription is None:
-                            continue
-                        coords = list(transcription[:-1])
-                        # print coords
-                        if not coords in individual_pts:
-                            plt.plot([coords[0],coords[1]],[coords[2],coords[3]],linewidth=0.5,color="blue")
-                    # assert False
-
-                    plt.savefig("/tmp/"+str(subject_id)+".pdf",bbox_inches='tight', pad_inches=0,dpi = 500)
-                    plt.close()
-
-                    f.write("\\newline \\newline Number of transcriptions per line: " + str(num_users) + "\n")
-                    f.write("\\newpage\n")
-
-                    # now repeat for individual lines
-                    for y,l in line_items:
-                        f.write("\\noindent ")
-                        cumulative_c = ""
-                        for c in l:
-                            if c == "&":
-                                f.write(coloured_string(cumulative_c)+"\&")
-                                cumulative_c = ""
-                            elif ord(c) == 27:
-                                # we are not certain
-                                f.write(coloured_string(cumulative_c)+"{\color{red}?}")
-                                cumulative_c = ""
-                            elif ord(c) != 24:
-                                # f.write(c)
-                                # 24 => gap, in which case we just skip
-                                cumulative_c += c
-
-                        f.write(coloured_string(cumulative_c))
-
-                        f.write("\\newline\n--- \\newline\n")
-
-                        for i_l in individual_lines[y]:
-                            i_l = i_l.encode('ascii','ignore')
-                            # i_l = i_l.decode('utf8')
-                            # assert isinstance(i_l,unicode)
-                            # i_l.replace('\u2014',"-")
-
-                            # if "with" in i_l:
-                            #     print i_l
-                            #     assert False
-                            f.write("\\textit{")
-                            cumulative_c = ""
-                            for c in i_l:
-
-                                if c == "&":
-                                    f.write(coloured_string(cumulative_c)+"\&")
-                                    #f.write("\&")
-                                    cumulative_c = ""
-                                elif c == "%":
-                                    f.write(coloured_string(cumulative_c)+"\%")
-                                    cumulative_c = ""
-                                elif ord(c) not in [24,27]:
-                                    cumulative_c += c
-                                else:
-                                    if cumulative_c != "":
-                                        f.write(coloured_string(cumulative_c)+"{\color{red}-}")
-                                    else:
-                                        f.write("{\color{red}-}")
-                                    cumulative_c = ""
-                            try:
-                                f.write(coloured_string(cumulative_c))
-                            except UnicodeEncodeError:
-                                print cumulative_c
-                                print [(c,ord(c)) for c in cumulative_c]
-                                raise
-
-                            f.write("}")
-                            f.write("\\newline\n")
-
-                        f.write("\\newline\n")
-                    f.write("\\newpage\n")
+                    f.write("\\newline\n")
+                f.write("\\newpage\n")
 
 
         f.write("\end{document}")
 
-    call(["pdflatex","-output-directory=/tmp","/tmp/transcription.tex"])
+    call(["pdflatex","-output-directory=/tmp","/tmp/transcription.tex"],stdout=open("/dev/null","wb"))
