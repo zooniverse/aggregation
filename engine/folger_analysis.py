@@ -25,7 +25,8 @@ with transcription_3.Tate(376,"development") as project:
             fname = metadata['RF/JPG#']
             f_id = int(fname[:-4])
 
-            corrected_ids[f_id] = subject_id
+            if f_id in folger_ids:
+                corrected_ids[f_id] = subject_id
         else:
             unmatched_ids.append(subject_id)
 
