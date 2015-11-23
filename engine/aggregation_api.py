@@ -428,7 +428,7 @@ class AggregationAPI:
         # todo - set things up so that you don't have to redo all of the aggregations just to rerun ibcc
         if workflows is None:
             workflows = self.workflows
-        print self.workflows
+
         given_subject_set = (subject_set != None)
 
         for workflow_id in workflows:
