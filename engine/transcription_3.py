@@ -430,6 +430,7 @@ class TextCluster(clustering.Cluster):
         :param text:
         :return:
         """
+        assert isinstance(text,str)
 
         reverse_map = {v: k for k, v in self.tags.items()}
         # also go with something different for "not sure"
@@ -445,6 +446,8 @@ class TextCluster(clustering.Cluster):
                 ret_text += reverse_map[ord(c)]
             else:
                 ret_text += c
+
+        assert isinstance(text,str)
         return ret_text
 
     def __merge_aligned_text__(self,aligned_text):
