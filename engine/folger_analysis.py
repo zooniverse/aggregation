@@ -1,4 +1,5 @@
 import transcription_3
+from latex_transcription import latex_output
 
 folger_ids = [49241,50769,53795,67272,81278,86365,86365,110543,110755,111232,1122]
 metadict = {}
@@ -28,35 +29,9 @@ with transcription_3.Tate(376,"development") as project:
         else:
             unmatched_ids.append(subject_id)
 
-    # print len(corrected_ids)
-    # print len([f for f in folger_ids if f in corrected_ids])
-    #     # if f_id not in corrected_ids:
-    #     #     print f_id
-    #
-    # print
-    # for subject_id in metadict:
-    #     if subject_id not in list(corrected_ids.values()):
-    #         print subject_id,metadict[subject_id]
-    # print
-    for m in metadict.values():
-        if "file name" in m:
-            print m["file name"]
-            print m
-            print
-        elif "Filename" in m:
-            print m["Filename"]
-            print m
-            print
-        else:
-            print "***"
-            print m
-            print
+    subject_ids = [corrected_ids[f] for f in folger_ids if f in corrected_ids]
+    # print subject_ids
+    # project.__migrate__()
+    # project.__aggregate__(subject_set=subject_ids)
 
-    assert False
-
-    project.__migrate__()
-    project.__aggregate__(subject_set=subjects)
-
-    for s in subjects:
-        aggregations = list(project.__yield_aggregations__(205,s))
-        print s
+    latex_output(376,205,subject_ids)
