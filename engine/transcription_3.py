@@ -372,6 +372,7 @@ class TextCluster(clustering.Cluster):
         so going from lower_text to text, allows us to recover what the captialization should have been
         """
 
+        # text = text.replace("\u0018","")
         text = text.encode('ascii','ignore')
 
         # first we need to replace each tag with a one character representation
@@ -568,7 +569,10 @@ class TextCluster(clustering.Cluster):
 
         x1_values,x2_values,y1_values,y2_values,transcriptions = zip(*markings_in_cluster)
 
+        # print transcriptions
+
         transformed_transcriptions = [self.__set_special_characters__(t) for t in transcriptions]
+        # print transformed_transcriptions
         # in lower case transformed, all of the original characters have been put into lower case
         # and upper case are used for special characters
         # we'll use lower_case_transformed to align the strings and by mapping back to capitalized_transformed
@@ -602,11 +606,13 @@ class TextCluster(clustering.Cluster):
 
         cluster["tools"] = []
 
-
         cluster["cluster members"] = []
         for ii,m in enumerate(markings_in_cluster):
             coords = m[:-1]
+            # print aligned_transcriptions[ii]
             text = self.__reset_special_characters__(aligned_transcriptions[ii])
+            # print text
+            # print
             # text = m[-1]
             cluster["cluster members"].append((coords,text))
         cluster["num users"] = len(cluster["cluster members"])
@@ -889,6 +895,8 @@ class Tate(AggregationAPI):
         self.only_recent_subjects = True
 
         self.rollbar_token = None
+
+
 
     def __setup__(self):
         AggregationAPI.__setup__(self)
