@@ -109,7 +109,7 @@ def relevant_line_params(marking,image_dimensions):
 # todo - do a better job with checking whether the markings fall within the image_dimensions
 def relevant_point_params(marking,image_dimensions):
     # todo - this has to be changed
-    image_dimensions = 1000,1000
+    image_dimensions = 100000,100000
     if (marking["x"] == "") or (marking["y"] == ""):
         raise InvalidMarking(marking)
 
@@ -121,6 +121,7 @@ def relevant_point_params(marking,image_dimensions):
         raise
 
     if (x<0)or(y<0)or(x > image_dimensions[0]) or(y>image_dimensions[1]):
+        print "marking probably outside of image"
         raise InvalidMarking(marking)
 
     return x,y
@@ -932,12 +933,26 @@ class AggregationAPI:
                             if ("details" in tool) and (tool["details"] != []):
                                 instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"] = {}
 
-                                for subtask_index,subtask in enumerate(tool["details"]):
-                                    instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index] = {}
-                                    instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["question"] = subtask["question"]
-                                    instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"] = {}
-                                    for answer_index,answers in enumerate(subtask["answers"]):
-                                        instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"][answer_index] = answers
+                                try:
+                                    for subtask_index,subtask in enumerate(tool["details"]):
+                                        instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index] = {}
+
+                                        # what kind of follow up question is this?
+                                        # could be a multiple choice or could be a text field
+                                        if "question" in subtask:
+                                            instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["type"] = "question"
+                                            instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["question"] = subtask["question"]
+                                            instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"] = {}
+                                            for answer_index,answers in enumerate(subtask["answers"]):
+                                                instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"][answer_index] = answers
+                                        else:
+                                            # for now the only other type of follow up question is a text field
+                                            assert "type" in subtask
+                                            assert subtask["type"] == "text"
+                                            instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["type"] = "text"
+                                except KeyError:
+                                    print subtask
+                                    raise
                     else:
                         assert False
 
@@ -1565,8 +1580,6 @@ class AggregationAPI:
         for task_id in tasks:
             # self.task_type[task_id] = tasks[task_id]["type"]
             # if the task is a drawing one, get the necessary details for clustering
-            print tasks[task_id]["type"]
-            # print tasks[task_id]
 
             if tasks[task_id]["type"] == "drawing":
                 marking_tasks[task_id] = []
@@ -1587,7 +1600,6 @@ class AggregationAPI:
 
                     # are there any classification questions associated with this marking?
                     if ("details" in tool) and (tool["details"] is not None) and (tool["details"] != []):
-                        print tool["details"]
                         # is this the first follow up question associated with this task?
                         if task_id not in classification_tasks:
                             classification_tasks[task_id] = {}
@@ -1630,7 +1642,7 @@ class AggregationAPI:
         self.classification_alg = alg(self.environment,params)
         assert isinstance(self.classification_alg,classification.Classification)
 
-    def __sort_annotations__(self,workflow_id,subject_set=None,expert=None):
+    def __sort_annotations__(self,workflow_id,subject_set,expert=None):
         """
         experts is when you have experts for whom you don't want to read in there classifications
         :param workflow_id:
@@ -1740,6 +1752,7 @@ class AggregationAPI:
                         except (InvalidMarking,KeyError) as e:
                             # badly formed marking - or the marking is slightly off the image
                             # either way - just skip it
+                            print "bad params"
                             continue
 
                         spotted_shapes.add(shape)
