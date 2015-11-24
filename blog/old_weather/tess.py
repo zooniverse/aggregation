@@ -1,8 +1,26 @@
+import matplotlib
+matplotlib.use('WXAgg')
+import matplotlib.pyplot as plt
 from subprocess import call
 import collections
 import xmltodict
+import matplotlib.cbook as cbook
+import cv2
 
+img = cv2.imread("/home/ggdhines/Databases/old_weather/test_cases/Bear-AG-29-1941-0813.JPG")
+gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+ret, thresh = cv2.threshold(gray,175,255,cv2.THRESH_BINARY_INV)
+cv2.imwrite("/home/ggdhines/greg.jpg",thresh)
+# assert False
 # call(["tesseract","/home/ggdhines/Downloads/Hooper_John-Certeine_comfortable_expositions-STC-13743-548_05-p3.tif","/home/ggdhines/tess","hocr"])
+
+# image_file = cbook.get_sample_data("/home/ggdhines/Databases/old_weather/test_cases/Bear-AG-29-1941-0813.JPG")
+image_file = cbook.get_sample_data("/home/ggdhines/greg.jpg")
+image = plt.imread(image_file)
+fig = plt.figure()
+ax = fig.add_subplot(1, 1, 1)
+im = ax.imshow(image)
+fig.set_size_inches(52,78)
 
 def process_page(node):
     print "page length is " + str(len(node))
@@ -12,21 +30,37 @@ def process_page(node):
         else:
             assert False
 
-    assert False
+ax.set_axis_off()
+# ax.set_xticks()
+
+plt.tick_params(
+    axis='x',          # changes apply to the x-axis
+    which='both',      # both major and minor ticks are affected
+    bottom='off',      # ticks along the bottom edge are off
+    top='off',         # ticks along the top edge are off
+    labelbottom='off')
+
+plt.tick_params(
+    axis='y',          # changes apply to the x-axis
+    which='both',      # both major and minor ticks are affected
+    bottom='off',      # ticks along the bottom edge are off
+    top='off',         # ticks along the top edge are off
+    labelleft='off')
 
 def process_carea(node):
     paragraphs = []
     for child in node:
-        print "a"
         if child.attrib["class"] == "ocr_par":
             r = process_paragraph(child)
             if r is not None:
                 paragraphs.append(r)
+                for (x0,y0,x1,y1) in r[1]:
+                    plt.plot([x0,x1,x1,x0,x0],[y0,y0,y1,y1,y0],color="red")
+
         else:
             assert False
 
     # print "****"
-    # print paragraphs
     return paragraphs
 
 def process_word(node):
@@ -53,8 +87,11 @@ def process_word(node):
         coords = [int(c) for c in coords]
 
         confidence = int(title_params[-1])
-        assert text != " "
-        return text,coords,confidence
+        if text in [""," ","  ","   "]:
+            return None
+        else:
+            assert (text != " ") and (text != "") and (text != "  ")
+            return text,coords,confidence
     else:
         return None
 
@@ -73,20 +110,17 @@ def process_em(node):
 
 def process_line(node):
     line = []
-    print "^^^^"
     for child in node:
         if child.attrib["class"] == "ocrx_word":
 
             word = process_word(child)
             if word is not None:
-                print "a"
                 # print "&&&",word,type(word)
 
                 line.append(word)
         else:
             assert False
-    print "done " + str(line)
-    # print line
+
     return line
 
 def process_paragraph(node):
@@ -97,8 +131,6 @@ def process_paragraph(node):
     for child in node:
         if child.attrib["class"] == "ocr_line":
             for l,b,c in process_line(child):
-                # print type(l)
-                print l
 
                 if l != []:
                     lines.append(l)
@@ -107,8 +139,8 @@ def process_paragraph(node):
         else:
             assert False
 
-    if lines == []:
-        print lines
+    if lines != []:
+
         return lines,bounding_boxes,confidence
     else:
         return None
@@ -142,3 +174,5 @@ with open("/home/ggdhines/Documents/gold_standard.txt","rb") as f:
 
     # print gold_paragraphs
     # print ocr
+plt.savefig("/home/ggdhines/old_weather.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
+plt.show()
