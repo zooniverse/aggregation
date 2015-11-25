@@ -707,9 +707,9 @@ class AggregationAPI:
         # only update time stamp if there were no problems
         if exc_type is None:
             statements_and_params = []
-            insert_statement = self.cassandra_session.prepare("insert into most_recent (project_id,classification) values (?,?)")
-            statements_and_params.append((insert_statement, (self.project_id,self.new_runtime)))
-            execute_concurrent(self.cassandra_session, statements_and_params)
+            # insert_statement = self.cassandra_session.prepare("insert into most_recent (project_id,classification) values (?,?)")
+            # statements_and_params.append((insert_statement, (self.project_id,self.new_runtime)))
+            # execute_concurrent(self.cassandra_session, statements_and_params)
 
         # shutdown the connection to Cassandra and remove the lock so other aggregation instances
         # can run, regardless of whether an error occurred
@@ -1109,19 +1109,22 @@ class AggregationAPI:
         if self.csv_classification_file is not None:
             return
 
-        try:
-            self.cassandra_session.execute("CREATE TABLE most_recent (project_id int, classification timestamp, PRIMARY KEY(project_id))")
-        except cassandra.AlreadyExists:
-            pass
+
 
         # uncomment this code if this is the first time you've run migration on whatever machine
         # will create the necessary cassandra tables for you - also useful if you need to reset
         try:
             self.cassandra_session.execute("drop table classifications")
             self.cassandra_session.execute("drop table subjects")
+            self.cassandra_session.execute("drop table most_recent")
             print "tables dropped"
         except cassandra.InvalidRequest:
             print "tables did not already exist"
+
+        try:
+            self.cassandra_session.execute("CREATE TABLE most_recent (project_id int, classification timestamp, PRIMARY KEY(project_id))")
+        except cassandra.AlreadyExists:
+            pass
 
         try:
             self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id,created_at) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC,created_at ASC);")
