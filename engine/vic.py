@@ -15,7 +15,7 @@ with transcription_3.Tate(245,"development") as project:
 
     id_ = cursor.fetchone()[0]
 
-    cursor.execute("SELECT * FROM classifications WHERE user_id = " + str(id_) + " and project_id = 245")
+    cursor.execute("SELECT annotations FROM classifications WHERE user_id = " + str(id_) + " and project_id = 245")
 
     subjects = 0
     lines = 0
@@ -23,11 +23,20 @@ with transcription_3.Tate(245,"development") as project:
     for t in cursor.fetchall():
         subjects += 1
 
-        for task in t[4]:
+        for task in t[0]:
             if task["task"] == "T2":
-                for marking in task["value"]:
-                    if marking["type"] == "text":
-                        lines += 1
+                try:
+                    for marking in task["value"]:
+                        if marking["type"] == "text":
+                            lines += 1
+                        else:
+                            assert marking["type"] == "image"
+                except TypeError:
+                    print task
+            else:
+                assert task["task"] in ["T0","T3"]
+
+
 
     print subjects
     print lines
