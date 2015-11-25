@@ -1,87 +1,84 @@
+from learning import NearestNeighbours
+try:
+    import Image
+except ImportError:
+    from PIL import Image
 import os
-import numpy as np
-import Image
-# from extract_digits import extract
 import matplotlib.pyplot as plt
-import subprocess
+import matplotlib.cbook as cbook
+import numpy as np
+import shutil
+image_directory = "/home/ggdhines/Databases/old_weather/pruned_cases/"
+# log_pages = list(os.listdir(image_directory))
 
-import signal
+classification_algorithm = NearestNeighbours(collect_gold_standard=False)
 
-def sig_handler(signum, frame):
-    print "seg fault!!"
-    raise
+cell_columns = [(713,821),(821,890),(1067,1252),(1527,1739),(1739,1837),(1837,1949),(1949,2053),(2053,2156)] #(510,713),
+cell_rows = [(1226,1320),(1320,1377),(1377,1437),(1437,1495),(1495,1555),(1555,1613),(1613,1673),(1673,1731),(1731,1790),(1790,1848),(1848,1907),(1907,1967)]
 
-signal.signal(signal.SIGSEGV, sig_handler)
+aligned_subjects = list(os.listdir(image_directory))
 
-image_directory = "/home/ggdhines/Databases/old_weather/test_cases/"
-template_image = "Bear-AG-29-1941-0557.JPG"
+# print aligned_subjects[:10]
+# assert False
 
-
-# cell_columns = [(496,698),(698,805),(805,874),(1051,1234),(1405,1508),(1508,1719),(1719,1816),(1816,1927),(1927,2032),(2032,2134),(2733,2863),(2863,2971),(2971,3133)]
-# cell_rows = [(1267,1370),(1370,1428),(1428,1488),(1488,1547),(1547,1606),(1606,1665),(1665,1723),(1723,1781),(1781,1840),(1840,1899),(1899,1957),(1957,2016)]
-
-cell_columns = [(510,713),(713,821),(821,890),(1219,1252),(1527,1739),(1739,1837),(1837,1949),(1949,2053),(2053,2156)]
-cell_rows = [(1226,1320),(1320,1377)]
-
-# s3://zooniverse-static/old-weather-2015/War_in_the_Arctic/Greenland_Patrol/Navy/Bear_AG-29_/
-
-log_pages = list(os.listdir(image_directory))
-
-# for f_count,f_name in enumerate():
-f_count = 0
-while f_count < min(100,len(log_pages)):
-    f_name = log_pages[f_count]
-    if f_name.endswith(".JPG"):
-        print image_directory+f_name
-
-        # we want to map these new image back to the template image
-        # this way we can use the template coordinates without having to do any further transformations
-        # image = align(image_directory+template_image,image_directory+f_name)
-        # image = align(image_directory+f_name,image_directory+template_image)
-        try:
-            t = subprocess.check_output(["python","template_align.py",image_directory+f_name,image_directory+template_image])
-            # print type(t)
-            print t
-            f_count += 1
-        except subprocess.CalledProcessError:
-            print "segfault"
-
+for f_count,f_name in enumerate(aligned_subjects[:10]):
+    if not f_name.endswith(".JPG"):
         continue
-        # cv2.imwrite("/home/ggdhines/t1.png",image)
 
-        # # cv2.imwrite('/home/ggdhines/messigray.png',image)
-        # # break
-        # # print type(image)
-        # # sub_image = image[162:238,274:326,:]
+    image_file = cbook.get_sample_data(image_directory+f_name)
+    image = plt.imread(image_file)
 
-        for column_lb,column_ub in cell_columns:
-            for row_lb,row_ub in cell_rows:
+    fig = plt.figure()
+    fig.set_size_inches(52,78)
+    ax = fig.add_subplot(1, 1, 1)
+    im = ax.imshow(image)
 
-                # image_file = cbook.get_sample_data(base_directory + "/Databases/penguins/images/"+object_id+".JPG")
-                # image = plt.imread(image_file)
-                # fig, ax = plt.subplots()
-                # im = ax.imshow(image)
-                # plt.plot([column_lb,column_lb,column_ub,column_ub,column_lb],[row_lb,row_ub,row_ub,row_lb,row_lb],color="red")
-                # plt.savefig("/tmp/aa.png",dpi=500)
-                # assert False
-                # cv2.imwrite("/tmp/aa__.png",image)
+    p_index = f_name.rfind(".")
+    base_fname = f_name[:p_index]
 
-                offset = 8
-                r = range(row_lb-offset,row_ub+offset)
-                c = range(column_lb-offset,column_ub+offset)
+    print f_name
 
-                fig, ax = plt.subplots()
-                sub_image = image[np.ix_(r, c)]
-                # print sub_image.shape
-                # im = ax.imshow(sub_image)
-                # plt.plot([column_lb,column_lb,column_ub,column_ub,column_lb],[row_lb,row_ub,row_ub,row_lb,row_lb],color="red")
-                # plt.savefig("/tmp/aa.png",dpi=500)
-                # assert False
+    for row_index,(row_lb,row_ub) in enumerate(cell_rows):
+        for column_index,(column_lb,column_ub) in enumerate(cell_columns):
 
 
-                img = Image.fromarray(sub_image, 'RGB')
-                img.save('/home/ggdhines/a.png')
 
 
-                # extract(sub_image)
-                raw_input("enter something")
+                sizes = np.shape(image)
+                height = float(sizes[0])
+                width = float(sizes[1])
+                # fig.set_size_inches(width/height, 1, forward=False)
+                # ax = plt.Axes(fig, [0., 0., 1., 1.])
+
+
+                ax.set_axis_off()
+                # ax.set_xticks()
+
+                plt.tick_params(
+                    axis='x',          # changes apply to the x-axis
+                    which='both',      # both major and minor ticks are affected
+                    bottom='off',      # ticks along the bottom edge are off
+                    top='off',         # ticks along the top edge are off
+                    labelbottom='off')
+
+                plt.tick_params(
+                    axis='y',          # changes apply to the x-axis
+                    which='both',      # both major and minor ticks are affected
+                    bottom='off',      # ticks along the bottom edge are off
+                    top='off',         # ticks along the top edge are off
+                    labelleft='off')
+
+                # fig.add_axes(ax)
+
+                # fig.add_axes(ax)
+                ax.set_xlim((0,width))
+                ax.set_ylim((height,0))
+                ax.plot([column_lb,column_ub],[row_lb,row_lb],"-r",linewidth=3.0)
+                ax.plot([column_lb,column_ub],[row_ub,row_ub],"-r",linewidth=3.0)
+                ax.plot([column_lb,column_lb],[row_lb,row_ub],"-r",linewidth=3.0)
+                ax.plot([column_ub,column_ub],[row_lb,row_ub],"-r",linewidth=3.0)
+                # ax.tight_layout()
+                plt.subplots_adjust(bottom=0, right =1, top=1,left=0)
+                # plt.savefig("/home/ggdhines/Databases/old_weather/hard_cases/"+f_name,bbox_inches='tight', pad_inches=0,dpi=72)
+                # plt.close()
+    plt.show()
