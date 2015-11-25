@@ -122,6 +122,7 @@ def relevant_point_params(marking,image_dimensions):
 
     if (x<0)or(y<0)or(x > image_dimensions[0]) or(y>image_dimensions[1]):
         print "marking probably outside of image"
+        print marking
         raise InvalidMarking(marking)
 
     return x,y
@@ -339,12 +340,12 @@ class AggregationAPI:
         try:
             r = self.cassandra_session.execute("select classification from most_recent where project_id = " + str(self.project_id))
             if r != []:
+                print "here here"
+                print r
                 self.previous_runtime = r[0].classification
         except:
+            print "could not find most_recent classification - falling back on default"
             pass
-
-        self.previous_runtime = datetime.datetime(2000,1,1)
-        self.new_runtime = datetime.datetime(2000,1,1)
 
         print "we have already aggregated classifications up to: " + str(self.previous_runtime)
 
@@ -850,8 +851,7 @@ class AggregationAPI:
                 subjects.append(subject[0])
 
         else:
-            # stmt = "SELECT subject_id,workflow_version FROM \"classifications\" WHERE \"project_id\" = " + str(self.project_id) + " and \"workflow_id\" = " + str(workflow_id) + " and \"updated_at\" > '" + str(datetime.datetime(2000,1,1)) +"'"
-            stmt = "SELECT subject_id,workflow_version FROM classifications WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)# + " and \"updated_at\" > '" + str(datetime.datetime(2000,1,1)) +"'"
+            stmt = "SELECT subject_id,workflow_version FROM classifications WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)+ " and updated_at >= '" + str(self.new_runtime) +"'"
             # filter for subjects which have the correct major version number
             if not self.ignore_versions:
                 subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt) if int(r.workflow_version) == int(self.versions[workflow_id]) ])
