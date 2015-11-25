@@ -346,7 +346,7 @@ class AggregationAPI:
         except:
             print "could not find most_recent classification - falling back on default"
             pass
-
+        self.previous_runtime = datetime.datetime(2000,1,1)
         print "we have already aggregated classifications up to: " + str(self.previous_runtime)
 
         # use this to determine the time frame for reading in classifications
@@ -851,10 +851,13 @@ class AggregationAPI:
                 subjects.append(subject[0])
 
         else:
-            stmt = "SELECT subject_id,workflow_version FROM classifications WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)+ " and updated_at >= '" + str(self.new_runtime) +"'"
+            stmt = "SELECT subject_id,workflow_version,created_at FROM classifications WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)#+ " and created_at >= '" + str(self.new_runtime) +"'"
+            print stmt
             # filter for subjects which have the correct major version number
             if not self.ignore_versions:
-                subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt) if int(r.workflow_version) == int(self.versions[workflow_id]) ])
+                # do this filter over two steps
+                subjects = [(r.subject_id,r.created_at) for r in self.cassandra_session.execute(stmt) if int(r.workflow_version) == int(self.versions[workflow_id]) ]
+                subjects = set([r[0] for r in subjects if r[1] >= self.previous_runtime])
                 if subjects == set():
                     print "no subjects found - maybe remove version filter"
             else:
@@ -1113,15 +1116,15 @@ class AggregationAPI:
 
         # uncomment this code if this is the first time you've run migration on whatever machine
         # will create the necessary cassandra tables for you - also useful if you need to reset
-        # try:
-        #     self.cassandra_session.execute("drop table classifications")
-        #     self.cassandra_session.execute("drop table subjects")
-        #     print "tables dropped"
-        # except cassandra.InvalidRequest:
-        #     print "tables did not already exist"
-        #
         try:
-            self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC);")
+            self.cassandra_session.execute("drop table classifications")
+            self.cassandra_session.execute("drop table subjects")
+            print "tables dropped"
+        except cassandra.InvalidRequest:
+            print "tables did not already exist"
+
+        try:
+            self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id,created_at) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC,created_at ASC);")
         except cassandra.AlreadyExists:
             pass
 
