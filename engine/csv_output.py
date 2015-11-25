@@ -5,6 +5,7 @@ import numpy
 import tarfile
 import math
 import sys
+import shapely.geometry as geometry
 
 class CsvOut:
     def __init__(self,project):
@@ -292,9 +293,9 @@ class CsvOut:
             tool = self.__csv_string__(tool)
 
             for polygon in cluster["center"]:
-                print polygon
-                assert False
-                row = str(subject_id) + ","+ str(p_index)+ ","+ tool +",\"" + str(polygon) + "\""
+                p = geometry.Polygon(polygon)
+
+                row = str(subject_id) + ","+ str(p_index)+ ","+ tool +",\"" + str(p.area/float(cluster["image area"])) + str(polygon) + "\""
                 self.csv_files[id_].write(row+"\n")
 
     def __write_out__(self,subject_set = None,compress=True):
@@ -562,7 +563,7 @@ class CsvOut:
             if shape == "polygon":
                 id_ = task_id,shape,"detailed"
                 self.csv_files[id_] = open(output_directory+fname+"_"+shape+".csv","wb")
-                self.csv_files[id_].write("subject_id,cluster_index,most_likely_tool,list_of_xy_polygon_coordinates\n")
+                self.csv_files[id_].write("subject_id,cluster_index,most_likely_tool,area,list_of_xy_polygon_coordinates\n")
 
                 id_ = task_id,shape,"summary"
                 self.csv_files[id_] = open(output_directory+fname+"_"+shape+"_summary.csv","wb")
