@@ -78,8 +78,7 @@ def process_word(node):
     else:
         text = node.text
 
-
-    if text != " ":
+    if True:#text != " ":
         title = node.attrib["title"]
         title_params = title.split()
         coords = title_params[1:4]
@@ -87,10 +86,10 @@ def process_word(node):
         coords = [int(c) for c in coords]
 
         confidence = int(title_params[-1])
-        if text in [""," ","  ","   "]:
+        if False: #text in [""," ","  ","   "]:
             return None
         else:
-            assert (text != " ") and (text != "") and (text != "  ")
+            # assert (text != " ") and (text != "") and (text != "  ")
             return text,coords,confidence
     else:
         return None
