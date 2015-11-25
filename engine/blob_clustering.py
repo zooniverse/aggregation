@@ -521,6 +521,7 @@ class BlobClustering(clustering.Cluster):
                     next_result["cluster members"].append(markings[marking_index][:5])
                     next_result["users"].append(user)
                     next_result["tools"].append(tool_id)
+                    next_result["image area"] = image_area
 
                 # put this in the format that is used by the other shapes - 1 for now
                 # todo - if it really matters calculate an actual value instead of 1
