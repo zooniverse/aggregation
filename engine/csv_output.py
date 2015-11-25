@@ -295,7 +295,7 @@ class CsvOut:
             for polygon in cluster["center"]:
                 p = geometry.Polygon(polygon)
 
-                row = str(subject_id) + ","+ str(p_index)+ ","+ tool +",\"" + str(p.area/float(cluster["image area"])) + str(polygon) + "\""
+                row = str(subject_id) + ","+ str(p_index)+ ","+ tool + ","+ str(p.area/float(cluster["image area"])) + ",\"" +str(polygon) + "\""
                 self.csv_files[id_].write(row+"\n")
 
     def __write_out__(self,subject_set = None,compress=True):
