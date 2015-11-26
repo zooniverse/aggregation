@@ -32,8 +32,8 @@ def prune_bad_matches__(P,Q,H,thres):
             p_x,p_y = p[(0,0)],p[(0,1)]
             q_x,q_y = q[(0,0)],q[(0,1)]
         except IndexError:
-            print p
-            print q
+            print P
+            print Q
             raise
         old_distance = math.sqrt((p_x-q_x)**2+(p_y-q_y)**2)
         # print H
@@ -42,7 +42,8 @@ def prune_bad_matches__(P,Q,H,thres):
 
         t_x,t_y = t[(0,0)],t[(1,0)]
         new_distance = math.sqrt((t_x-q_x)**2+(t_y-q_y)**2)
-        if new_distance < (old_distance*thres): #0.4
+        # print old_distance,new_distance
+        if new_distance <= ((old_distance*thres)+0.000001): #0.4
             pruned_pts1.append((p_x,p_y,1))
             pruned_pts2.append((q_x,q_y,1))
         else:
@@ -90,11 +91,12 @@ def align(img_fname1,img_fname2):
     # first pass
     P,Q,H = euclidean_least_squares(image1_pts,image2_pts)
 
-    thresholds = [0.7,0.4,0.3,0.15]
+    thresholds = [0.7,0.4,0.3,0.15,0.05,0.01]
     t_i = 0
 
     for i in range(10):
         # second pass - remove any bad matches
+        print len(image1_pts),len(image2_pts)
         image1_pts,image2_pts,bad_count = prune_bad_matches__(P,Q,H,thresholds[t_i])
         P,Q,H = euclidean_least_squares(image1_pts,image2_pts)
         if bad_count == 0:
@@ -139,4 +141,4 @@ if __name__ == "__main__":
     if num_matches < 70000:
         print "bad match"
     else:
-        cv2.imwrite("/home/ggdhines/Databases/old_weather/pruned_cases/"+fname,image)
+        cv2.imwrite("/home/ggdhines/Databases/old_weather/aligned_images/"+fname,image)

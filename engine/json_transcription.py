@@ -87,7 +87,6 @@ def json_dump(project,subject_ids):
                 # aggregated_line = str(cluster["center"][-1])
 
                 # we need to retokenize everything
-                print "**"
                 # print aggregated_line
                 tags = dict()
                 reverse_tags = dict()

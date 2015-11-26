@@ -1,5 +1,8 @@
-import matplotlib
-matplotlib.use('WXAgg')
+# try:
+#     import matplotlib
+#     matplotlib.use('WXAgg')
+# except ImportError:
+#     pass
 
 from skimage.transform import probabilistic_hough_line
 from skimage.feature import canny

@@ -8,18 +8,30 @@ import matplotlib.pyplot as plt
 import matplotlib.cbook as cbook
 import numpy as np
 import shutil
-image_directory = "/home/ggdhines/Databases/old_weather/pruned_cases/"
+image_directory = "/home/ggdhines/Databases/old_weather/aligned_images/"
 # log_pages = list(os.listdir(image_directory))
+
+from cassandra.cluster import Cluster
+import cassandra
+
+cluster = Cluster()
+
+
+cassandra_session = cluster.connect("active_weather")
 
 classification_algorithm = NearestNeighbours(collect_gold_standard=False)
 
-cell_columns = [(713,821),(821,890),(1067,1252),(1527,1739),(1739,1837),(1837,1949),(1949,2053),(2053,2156)] #(510,713),
-cell_rows = [(1226,1320),(1320,1377),(1377,1437),(1437,1495),(1495,1555),(1555,1613),(1613,1673),(1673,1731),(1731,1790),(1790,1848),(1848,1907),(1907,1967)]
+# cell_columns = [(713,821),(821,890),(1067,1252),(1527,1739),(1739,1837),(1837,1949),(1949,2053),(2053,2156)] #(510,713),
+# cell_rows = [(1226,1320),(1320,1377),(1377,1437),(1437,1495),(1495,1555),(1555,1613),(1613,1673),(1673,1731),(1731,1790),(1790,1848),(1848,1907),(1907,1967)]
 
 aligned_subjects = list(os.listdir(image_directory))
 
 # print aligned_subjects[:10]
 # assert False
+
+cell_columns = [(a.lb,a.ub) for a in cassandra_session.execute("select * from columns")]
+cell_rows = [(a.lb,a.ub) for a in cassandra_session.execute("select * from rows")]
+
 
 for f_count,f_name in enumerate(aligned_subjects[:10]):
     if not f_name.endswith(".JPG"):
@@ -79,6 +91,5 @@ for f_count,f_name in enumerate(aligned_subjects[:10]):
                 ax.plot([column_ub,column_ub],[row_lb,row_ub],"-r",linewidth=3.0)
                 # ax.tight_layout()
                 plt.subplots_adjust(bottom=0, right =1, top=1,left=0)
-                # plt.savefig("/home/ggdhines/Databases/old_weather/hard_cases/"+f_name,bbox_inches='tight', pad_inches=0,dpi=72)
-                # plt.close()
-    plt.show()
+    plt.savefig("/home/ggdhines/Databases/"+f_name,bbox_inches='tight', pad_inches=0,dpi=72)
+    raw_input("enter something")

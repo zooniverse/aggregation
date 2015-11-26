@@ -14,7 +14,7 @@ def sig_handler(signum, frame):
 signal.signal(signal.SIGSEGV, sig_handler)
 
 image_directory = "/home/ggdhines/Databases/old_weather/test_cases/"
-template_image = "Bear-AG-29-1941-0557.JPG"
+template_image = "Bear-AG-29-1939-0191.JPG"
 
 
 # cell_columns = [(496,698),(698,805),(805,874),(1051,1234),(1405,1508),(1508,1719),(1719,1816),(1816,1927),(1927,2032),(2032,2134),(2733,2863),(2863,2971),(2971,3133)]
@@ -31,6 +31,7 @@ log_pages = list(os.listdir(image_directory))
 f_count = 0
 while f_count < min(100,len(log_pages)):
     f_name = log_pages[f_count]
+    # f_name = template_image
     if f_name.endswith(".JPG"):
         print image_directory+f_name
 
