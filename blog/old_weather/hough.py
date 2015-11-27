@@ -37,7 +37,7 @@ def hesse_line(line_seg):
 # image = data.camera()
 image = load("/home/ggdhines/Databases/old_weather/test_cases/Bear-AG-29-1939-0191.JPG")
 # image = rgb2gray(image)
-
+# aws s3 ls s3://zooniverse-static/old-weather-2015/Distant_Seas/Navy/Bear_AG-29_/Bear-AG-29-1939/
 # img = cv2.imread("/home/ggdhines/Databases/old_weather/test_cases/Bear-AG-29-1939-0191.JPG",0)
 
 gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
@@ -47,10 +47,13 @@ edges = cv2.Canny(gray,50,150,apertureSize = 3)
 lines = probabilistic_hough_line(edges, threshold=10, line_length=50,line_gap=0)
 fig, ax1 = plt.subplots(1, 1)
 fig.set_size_inches(52,78)
-# ax1.imshow(image)
+ax1.imshow(image)
 
-hesse_list = []
-pruned_lines = []
+horiz_list = []
+horiz_intercepts = []
+
+vert_list = []
+vert_intercepts = []
 
 for line in lines:
     p0, p1 = line
@@ -60,51 +63,134 @@ for line in lines:
     if (min(X) >= 559) and (max(X) <= 3245) and (min(Y) >= 1292) and (max(Y) <= 2014):
         d,t = hesse_line(line)
         if math.fabs(t) <= 0.1:
-            pruned_lines.append(line)
-            hesse_list.append(hesse_line(line))
+            horiz_list.append(line)
+            # hesse_list.append(hesse_line(line))
+
+            m = (Y[0]-Y[1])/float(X[0]-X[1])
+            b = Y[0]-m*X[0]
+            horiz_intercepts.append(b)
+        else:
+            vert_list.append(line)
+            m = (X[0]-X[1])/float(Y[0]-Y[1])
+            b = X[0]-m*Y[0]
+            vert_intercepts.append(b)
+
+
         # ax1.plot(X, Y,color="red")
     # else:
     #     print min(X)
     # print hesse_line(line)
 
 from sklearn.cluster import DBSCAN
-d_list,t_list = zip(*hesse_list)
-min_dist = min(d_list)
-max_dist = max(d_list)
-# min_theta = min(t_list)
-# max_theta = max(t_list)
 
-normalized_d = [[(d-min_dist)/float(max_dist-min_dist),] for d in d_list]
-# normalized_t = [(t-min_theta)/float(max_theta-min_theta) for t in t_list]
-# print normalized_d
-# print normalized_t
+def analysis(lines,intercepts,horiz=True):
+    retval = []
+    # d_list,t_list = zip(*hesse_list)
+    min_dist = min(intercepts)
+    max_dist = max(intercepts)
+    # min_theta = min(t_list)
+    # max_theta = max(t_list)
 
-X = np.asarray(normalized_d)
-print X
-db = DBSCAN(eps=0.02, min_samples=3).fit(X)
-core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
-core_samples_mask[db.core_sample_indices_] = True
-labels = db.labels_
+    normalized_d = [[(d-min_dist)/float(max_dist-min_dist),] for d in intercepts]
+    # normalized_t = [(t-min_theta)/float(max_theta-min_theta) for t in t_list]
+    # print normalized_d
+    # print normalized_t
 
-unique_labels = set(labels)
-colors = plt.cm.Spectral(np.linspace(0, 1, len(unique_labels)))
+    X = np.asarray(normalized_d)
+    # print X
+    db = DBSCAN(eps=0.005, min_samples=3).fit(X)
+    core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
+    core_samples_mask[db.core_sample_indices_] = True
+    labels = db.labels_
 
-for k, col in zip(unique_labels, colors):
-    if k == -1:
-        # Black used for noise.
-        col = 'k'
-        continue
+    unique_labels = set(labels)
+    colors = plt.cm.Spectral(np.linspace(0, 1, len(unique_labels)))
 
-    class_indices = [i for (i,l) in enumerate(labels) if l == k]
-    # print class_indices
+    for k, col in zip(unique_labels, colors):
+        if k == -1:
+            # Black used for noise.
+            col = 'k'
+            continue
 
-    for i in class_indices:
-        line = pruned_lines[i]
-        p0, p1 = line
-        X = p0[0],p1[0]
-        Y = p0[1],p1[1]
-        # print X,Y
-        ax1.plot(X, Y,color=col)
+        class_indices = [i for (i,l) in enumerate(labels) if l == k]
+        # print class_indices
+        print len(class_indices)
+
+        multiline = []
+
+        for i in class_indices:
+            line = lines[i]
+            p0, p1 = line
+            X = p0[0],p1[0]
+            Y = p0[1],p1[1]
+            ax1.plot(X, Y,color=col)
+
+            # if horiz, sort by increasing X values
+            if horiz:
+                if p0[0] < p1[0]:
+                    multiline.append(line)
+                else:
+
+                    multiline.append((p1,p0))
+            else:
+                # sort y increasing Y values
+                if p0[1] < p1[1]:
+                    multiline.append(line)
+                else:
+                    multiline.append((p1,p0))
+
+        multiline.sort(key = lambda x:x[0][0])
+
+        lb = set()
+        ub = set()
+
+        for l_index,line in enumerate(multiline):
+            for l2_lindex,line_2 in list(enumerate(multiline))[l_index+1:]:
+                # if the starting point of the next line segment is after the ending point of the current line segment
+                # stop
+                if horiz:
+                    if line_2[0][0] > line[1][0]:
+                        break
+
+                    if line_2[0][1] > line[0][1]:
+                        ub.add(l2_lindex)
+                        lb.add(l_index)
+                    else:
+                        lb.add(l2_lindex)
+                        ub.add(l_index)
+                else:
+                    if line_2[0][1] > line[1][1]:
+                        break
+
+                    if line_2[0][0] > line[0][0]:
+                        ub.add(l2_lindex)
+                        lb.add(l_index)
+                    else:
+                        lb.add(l2_lindex)
+                        ub.add(l_index)
+
+        lb = sorted(list(lb))
+        for ii in range(len(lb)-1):
+            l_index = lb[ii]
+            l2_index = lb[ii+1]
+            X = multiline[l_index][1][0],multiline[l2_index][0][0]
+            Y = multiline[l_index][1][1],multiline[l2_index][0][1]
+            ax1.plot(X, Y,color=col)
+
+        ub = sorted(list(ub))
+        for ii in range(len(ub)-1):
+            l_index = ub[ii]
+            l2_index = ub[ii+1]
+            X = multiline[l_index][1][0],multiline[l2_index][0][0]
+            Y = multiline[l_index][1][1],multiline[l2_index][0][1]
+            ax1.plot(X, Y,color=col)
+
+        retval.append((lb,ub))
+
+
+h_lines = analysis(horiz_list,horiz_intercepts,horiz=True)
+v_lines = analysis(vert_list,vert_intercepts,horiz=False)
+
 
 # ax1.set_title('Probabilistic Hough')
 ax1.set_axis_off()
