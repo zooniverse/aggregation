@@ -37,37 +37,47 @@ def intersection(h_line,v_line):
     (x1,y1),(x2,y2) = h_line
     (x3,y3),(x4,y4) = v_line
 
-    d1 = deter(x1,y1,x2,y2)
-    d2 = deter(x1,1,x2,1)
-    d3 = deter(x3,y3,x4,y4)
-    d4 = deter(x3,1,x4,1)
+    # do we have a completely vertical line
+    if x3 == x4:
+        intersect_x = x3
 
-    D1 = deter(d1,d2,d3,d4)
+        m = (y2-y1)/float(x2-x1)
+        b = y2 - m*x2
+        intersect_y = m*intersect_x+b
+    else:
+        d1 = deter(x1,y1,x2,y2)
+        d2 = deter(x1,1,x2,1)
+        d3 = deter(x3,y3,x4,y4)
+        d4 = deter(x3,1,x4,1)
 
-    d5 = deter(y1,1,y2,1)
-    d6 = deter(y3,1,y4,1)
+        D1 = deter(d1,d2,d3,d4)
 
-    D2 = deter(d1,d5,d3,d6)
+        d5 = deter(y1,1,y2,1)
+        d6 = deter(y3,1,y4,1)
 
-    d7 = deter(x3,1,x4,1)
-    d8 = deter(y3,1,y4,1)
+        D2 = deter(d1,d5,d3,d6)
 
-    D3 = deter(d2,d5,d7,d8)
+        d7 = deter(x3,1,x4,1)
+        d8 = deter(y3,1,y4,1)
 
-    intersect_x = D1/float(D3)
-    intersect_y = D2/float(D3)
+        D3 = deter(d2,d5,d7,d8)
+
+        intersect_x = D1/float(D3)
+        intersect_y = D2/float(D3)
 
     return intersect_x,intersect_y
 
-def multi_intersection(h_line,v_line):
-    for h in h_line:
-        for v in v_line:
-            if does_intersect(h,v):
-                x,y = intersection(h,v)
-                print h
-                print v
-                print
-                plt.plot(x,y,"o",color ="green")
+def multi_intersection(h_multi_line,v_multi_line):
+    for h_index in range(len(h_multi_line)-1):
+        h_line = h_multi_line[h_index:h_index+2]
+
+        for v_index in range(len(v_multi_line)-1):
+            v_line = v_multi_line[v_index:v_index+2]
+
+            if does_intersect(h_line,v_line):
+                return intersection(h_line,v_line)
+
+    assert False
 
 def hesse_line(line_seg):
     """
@@ -159,6 +169,21 @@ def fil_gaps(line_segments,horiz=True):
 
     return line_segments
 
+def lowest_y((lb_lines,ub_lines)):
+    if lb_lines == []:
+        assert ub_lines != []
+        return ub_lines[0][1]
+    else:
+        return lb_lines[0][1]
+
+
+def lowest_x((lb_lines,ub_lines)):
+    if lb_lines == []:
+        assert ub_lines != []
+        return ub_lines[0][0]
+    else:
+        return lb_lines[0][0]
+
 
 def analysis(lines,intercepts,horiz=True):
     retval = []
@@ -237,7 +262,7 @@ def analysis(lines,intercepts,horiz=True):
                 # if line starts before line_2, make sure that it ends after line_2 has started
                 # or line starts before line_2 ends
                 # these two cases cover overlaps
-                if ((x1 < x3) and (x2 > x3)) or ((x1 >= x3) and (x1 < x4)):
+                if ((x1 < x3) and (x2 > x3)) or ((x1 >= x3) and (x1 <= x4)):
                     # we have an overlap
                     # the second case is slightly redundant but we have some strange cases
                     if (y1 < y3) and (y2 < y4):
@@ -266,6 +291,37 @@ def analysis(lines,intercepts,horiz=True):
                 (x1,y1),(x2,y2) = multiline[i]
                 ub_lines.extend([(y1,x1),(y2,x2)])
 
+
+
+        if horiz:
+            if lb_lines != []:
+                first_y = lb_lines[0][1]
+                last_y = lb_lines[-1][1]
+
+                lb_lines.insert(0,(big_lower_x,first_y))
+                lb_lines.append((big_upper_x,last_y))
+
+            if ub_lines != []:
+                first_y = ub_lines[0][1]
+                last_y = ub_lines[-1][1]
+
+                ub_lines.insert(0,(big_lower_x,first_y))
+                ub_lines.append((big_upper_x,last_y))
+        else:
+            if lb_lines != []:
+                first_x = lb_lines[0][0]
+                last_x = lb_lines[-1][0]
+
+                lb_lines.insert(0,(first_x,big_lower_y))
+                lb_lines.append((last_x,big_upper_y))
+
+            if ub_lines != []:
+                first_x = ub_lines[0][0]
+                last_x = ub_lines[-1][0]
+
+                ub_lines.insert(0,(first_x,big_lower_y))
+                ub_lines.append((last_x,big_upper_y))
+
         if True:
             if lb_lines != []:
                 X,Y = zip(*lb_lines)
@@ -274,9 +330,27 @@ def analysis(lines,intercepts,horiz=True):
                 X,Y = zip(*ub_lines)
                 plt.plot(X,Y,"-",color="blue")
 
+            for i,line in enumerate(multiline):
+                if (i not in lb) and (i not in ub):
+                    if horiz:
+                        (x1,y1),(x2,y2) = line
+                    else:
+                        (y1,x1),(y2,x2) = line
+
+                    plt.plot([x1,x2],[y1,y2],"-",color="green")
+        if lb_lines != [] or ub_lines != []:
+            # todo - what to do when they are both empty
+            retval.append((lb_lines,ub_lines))
+
+    if horiz:
+        assert isinstance(retval[0][0][0][1],int)
+        retval.sort(key = lambda l:lowest_y(l))
+    else:
+        assert isinstance(retval[0][0][0][0],int)
+        retval.sort(key = lambda l:lowest_x(l))
     return retval
 
-# h_lines = analysis(horiz_list,horiz_intercepts,horiz=True)
+h_lines = analysis(horiz_list,horiz_intercepts,horiz=True)
 # assert False
 v_lines = analysis(vert_list,vert_intercepts,horiz=False)
 
@@ -285,15 +359,29 @@ ax1.set_axis_off()
 ax1.set_adjustable('box-forced')
 
 
-# for row_index in range(len(h_lines)-1):
-#     for column_index in range(len(v_lines)-1):
-#         # start with the top left
-#         lower_horiz = h_lines[row_index][1]
-#         lower_vert = v_lines[column_index][1]
-#         # print lower_horiz
-#         # print lower_vert
-#         multi_intersection(lower_horiz,lower_vert)
-#         break
-#     break
+for row_index in range(len(h_lines)-1):
+    if [] in h_lines[row_index]:
+        continue
+
+    for column_index in range(len(v_lines)-1):
+        if [] in v_lines[column_index]:
+            continue
+        # start with the top left
+        lower_horiz = h_lines[row_index][1]
+        lower_vert = v_lines[column_index][1]
+        # print lower_horiz
+        # print lower_vert
+        x1,y1 = multi_intersection(lower_horiz,lower_vert)
+        plt.plot(x1,y1,"o",color="yellow")
+
+        upper_vert = v_lines[column_index+1][0]
+        x2,y2 = multi_intersection(lower_horiz,upper_vert)
+
+        upper_horiz = h_lines[row_index+1][0]
+        x3,y3 = multi_intersection(upper_horiz,upper_vert)
+
+        x4,y4 = multi_intersection(upper_horiz,lower_vert)
+
+
 plt.savefig("/home/ggdhines/Databases/example.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
 plt.close()
