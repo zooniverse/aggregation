@@ -11,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.neighbors import KDTree
 import math
+import matplotlib.path as mplPath
 
 def deter(a,b,c,d):
     return a*d - c*b
@@ -186,6 +187,43 @@ def lowest_x((lb_lines,ub_lines)):
     else:
         return lb_lines[0][0]
 
+# from
+# http://geospatialpython.com/2011/01/point-in-polygon.html
+def point_in_poly(x,y,poly):
+
+    n = len(poly)
+    inside = False
+
+    p1x,p1y = poly[0]
+    for i in range(n+1):
+        p2x,p2y = poly[i % n]
+        if y > min(p1y,p2y):
+            if y <= max(p1y,p2y):
+                if x <= max(p1x,p2x):
+                    if p1y != p2y:
+                        xints = (y-p1y)*(p2x-p1x)/(p2y-p1y)+p1x
+                    if p1x == p2x or x <= xints:
+                        inside = not inside
+        p1x,p1y = p2x,p2y
+
+    return inside
+
+
+def __pixel_generator__(boundary):
+    X,Y = zip(*boundary)
+    x_min = int(math.ceil(min(X)))
+    x_max = int(math.floor(max(X)))
+
+    y_min = int(math.ceil(min(Y)))
+    y_max = int(math.floor(max(Y)))
+
+
+    bbPath = mplPath.Path(np.asarray(boundary))
+
+    for x in range(x_min,x_max+1):
+        for y in range(y_min,y_max+1):
+            pass
+            print x,y,bbPath.contains_point((x,y))
 
 def analysis(lines,intercepts,horiz=True):
     retval = []
@@ -360,15 +398,6 @@ v_lines = analysis(vert_list,vert_intercepts,horiz=False)
 ax1.set_axis_off()
 ax1.set_adjustable('box-forced')
 
-def pixel_generator(bottom,right,top,left):
-    X_bottom,Y_bottom = zip(*bottom)
-    X_top,Y_top = zip(*top)
-
-    x_min = min(min(X_bottom),min(X_top))
-    x_max = max(max(X_bottom),max(X_top))
-
-    y_min = min(X_bottom)
-    y_max = max(X_top)
 
 
 
@@ -410,9 +439,7 @@ for row_index in range(len(h_lines)-1):
         cell_boundries.append((x1+offset,y1+offset))
 
         X,Y = zip(*cell_boundries)
-        plt.close()
-        plt.plot(X,Y)
-        plt.show()
+        __pixel_generator__(cell_boundries)
         assert False
 
         # now convert from points back to the list
