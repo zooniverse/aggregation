@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use('WXAgg')
 from skimage.transform import (hough_line, hough_line_peaks,
                                probabilistic_hough_line)
 from skimage.feature import canny
@@ -75,7 +77,7 @@ def multi_intersection(h_multi_line,v_multi_line):
             v_line = v_multi_line[v_index:v_index+2]
 
             if does_intersect(h_line,v_line):
-                return intersection(h_line,v_line)
+                return h_index,v_index,intersection(h_line,v_line)
 
     assert False
 
@@ -358,6 +360,19 @@ v_lines = analysis(vert_list,vert_intercepts,horiz=False)
 ax1.set_axis_off()
 ax1.set_adjustable('box-forced')
 
+def pixel_generator(bottom,right,top,left):
+    X_bottom,Y_bottom = zip(*bottom)
+    X_top,Y_top = zip(*top)
+
+    x_min = min(min(X_bottom),min(X_top))
+    x_max = max(max(X_bottom),max(X_top))
+
+    y_min = min(X_bottom)
+    y_max = max(X_top)
+
+
+
+
 
 for row_index in range(len(h_lines)-1):
     if [] in h_lines[row_index]:
@@ -371,16 +386,37 @@ for row_index in range(len(h_lines)-1):
         lower_vert = v_lines[column_index][1]
         # print lower_horiz
         # print lower_vert
-        x1,y1 = multi_intersection(lower_horiz,lower_vert)
+        x1_index,y1_index,(x1,y1) = multi_intersection(lower_horiz,lower_vert)
         plt.plot(x1,y1,"o",color="yellow")
 
         upper_vert = v_lines[column_index+1][0]
-        x2,y2 = multi_intersection(lower_horiz,upper_vert)
+        x2_index,y2_index,(x2,y2) = multi_intersection(lower_horiz,upper_vert)
 
         upper_horiz = h_lines[row_index+1][0]
-        x3,y3 = multi_intersection(upper_horiz,upper_vert)
+        x3_index,y3_index,(x3,y3) = multi_intersection(upper_horiz,upper_vert)
 
-        x4,y4 = multi_intersection(upper_horiz,lower_vert)
+        x4_index,y4_index,(x4,y4) = multi_intersection(upper_horiz,lower_vert)
+
+        # let's draw out the bounding box/polygon
+        offset = 0.005
+        cell_boundries = [(x1+offset,y1+offset)]
+        cell_boundries.extend([(x,y+offset) for (x,y) in lower_horiz[x1_index+1:x2_index+1]])
+        cell_boundries.append((x2-offset,y2+offset))
+        cell_boundries.extend([(x-offset,y) for (x,y) in upper_vert[y2_index+1:y3_index+1]])
+        cell_boundries.append((x3-offset,y3-offset))
+        cell_boundries.extend([(x,y-offset) for (x,y) in reversed(upper_horiz[x3_index+1:x4_index+1])])
+        cell_boundries.append((x4+offset,y4-offset))
+        cell_boundries.extend([(x+offset,y) for (x,y) in reversed(lower_vert[y1_index+1:y4_index+1])])
+        cell_boundries.append((x1+offset,y1+offset))
+
+        X,Y = zip(*cell_boundries)
+        plt.close()
+        plt.plot(X,Y)
+        plt.show()
+        assert False
+
+        # now convert from points back to the list
+
 
 
 plt.savefig("/home/ggdhines/Databases/example.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
