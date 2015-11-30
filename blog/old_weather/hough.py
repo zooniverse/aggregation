@@ -106,7 +106,7 @@ edges = cv2.Canny(gray,25,150,apertureSize = 3)
 lines = probabilistic_hough_line(edges, threshold=5, line_length=50,line_gap=0)
 fig, ax1 = plt.subplots(1, 1)
 fig.set_size_inches(52,78)
-# ax1.imshow(image)
+ax1.imshow(image)
 
 horiz_list = []
 horiz_intercepts = []
@@ -175,7 +175,7 @@ def analysis(lines,intercepts,horiz=True):
 
     X = np.asarray([[i,] for i in intercepts])
     # print X
-    db = DBSCAN(eps=15, min_samples=2).fit(X)
+    db = DBSCAN(eps=15, min_samples=1).fit(X)
     core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
     core_samples_mask[db.core_sample_indices_] = True
     labels = db.labels_
@@ -187,6 +187,7 @@ def analysis(lines,intercepts,horiz=True):
         if k == -1:
             # Black used for noise.
             col = 'k'
+
             continue
 
         class_indices = [i for (i,l) in enumerate(labels) if l == k]
@@ -196,262 +197,88 @@ def analysis(lines,intercepts,horiz=True):
         multiline = []
 
         for i in class_indices:
-            line = lines[i]
-            p0, p1 = line
-            X = p0[0],p1[0]
-            Y = p0[1],p1[1]
-            # ax1.plot(X, Y,color=col)
 
+            p0, p1 = lines[i]
+
+            # if vertical - flip, then we'll flip back later
+            if not horiz:
+                p0 = [p0[1],p0[0]]
+                p1 = [p1[1],p1[0]]
+
+            # insert in increasing "X" order (quotation marks refer to the above flipping)
             # if horiz, sort by increasing X values
-            if horiz:
-                if p0[0] < p1[0]:
-                    multiline.append([list(p0),list(p1)])
-                else:
 
-                    multiline.append([list(p1),list(p0)])
+            if p0[0] < p1[0]:
+                multiline.append([list(p0),list(p1)])
             else:
-                # sort y increasing Y values
-                if p0[1] < p1[1]:
-                    multiline.append([list(p0),list(p1)])
-                else:
-                    multiline.append([list(p1),list(p0)])
-        # print multiline
-        # multiline.sort(key = lambda x:x[0][0])
 
-        lb = [[-float("inf"),float("inf")],[float("inf"),float("inf")]]
-        # lb.extend(multiline[0])
-        # lb.sort(key = lambda x:x[0])
-        ub = [[-float("inf"),-float("inf")],[float("inf"),-float("inf")]]
-        # ub.extend(multiline[0])
-        # ub.sort(key = lambda x:x[0])
+                multiline.append([list(p1),list(p0)])
 
-        print "^^^^"
-        if horiz:
-            for ii,(starting_pt,ending_pt) in enumerate(multiline):
-                print starting_pt,ending_pt
-                if ii == 4:
-                    break
-                m = (ending_pt[1]-starting_pt[1])/float(ending_pt[0]-starting_pt[0])
-                b = starting_pt[1]-m*starting_pt[0]
+        # sort so that we can add lines in order
+        multiline.sort(key = lambda pt:pt[0][0])
 
-                inserted_end_point = False
-                # start at the end point so we can insert element without messing order
-                for pt_index in range(len(lb)-1,-1,-1):
-                    # haven't gone far enough - keep searching
-                    if lb[pt_index][0] > ending_pt[0]:
-                        continue
-                    # gone just far enough -
-                    elif lb[pt_index][0] == ending_pt[0]:
-                        lb[pt_index][1] = min(ending_pt[1],lb[pt_index][1])
-                        inserted_end_point = True
-                    # have we gone too far?
-                    elif lb[pt_index][0] < starting_pt[0]:
-                        lb.insert(pt_index+1,starting_pt)
-                        break
-                    elif lb[pt_index][0] == starting_pt[0]:
-                        lb[pt_index][1] = min(starting_pt[1],lb[pt_index][1])
-                        break
-                    else:
-                        assert starting_pt[0] < lb[pt_index][0]
-                        assert lb[pt_index][0] < ending_pt[0]
+        lb = set()
+        ub = set()
 
-                        # if we hadn't already inserted the end point
-                        if not inserted_end_point:
-                            lb.insert(pt_index+1,ending_pt)
-                            inserted_end_point = True
+        lb_lines = []
+        ub_lines = []
 
-                        # according to our line, what should y(x) be for lb[pt_index][0]
-                        y = m*lb[pt_index][0]+b
-                        lb[pt_index][1] = min(y,lb[pt_index][1])
-                print lb
-                # repeat for upper bound
-                inserted_end_point = False
-                # start at the end point so we can insert element without messing order
-                for pt_index in range(len(ub)-1,-1,-1):
-                    # haven't gone far enough - keep searching
-                    if ub[pt_index][0] > ending_pt[0]:
-                        continue
-                    # gone just far enough -
-                    elif ub[pt_index][0] == ending_pt[0]:
-                        ub[pt_index][1] = max(ending_pt[1],ub[pt_index][1])
-                        inserted_end_point = True
-                    # have we gone too far?
-                    elif ub[pt_index][0] < starting_pt[0]:
-                        ub.insert(pt_index+1,starting_pt)
-                        break
-                    elif ub[pt_index][0] == starting_pt[0]:
-                        ub[pt_index][1] = max(starting_pt[1],ub[pt_index][1])
-                        break
-                    else:
-                        assert starting_pt[0] < ub[pt_index][0]
-                        assert ub[pt_index][0] < ending_pt[0]
+        # note that these line segments will often not be overlapping but we want the ones that are since they will
+        # they may provide upper and lower bounds on a line.
+        for l_index,line in enumerate(multiline):
+            for l2_index,line_2 in list(enumerate(multiline)):
+                if l_index == l2_index:
+                    continue
 
-                        # if we hadn't already inserted the end point
-                        if not inserted_end_point:
-                            ub.insert(pt_index+1,ending_pt)
-                            inserted_end_point = True
+                #make sure that they are overlapping
+                (x1,y1),(x2,y2) = line
+                (x3,y3),(x4,y4) = line_2
 
-                        # according to our line, what should y(x) be for lb[pt_index][0]
-                        y = m*ub[pt_index][0]+b
-                        ub[pt_index][1] = max(y,ub[pt_index][1])
-                print ub
+                # if line starts before line_2, make sure that it ends after line_2 has started
+                # or line starts before line_2 ends
+                # these two cases cover overlaps
+                if ((x1 < x3) and (x2 > x3)) or ((x1 >= x3) and (x1 < x4)):
+                    # we have an overlap
+                    # the second case is slightly redundant but we have some strange cases
+                    if (y1 < y3) and (y2 < y4):
+                        lb.add(l_index)
+                        ub.add(l2_index)
+                    elif (y1 > y3) and (y2 > y4):
+                        lb.add(l2_index)
+                        ub.add(l_index)
 
-        X,Y = zip(*lb)
-        plt.plot(X[1:-1],Y[1:-1],"-",color="red")
-        X,Y = zip(*ub)
-        plt.plot(X[1:-1],Y[1:-1],"-",color="blue")
+        lb = sorted(list(lb))
+        ub = sorted(list(ub))
+        for i in lb:
+            if horiz:
+                # lb_lines.append(multiline[i])
+                lb_lines.extend(multiline[i])
+            else:
+                # else flip
+                (x1,y1),(x2,y2) = multiline[i]
+                lb_lines.extend(((y1,x1),(y2,x2)))
 
+        for i in ub:
+            if horiz:
+                ub_lines.extend(multiline[i])
+            else:
+                # else flip
+                (x1,y1),(x2,y2) = multiline[i]
+                ub_lines.extend([(y1,x1),(y2,x2)])
 
-        # for l_index,line in enumerate(multiline):
-        #     for l2_index,line_2 in list(enumerate(multiline)):
-        #         if l_index == l2_index:
-        #             continue
-        #         # if the starting point of the next line segment is after the ending point of the current line segment
-        #         # stop
-        #         if horiz:
-        #             try:
-        #                 if does_intersect(line,line_2):
-        #                     print "ii"
-        #                     continue
-        #             except ZeroDivisionError:
-        #                 continue
-        #             # check the case where line 2 is first - so line 1 must start before line 2 ends
-        #             opt1 = (line_2[0][0] < line[0][0]) and (line[1][0] > line_2[0][0])
-        #             # or line
-        #             opt2 = (line_2[0][0] < line[0][0]) and (line[0][0] < line_2[1][0])
-        #
-        #
-        #             print "^^"
-        #             print line
-        #             print line_2
-        #             print opt1,opt2
-        #             if not(opt1 or opt2):
-        #                 continue
-        #             # print "^^"
-        #
-        #
-        #             # if line_2[0][0] > line[1][0]:
-        #             #     break
-        #             # print (line_2[0][1] , line[0][1]) , (line_2[1][1] , line[1][1])
-        #
-        #             if (line_2[0][1] > line[0][1]) and (line_2[1][1] > line[1][1]):
-        #                 ub.add(l2_index)
-        #                 lb.add(l_index)
-        #                 print "a"
-        #             elif (line_2[0][1] < line[0][1]) and (line_2[1][1] < line[1][1]):
-        #                 lb.add(l2_index)
-        #                 ub.add(l_index)
-        #                 # print "b"
-        #         else:
-        #             try:
-        #                 if does_intersect(line,line_2):
-        #                     continue
-        #             except ZeroDivisionError:
-        #                 continue
-        #             # if line_2[0][1] > line[1][1]:
-        #             #     break
-        #
-        #             opt1 = (line_2[0][1] < line[0][1]) and (line[1][1] > line_2[0][1])
-        #             # or line
-        #             opt2 = (line_2[0][1] < line[0][1]) and (line[0][1] < line_2[1][1])
-        #
-        #             if not(opt1 or opt2):
-        #                 continue
-        #
-        #             if line_2[0][0] > line[0][0]:
-        #                 assert line_2[-1][0] > line[-1][0]
-        #                 ub.add(l2_index)
-        #                 lb.add(l_index)
-        #             elif line_2[0][0] < line[0][0]:
-        #                 assert line_2[-1][0] <line[-1][0]
-        #                 lb.add(l2_index)
-        #                 ub.add(l_index)
-        # print [i for i in range(len(multiline)) if (i not in lb) and (i not in ub)]
-        # lb = sorted(list(lb))
-        # ub = sorted(list(ub))
-        #
-        # for i in range(len(multiline)):
-        #     if (i not in lb) and (i not in ub):
-        #         for ii in range(len(ub)-1):
-        #             l_index = ub[ii]
-        #             l2_index = ub[ii+1]
-        #             p1 = multiline[l_index][1]
-        #             p2 = multiline[l2_index][0]
-        #             try:
-        #                 if does_intersect(multiline[i],(p1,p2)):
-        #                     ub.append(i)
-        #             except ZeroDivisionError:
-        #                 pass
-        #         for ii in range(len(lb)-1):
-        #             l_index = lb[ii]
-        #             l2_index = lb[ii+1]
-        #             p1 = multiline[l_index][1]
-        #             p2 = multiline[l2_index][0]
-        #             try:
-        #                 if does_intersect(multiline[i],(p1,p2)):
-        #                     lb.append(i)
-        #             except ZeroDivisionError:
-        #                 pass
-        #
-        # lb = sorted(list(set(lb)))
-        # ub = sorted(list(set(ub)))
-        # lower_lines = []
-        # for ii in range(len(lb)):
-        #     l_index = lb[ii]
-        #     # l2_index = lb[ii+1]
-        #     # X = multiline[l_index][1][0],multiline[l2_index][0][0]
-        #     # Y = multiline[l_index][1][1],multiline[l2_index][0][1]
-        #     # ax1.plot(X, Y,color=col)
-        #     # lower_lines.append(((X[0],Y[0]),(X[1],Y[1])))
-        #     lower_lines.append(multiline[l_index])
-        #
-        # # if lower_lines != []:
-        # #     lower_lines = fil_gaps(lower_lines)
-        # for (x1,y1),(x2,y2) in lower_lines:
-        #     ax1.plot((x1,x2),(y1,y2),color="red")
-        #     pass
-        #
-        # upper_lines = []
-        #
-        # for ii in range(len(ub)-1):
-        #     l_index = ub[ii]
-        #     # l2_index = ub[ii+1]
-        #     # X = multiline[l_index][1][0],multiline[l2_index][0][0]
-        #     # Y = multiline[l_index][1][1],multiline[l2_index][0][1]
-        #     # ax1.plot(X, Y,color=col)
-        #     # upper_lines.append(((X[0],Y[0]),(X[1],Y[1])))
-        #     upper_lines.append(multiline[l_index])
-        #
-        # # if upper_lines != []:
-        # #     upper_lines = fil_gaps(upper_lines)
-        #
-        # for (x1,y1),(x2,y2) in upper_lines:
-        #     ax1.plot((x1,x2),(y1,y2),color="green")
-        #     pass
-        #
-        # if lower_lines == [] and upper_lines == []:
-        #     for ii in range(len(multiline)-1):
-        #         X = multiline[ii][1][0],multiline[ii+1][0][0]
-        #         Y = multiline[ii][1][1],multiline[ii+1][0][1]
-        #         ax1.plot(X,Y,color="blue")
-        #     retval.append((multiline,multiline))
-        # else:
-        #     # assert lower_lines != []
-        #     # assert upper_lines != []
-        #     retval.append((lower_lines,upper_lines))
+        if True:
+            if lb_lines != []:
+                X,Y = zip(*lb_lines)
+                plt.plot(X,Y,"-",color="red")
+            if ub_lines != []:
+                X,Y = zip(*ub_lines)
+                plt.plot(X,Y,"-",color="blue")
 
-    # if horiz:
-    #     retval.sort(key = lambda x:x[0][0][0])
-    # else:
-    #     retval.sort(key = lambda x:x[1][0][1])
     return retval
 
-
-h_lines = analysis(horiz_list,horiz_intercepts,horiz=True)
+# h_lines = analysis(horiz_list,horiz_intercepts,horiz=True)
 # assert False
-# v_lines = analysis(vert_list,vert_intercepts,horiz=False)
-
-
+v_lines = analysis(vert_list,vert_intercepts,horiz=False)
 
 # ax1.set_title('Probabilistic Hough')
 ax1.set_axis_off()
