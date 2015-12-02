@@ -107,22 +107,22 @@ def hesse_line(line_seg):
 
 
 # image = data.camera()
-image = load("/home/ggdhines/Databases/old_weather/test_cases/Bear-AG-29-1939-0191.JPG")
+image = load("/home/ggdhines/t.png")
+image2 = load("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0241.JPG")
 # image = rgb2gray(image)
 # aws s3 ls s3://zooniverse-static/old-weather-2015/Distant_Seas/Navy/Bear_AG-29_/Bear-AG-29-1939/
 # img = cv2.imread("/home/ggdhines/Databases/old_weather/test_cases/Bear-AG-29-1939-0191.JPG",0)
 
-gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
-edges = cv2.Canny(gray,25,150,apertureSize = 3)
+# gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+edges = cv2.Canny(image,25,150,apertureSize = 3)
 # cv2.imwrite('/home/ggdhines/1.jpg',edges)
 
 lines = probabilistic_hough_line(edges, threshold=8, line_length=8,line_gap=1)
 fig, ax1 = plt.subplots(1, 1)
 fig.set_size_inches(52,78)
-ax1.imshow(edges)
+ax1.imshow(image2)
 
-plt.savefig("/home/ggdhines/Databases/example.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
-assert False
+
 
 horiz_list = []
 horiz_intercepts = []
@@ -161,77 +161,81 @@ for line in lines:
             b = X[0]-m*Y[0]
             vert_intercepts.append(b+m*big_lower_y)
             vert_lines.append(line)
+        else:
+            continue
 
 
-        # ax1.plot(X, Y,color="red")
+        ax1.plot(X, Y,color="red")
     # else:
     #     print min(X)
     # print hesse_line(line)
+# plt.savefig("/home/ggdhines/Databases/example.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
+# assert False
 
-clusters = [-1 for i in range(len(horiz_lines))]
-clusters_count = -1
+# clusters = [-1 for i in range(len(horiz_lines))]
+# clusters_count = -1
+#
+# horiz_lines.sort(key = lambda x:x[0][0])
+# for l_index in range(len(horiz_lines)-1):
+#     for l2_index in range(l_index+1,len(horiz_lines)):
+#         line_1 = horiz_lines[l_index]
+#         line_2 = horiz_lines[l2_index]
+#
+#         (x1,y1),(x2,y2) = line_1
+#         (x3,y3),(x4,y4) = line_2
+#
+#         assert x1 <= x3
+#
+#         if x3 <= x2:
+#             dist = y4 - y2
+#             x_dist = 0
+#         else:
+#             m = (y2-y1)/float(x2-x1)
+#             b = y2 - m*x2
+#
+#             d1 = (m*x3+b)-y3
+#             d2 = (m*x4+b)-y4
+#             dist = max(d1,d2)
+#
+#             x_dist = math.sqrt((x3-x2)**2+(y3-y2)**2)
+#
+#         # print dist
+#         if (math.fabs(dist) < 0.3) and (x_dist < 100):
+#             if (clusters[l_index] == -1) and (clusters[l2_index] == -1):
+#                 clusters_count += 1
+#                 clusters[l_index] = clusters_count
+#                 clusters[l2_index] = clusters_count
+#             elif clusters[l_index] == -1:
+#                 clusters[l_index] = clusters[l2_index]
+#             elif clusters[l2_index] == -1:
+#                 clusters[l2_index] = clusters[l_index]
+#             else:
+#                 new_cluster_id = max(clusters[l2_index], clusters[l_index])
+#                 old_cluster_id = min(clusters[l2_index], clusters[l_index])
+#                 for j,c in enumerate(clusters):
+#                     if c == old_cluster_id:
+#                         clusters[j] = new_cluster_id
 
-horiz_lines.sort(key = lambda x:x[0][0])
-for l_index in range(len(horiz_lines)-1):
-    for l2_index in range(l_index+1,len(horiz_lines)):
-        line_1 = horiz_lines[l_index]
-        line_2 = horiz_lines[l2_index]
 
-        (x1,y1),(x2,y2) = line_1
-        (x3,y3),(x4,y4) = line_2
-
-        assert x1 <= x3
-
-        if x3 <= x2:
-            dist = y4 - y2
-            x_dist = 0
-        else:
-            m = (y2-y1)/float(x2-x1)
-            b = y2 - m*x2
-
-            d1 = (m*x3+b)-y3
-            d2 = (m*x4+b)-y4
-            dist = max(d1,d2)
-
-            x_dist = math.sqrt((x3-x2)**2+(y3-y2)**2)
-
-        # print dist
-        if (math.fabs(dist) < 0.3) and (x_dist < 100):
-            if (clusters[l_index] == -1) and (clusters[l2_index] == -1):
-                clusters_count += 1
-                clusters[l_index] = clusters_count
-                clusters[l2_index] = clusters_count
-            elif clusters[l_index] == -1:
-                clusters[l_index] = clusters[l2_index]
-            elif clusters[l2_index] == -1:
-                clusters[l2_index] = clusters[l_index]
-            else:
-                new_cluster_id = max(clusters[l2_index], clusters[l_index])
-                old_cluster_id = min(clusters[l2_index], clusters[l_index])
-                for j,c in enumerate(clusters):
-                    if c == old_cluster_id:
-                        clusters[j] = new_cluster_id
-
-
-for c in range(clusters_count):
-    pts = []
-    dist = 0
-    for i,l in enumerate(horiz_lines):
-        if clusters[i] == c:
-            pts.extend(l)
-            (x1,y1),(x2,y2) = l
-            dist += x2-x1
-    # print dist/float(big_upper_x-big_lower_x)
-    # if dist/float(big_upper_x-big_lower_x) < 0.6:
-    #     continue
-    if pts == []:
-        continue
-    pts.sort(key = lambda x:x[0])
-    X,Y = zip(*pts)
-    plt.plot(X,Y)
-
-plt.savefig("/home/ggdhines/Databases/example.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
-assert False
+# for c in range(clusters_count):
+#     pts = []
+#     dist = 0
+#     for i,l in enumerate(horiz_lines):
+#         if clusters[i] == c:
+#             pts.extend(l)
+#             (x1,y1),(x2,y2) = l
+#             dist += x2-x1
+#     # print dist/float(big_upper_x-big_lower_x)
+#     # if dist/float(big_upper_x-big_lower_x) < 0.6:
+#     #     continue
+#     if pts == []:
+#         continue
+#     pts.sort(key = lambda x:x[0])
+#     X,Y = zip(*pts)
+#     plt.plot(X,Y)
+#
+# plt.savefig("/home/ggdhines/Databases/example.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
+# assert False
 
 from sklearn.cluster import DBSCAN
 
@@ -324,7 +328,7 @@ def analysis(lines,intercepts,horiz=True):
 
     X = np.asarray([[i,] for i in intercepts])
     # print X
-    db = DBSCAN(eps=1, min_samples=1).fit(X)
+    db = DBSCAN(eps=2.5, min_samples=1).fit(X)
     core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
     core_samples_mask[db.core_sample_indices_] = True
     labels = db.labels_
@@ -464,8 +468,8 @@ def analysis(lines,intercepts,horiz=True):
         else:
             p2 = -1
 
-        if max(p1,p2) < 0.5:
-            continue
+        # if max(p1,p2) < 0.5:
+        #     continue
 
         if horiz:
             if lb_lines != []:

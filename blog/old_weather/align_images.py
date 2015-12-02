@@ -33,6 +33,11 @@ while f_count < min(100,len(log_pages)):
     f_name = log_pages[f_count]
     # f_name = template_image
     if f_name.endswith(".JPG"):
+        # print "here"
+        if os.path.isfile("/home/ggdhines/Databases/old_weather/aligned_images/"+f_name):
+            f_count += 1
+            print "skipping " + str(f_name)
+            continue
         print image_directory+f_name
 
         # we want to map these new image back to the template image

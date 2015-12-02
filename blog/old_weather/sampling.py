@@ -12,15 +12,33 @@ from skimage.data import load
 # img2 = cv2.imread(filename)
 
 import Image
+mypath = "/home/ggdhines/Databases/old_weather/aligned_images/"
+from os import listdir
+from os.path import isfile, join
+onlyfiles = [f for f in listdir(mypath) if isfile(join(mypath, f))]
 
-background = Image.open("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0185.JPG")
-overlay = Image.open("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0187.JPG")
-third = Image.open("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0191.JPG")
-fourth = Image.open("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0175.JPG")
-fifth = Image.open("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0177.JPG")
+print onlyfiles
+print mypath+onlyfiles[0]
+assert False
+base_image = Image.open(mypath+onlyfiles[0])
+for ii,fname in enumerate(onlyfiles[1:]):
+    print 1/(ii+2.)
+    image = Image.open(mypath+fname)
+    base_image = Image.blend(base_image,image,1/(ii+2.))
 
-background = background.convert("RGBA")
-overlay = overlay.convert("RGBA")
+base_image.save("/home/ggdhines/new.jpg","JPEG")
+img = cv2.imread("/home/ggdhines/new.jpg")
+gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+
+ret,thresh1 = cv2.threshold(gray,170,255,cv2.THRESH_BINARY)
+cv2.imwrite("/home/ggdhines/t.png",thresh1)
+
+assert False
+
+
+
+# background = background.convert("RGBA")
+# overlay = overlay.convert("RGBA")
 
 new_img = Image.blend(background, overlay, 0.5)
 new_img.save("/home/ggdhines/new.JPG","JPEG")
