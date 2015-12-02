@@ -3,20 +3,59 @@ import numpy as np
 import matplotlib.pyplot as plt
 from skimage.feature import corner_harris,corner_peaks
 from sklearn.cluster import DBSCAN
+from skimage.data import load
 
-filename = "/home/ggdhines/Databases/old_weather/test_cases/Bear-AG-29-1939-0191.JPG"
-img = cv2.imread(filename)
+# filename = "/home/ggdhines/Databases/old_weather/test_cases/Bear-AG-29-1939-0191.JPG"
+# img = cv2.imread(filename)
+#
+# filename = "/home/ggdhines/Databases/old_weather/test_cases/Bear-AG-29-1939-0185.JPG"
+# img2 = cv2.imread(filename)
+
+import Image
+
+background = Image.open("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0185.JPG")
+overlay = Image.open("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0187.JPG")
+third = Image.open("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0191.JPG")
+fourth = Image.open("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0175.JPG")
+fifth = Image.open("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0177.JPG")
+
+background = background.convert("RGBA")
+overlay = overlay.convert("RGBA")
+
+new_img = Image.blend(background, overlay, 0.5)
+new_img.save("/home/ggdhines/new.JPG","JPEG")
+
+new_img = Image.open("/home/ggdhines/new.JPG")
+new_img = Image.blend(new_img, third, 0.33)
+new_img.save("/home/ggdhines/new.JPG","JPEG")
+
+new_img = Image.open("/home/ggdhines/new.JPG")
+new_img = Image.blend(new_img, fourth, 0.25)
+new_img.save("/home/ggdhines/new.JPG","JPEG")
+
+new_img = Image.open("/home/ggdhines/new.JPG")
+new_img = Image.blend(new_img, fifth, 0.2)
+new_img.save("/home/ggdhines/new.JPG","JPEG")
+
+img = cv2.imread("/home/ggdhines/new.JPG")
 gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+ret,thresh1 = cv2.threshold(gray,160,255,cv2.THRESH_BINARY)
+cv2.imwrite("/home/ggdhines/t.png",thresh1)
 
-coords = corner_peaks(corner_harris(gray), min_distance=1)
+image = load("/home/ggdhines/t.png")
 
+# print img.shape
+# gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+#
+coords = corner_peaks(corner_harris(image), min_distance=1)
+#
 db = DBSCAN(eps=5, min_samples=2).fit(coords)
 core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
 core_samples_mask[db.core_sample_indices_] = True
 labels = db.labels_
 fig, ax1 = plt.subplots(1, 1)
 fig.set_size_inches(52,78)
-ax1.imshow(img)
+ax1.imshow(image)
 
 # Number of clusters in labels, ignoring noise if present.
 n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
