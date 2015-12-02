@@ -29,13 +29,16 @@ log_pages = list(os.listdir(image_directory))
 
 # for f_count,f_name in enumerate():
 f_count = 0
+f_index = 0
+print log_pages
 while f_count < min(100,len(log_pages)):
-    f_name = log_pages[f_count]
+    f_name = log_pages[f_index]
     # f_name = template_image
     if f_name.endswith(".JPG"):
         # print "here"
         if os.path.isfile("/home/ggdhines/Databases/old_weather/aligned_images/"+f_name):
             f_count += 1
+            f_index += 1
             print "skipping " + str(f_name)
             continue
         print image_directory+f_name
@@ -49,6 +52,7 @@ while f_count < min(100,len(log_pages)):
             # print type(t)
             print t
             f_count += 1
+            f_index += 1
         except subprocess.CalledProcessError:
             print "segfault"
 

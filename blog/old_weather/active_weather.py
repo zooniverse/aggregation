@@ -1,5 +1,5 @@
-# import matplotlib
-# matplotlib.use('WXAgg')
+import matplotlib
+matplotlib.use('WXAgg')
 from skimage.transform import (hough_line, hough_line_peaks,
                                probabilistic_hough_line)
 from skimage.feature import canny
@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 from sklearn.neighbors import KDTree
 import math
 import matplotlib.path as mplPath
+import learning
 
 def deter(a,b,c,d):
     return a*d - c*b
@@ -20,19 +21,29 @@ def does_intersect(l1,l2):
     (x1,y1),(x2,y2) = l1
     (x3,y3),(x4,y4) = l2
 
-    l1_lower_x = min(x1,x2)
-    l1_upper_x = max(x1,x2)
-    l2_lower_x = min(x3,x4)
-    l2_upper_x = max(x3,x4)
+    # do these line overlap on the x-axis?
+    if ((x3 < x1) and (x4 >= x1)) or ((x3 >= x1) and (x3 <= x2)):
 
-    l1_lower_y = min(y1,y2)
-    l1_upper_y = max(y1,y2)
-    l2_lower_y = min(y3,y4)
-    l2_upper_y = max(y3,y4)
+        # do these lines overlap on the y-axis?
+        if ((y1 < y3) and (y2 >= y3)) or ((y1 >= y3) and (y1 <= y4)):
+            return True
+        return False
+    return False
 
-    x_inter,y_inter = intersection(l1,l2)
-    valid_x = (l1_lower_x <= x_inter) and (l2_lower_x <= x_inter) and (x_inter <= l1_upper_x) and (x_inter <= l2_upper_x)
-    valid_y = (l1_lower_y <= y_inter) and (l2_lower_y <= y_inter) and (y_inter <= l1_upper_y) and (y_inter <= l2_upper_y)
+
+    # l1_lower_x = min(x1,x2)
+    # l1_upper_x = max(x1,x2)
+    # l2_lower_x = min(x3,x4)
+    # l2_upper_x = max(x3,x4)
+    #
+    # l1_lower_y = min(y1,y2)
+    # l1_upper_y = max(y1,y2)
+    # l2_lower_y = min(y3,y4)
+    # l2_upper_y = max(y3,y4)
+    #
+    # x_inter,y_inter = intersection(l1,l2)
+    # valid_x = (l1_lower_x <= x_inter) and (l2_lower_x <= x_inter) and (x_inter <= l1_upper_x) and (x_inter <= l2_upper_x)
+    # valid_y = (l1_lower_y <= y_inter) and (l2_lower_y <= y_inter) and (y_inter <= l1_upper_y) and (y_inter <= l2_upper_y)
 
     return valid_x and valid_y
 
@@ -41,32 +52,38 @@ def intersection(h_line,v_line):
     (x3,y3),(x4,y4) = v_line
 
     # do we have a completely vertical line
-    if x3 == x4:
-        intersect_x = x3
+    try:
+        if x3 == x4:
+            intersect_x = x3
 
-        m = (y2-y1)/float(x2-x1)
-        b = y2 - m*x2
-        intersect_y = m*intersect_x+b
-    else:
-        d1 = deter(x1,y1,x2,y2)
-        d2 = deter(x1,1,x2,1)
-        d3 = deter(x3,y3,x4,y4)
-        d4 = deter(x3,1,x4,1)
+            m = (y2-y1)/float(x2-x1)
+            b = y2 - m*x2
+            intersect_y = m*intersect_x+b
+        else:
+            d1 = deter(x1,y1,x2,y2)
+            d2 = deter(x1,1,x2,1)
+            d3 = deter(x3,y3,x4,y4)
+            d4 = deter(x3,1,x4,1)
 
-        D1 = deter(d1,d2,d3,d4)
+            D1 = deter(d1,d2,d3,d4)
 
-        d5 = deter(y1,1,y2,1)
-        d6 = deter(y3,1,y4,1)
+            d5 = deter(y1,1,y2,1)
+            d6 = deter(y3,1,y4,1)
 
-        D2 = deter(d1,d5,d3,d6)
+            D2 = deter(d1,d5,d3,d6)
 
-        d7 = deter(x3,1,x4,1)
-        d8 = deter(y3,1,y4,1)
+            d7 = deter(x3,1,x4,1)
+            d8 = deter(y3,1,y4,1)
 
-        D3 = deter(d2,d5,d7,d8)
+            D3 = deter(d2,d5,d7,d8)
 
-        intersect_x = D1/float(D3)
-        intersect_y = D2/float(D3)
+            intersect_x = D1/float(D3)
+            intersect_y = D2/float(D3)
+    except ZeroDivisionError:
+        print h_line
+        print v_line
+        print D3
+        raise
 
     return intersect_x,intersect_y
 
@@ -78,8 +95,12 @@ def multi_intersection(h_multi_line,v_multi_line):
             v_line = v_multi_line[v_index:v_index+2]
 
             if does_intersect(h_line,v_line):
-                return h_index,v_index,intersection(h_line,v_line)
-
+                try:
+                    return h_index,v_index,intersection(h_line,v_line)
+                except ZeroDivisionError:
+                    print h_multi_line
+                    print v_multi_line
+                    raise
     assert False
 
 def hesse_line(line_seg):
@@ -117,7 +138,7 @@ image2 = load("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-19
 edges = cv2.Canny(image,25,150,apertureSize = 3)
 # cv2.imwrite('/home/ggdhines/1.jpg',edges)
 
-lines = probabilistic_hough_line(edges, threshold=8, line_length=8,line_gap=1)
+lines = probabilistic_hough_line(edges, threshold=5, line_length=3,line_gap=1)
 fig, ax1 = plt.subplots(1, 1)
 fig.set_size_inches(52,78)
 ax1.imshow(image2)
@@ -169,7 +190,7 @@ for line in lines:
     # else:
     #     print min(X)
     # print hesse_line(line)
-# plt.savefig("/home/ggdhines/Databases/example.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
+plt.savefig("/home/ggdhines/Databases/new.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
 # assert False
 
 # clusters = [-1 for i in range(len(horiz_lines))]
@@ -301,16 +322,21 @@ def __pixel_generator__(boundary):
 
     bbPath = mplPath.Path(np.asarray(boundary))
 
+    ink_pixels = []
+
     for x in range(x_min,x_max+1):
         for y in range(y_min,y_max+1):
 
             if bbPath.contains_point((x,y)):
-                dist = math.sqrt(sum([(int(a)-int(b))**2 for (a,b) in zip(image[y][x],most_common_colour)]))
+                dist = math.sqrt(sum([(int(a)-int(b))**2 for (a,b) in zip(image2[y][x],most_common_colour)]))
                 if dist > 40:
                     plt.plot(x,y,"o",color="blue")
+                    ink_pixels.append((x,y))
 
     plt.xlim((x_min,x_max))
     plt.ylim((y_max,y_min))
+    plt.show()
+    return ink_pixels
 
 
 def analysis(lines,intercepts,horiz=True):
@@ -328,7 +354,7 @@ def analysis(lines,intercepts,horiz=True):
 
     X = np.asarray([[i,] for i in intercepts])
     # print X
-    db = DBSCAN(eps=2.5, min_samples=1).fit(X)
+    db = DBSCAN(eps=2, min_samples=1).fit(X)
     core_samples_mask = np.zeros_like(db.labels_, dtype=bool)
     core_samples_mask[db.core_sample_indices_] = True
     labels = db.labels_
@@ -345,11 +371,8 @@ def analysis(lines,intercepts,horiz=True):
 
         class_indices = [i for (i,l) in enumerate(labels) if l == k]
         class_size = sum([1 for (i,l) in enumerate(labels) if l == k])
-        if class_size <= 2:
+        if class_size <= 3:
             continue
-        # print class_indices
-        print len(class_indices)
-        print [intercepts[i] for (i,l) in enumerate(labels) if l == k]
 
         multiline = []
 
@@ -471,6 +494,43 @@ def analysis(lines,intercepts,horiz=True):
         # if max(p1,p2) < 0.5:
         #     continue
 
+        if True:
+            if (lb_lines != []) and (ub_lines != []):
+                X_l,Y_l = zip(*lb_lines)
+                X_u,Y_u = zip(*ub_lines)
+
+                x_min = min(min(X_l),min(X_u))
+                x_max = max(max(X_l),max(X_u))
+
+                y_min = min(min(Y_l),min(Y_u))
+                y_max = max(max(Y_l),max(Y_u))
+            else:
+                x_min = float("inf")
+                x_max = -float("inf")
+
+                y_min = float("inf")
+                y_max = -float("inf")
+
+            for i,line in enumerate(multiline):
+                if (i not in lb) and (i not in ub):
+                    (x1,y1),(x2,y2) = line
+
+                    if horiz:
+                        if (x2 < x_min) or (x1 > x_max):
+                            lb_lines.extend([(x1,y1+1),(x2,y2+1)])
+                            ub_lines.extend([(x1,y1-1),(x2,y2-1)])
+                    else:
+                        if (y2 < y_min) or (y1 > y_max):
+                            lb_lines.extend([(y1,x1),(y2,x2)])
+                            ub_lines.extend([(y1,x1),(y2,x2)])
+
+        if horiz:
+            lb_lines.sort(key = lambda pt:pt[0])
+            ub_lines.sort(key = lambda pt:pt[0])
+        else:
+            lb_lines.sort(key = lambda pt:pt[1])
+            ub_lines.sort(key = lambda pt:pt[1])
+        # assert False
         if horiz:
             if lb_lines != []:
                 first_y = lb_lines[0][1]
@@ -508,14 +568,14 @@ def analysis(lines,intercepts,horiz=True):
                 X,Y = zip(*ub_lines)
                 plt.plot(X,Y,"-",color="blue")
 
-            for i,line in enumerate(multiline):
-                if (i not in lb) and (i not in ub):
-                    if horiz:
-                        (x1,y1),(x2,y2) = line
-                    else:
-                        (y1,x1),(y2,x2) = line
-
-                    plt.plot([x1,x2],[y1,y2],"-",color="green")
+            # for i,line in enumerate(multiline):
+            #     if (i not in lb) and (i not in ub):
+            #         if horiz:
+            #             (x1,y1),(x2,y2) = line
+            #         else:
+            #             (y1,x1),(y2,x2) = line
+            #
+            #         plt.plot([x1,x2],[y1,y2],"-",color="green")
         if lb_lines != [] or ub_lines != []:
             # todo - what to do when they are both empty
             retval.append((lb_lines,ub_lines))
@@ -540,22 +600,23 @@ ax1.set_adjustable('box-forced')
 
 plt.savefig("/home/ggdhines/Databases/example.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
 plt.close()
+# assert False
 
-
+classifier = learning.NearestNeighbours(collect_gold_standard=True)
+classifier.__set_image__(image2)
 for row_index in range(len(h_lines)-1):
     if [] in h_lines[row_index]:
         continue
 
     for column_index in range(len(v_lines)-1):
-        if column_index == 0:
-            continue
+        # if column_index == 0:
+        #     continue
         if [] in v_lines[column_index]:
             continue
         # start with the top left
         lower_horiz = h_lines[row_index][1]
         lower_vert = v_lines[column_index][1]
-        # print lower_horiz
-        # print lower_vert
+
         x1_index,y1_index,(x1,y1) = multi_intersection(lower_horiz,lower_vert)
         plt.plot(x1,y1,"o",color="yellow")
 
@@ -579,13 +640,14 @@ for row_index in range(len(h_lines)-1):
         cell_boundries.extend([(x+offset,y) for (x,y) in reversed(lower_vert[y1_index+1:y4_index+1])])
         cell_boundries.append((x1+offset,y1+offset))
 
-
         plt.close()
         X,Y = zip(*cell_boundries)
+
         plt.plot(X,Y,color="red")
-        __pixel_generator__(cell_boundries)
-        plt.show()
-        assert False
+        ink = __pixel_generator__(cell_boundries)
+        classifier.__pixels_to_clusters__(ink)
+
+        # assert False
 
         # now convert from points back to the list
 
