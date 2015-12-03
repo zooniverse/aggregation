@@ -8,7 +8,14 @@ import matplotlib.pyplot as plt
 import math
 from sklearn.cluster import DBSCAN
 import matplotlib.path as mplPath
-# import learning
+import learning
+# from cassandra.cluster import Cluster
+# import cassandra
+# import uuid
+import sqlite3
+import json
+import os
+import cPickle as pickle
 
 def deter(a,b,c,d):
     return a*d - c*b
@@ -130,17 +137,100 @@ def lowest_x((lb_lines,ub_lines)):
 
 class ActiveWeather:
     def __init__(self):
-        self.template = load("/home/ggdhines/t.png")
+        self.template = None
+        self.template_id = None
+        self.h_lines = None
+        self.v_lines = None
+
         self.image = None
+        self.conn = None
+
+        if os.path.isfile("/home/ggdhines/classifier.pickle"):
+            self.classifier = pickle.load(open("/home/ggdhines/classifier.pickle","rb"))
+        else:
+            self.classifier = learning.NearestNeighbours()
+        self.cluster = None
+
+
+
+    def __db_setup__(self):
+        c = self.conn.cursor()
+        c.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        current_tables = [r[0] for r in c.fetchall()]
+
+        if "subject_info" not in current_tables:
+            c.execute("create table subject_info (subject_id int, fname text, template_id int)")
+
+        if "templates" not in current_tables:
+            c.execute("create table templates (template_id, fname text, region_id int, lower_x int, lower_y int, column_filter int[], num_rows int)")
+
+        if "cell_boundaries" not in current_tables:
+            c.execute("create table cell_boundaries (template_id int, region_id int, column_id int, row_id int, boundary int[][2])")
+        self.conn.commit()
+
+        #
+        # try:
+        #     self.cassandra_session.execute("CREATE TABLE cells (subject_id int, region_id int, row_id int, column_id int, digit_id int, x_pixels list<int>, y_pixels list<int>, algorithm_classification int, probability float, actual_digit int, PRIMARY KEY(subject_id))")
+        # except cassandra.AlreadyExists:
+        #     pass
 
     def __set_image__(self,f_name):
+        c = self.conn.cursor()
+        c.execute("select subject_id from subject_info where fname = '" + str(f_name)+"'")
+        r = c.fetchone()
+
+        if r is None:
+            c.execute("select count(*) from subject_info")
+            subject_id = c.fetchone()[0]
+
+            params = (subject_id,f_name,self.template_id)
+            c.execute("insert into subject_info values(?,?,?)",params)
+            self.conn.commit()
         self.image = load(f_name)
 
-    def __set_region__(self,(big_lower_x,big_upper_x,big_lower_y,big_upper_y)):
-        self.big_lower_x = big_lower_x
-        self.big_upper_x = big_upper_x
-        self.big_lower_y = big_lower_y
-        self.big_upper_y = big_upper_y
+
+    def __set_template__(self,fname,(big_lower_x,big_upper_x,big_lower_y,big_upper_y)):
+        # have we used this template/region before?
+        c = self.conn.cursor()
+        c.execute("select lower_x,lower_y from templates where fname = '" + fname + "'")
+        #"and lower_x = " + str(big_lower_x) + " and lower_y  = " + str(big_lower_y))
+
+        self.template = load(fname)
+
+        # so we have not used this template/region before
+        if c.fetchall() == []:
+            c.execute("select count(*) from templates")
+            self.template_id = c.fetchone()[0]
+            region_id = 0
+
+
+            self.template_fname = fname
+            self.template = load(self.template_fname)
+
+            self.big_lower_x = big_lower_x
+            self.big_upper_x = big_upper_x
+            self.big_lower_y = big_lower_y
+            self.big_upper_y = big_upper_y
+
+            horiz_segments,vert_segments,horiz_intercepts,vert_intercepts = self.__get_grid_segments__()
+            h_lines = self.__segments_to_grids__(horiz_segments,horiz_intercepts,horiz=True)
+            v_lines = self.__segments_to_grids__(vert_segments,vert_intercepts,horiz=False)
+
+            for row_index in range(len(h_lines)-1):
+                for column_index in range(len(v_lines)-1):
+                    print row_index,column_index
+                    boundary = self.__get_bounding_box__(h_lines,v_lines,row_index,column_index)
+                    #(template_id int, region_id int, column_id int, row_id int, boundary int[][2])
+                    params = (self.template_id,region_id,column_index,row_index,json.dumps(boundary))
+                    c.execute("insert into cell_boundaries values (?,?,?,?,?)",params)
+
+            params = (self.template_id,fname,region_id,big_lower_x,big_lower_y,json.dumps([]),row_index+1)
+            c.execute("insert into templates values (?,?,?,?,?,?,?)",params)
+        else:
+            c.execute("select template_id from templates where fname = '" + fname + "'")
+            self.template_id = c.fetchone()[0]
+
+        self.conn.commit()
 
     def __get_grid_segments__(self):
         horiz_segments = []
@@ -154,10 +244,10 @@ class ActiveWeather:
 
         print "probabilistic houghes"
         lines = probabilistic_hough_line(edges, threshold=5, line_length=3,line_gap=1)
-        plt.close()
-        fig, ax1 = plt.subplots(1, 1)
-        fig.set_size_inches(52,78)
-        ax1.imshow(self.image)
+        # plt.close()
+        # fig, ax1 = plt.subplots(1, 1)
+        # fig.set_size_inches(52,78)
+        # ax1.imshow(self.image)
 
 
         for line in lines:
@@ -184,8 +274,8 @@ class ActiveWeather:
                 else:
                     continue
 
-            ax1.plot(X, Y,color="red")
-        plt.savefig("/home/ggdhines/Databases/new.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
+            # ax1.plot(X, Y,color="red")
+        # plt.savefig("/home/ggdhines/Databases/new.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
         return horiz_segments,vert_segments,horiz_intercepts,vert_intercepts
 
     def __pixel_generator__(self,boundary):
@@ -491,37 +581,37 @@ class ActiveWeather:
         cell_boundries.extend([(x+offset,y) for (x,y) in reversed(lower_vert[y1_index+1:y4_index+1])])
         cell_boundries.append((x1+offset,y1+offset))
 
-        plt.close()
-        fig, ax1 = plt.subplots(1, 1)
-        fig.set_size_inches(52,78)
-        ax1.imshow(self.image)
-        X,Y = zip(*cell_boundries)
-
-        plt.plot(X,Y,color="red")
-        plt.savefig("/home/ggdhines/Databases/cell.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
+        # plt.close()
+        # fig, ax1 = plt.subplots(1, 1)
+        # fig.set_size_inches(52,78)
+        # ax1.imshow(self.image)
+        # X,Y = zip(*cell_boundries)
+        #
+        # plt.plot(X,Y,color="red")
+        # plt.savefig("/home/ggdhines/Databases/cell.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
         return cell_boundries
 
-    def __grid_lines_to_digits__(self,h_lines,v_lines,row_index,column_index):
-        # for row_index in range(len(h_lines)-1):
-        #     if [] in h_lines[row_index]:
-        #         continue
-        #
-        #     for column_index in range(len(v_lines)-1):
-        #         if column_index == 0:
-        #             continue
-        #         if [] in v_lines[column_index]:
-        #             continue
-        # start with the top left
-
-
-        plt.close()
-        X,Y = zip(*cell_boundries)
-
-        plt.plot(X,Y,color="red")
-        ink = self.__pixel_generator__(cell_boundries)
-        clusters = self.__pixels_to_clusters__(ink)
-
-        return clusters
+    # def __grid_lines_to_digits__(self,h_lines,v_lines,row_index,column_index):
+    #     # for row_index in range(len(h_lines)-1):
+    #     #     if [] in h_lines[row_index]:
+    #     #         continue
+    #     #
+    #     #     for column_index in range(len(v_lines)-1):
+    #     #         if column_index == 0:
+    #     #             continue
+    #     #         if [] in v_lines[column_index]:
+    #     #             continue
+    #     # start with the top left
+    #
+    #
+    #     plt.close()
+    #     X,Y = zip(*cell_boundries)
+    #
+    #     plt.plot(X,Y,color="red")
+    #     ink = self.__pixel_generator__(cell_boundries)
+    #     clusters = self.__pixels_to_clusters__(ink)
+    #
+    #     return clusters
 
     def __pixels_to_clusters__(self,pixels):
         pixels_np = np.asarray(pixels)
@@ -554,27 +644,72 @@ class ActiveWeather:
             # digit,prob = self.__identify_digit__(xy)
             clusters.append(xy)
 
+        x_values = [zip(*xy)[0] for xy in clusters]
+        clusters_with_indices = list(enumerate(clusters))
+        # sort in increasing x values
+        clusters_with_indices.sort(key = lambda c_i:np.median(x_values[c_i[0]]))
+        clusters,_ = zip(*clusters_with_indices)
         return clusters
 
-    def __process_subject__(self,f_name,record_boundary):
+    def __process_subject__(self,f_name,region_id):
         self.__set_image__(f_name)
-        self.__set_region__(record_boundary)
 
+        c = self.conn.cursor()
+        # c.execute("create table subject_info (subject_id int, fname text, template_id int)")
+        c.execute("select template_id from subject_info where fname = \"" + f_name + "\"")
+        r = c.fetchone()
+        if r is None:
+            assert self.template_id is not None
+            c.execute("select count(*) from subject_info")
+            subject_id = c.fetchone()[0]
 
-        horiz_segments,vert_segments,horiz_intercepts,vert_intercepts = self.__get_grid_segments__()
+            params = (subject_id,f_name,self.template_id)
+            c.execute("insert into subject_info values(?,?,?)",params)
+            self.conn.commit()
 
-        print "converting segments into actual grid lines"
-        plt.close()
-        h_lines = self.__segments_to_grids__(horiz_segments,horiz_intercepts,horiz=True)
-        v_lines = self.__segments_to_grids__(vert_segments,vert_intercepts,horiz=False)
-        plt.savefig("/home/ggdhines/Databases/lines.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
-        #
-        self.__get_bounding_box__(h_lines,v_lines,0,0)
-        # self.__grid_lines_to_digits__(h_lines,v_lines,0,0)
+        c.execute("select template_id from subject_info where fname = \"" + f_name +"\"")
+        template_id = c.fetchone()[0]
+
+        c.execute("select column_filter,num_rows from templates where template_id = " + str(template_id) + " and region_id = " + str(region_id))
+        columns_filter,num_rows = c.fetchone()
+        columns_filter = json.loads(columns_filter)
+
+        for row_index in range(num_rows):
+            for column_index in columns_filter:
+
+                c.execute("select boundary from cell_boundaries where template_id = " + str(template_id) + " and region_id = " + str(region_id) + " and column_id = " + str(column_index) + " and row_id = " + str(row_index))
+                boundary_box = json.loads(c.fetchone()[0])
+                pixels = self.__pixel_generator__(boundary_box)
+
+                if pixels == []:
+                    continue
+
+                clusters = self.__pixels_to_clusters__(pixels)
+                if clusters == []:
+                    continue
+
+                for ii,c in enumerate(clusters):
+                    gold_standard,digit,digit_prob = self.classifier.__identify_digit__(c)
+
+    def __enter__(self):
+        self.conn = sqlite3.connect('/home/ggdhines/example.db')
+        self.__db_setup__()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        pickle.dump(self.classifier,open("/home/ggdhines/classifier.pickle","wb"))
+        self.conn.close()
+
+    def __set_columns__(self,template_id,region_id,columns):
+        c = self.conn.cursor()
+        c.execute("update templates set column_filter = \"" + json.dumps(columns) + "\" where template_id = " + str(template_id) + " and region_id = " + str(region_id))
+
 
 record_region = (big_lower_x,big_upper_x,big_lower_y,big_upper_y)
 
-project = ActiveWeather()
-project.__process_subject__("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0241.JPG",record_region)
+with ActiveWeather() as project:
+    project.__set_template__("/home/ggdhines/t.png",record_region)
+    project.__set_columns__(0,0,[0,1,2])
+    project.__process_subject__("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0241.JPG",0)
 
 
