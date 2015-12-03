@@ -16,6 +16,7 @@ import sqlite3
 import json
 import os
 import cPickle as pickle
+import matplotlib.cbook as cbook
 
 def deter(a,b,c,d):
     return a*d - c*b
@@ -155,8 +156,10 @@ class ActiveWeather:
 
     def __db_setup__(self):
         c = self.conn.cursor()
+        # c.execute("drop table cells")
         c.execute("SELECT name FROM sqlite_master WHERE type='table'")
         current_tables = [r[0] for r in c.fetchall()]
+
 
         if "subject_info" not in current_tables:
             c.execute("create table subject_info (subject_id int, fname text, template_id int)")
@@ -166,6 +169,11 @@ class ActiveWeather:
 
         if "cell_boundaries" not in current_tables:
             c.execute("create table cell_boundaries (template_id int, region_id int, column_id int, row_id int, boundary int[][2])")
+
+        if "cells" not in current_tables:
+            print "redoing cells"
+            c.execute("create table cells (subject_id int, region_id int, column_id int, row_id int, pixels[][2], digit_index int, algorithm_classification int, probability float, gold_classification int)")
+            c.execute("CREATE UNIQUE INDEX t1b ON cells(subject_id,region_id,column_id,row_id,digit_index)")
         self.conn.commit()
 
         #
@@ -181,11 +189,13 @@ class ActiveWeather:
 
         if r is None:
             c.execute("select count(*) from subject_info")
-            subject_id = c.fetchone()[0]
+            self.subject_id = c.fetchone()[0]
 
-            params = (subject_id,f_name,self.template_id)
+            params = (self.subject_id,f_name,self.template_id)
             c.execute("insert into subject_info values(?,?,?)",params)
             self.conn.commit()
+        else:
+            self.subject_id = r[0]
         self.image = load(f_name)
 
 
@@ -230,7 +240,39 @@ class ActiveWeather:
             c.execute("select template_id from templates where fname = '" + fname + "'")
             self.template_id = c.fetchone()[0]
 
+            self.big_lower_x = big_lower_x
+            self.big_upper_x = big_upper_x
+            self.big_lower_y = big_lower_y
+            self.big_upper_y = big_upper_y
+
         self.conn.commit()
+
+    def __plot__(self,fname):
+        image_file = cbook.get_sample_data(fname)
+        image = plt.imread(image_file)
+
+        fig, ax1 = plt.subplots(1, 1)
+        fig.set_size_inches(52,78)
+        ax1.imshow(image)
+
+        horiz_segments,vert_segments,horiz_intercepts,vert_intercepts = self.__get_grid_segments__()
+        h_lines = self.__segments_to_grids__(horiz_segments,horiz_intercepts,horiz=True)
+        v_lines = self.__segments_to_grids__(vert_segments,vert_intercepts,horiz=False)
+
+
+        for (lb,ub) in h_lines:
+            X,Y = zip(*lb)
+            ax1.plot(X, Y,color="red")
+            X,Y = zip(*ub)
+            ax1.plot(X, Y,color="red")
+
+        for (lb,ub) in v_lines:
+            X,Y = zip(*lb)
+            ax1.plot(X, Y,color="blue")
+            X,Y = zip(*ub)
+            ax1.plot(X, Y,color="blue")
+
+        plt.savefig("/home/ggdhines/Databases/temp.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
 
     def __get_grid_segments__(self):
         horiz_segments = []
@@ -654,31 +696,41 @@ class ActiveWeather:
     def __process_subject__(self,f_name,region_id):
         self.__set_image__(f_name)
 
-        cusor = self.conn.cursor()
+        cursor = self.conn.cursor()
         # c.execute("create table subject_info (subject_id int, fname text, template_id int)")
-        cusor.execute("select template_id from subject_info where fname = \"" + f_name + "\"")
-        r = cusor.fetchone()
+        cursor.execute("select template_id from subject_info where fname = \"" + f_name + "\"")
+        r = cursor.fetchone()
         if r is None:
             assert self.template_id is not None
-            cusor.execute("select count(*) from subject_info")
-            subject_id = cusor.fetchone()[0]
+            cursor.execute("select count(*) from subject_info")
+            subject_id = cursor.fetchone()[0]
 
             params = (subject_id,f_name,self.template_id)
-            cusor.execute("insert into subject_info values(?,?,?)",params)
+            cursor.execute("insert into subject_info values(?,?,?)",params)
             self.conn.commit()
 
-        cusor.execute("select template_id from subject_info where fname = \"" + f_name +"\"")
-        template_id = cusor.fetchone()[0]
+        cursor.execute("select template_id from subject_info where fname = \"" + f_name +"\"")
+        template_id = cursor.fetchone()[0]
 
-        cusor.execute("select column_filter,num_rows from templates where template_id = " + str(template_id) + " and region_id = " + str(region_id))
-        columns_filter,num_rows = cusor.fetchone()
+        cursor.execute("select column_filter,num_rows from templates where template_id = " + str(template_id) + " and region_id = " + str(region_id))
+        columns_filter,num_rows = cursor.fetchone()
         columns_filter = json.loads(columns_filter)
 
-        for row_index in range(num_rows):
-            for column_index in columns_filter:
+        done = False
 
-                cusor.execute("select boundary from cell_boundaries where template_id = " + str(template_id) + " and region_id = " + str(region_id) + " and column_id = " + str(column_index) + " and row_id = " + str(row_index))
-                boundary_box = json.loads(cusor.fetchone()[0])
+        #"create table cells (subject_id int, region_id int, column_id int, row_id int, pixels[][2], digit_index int, algorithm_classification int, probability float, gold_classification int)"
+        cursor.execute("select column_id,row_id from cells where subject_id = " + str(self.subject_id) + " and region_id = " + str(region_id))
+        previously_done = cursor.fetchall()
+
+        for row_index in range(num_rows):
+            if done:
+                break
+            for column_index in columns_filter:
+                if (column_index,row_index) in previously_done:
+                    continue
+
+                cursor.execute("select boundary from cell_boundaries where template_id = " + str(template_id) + " and region_id = " + str(region_id) + " and column_id = " + str(column_index) + " and row_id = " + str(row_index))
+                boundary_box = json.loads(cursor.fetchone()[0])
                 pixels = self.__pixel_generator__(boundary_box)
 
                 if pixels == []:
@@ -689,7 +741,18 @@ class ActiveWeather:
                     continue
 
                 for ii,c in enumerate(clusters):
+                    # ("create table cells (subject_id int, region_id int, column_id int, row_id int, pixels[][2], digit_index int, algorithm_classification int, probability float, gold_classification int)")
                     gold_standard,digit,digit_prob = self.classifier.__identify_digit__(self.image,c)
+                    params = (self.subject_id,region_id,column_index,row_index,json.dumps(c.tolist()),ii,digit,digit_prob,gold_standard)
+                    # print (self.subject_id,region_id,column_index,row_index,json.dumps(c.tolist()),ii,digit,digit_prob,gold_standard)
+                    cursor.execute("insert into cells values(?,?,?,?,?,?,?,?,?)",params)
+
+                self.conn.commit()
+
+                s = raw_input("enter s to stop")
+                if s == "s":
+                    done = True
+                    break
 
     def __enter__(self):
         self.conn = sqlite3.connect('/home/ggdhines/example.db')
@@ -704,12 +767,69 @@ class ActiveWeather:
         c = self.conn.cursor()
         c.execute("update templates set column_filter = \"" + json.dumps(columns) + "\" where template_id = " + str(template_id) + " and region_id = " + str(region_id))
 
+    def __roc__(self):
+        cursor = self.conn.cursor()
+        cursor.execute("select subject_id,region_id,column_id,row_id,algorithm_classification, probability, gold_classification from cells")
+
+        probabilities = {}
+        correctness = {}
+
+        for (subject_id,region_id,column_id,row_id,alg,p,gold) in cursor.fetchall():
+            id_ = subject_id,region_id,column_id,row_id
+            if id_ in probabilities:
+                probabilities[id_] = min(probabilities[id_],p)
+                correctness[id_] = correctness[id_] and (alg == gold)
+            else:
+                probabilities[id_] = p
+                correctness[id_] = (alg == gold)
+
+        true_positive = []
+        false_positive = []
+
+
+        for key in correctness.keys():
+            prob = probabilities[key]
+            correct = correctness[key]
+
+            if correct:
+                true_positive.append(prob)
+
+            else:
+                false_positive.append(prob)
+
+
+        roc_X = []
+        roc_Y = []
+
+        alpha_list = true_positive[:]
+        alpha_list.extend(false_positive)
+        alpha_list.sort()
+
+        for alpha in alpha_list:
+            positive_count = sum([1 for x in true_positive if x >= alpha])
+            positive_rate = positive_count/float(len(true_positive))
+
+            negative_count = sum([1 for x in false_positive if x >= alpha])
+            negative_rate = negative_count/float(len(false_positive))
+
+            roc_X.append(negative_rate)
+            roc_Y.append(positive_rate)
+
+        plt.plot(roc_X,roc_Y)
+
+        plt.plot((0,1),(0,1),'--')
+        plt.xlim((-0.01,1.00))
+        plt.ylim((0,1.01))
+        plt.show()
+
+
 
 record_region = (big_lower_x,big_upper_x,big_lower_y,big_upper_y)
 
 with ActiveWeather() as project:
     project.__set_template__("/home/ggdhines/t.png",record_region)
-    project.__set_columns__(0,0,[0,1,2])
+    # project.__plot__("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0241.JPG")
+    project.__set_columns__(0,0,[0,1,2,3,4,18])
     project.__process_subject__("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0241.JPG",0)
-
+    # project.__roc__()
 

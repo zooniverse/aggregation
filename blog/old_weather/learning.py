@@ -256,8 +256,8 @@ class NearestNeighbours:
         t = self.clf.predict_proba(centered_array)
         digit_prob = max(t[0])
         digit_probabilities.append(max(t[0]))
-        digit = list(t[0]).index(max(t[0]))
-        print "knn thinks this is a " + str(digit) + " with probability " + str(max(t[0]))
+        algorithm_digit = list(t[0]).index(max(t[0]))
+        print "knn thinks this is a " + str(algorithm_digit) + " with probability " + str(max(t[0]))
 
         # print digit_probabilities
 
@@ -271,5 +271,5 @@ class NearestNeighbours:
 
 
 
-        return gold_standard,digit,digit_prob
+        return gold_standard,algorithm_digit,digit_prob
 
