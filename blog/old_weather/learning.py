@@ -134,7 +134,7 @@ class NearestNeighbours:
     def __set_image__(self,image):
         self.image = image
 
-    def __identify_digit__(self,pts):
+    def __identify_digit__(self,image,pts):
         """
         identify a cluster of pixels, given by pts
         image is needed for rescaling
@@ -178,7 +178,7 @@ class NearestNeighbours:
         # print (min_x,max_x+1)
 
         # todo - this will probably include noise-pixels, so we need to redo this
-        template = self.image[np.ix_(r, c)]
+        template = image[np.ix_(r, c)]
 
 
         zero_template = np.zeros((len(r),len(c),3))
@@ -188,7 +188,7 @@ class NearestNeighbours:
             # print (y-min_y,x-min_x),zero_template.shape
             # print zero_template[(y-min_y,x-min_x)]
             # print image[(y,x)]
-            zero_template[(y-min_y,x-min_x)] = self.image[(y,x)]
+            zero_template[(y-min_y,x-min_x)] = image[(y,x)]
         # cv2.imwrite("/home/ggdhines/aa.png",np.uint8(np.asarray(zero_template)))
         # i = Image.fromarray(np.uint8(np.asarray(zero_template)))
         # i.save("/home/ggdhines/aa.png")

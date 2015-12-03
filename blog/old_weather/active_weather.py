@@ -648,37 +648,37 @@ class ActiveWeather:
         clusters_with_indices = list(enumerate(clusters))
         # sort in increasing x values
         clusters_with_indices.sort(key = lambda c_i:np.median(x_values[c_i[0]]))
-        clusters,_ = zip(*clusters_with_indices)
+        _,clusters = zip(*clusters_with_indices)
         return clusters
 
     def __process_subject__(self,f_name,region_id):
         self.__set_image__(f_name)
 
-        c = self.conn.cursor()
+        cusor = self.conn.cursor()
         # c.execute("create table subject_info (subject_id int, fname text, template_id int)")
-        c.execute("select template_id from subject_info where fname = \"" + f_name + "\"")
-        r = c.fetchone()
+        cusor.execute("select template_id from subject_info where fname = \"" + f_name + "\"")
+        r = cusor.fetchone()
         if r is None:
             assert self.template_id is not None
-            c.execute("select count(*) from subject_info")
-            subject_id = c.fetchone()[0]
+            cusor.execute("select count(*) from subject_info")
+            subject_id = cusor.fetchone()[0]
 
             params = (subject_id,f_name,self.template_id)
-            c.execute("insert into subject_info values(?,?,?)",params)
+            cusor.execute("insert into subject_info values(?,?,?)",params)
             self.conn.commit()
 
-        c.execute("select template_id from subject_info where fname = \"" + f_name +"\"")
-        template_id = c.fetchone()[0]
+        cusor.execute("select template_id from subject_info where fname = \"" + f_name +"\"")
+        template_id = cusor.fetchone()[0]
 
-        c.execute("select column_filter,num_rows from templates where template_id = " + str(template_id) + " and region_id = " + str(region_id))
-        columns_filter,num_rows = c.fetchone()
+        cusor.execute("select column_filter,num_rows from templates where template_id = " + str(template_id) + " and region_id = " + str(region_id))
+        columns_filter,num_rows = cusor.fetchone()
         columns_filter = json.loads(columns_filter)
 
         for row_index in range(num_rows):
             for column_index in columns_filter:
 
-                c.execute("select boundary from cell_boundaries where template_id = " + str(template_id) + " and region_id = " + str(region_id) + " and column_id = " + str(column_index) + " and row_id = " + str(row_index))
-                boundary_box = json.loads(c.fetchone()[0])
+                cusor.execute("select boundary from cell_boundaries where template_id = " + str(template_id) + " and region_id = " + str(region_id) + " and column_id = " + str(column_index) + " and row_id = " + str(row_index))
+                boundary_box = json.loads(cusor.fetchone()[0])
                 pixels = self.__pixel_generator__(boundary_box)
 
                 if pixels == []:
@@ -689,7 +689,7 @@ class ActiveWeather:
                     continue
 
                 for ii,c in enumerate(clusters):
-                    gold_standard,digit,digit_prob = self.classifier.__identify_digit__(c)
+                    gold_standard,digit,digit_prob = self.classifier.__identify_digit__(self.image,c)
 
     def __enter__(self):
         self.conn = sqlite3.connect('/home/ggdhines/example.db')
