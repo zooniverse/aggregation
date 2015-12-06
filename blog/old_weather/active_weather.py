@@ -156,7 +156,6 @@ class ActiveWeather:
 
     def __db_setup__(self):
         c = self.conn.cursor()
-        # c.execute("drop table cells")
         c.execute("SELECT name FROM sqlite_master WHERE type='table'")
         current_tables = [r[0] for r in c.fetchall()]
 
@@ -181,6 +180,25 @@ class ActiveWeather:
         #     self.cassandra_session.execute("CREATE TABLE cells (subject_id int, region_id int, row_id int, column_id int, digit_id int, x_pixels list<int>, y_pixels list<int>, algorithm_classification int, probability float, actual_digit int, PRIMARY KEY(subject_id))")
         # except cassandra.AlreadyExists:
         #     pass
+
+    def __update_classifier__(self):
+        self.classifier = learning.NearestNeighbours()
+
+        cursor = self.conn.cursor()
+        cursor.execute("select subject_id,region_id,column_id,row_id,digit_index,pixels from cells")
+
+        for subject_id,region_id,column_id,row_id,digit_index,pixels in cursor.fetchall():
+            cursor.execute("select fname from subject_info where subject_id = " + str(subject_id))
+            fname = cursor.fetchone()[0]
+            image = load(fname)
+
+            pixels = json.loads(pixels)
+
+            _,algorithm_digit,prob = self.classifier.__identify_digit__(image,pixels,collect_gold_standard=False)
+            cursor.execute("update cells set algorithm_classification = " + str(algorithm_digit) + ", probability = " + str(prob) + " where subject_id = " + str(subject_id) + " and region_id = " + str(region_id) + " and column_id = " + str(column_id) + " and row_id = " + str(row_id) + " and digit_index = " + str(digit_index))
+        self.conn.commit()
+
+
 
     def __set_image__(self,f_name):
         c = self.conn.cursor()
@@ -340,12 +358,13 @@ class ActiveWeather:
                 if bbPath.contains_point((x,y)):
                     dist = math.sqrt(sum([(int(a)-int(b))**2 for (a,b) in zip(self.image[y][x],most_common_colour)]))
                     if (dist > 40) and (self.template[y][x] != 0):
-                        plt.plot(x,y,"o",color="blue")
+                        # plt.plot(x,y,"o",color="blue")
                         ink_pixels.append((x,y))
 
-        plt.xlim((x_min,x_max))
-        plt.ylim((y_max,y_min))
-        plt.show()
+        # plt.xlim((x_min,x_max))
+        # plt.ylim((y_max,y_min))
+        # plt.show()
+        # plt.close()
 
         return ink_pixels
 
@@ -571,10 +590,10 @@ class ActiveWeather:
             if True:
                 if lb_lines != []:
                     X,Y = zip(*lb_lines)
-                    plt.plot(X,Y,"-",color="red")
+                    # plt.plot(X,Y,"-",color="red")
                 if ub_lines != []:
                     X,Y = zip(*ub_lines)
-                    plt.plot(X,Y,"-",color="blue")
+                    # plt.plot(X,Y,"-",color="blue")
 
                 # for i,line in enumerate(multiline):
                 #     if (i not in lb) and (i not in ub):
@@ -601,7 +620,7 @@ class ActiveWeather:
         lower_vert = v_lines[column_index][1]
 
         x1_index,y1_index,(x1,y1) = multi_intersection(lower_horiz,lower_vert)
-        plt.plot(x1,y1,"o",color="yellow")
+        # plt.plot(x1,y1,"o",color="yellow")
 
         upper_vert = v_lines[column_index+1][0]
         x2_index,y2_index,(x2,y2) = multi_intersection(lower_horiz,upper_vert)
@@ -760,7 +779,7 @@ class ActiveWeather:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        pickle.dump(self.classifier,open("/home/ggdhines/classifier.pickle","wb"))
+        # pickle.dump(self.classifier,open("/home/ggdhines/classifier.pickle","wb"))
         self.conn.close()
 
     def __set_columns__(self,template_id,region_id,columns):
@@ -777,7 +796,8 @@ class ActiveWeather:
         for (subject_id,region_id,column_id,row_id,alg,p,gold) in cursor.fetchall():
             id_ = subject_id,region_id,column_id,row_id
             if id_ in probabilities:
-                probabilities[id_] = min(probabilities[id_],p)
+                # probabilities[id_] = min(probabilities[id_],p)
+                probabilities[id_] = probabilities[id_]*p
                 correctness[id_] = correctness[id_] and (alg == gold)
             else:
                 probabilities[id_] = p
@@ -831,5 +851,6 @@ with ActiveWeather() as project:
     # project.__plot__("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0241.JPG")
     project.__set_columns__(0,0,[0,1,2,3,4,18])
     project.__process_subject__("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0241.JPG",0)
-    # project.__roc__()
 
+    # project.__update_classifier__()
+    # project.__roc__()
