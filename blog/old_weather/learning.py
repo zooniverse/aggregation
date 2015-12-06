@@ -18,123 +18,20 @@ except ImportError:
 from mnist import MNIST
 from sklearn import neighbors
 from sklearn.decomposition import PCA
-from lines import __get_bounding_box__
+from sklearn import svm,metrics
+import sqlite3
 
-# class YGenerator:
-#     def __init__(self,x,ll,lr,ul,ur):
-#         ll_x,ll_y = ll
-#         lr_x,lr_y = lr
-#         ur_x,ur_y = ur
-#         ul_x,ul_y = ul
-#
-#         # we can up to three lines which can act as lower bounds
-#         # the horizontal lower line (the obvious one) will always be a lower bound
-#         # but the vertical rhs and lhs lines can also be lower bounds if they are not completely
-#         # vertical - not sure how much this matters but probably good to protect against slightly rotated
-#         # cells which seem like a possibility
-#
-#         lower_bounds = []
-#
-#         # let's start with the horizontal lower line which goes from ll to lr
-#         # for the given x, what values of y does this line give?
-#         slope = (lr_y - ll_y)/float(lr_x-ll_x)
-#         y = ll_y + slope*(x-ll_x)
-#         lower_bounds.append(y)
-#
-#         # next, let's look t the lhs - this is a lower bound if angling in slightly at the bottom
-#         # (probably draw an example to help understand)
-#         if ll_x > ul_x:
-#             slope = (ul_y - ll_y)/float(ul_x - ll_x)
-#             y = ll_y + slope*(x-ll_x)
-#             lower_bounds.append(y)
-#
-#         # the rhs side is a lower bound if is angling in a but at the bottom:
-#         if lr_x < ur_x:
-#             slope = (ur_y - lr_y)/float(ur_x - lr_x)
-#             y = lr_y + slope*(x-lr_x)
-#             lower_bounds.append(y)
-#
-#         # now take the maximum of all these values to be our starting point
-#         self.y_lower_bound = max(int(math.ceil(max(lower_bounds))),0)
-#
-#         # now repeat for upper bound
-#         upper_bounds = []
-#         slope = (ur_y - ul_y)/float(ur_x-ul_x)
-#         y = ul_y + slope*(x-ul_x)
-#         upper_bounds.append(y)
-#
-#         # look at the rhs and lhs lines - this time the inequalities are flipped (definitely draw a slanted
-#         # rectangle if that helps)
-#         if ll_x < ul_x:
-#             slope = (ul_y - ll_y)/float(ul_x - ll_x)
-#             y = ll_y + slope*(x-ll_x)
-#             upper_bounds.append(y)
-#
-#         if lr_x > ur_x:
-#             slope = (ur_y - lr_y)/float(ur_x - lr_x)
-#             y = lr_y + slope*(x-lr_x)
-#             upper_bounds.append(y)
-#
-#
-#         self.y_upper_bound = int(math.floor(min(upper_bounds)))
-#         self.y = None
-#
-#
-#     def __iter__(self):
-#         return self
-#
-#     def __next__(self):
-#         return self.next()
-#
-#     def next(self):
-#         if self.y is None:
-#             self.y = self.y_lower_bound
-#         else:
-#             self.y += 1
-#
-#         if self.y == self.y_upper_bound:
-#             raise StopIteration()
-#         else:
-#             return self.y
-
-
-class NearestNeighbours:
+class Classifier:
     def __init__(self):
-        n_neighbors = 15
+        pass
 
-        mndata = MNIST('/home/ggdhines/Databases/mnist')
-        training = mndata.load_training()
-
-        digits = range(0,10)
-
-        training_dict = {d:[] for d in digits}
-
-        for t_index,label in enumerate(training[1]):
-            training_dict[label].append(training[0][t_index])
-
-        weight = "distance"
-        self.clf = neighbors.KNeighborsClassifier(n_neighbors, weights=weight)
-
-        pca = PCA(n_components=50)
-        self.T = pca.fit(training[0])
-        reduced_training = self.T.transform(training[0])
-        # print sum(pca.explained_variance_ratio_)
-        # clf.fit(training[0], training[1])
-        self.clf.fit(reduced_training, training[1])
-
-        self.transcribed_digits = {d:[] for d in digits}
-        # self.collect_gold_standard = collect_gold_standard
-
-        self.cells_to_process = []
-        self.completed_cells = []
-
-
-        # plt.show()
+    def __p_classification__(self,array):
+        pass
 
     def __set_image__(self,image):
         self.image = image
 
-    def __identify_digit__(self,image,pts):
+    def __identify_digit__(self,image,pts,collect_gold_standard=True):
         """
         identify a cluster of pixels, given by pts
         image is needed for rescaling
@@ -241,35 +138,136 @@ class NearestNeighbours:
 
                 if dist > 30:#digit_array[y][x] > 10:
                     centered_array[(y+y_offset)*28+(x+x_offset)] = grey_image[y][x]#/float(darkest_pixel)
-                    print "*",
+                    if collect_gold_standard:
+                        print "*",
                 else:
                     centered_array[(y+y_offset)*28+(x+x_offset)] = 0
-                    print " ",
-            print
+                    if collect_gold_standard:
+                        print " ",
+            if collect_gold_standard:
+                print
 
-        centered_array = np.asarray(centered_array)
-        # print centered_array
-        centered_array = self.T.transform(centered_array)
-        # print centered_array
-        # print clf.predict_proba(centered_array)
-        # raw_input("enter something")
-        t = self.clf.predict_proba(centered_array)
-        digit_prob = max(t[0])
-        digit_probabilities.append(max(t[0]))
-        algorithm_digit = list(t[0]).index(max(t[0]))
-        print "knn thinks this is a " + str(algorithm_digit) + " with probability " + str(max(t[0]))
+
+        algorithm_digit,digit_prob = self.__p_classification__(centered_array)
+
 
         # print digit_probabilities
 
         digit = ""
-        while digit == "":
-            digit = raw_input("enter digit - ")
-            if digit == "o":
-                gold_standard = -1
-            else:
-                gold_standard = int(digit)
-
+        if collect_gold_standard:
+            print "knn thinks this is a " + str(algorithm_digit) + " with probability " + str(digit_prob)
+            while digit == "":
+                digit = raw_input("enter digit - ")
+                if digit == "o":
+                    gold_standard = -1
+                else:
+                    gold_standard = int(digit)
+        else:
+            gold_standard = None
 
 
         return gold_standard,algorithm_digit,digit_prob
 
+
+class NearestNeighbours(Classifier):
+    def __init__(self):
+        Classifier.__init__(self)
+
+        n_neighbors = 25
+
+        mndata = MNIST('/home/ggdhines/Databases/mnist')
+        training = mndata.load_training()
+
+        weight = "distance"
+        self.clf = neighbors.KNeighborsClassifier(n_neighbors, weights=weight)
+
+        pca = PCA(n_components=50)
+        self.T = pca.fit(training[0])
+        reduced_training = self.T.transform(training[0])
+        print sum(pca.explained_variance_ratio_)
+        # clf.fit(training[0], training[1])
+        self.clf.fit(reduced_training, training[1])
+
+    def __p_classification__(self,centered_array):
+        centered_array = np.asarray(centered_array)
+        # print centered_array
+        centered_array = self.T.transform(centered_array)
+
+        t = self.clf.predict_proba(centered_array)
+        digit_prob = max(t[0])
+        # digit_probabilities.append(max(t[0]))
+        algorithm_digit = list(t[0]).index(max(t[0]))
+
+        return algorithm_digit,digit_prob
+
+class SVM(Classifier):
+    def __init__(self):
+        Classifier.__init__(self)
+
+        self.classifier = svm.SVC(gamma=0.001,probability=True)
+
+        mndata = MNIST('/home/ggdhines/Databases/mnist')
+        training = mndata.load_training()
+
+        self.classifier.fit(training[0], training[1])
+
+class HierarchicalNN(Classifier):
+    def __init__(self):
+        Classifier.__init__(self)
+        self.conn = sqlite3.connect('/home/ggdhines/example.db')
+        cursor = self.conn.cursor()
+
+        cursor.execute("select algorithm_classification, gold_classification from cells")
+        r = cursor.fetchall()
+        predicted,actual = zip(*r)
+
+        confusion_matrix = metrics.confusion_matrix(predicted,actual,labels= np.asarray([0,1,2,3,4,5,6,7,8,9,-1]))
+
+        clusters = range(10)
+
+        for i in range(10):
+            for j in range(10):
+                if i == j:
+                    continue
+                if confusion_matrix[i][j] > 2:
+                    t = max(clusters[i],clusters[j])
+                    t_old = min(clusters[i],clusters[j])
+                    for k,c in enumerate(clusters):
+                        if c == t_old:
+                            clusters[k] = t
+
+
+        mndata = MNIST('/home/ggdhines/Databases/mnist')
+        training = mndata.load_training()
+
+        testing = mndata.load_testing()
+
+        labels = training[1]#[clusters[t] for t in training[1]]
+        pca = PCA(n_components=50)
+        self.T = pca.fit(training[0])
+        reduced_training = self.T.transform(training[0])
+        # print sum(pca.explained_variance_ratio_)
+        weight = "distance"
+        n_neighbors = 15
+        self.clf = neighbors.KNeighborsClassifier(n_neighbors, weights=weight)
+        self.clf.fit(reduced_training, labels)
+
+        test_labels = testing[1]#[clusters[t] for t in testing[1]]
+        reduced_testing = self.T.transform(testing[0])
+
+        predictions = self.clf.predict(reduced_testing)
+
+        print sum([1 for (t,p) in zip(test_labels,predictions) if t==p])/float(len(test_labels))
+
+        # # filter
+        # filtered_training = [(training[0][i],training[1][i]) for i in range(len(training[0])) if labels[training[1][i]] == 6]
+        # data,new_labels = zip(*filtered_training)
+        # self.T = pca.fit(data)
+        # reduced_training = self.T.transform(data)
+        # self.clf.fit(reduced_training, new_labels)
+        #
+        # filtered_testing = [(testing[0][i],testing[1][i]) for i in range(len(testing[0])) if labels[testing[1][i]] == 6]
+        # testing,new_labels = zip(*filtered_testing)
+        # reduced_testing = self.T.transform(testing)
+        # predictions = self.clf.predict(reduced_testing)
+        # print sum([1 for (t,p) in zip(new_labels,predictions) if t==p])/float(len(new_labels))
