@@ -23,7 +23,7 @@ import sqlite3
 
 class Classifier:
     def __init__(self):
-        pass
+        self.conn = sqlite3.connect('/home/ggdhines/example.db')
 
     def __p_classification__(self,array):
         pass
@@ -47,6 +47,9 @@ class Classifier:
         min_x = min(X)
         max_y = max(Y)
         min_y = min(Y)
+        print (max_x-min_x),(max_y-min_y)
+        if (12 <= (max_x-min_x) <= 14) and (12 <= (max_y-min_y) <= 14):
+            return -2,-2,1.
 
         desired_height = 20.
 
@@ -214,14 +217,13 @@ class SVM(Classifier):
 class HierarchicalNN(Classifier):
     def __init__(self):
         Classifier.__init__(self)
-        self.conn = sqlite3.connect('/home/ggdhines/example.db')
         cursor = self.conn.cursor()
 
         cursor.execute("select algorithm_classification, gold_classification from cells")
         r = cursor.fetchall()
         predicted,actual = zip(*r)
 
-        confusion_matrix = metrics.confusion_matrix(predicted,actual,labels= np.asarray([0,1,2,3,4,5,6,7,8,9,-1]))
+        confusion_matrix = metrics.confusion_matrix(predicted,actual,labels= np.asarray([0,1,2,3,4,5,6,7,8,9,-1,-2]))
 
         clusters = range(10)
 
@@ -229,13 +231,14 @@ class HierarchicalNN(Classifier):
             for j in range(10):
                 if i == j:
                     continue
-                if confusion_matrix[i][j] > 2:
+                if confusion_matrix[i][j] > 3:
                     t = max(clusters[i],clusters[j])
                     t_old = min(clusters[i],clusters[j])
                     for k,c in enumerate(clusters):
                         if c == t_old:
                             clusters[k] = t
 
+        print clusters
 
         mndata = MNIST('/home/ggdhines/Databases/mnist')
         training = mndata.load_training()
@@ -245,8 +248,17 @@ class HierarchicalNN(Classifier):
         labels = training[1]#[clusters[t] for t in training[1]]
         pca = PCA(n_components=50)
         self.T = pca.fit(training[0])
+
+        f = self.T.components_.reshape((50,28,28))
+        assert False
+
         reduced_training = self.T.transform(training[0])
-        # print sum(pca.explained_variance_ratio_)
+        # starting variance explained
+        print sum(pca.explained_variance_ratio_)
+
+        # map classes
+        mapped_labels = [clusters[i] for i in labels]
+
         weight = "distance"
         n_neighbors = 15
         self.clf = neighbors.KNeighborsClassifier(n_neighbors, weights=weight)

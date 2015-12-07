@@ -1,5 +1,5 @@
-# import matplotlib
-# matplotlib.use('WXAgg')
+import matplotlib
+matplotlib.use('WXAgg')
 from skimage.transform import probabilistic_hough_line
 from skimage.data import load
 import cv2
@@ -17,6 +17,10 @@ import json
 import os
 import cPickle as pickle
 import matplotlib.cbook as cbook
+import random
+from scipy.interpolate import interp1d
+from numpy import trapz
+from sklearn import metrics
 
 def deter(a,b,c,d):
     return a*d - c*b
@@ -135,6 +139,8 @@ def lowest_x((lb_lines,ub_lines)):
     else:
         return lb_lines[0][0]
 
+def guass_kernel(x,x_star,b):
+    return math.exp(-(x-x_star)**2/(2.*b**2))
 
 class ActiveWeather:
     def __init__(self):
@@ -149,7 +155,8 @@ class ActiveWeather:
         if os.path.isfile("/home/ggdhines/classifier.pickle"):
             self.classifier = pickle.load(open("/home/ggdhines/classifier.pickle","rb"))
         else:
-            self.classifier = learning.NearestNeighbours()
+            self.classifier = learning.HierarchicalNN()
+        self.classifier = learning.HierarchicalNN()
         self.cluster = None
 
 
@@ -246,7 +253,6 @@ class ActiveWeather:
 
             for row_index in range(len(h_lines)-1):
                 for column_index in range(len(v_lines)-1):
-                    print row_index,column_index
                     boundary = self.__get_bounding_box__(h_lines,v_lines,row_index,column_index)
                     #(template_id int, region_id int, column_id int, row_id int, boundary int[][2])
                     params = (self.template_id,region_id,column_index,row_index,json.dumps(boundary))
@@ -745,6 +751,7 @@ class ActiveWeather:
             if done:
                 break
             for column_index in columns_filter:
+
                 if (column_index,row_index) in previously_done:
                     continue
 
@@ -758,20 +765,25 @@ class ActiveWeather:
                 clusters = self.__pixels_to_clusters__(pixels)
                 if clusters == []:
                     continue
+                print (column_index,row_index)
 
                 for ii,c in enumerate(clusters):
                     # ("create table cells (subject_id int, region_id int, column_id int, row_id int, pixels[][2], digit_index int, algorithm_classification int, probability float, gold_classification int)")
-                    gold_standard,digit,digit_prob = self.classifier.__identify_digit__(self.image,c)
+                    try:
+                        gold_standard,digit,digit_prob = self.classifier.__identify_digit__(self.image,c)
+                    except ValueError:
+                        done = True
+                        break
                     params = (self.subject_id,region_id,column_index,row_index,json.dumps(c.tolist()),ii,digit,digit_prob,gold_standard)
                     # print (self.subject_id,region_id,column_index,row_index,json.dumps(c.tolist()),ii,digit,digit_prob,gold_standard)
+
                     cursor.execute("insert into cells values(?,?,?,?,?,?,?,?,?)",params)
+                #
 
-                self.conn.commit()
-
-                s = raw_input("enter s to stop")
-                if s == "s":
-                    done = True
+                if done:
                     break
+                else:
+                    self.conn.commit()
 
     def __enter__(self):
         self.conn = sqlite3.connect('/home/ggdhines/example.db')
@@ -794,6 +806,7 @@ class ActiveWeather:
         correctness = {}
 
         for (subject_id,region_id,column_id,row_id,alg,p,gold) in cursor.fetchall():
+            # print alg,gold
             id_ = subject_id,region_id,column_id,row_id
             if id_ in probabilities:
                 # probabilities[id_] = min(probabilities[id_],p)
@@ -805,6 +818,7 @@ class ActiveWeather:
 
         true_positive = []
         false_positive = []
+        print len(probabilities)
 
 
         for key in correctness.keys():
@@ -840,17 +854,246 @@ class ActiveWeather:
         plt.plot((0,1),(0,1),'--')
         plt.xlim((-0.01,1.00))
         plt.ylim((0,1.01))
+
+        print trapz(list(reversed(roc_Y)),x=list(reversed(roc_X)))
+
+        plt.show()
+
+    def __probability_estimation__(self):
+        cursor = self.conn.cursor()
+        cursor.execute("select subject_id,region_id,column_id,row_id,algorithm_classification, probability, gold_classification from cells")
+
+        probabilities = {}
+        correctness = {}
+
+        for (subject_id,region_id,column_id,row_id,alg,p,gold) in cursor.fetchall():
+            # print alg,gold
+            id_ = subject_id,region_id,column_id,row_id
+            if id_ in probabilities:
+                # probabilities[id_] = min(probabilities[id_],p)
+                probabilities[id_] = probabilities[id_]*p
+                correctness[id_] = correctness[id_] and (alg == gold)
+            else:
+                probabilities[id_] = p
+                correctness[id_] = (alg == gold)
+
+        training_indices = random.sample(range(len(probabilities)),25)
+        testing_indices = [i for i in range(len(probabilities)) if i not in training_indices]
+
+        xy_indices = [probabilities.keys()[i] for i in training_indices]
+        x = np.asarray([probabilities[i] for i in xy_indices])
+        y = np.asarray([correctness[i] for i in xy_indices])
+        print x
+        f = interp1d(x, y)
+        f2 = interp1d(x, y, kind='cubic')
+        xnew = np.linspace(min(x), max(x), num=41, endpoint=True)
+        plt.plot(x, y, 'o', xnew, f(xnew), '-', xnew, f2(xnew), '--')
+        plt.ylim((0,1))
         plt.show()
 
 
+
+    def __probability_smoothing__(self):
+        cursor = self.conn.cursor()
+        cursor.execute("select subject_id,region_id,column_id,row_id,algorithm_classification, probability, gold_classification from cells")
+
+        probabilities = {}
+        correctness = {}
+
+        for (subject_id,region_id,column_id,row_id,alg,p,gold) in cursor.fetchall():
+            # print alg,gold
+            id_ = subject_id,region_id,column_id,row_id
+            if id_ in probabilities:
+                # probabilities[id_] = min(probabilities[id_],p)
+                probabilities[id_] = probabilities[id_]*p
+                correctness[id_] = correctness[id_] and (alg == gold)
+            else:
+                probabilities[id_] = p
+                correctness[id_] = (alg == gold)
+
+        temp = probabilities.keys()
+        training_indices = random.sample(temp,25)
+        testing_indices = [i for i in probabilities.keys() if i not in training_indices]
+
+        # xy_indices = [[i] for i in training_indices]
+        x_values = [probabilities[i] for i in training_indices]
+        y_values = [correctness[i] for i in training_indices]
+
+        y_est = []
+
+        b = 0.15
+        for x_star in np.arange(0,1,0.05):
+            kernels = [guass_kernel(x,x_star,b) for x in x_values]
+            y_hat = sum([k*y for (k,y) in zip(kernels,y_values)])/float(sum(kernels))
+            y_est.append(y_hat)
+
+        plt.plot(np.arange(0,1,0.05),y_est)
+        plt.show()
+
+        #####
+
+        true_positive = []
+        false_positive = []
+        print len(probabilities)
+
+
+        for key in testing_indices:
+            prob = probabilities[key]
+            kernels = [guass_kernel(x,prob,b) for x in x_values]
+            y_values = [correctness[i] for i in training_indices]
+            y_hat = sum([k*y for (k,y) in zip(kernels,y_values)])/float(sum(kernels))
+
+
+
+            correct = correctness[key]
+
+            if correct:
+                true_positive.append(y_hat)
+
+            else:
+                false_positive.append(y_hat)
+
+
+        roc_X = []
+        roc_Y = []
+
+        alpha_list = true_positive[:]
+        alpha_list.extend(false_positive)
+        alpha_list.sort()
+
+        for alpha in alpha_list:
+            positive_count = sum([1 for x in true_positive if x >= alpha])
+            positive_rate = positive_count/float(len(true_positive))
+
+            negative_count = sum([1 for x in false_positive if x >= alpha])
+            negative_rate = negative_count/float(len(false_positive))
+
+            roc_X.append(negative_rate)
+            roc_Y.append(positive_rate)
+
+        plt.plot(roc_X,roc_Y)
+
+        print trapz(list(reversed(roc_Y)),x=list(reversed(roc_X)))
+
+        plt.plot((0,1),(0,1),'--')
+        plt.xlim((-0.01,1.00))
+        plt.ylim((0,1.01))
+        plt.show()
+
+    def __smoothing_by_digit__(self):
+        cursor = self.conn.cursor()
+        cursor.execute("select subject_id,region_id,column_id,row_id,algorithm_classification, probability, gold_classification from cells")
+
+        probabilities = {}
+        correctness = {}
+
+        predicted_digits = {i:[] for i in range(10)}
+
+        ids = []
+
+        predicted = []
+        actual = []
+
+        for (subject_id,region_id,column_id,row_id,alg,p,gold) in cursor.fetchall():
+            # print alg,gold
+            id_ = subject_id,region_id,column_id,row_id
+
+            ids.append(id_)
+
+        training_indices = random.sample(range(len(ids)),25)
+        for ii in training_indices:
+            subject_id,region_id,column_id,row_id = ids[ii]
+            cursor.execute("select algorithm_classification, probability, gold_classification from cells where subject_id = " + str(subject_id) + " and region_id = " + str(region_id) + " and column_id = " + str(column_id) + " and row_id = " + str(row_id))
+            for alg_digit,prob,gold_digit in cursor.fetchall():
+                if alg_digit == -2:
+                    continue
+
+                predicted.append(alg_digit)
+                actual.append(gold_digit)
+
+                if alg_digit==gold_digit:
+                    c_value = 1
+                else:
+                    c_value = 0
+
+                predicted_digits[alg_digit].append((prob,c_value))
+
+        testing_indices = [i for i in range(len(ids)) if i not in training_indices]
+
+        b = 0.15
+
+        true_positive = []
+        false_positive = []
+
+        for ii in testing_indices:
+            subject_id,region_id,column_id,row_id = ids[ii]
+            cursor.execute("select algorithm_classification, probability, gold_classification from cells where subject_id = " + str(subject_id) + " and region_id = " + str(region_id) + " and column_id = " + str(column_id) + " and row_id = " + str(row_id))
+
+            overall_prob = 1.
+            overall_correctness = True
+
+            for alg_digit,prob,gold_digit in cursor.fetchall():
+                if alg_digit == -2:
+                    continue
+
+                if predicted_digits[alg_digit] != []:
+                    training_data = predicted_digits[alg_digit]
+                    training_prob,training_correctness = zip(*training_data)
+
+                    kernels = [guass_kernel(x,prob,b) for x in training_prob]
+                    y_hat = sum([k*y for (k,y) in zip(kernels,training_correctness)])/float(sum(kernels))
+                else:
+                    y_hat = prob
+
+                overall_prob = min(overall_prob,y_hat)
+                overall_correctness = overall_correctness and (alg_digit == gold_digit)
+
+            if overall_correctness:
+                true_positive.append(overall_prob)
+            else:
+                false_positive.append(overall_prob)
+
+        roc_X = []
+        roc_Y = []
+
+        alpha_list = true_positive[:]
+        alpha_list.extend(false_positive)
+        alpha_list.sort()
+
+        plt.hist(alpha_list, bins=5, normed=1, histtype='step', cumulative=1)
+        plt.ylim(0, 1.05)
+        plt.show()
+
+        for alpha in alpha_list:
+            positive_count = sum([1 for x in true_positive if x >= alpha])
+            positive_rate = positive_count/float(len(true_positive))
+
+            negative_count = sum([1 for x in false_positive if x >= alpha])
+            negative_rate = negative_count/float(len(false_positive))
+
+            roc_X.append(negative_rate)
+            roc_Y.append(positive_rate)
+
+        plt.plot(roc_X,roc_Y)
+
+        print trapz(list(reversed(roc_Y)),x=list(reversed(roc_X)))
+
+        plt.plot((0,1),(0,1),'--')
+        plt.xlim((-0.01,1.00))
+        plt.ylim((0,1.01))
+        plt.show()
+
+        confusion_matrix = metrics.confusion_matrix(predicted,actual,labels= np.asarray([0,1,2,3,4,5,6,7,8,9,-1]))
+        print confusion_matrix
 
 record_region = (big_lower_x,big_upper_x,big_lower_y,big_upper_y)
 
 with ActiveWeather() as project:
     project.__set_template__("/home/ggdhines/t.png",record_region)
     # project.__plot__("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0241.JPG")
-    project.__set_columns__(0,0,[0,1,2,3,4,18])
-    project.__process_subject__("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0241.JPG",0)
+    project.__set_columns__(0,0,[0,1,2,3,4,5,7,8,9,10,11,18,19])
+    # project.__process_subject__("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0191.JPG",0)
 
     # project.__update_classifier__()
     # project.__roc__()
+    # project.__smoothing_by_digit__()
