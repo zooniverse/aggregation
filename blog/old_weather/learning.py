@@ -31,23 +31,13 @@ class Classifier:
     def __set_image__(self,image):
         self.image = image
 
-    def __identify_digit__(self,image,pts,collect_gold_standard=True):
-        """
-        identify a cluster of pixels, given by pts
-        image is needed for rescaling
-        :param image:
-        :param pts:
-        :return:
-        """
-        gold_standard_digits = []
-        digit_probabilities = []
-        # do dbscan
+    def __normalize_pixels__(self,image,pts):
         X,Y = zip(*pts)
         max_x = max(X)
         min_x = min(X)
         max_y = max(Y)
         min_y = min(Y)
-        print (max_x-min_x),(max_y-min_y)
+        # print (max_x-min_x),(max_y-min_y)
         if (12 <= (max_x-min_x) <= 14) and (12 <= (max_y-min_y) <= 14):
             return -2,-2,1.
 
@@ -141,23 +131,43 @@ class Classifier:
 
                 if dist > 30:#digit_array[y][x] > 10:
                     centered_array[(y+y_offset)*28+(x+x_offset)] = grey_image[y][x]#/float(darkest_pixel)
-                    if collect_gold_standard:
-                        print "*",
                 else:
                     centered_array[(y+y_offset)*28+(x+x_offset)] = 0
-                    if collect_gold_standard:
-                        print " ",
-            if collect_gold_standard:
-                print
 
+        return centered_array,28
+
+
+    def __identify_digit__(self,image,pts,collect_gold_standard=True):
+        """
+        identify a cluster of pixels, given by pts
+        image is needed for rescaling
+        :param image:
+        :param pts:
+        :return:
+        """
+        gold_standard_digits = []
+        digit_probabilities = []
+        # do dbscan
+
+        centered_array,size = self.__normalize_pixels__(image,pts)
 
         algorithm_digit,digit_prob = self.__p_classification__(centered_array)
+
 
 
         # print digit_probabilities
 
         digit = ""
         if collect_gold_standard:
+            for y in range(size):
+                for x in range(size):
+                    p = y*size+x
+                    if centered_array[p] > 0:
+                        print "*",
+                    else:
+                        print " ",
+                print
+
             print "knn thinks this is a " + str(algorithm_digit) + " with probability " + str(digit_prob)
             while digit == "":
                 digit = raw_input("enter digit - ")
@@ -179,17 +189,18 @@ class NearestNeighbours(Classifier):
         n_neighbors = 25
 
         mndata = MNIST('/home/ggdhines/Databases/mnist')
-        training = mndata.load_training()
+        self.training = mndata.load_training()
+        print type(self.training[0][0])
 
         weight = "distance"
         self.clf = neighbors.KNeighborsClassifier(n_neighbors, weights=weight)
 
         pca = PCA(n_components=50)
-        self.T = pca.fit(training[0])
-        reduced_training = self.T.transform(training[0])
+        self.T = pca.fit(self.training[0])
+        reduced_training = self.T.transform(self.training[0])
         print sum(pca.explained_variance_ratio_)
         # clf.fit(training[0], training[1])
-        self.clf.fit(reduced_training, training[1])
+        self.clf.fit(reduced_training, self.training[1])
 
     def __p_classification__(self,centered_array):
         centered_array = np.asarray(centered_array)
