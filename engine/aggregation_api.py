@@ -461,12 +461,10 @@ class AggregationAPI:
                 aggregations = self.__cluster__(used_shapes,raw_markings,image_dimensions)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
 
-            if (self.classification_alg is not None) and (classification_tasks != {}):
-                # we may need the clustering results
-                print "classifying"
-                # aggregations = self.__classify__(raw_classifications,aggregations,workflow_id,gold_standard_clusters)
-                # print classification_aggregations
-                aggregations = self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],aggregations)
+            # we ALWAYS have to do classifications - even if we only have marking tasks, we need to do
+            # tool classification and existence classifications
+            print "classifying"
+            aggregations = self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],aggregations)
 
             # unless we are provided with specific subjects, reset for the extra workflow
             if not given_subject_set:
@@ -636,10 +634,11 @@ class AggregationAPI:
         cluster_aggregation = {}
         for shape in used_shapes:
             # were any additional params provided?
+            print shape
             if shape in self.additional_clustering_args:
                 algorithm = self.default_clustering_algs[shape](shape,self.additional_clustering_args[shape])
             else:
-                algorithm = self.default_clustering_algs[shape](shape)
+                algorithm = self.default_clustering_algs[shape](shape,{})
 
             shape_aggregation = algorithm.__aggregate__(raw_markings,image_dimensions)
 
@@ -1113,13 +1112,13 @@ class AggregationAPI:
 
         # uncomment this code if this is the first time you've run migration on whatever machine
         # will create the necessary cassandra tables for you - also useful if you need to reset
-        try:
-            self.cassandra_session.execute("drop table classifications")
-            self.cassandra_session.execute("drop table subjects")
-            self.cassandra_session.execute("drop table most_recent")
-            print "tables dropped"
-        except cassandra.InvalidRequest:
-            print "tables did not already exist"
+        # try:
+        #     self.cassandra_session.execute("drop table classifications")
+        #     self.cassandra_session.execute("drop table subjects")
+        #     self.cassandra_session.execute("drop table most_recent")
+        #     print "tables dropped"
+        # except cassandra.InvalidRequest:
+        #     print "tables did not already exist"
 
         try:
             self.cassandra_session.execute("CREATE TABLE most_recent (project_id int, classification timestamp, PRIMARY KEY(project_id))")
@@ -1572,7 +1571,6 @@ class AggregationAPI:
         except:
             raise WorkflowNotfound(workflow_id)
 
-
         # which of these tasks have classifications associated with them?
         classification_tasks = {}
         # which have drawings associated with them
@@ -1616,20 +1614,9 @@ class AggregationAPI:
                             question_type = followup_question["type"]
                             classification_tasks[task_id][tool_id].append(question_type)
 
-                    if tool["type"] == "line":
-                        marking_tasks[task_id].append("line")
-                    elif tool["type"] == "ellipse":
-                        marking_tasks[task_id].append("ellipse")
-                    elif tool["type"] == "point":
-                        marking_tasks[task_id].append("point")
-                    elif tool["type"] == "circle":
-                        marking_tasks[task_id].append("circle")
-                    elif tool["type"] == "rectangle":
-                        marking_tasks[task_id].append("rectangle")
-                    elif tool["type"] == "polygon":
-                        marking_tasks[task_id].append("polygon")
-                    elif tool["type"] == "crop":
-                        marking_tasks[task_id].append("crop")
+                    # if the tool is the one of the recognized ones, add it. Otherwise report an error
+                    if tool["type"] in ["line","ellipse","point","circle","rectangle","polygon"]:
+                        marking_tasks[task_id].append(tool["type"])
                     else:
                         print tool
                         assert False
