@@ -1618,7 +1618,6 @@ class AggregationAPI:
                     if tool["type"] in ["line","ellipse","point","circle","rectangle","polygon"]:
                         marking_tasks[task_id].append(tool["type"])
                     else:
-                        print tool
                         assert False
 
             elif tasks[task_id]["type"] in ["single","multiple"]:
@@ -1626,6 +1625,7 @@ class AggregationAPI:
                 classification_tasks[task_id] = tasks[task_id]["type"]
             else:
                 print tasks[task_id]
+                print "***"
                 # unknown task type
                 assert False
 
