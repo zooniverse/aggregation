@@ -1,4 +1,6 @@
 __author__ = 'ggdhines'
+import matplotlib
+matplotlib.use('WXAgg')
 # from aggregation_api import AggregationAPI
 import json
 # # project = AggregationAPI(1457,"development")
@@ -47,8 +49,8 @@ import numpy as np
 #
 # plt.show()
 
-directory = "/home/ggdhines/Downloads/tmp/"
-fname = "1080356.jpg"
+directory = "/home/ggdhines/Downloads/tmp/imgs/"
+fname = "1080284.jpg"
 
 gold_standard = json.load(open("/home/ggdhines/Downloads/tmp/gold_results.json","rb"))
 
@@ -90,7 +92,12 @@ for k, col in zip(unique_labels, colors):
         continue
 
     xy = X[class_member_mask]
-    # plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=col, markersize=2)
+    x = np.median(xy[:, 0])
+    y = np.median(xy[:, 1])
+    # plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor="green", markersize=2)
+    circle=plt.Circle((x,y),5,color='blue',fill=False)
+    ax.add_artist(circle)
+
 
 print gold_standard[fname]
 for x,y,r in gold_standard[fname]:
