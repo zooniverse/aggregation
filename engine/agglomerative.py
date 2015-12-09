@@ -42,8 +42,8 @@ def text_line_mappings(line_segments):
 
 
 class Agglomerative(clustering.Cluster):
-    def __init__(self,shape,**kwargs):
-        clustering.Cluster.__init__(self,shape,kwargs)
+    def __init__(self,shape,additional_params):
+        clustering.Cluster.__init__(self,shape,additional_params)
         self.all_distances = []
         self.max = 0
 

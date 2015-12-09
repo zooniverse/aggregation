@@ -46,15 +46,15 @@ def identity_mapping(markings):
 class Cluster:
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self,shape,param_dict):
+    def __init__(self,shape,additional_params):
         """
         :param project_api: how to talk to whatever project we are clustering for (Panoptes/Ouroboros shouldn't matter)
         :param min_cluster_size: minimum number of points in a cluster to not be considered noise
         :return:
         """
         self.shape = shape
-        if "reduction" in param_dict:
-            self.dim_reduction_alg = param_dict["reduction"]
+        if "reduction" in additional_params:
+            self.dim_reduction_alg = additional_params["reduction"]
         else:
             self.dim_reduction_alg = identity_mapping
 
