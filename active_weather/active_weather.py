@@ -8,10 +8,6 @@ import matplotlib.pyplot as plt
 import math
 from sklearn.cluster import DBSCAN
 import matplotlib.path as mplPath
-import learning
-# from cassandra.cluster import Cluster
-# import cassandra
-# import uuid
 import sqlite3
 import json
 import os
@@ -21,11 +17,28 @@ import random
 from scipy.interpolate import interp1d
 from numpy import trapz
 from sklearn import metrics
+import learning
+
 
 def deter(a,b,c,d):
+    """
+    return the determinant of the 2x2 matrix (a,b),(c,d)
+    :param a:
+    :param b:
+    :param c:
+    :param d:
+    :return:
+    """
     return a*d - c*b
 
+
 def does_intersect(l1,l2):
+    """
+    do these two line segments intersect
+    :param l1:
+    :param l2:
+    :return:
+    """
     (x1,y1),(x2,y2) = l1
     (x3,y3),(x4,y4) = l2
 
@@ -38,7 +51,14 @@ def does_intersect(l1,l2):
         return False
     return False
 
+
 def intersection(h_line,v_line):
+    """
+    return the intersection of two line segments - one of which is vertical and the other is horizontal
+    :param h_line:
+    :param v_line:
+    :return:
+    """
     (x1,y1),(x2,y2) = h_line
     (x3,y3),(x4,y4) = v_line
 
@@ -51,6 +71,8 @@ def intersection(h_line,v_line):
             b = y2 - m*x2
             intersect_y = m*intersect_x+b
         else:
+            # see https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
+            # for an explanation of the following math
             d1 = deter(x1,y1,x2,y2)
             d2 = deter(x1,1,x2,1)
             d3 = deter(x3,y3,x4,y4)
@@ -155,8 +177,8 @@ class ActiveWeather:
         if os.path.isfile("/home/ggdhines/classifier.pickle"):
             self.classifier = pickle.load(open("/home/ggdhines/classifier.pickle","rb"))
         else:
-            self.classifier = learning.HierarchicalNN()
-        self.classifier = learning.HierarchicalNN()
+            self.classifier = learning.NearestNeighbours()
+
         self.cluster = None
 
 
@@ -182,14 +204,10 @@ class ActiveWeather:
             c.execute("CREATE UNIQUE INDEX t1b ON cells(subject_id,region_id,column_id,row_id,digit_index)")
         self.conn.commit()
 
-        #
-        # try:
-        #     self.cassandra_session.execute("CREATE TABLE cells (subject_id int, region_id int, row_id int, column_id int, digit_id int, x_pixels list<int>, y_pixels list<int>, algorithm_classification int, probability float, actual_digit int, PRIMARY KEY(subject_id))")
-        # except cassandra.AlreadyExists:
-        #     pass
+
 
     def __update_classifier__(self):
-        self.classifier = learning.NearestNeighbours()
+        self.classifier = blog.old_weather.learning.NearestNeighbours()
 
         cursor = self.conn.cursor()
         cursor.execute("select subject_id,region_id,column_id,row_id,digit_index,pixels from cells")
@@ -205,7 +223,36 @@ class ActiveWeather:
             cursor.execute("update cells set algorithm_classification = " + str(algorithm_digit) + ", probability = " + str(prob) + " where subject_id = " + str(subject_id) + " and region_id = " + str(region_id) + " and column_id = " + str(column_id) + " and row_id = " + str(row_id) + " and digit_index = " + str(digit_index))
         self.conn.commit()
 
+    def __accuracy__(self):
+        cursor = self.conn.cursor()
+        cursor.execute("select subject_id,region_id,column_id,row_id,algorithm_classification, probability, gold_classification from cells")
 
+        probabilities = {}
+        correctness = {}
+
+        individual_total = 0
+        individual_correct = 0.
+
+        for (subject_id,region_id,column_id,row_id,alg,p,gold) in cursor.fetchall():
+            # print alg,gold
+            id_ = subject_id,region_id,column_id,row_id
+
+            individual_total += 1
+
+            if alg == gold:
+                individual_correct += 1
+
+            if id_ in probabilities:
+                # probabilities[id_] = min(probabilities[id_],p)
+                probabilities[id_] = probabilities[id_]*p
+                correctness[id_] = correctness[id_] and (alg == gold)
+            else:
+                probabilities[id_] = p
+                correctness[id_] = (alg == gold)
+
+        print individual_correct/individual_total
+
+        print sum([1 for c in correctness.values() if c])/float(len(correctness))
 
     def __set_image__(self,f_name):
         c = self.conn.cursor()
@@ -286,9 +333,9 @@ class ActiveWeather:
 
         for (lb,ub) in h_lines:
             X,Y = zip(*lb)
-            ax1.plot(X, Y,color="red")
+            ax1.plot(X, Y,color="blue")
             X,Y = zip(*ub)
-            ax1.plot(X, Y,color="red")
+            ax1.plot(X, Y,color="blue")
 
         for (lb,ub) in v_lines:
             X,Y = zip(*lb)
@@ -373,6 +420,48 @@ class ActiveWeather:
         # plt.close()
 
         return ink_pixels
+
+    def __example_plot__(self,f_name,region_id,row_index,column_index):
+        self.image = load(f_name)
+        cursor = self.conn.cursor()
+
+        cursor.execute("select template_id from subject_info where fname = \"" + f_name +"\"")
+        template_id = cursor.fetchone()[0]
+
+        cursor.execute("select boundary from cell_boundaries where template_id = " + str(template_id) + " and region_id = " + str(region_id) + " and column_id = " + str(column_index) + " and row_id = " + str(row_index))
+
+        boundary_box = json.loads(cursor.fetchone()[0])
+
+        x,y = zip(*boundary_box)
+        x_max = int(max(x))
+        y_max = int(max(y))
+        x_min = int(min(x))
+        y_min = int(min(y))
+
+
+        sub_image = self.image[np.ix_(range(y_min,y_max+1), range(x_min,x_max+1))]
+        fig, ax = plt.subplots()
+        im = ax.imshow(sub_image)
+
+        plt.tick_params(
+                    axis='x',          # changes apply to the x-axis
+                    which='both',      # both major and minor ticks are affected
+                    bottom='off',      # ticks along the bottom edge are off
+                    top='off',         # ticks along the top edge are off
+                    labelbottom='off')
+
+        plt.tick_params(
+            axis='y',          # changes apply to the x-axis
+            which='both',      # both major and minor ticks are affected
+            bottom='off',      # ticks along the bottom edge are off
+            top='off',         # ticks along the top edge are off
+            labelleft='off')
+
+        plt.show()
+        pixels = self.__pixel_generator__(boundary_box)
+        self.__pixels_to_clusters__(pixels,True,y_min,y_max)
+
+
 
     def __segments_to_grids__(self,lines,intercepts,horiz=True):
         """
@@ -648,39 +737,9 @@ class ActiveWeather:
         cell_boundries.extend([(x+offset,y) for (x,y) in reversed(lower_vert[y1_index+1:y4_index+1])])
         cell_boundries.append((x1+offset,y1+offset))
 
-        # plt.close()
-        # fig, ax1 = plt.subplots(1, 1)
-        # fig.set_size_inches(52,78)
-        # ax1.imshow(self.image)
-        # X,Y = zip(*cell_boundries)
-        #
-        # plt.plot(X,Y,color="red")
-        # plt.savefig("/home/ggdhines/Databases/cell.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
         return cell_boundries
 
-    # def __grid_lines_to_digits__(self,h_lines,v_lines,row_index,column_index):
-    #     # for row_index in range(len(h_lines)-1):
-    #     #     if [] in h_lines[row_index]:
-    #     #         continue
-    #     #
-    #     #     for column_index in range(len(v_lines)-1):
-    #     #         if column_index == 0:
-    #     #             continue
-    #     #         if [] in v_lines[column_index]:
-    #     #             continue
-    #     # start with the top left
-    #
-    #
-    #     plt.close()
-    #     X,Y = zip(*cell_boundries)
-    #
-    #     plt.plot(X,Y,color="red")
-    #     ink = self.__pixel_generator__(cell_boundries)
-    #     clusters = self.__pixels_to_clusters__(ink)
-    #
-    #     return clusters
-
-    def __pixels_to_clusters__(self,pixels):
+    def __pixels_to_clusters__(self,pixels,plot=False,y_max=None,y_min=None):
         pixels_np = np.asarray(pixels)
         db = DBSCAN(eps=3, min_samples=20).fit(pixels_np)
         labels = db.labels_
@@ -707,7 +766,8 @@ class ActiveWeather:
             xy = pixels_np[class_member_mask]
 
             # X_l,Y_l = zip(*xy)
-            # plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=col,markeredgecolor='k', markersize=3)
+            if plot:
+                plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=col,markeredgecolor='k', markersize=3)
             # digit,prob = self.__identify_digit__(xy)
             clusters.append(xy)
 
@@ -716,6 +776,24 @@ class ActiveWeather:
         # sort in increasing x values
         clusters_with_indices.sort(key = lambda c_i:np.median(x_values[c_i[0]]))
         _,clusters = zip(*clusters_with_indices)
+        if plot:
+            plt.ylim((y_min,y_max))
+
+            plt.tick_params(
+                    axis='x',          # changes apply to the x-axis
+                    which='both',      # both major and minor ticks are affected
+                    bottom='off',      # ticks along the bottom edge are off
+                    top='off',         # ticks along the top edge are off
+                    labelbottom='off')
+
+            plt.tick_params(
+                axis='y',          # changes apply to the x-axis
+                which='both',      # both major and minor ticks are affected
+                bottom='off',      # ticks along the bottom edge are off
+                top='off',         # ticks along the top edge are off
+                labelleft='off')
+
+            plt.show()
         return clusters
 
     def __process_subject__(self,f_name,region_id):
@@ -1071,16 +1149,18 @@ class ActiveWeather:
             negative_count = sum([1 for x in false_positive if x >= alpha])
             negative_rate = negative_count/float(len(false_positive))
 
-            roc_X.append(negative_rate)
+            roc_X.append(1-negative_rate)
             roc_Y.append(positive_rate)
 
         plt.plot(roc_X,roc_Y)
 
         print trapz(list(reversed(roc_Y)),x=list(reversed(roc_X)))
 
-        plt.plot((0,1),(0,1),'--')
+        # plt.plot((0,1),(0,1),'--')
         plt.xlim((-0.01,1.00))
         plt.ylim((0,1.01))
+        plt.xlabel("% of incorrect cells transcribed by users ")
+        plt.ylabel("% of correct cells automatically transcribed ")
         plt.show()
 
         confusion_matrix = metrics.confusion_matrix(predicted,actual,labels= np.asarray([0,1,2,3,4,5,6,7,8,9,-1]))
@@ -1091,9 +1171,11 @@ record_region = (big_lower_x,big_upper_x,big_lower_y,big_upper_y)
 with ActiveWeather() as project:
     project.__set_template__("/home/ggdhines/t.png",record_region)
     # project.__plot__("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0241.JPG")
-    project.__set_columns__(0,0,[0,1,2,3,4,5,7,8,9,10,11,18,19])
+    # project.__set_columns__(0,0,[0,1,2,3,4,5,7,8,9,10,11,18,19])
+    # project.__example_plot__("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0191.JPG",0,0,0)
     # project.__process_subject__("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0191.JPG",0)
 
     # project.__update_classifier__()
-    # project.__roc__()
+    # project.__probability_smoothing__()
     # project.__smoothing_by_digit__()
+    project.__accuracy__()
