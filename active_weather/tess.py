@@ -8,19 +8,22 @@ import matplotlib.cbook as cbook
 import cv2
 
 img = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0245.JPG")
-gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-ret, thresh = cv2.threshold(gray,175,255,cv2.THRESH_BINARY_INV)
+# gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+# ret, thresh = cv2.threshold(gray,175,255,cv2.THRESH_BINARY_INV)
 # cv2.imwrite("/home/ggdhines/greg.jpg",thresh)
 # assert False
 # call(["tesseract","/home/ggdhines/Downloads/Hooper_John-Certeine_comfortable_expositions-STC-13743-548_05-p3.tif","/home/ggdhines/tess","hocr"])
 
 # image_file = cbook.get_sample_data("/home/ggdhines/Databases/old_weather/test_cases/Bear-AG-29-1941-0813.JPG")
-image_file = cbook.get_sample_data("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0245.JPG")
-image = plt.imread(image_file)
-fig = plt.figure()
-ax = fig.add_subplot(1, 1, 1)
-im = ax.imshow(image)
-fig.set_size_inches(52,78)
+# image_file = cbook.get_sample_data("/home/ggdhines/Databases/old_weather/aligned_images/Bear-AG-29-1939-0245.JPG")
+# image = plt.imread(image_file)
+# fig = plt.figure()
+# ax = fig.add_subplot(1, 1, 1)
+# im = ax.imshow(image)
+# plt.imshow(image)
+# fig.set_size_inches(52,78)
+
+
 
 def process_page(node):
     print "page length is " + str(len(node))
@@ -30,22 +33,7 @@ def process_page(node):
         else:
             assert False
 
-ax.set_axis_off()
-# ax.set_xticks()
 
-plt.tick_params(
-    axis='x',          # changes apply to the x-axis
-    which='both',      # both major and minor ticks are affected
-    bottom='off',      # ticks along the bottom edge are off
-    top='off',         # ticks along the top edge are off
-    labelbottom='off')
-
-plt.tick_params(
-    axis='y',          # changes apply to the x-axis
-    which='both',      # both major and minor ticks are affected
-    bottom='off',      # ticks along the bottom edge are off
-    top='off',         # ticks along the top edge are off
-    labelleft='off')
 
 def process_carea(node):
     paragraphs = []
@@ -55,7 +43,8 @@ def process_carea(node):
             if r is not None:
                 paragraphs.append(r)
                 for (x0,y0,x1,y1) in r[1]:
-                    plt.plot([x0,x1,x1,x0,x0],[y0,y0,y1,y1,y0],color="red")
+                    # ax.plot([x0,x1,x1,x0,x0],[y0,y0,y1,y1,y0],color="red")
+                    cv2.rectangle(img,(x0,y0),(x1,y1),color=(255,0,0),thickness=3)
 
         else:
             assert False
@@ -152,7 +141,8 @@ root = tree.getroot()
 # print root[1].tag
 for child in root[1]:
     if child.attrib["class"] == "ocr_page":
-        ocr = process_page(child)
+        process_page(child)
+        pass
     else:
         assert False
 
@@ -173,5 +163,25 @@ for child in root[1]:
 
     # print gold_paragraphs
     # print ocr
-plt.savefig("/home/ggdhines/old_weather.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
-plt.show()
+# ax.set_axis_off()
+# ax.set_xticks()
+
+# ax.tick_params(
+#     axis='x',          # changes apply to the x-axis
+#     which='both',      # both major and minor ticks are affected
+#     bottom='off',      # ticks along the bottom edge are off
+#     top='off',         # ticks along the top edge are off
+#     labelbottom='off')
+#
+# ax.tick_params(
+#     axis='y',          # changes apply to the x-axis
+#     which='both',      # both major and minor ticks are affected
+#     bottom='off',      # ticks along the bottom edge are off
+#     top='off',         # ticks along the top edge are off
+#     labelleft='off')
+# plt.savefig("/home/ggdhines/grrr.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
+# fig.subplots_adjust(bottom=0, right =1, top=1,left=0,wspace=0,hspace=0)
+# fig.tight_layout()
+# fig.savefig("/home/ggdhines/old_weather.jpg",bbox_inches='tight', pad_inches=0,dpi=72)
+# plt.show()
+cv2.imwrite("/home/ggdhines/test.jpg",img)
