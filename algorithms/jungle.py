@@ -5,9 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-# project = aggregation_api.AggregationAPI(153,"development")
-# f_name = project.__image_setup__(1125393)
-f_name = "/home/ggdhines/Databases/images/e1d11279-e515-42f4-a4d9-8e8a40a28425.jpeg"
+
 def analyze(f_name,display=False):
     image = cv2.imread(f_name)
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -68,3 +66,8 @@ def analyze(f_name,display=False):
         plt.xlim((0,max(x)+1))
         plt.show()
 
+if __name__ == "__main__":
+    project = aggregation_api.AggregationAPI(153,"development")
+    f_name = project.__image_setup__(1125393)
+    print f_name
+    analyze(f_name,display=True)
