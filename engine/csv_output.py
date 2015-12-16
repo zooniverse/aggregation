@@ -6,6 +6,7 @@ import tarfile
 import math
 import sys
 import shapely.geometry as geometry
+import unicodedata
 
 class CsvOut:
     def __init__(self,project):
@@ -351,28 +352,14 @@ class CsvOut:
 
             return tar_file_path
 
-    # todo - figure out if this string is necessary
     def __csv_string__(self,string):
         """
         remove or replace all characters which might cause problems in a csv template
         :param str:
         :return:
         """
-        assert isinstance(string,str) or isinstance(string,unicode)
-        string = re.sub(" ","_",string)
-        string = re.sub(",","",string)
-        string = re.sub("!","",string)
-        string = re.sub("\.","",string)
-        string = re.sub("#","",string)
-        string = re.sub("\(","",string)
-        string = re.sub("\)","",string)
-        string = re.sub("\?","",string)
-        string = re.sub("\*","",string)
-        string = re.sub("-","",string)
-        string = re.sub("/","",string)
-        string = re.sub(":","",string)
-        string = re.sub("\"","",string)
-        string = re.sub("%","",string)
+        string = unicodedata.normalize('NFKD', string).encode('ascii','ignore')
+        string = re.sub(r'\W+', '', string)
 
         return string
 
@@ -419,29 +406,6 @@ class CsvOut:
             num_users = cluster["existence"][1]
             row += str(prob_true_positive) + "," + str(num_users)
             self.csv_files[key].write(row+"\n")
-
-    # def __rectangle_output__(self,workflow_id,task_id,subject_id,aggregations,has_followup_questions = False):
-    #     key = task_id + "rectangle"
-    #     for cluster_index,cluster in aggregations["rectangle clusters"].items():
-    #         if cluster_index == "all_users":
-    #             continue
-    #
-    #         # build up the row bit by bit to have the following structure
-    #         # "subject_id,most_likely_tool,x,y,p(most_likely_tool),p(true_positive),num_users"
-    #         row = str(subject_id)+","
-    #         # todo for now - always give the cluster index
-    #         row += str(cluster_index) + ","
-    #
-    #         # extract the most likely tool for this particular marking and convert it to
-    #         # a string label
-    #         tool_classification = cluster["tool_classification"][0].items()
-    #         most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
-    #         tool_str = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool)]["marking tool"]
-    #         tool_str = self.__csv_string__(tool_str)
-    #         row += tool_str + "," + str(cluster["center"][0][0]) + "," + str(cluster["center"][0][1]) + "," + str(cluster["center"][1][0]) + "," + str(cluster["center"][1][1])
-    #         # get the central coordinates next
-    #
-    #         self.csv_files[key].write(row+"\n")
 
     def __shape_summary_output__(self,workflow_id,task_id,subject_id,aggregations,given_shape):
         """
