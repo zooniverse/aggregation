@@ -132,3 +132,59 @@ def hesse_line_reduction(line_segments):
             reduced_markings[-1].append(line_seg[4])
 
     return reduced_markings
+
+def relevant_text_params(marking,image_dimensions):
+    """
+    extract the relevant params from the the transcription marking
+    note that the text is the last item - which means we can treat the results
+    pretty much like a line segment - which it mostly is
+    :param marking:
+    :param image_dimensions:
+    :return:
+    """
+    if ("startPoint" not in marking) or ("endPoint" not in marking):
+        raise InvalidMarking(marking)
+    x1 = marking["startPoint"]["x"]
+    y1 = marking["startPoint"]["y"]
+    x2 = marking["endPoint"]["x"]
+    y2 = marking["endPoint"]["y"]
+
+    if min(x1,x2,y1,y2) < 0:
+        raise InvalidMarking(marking)
+
+    if "text" not in marking:
+        raise InvalidMarking(marking)
+
+    text = marking["text"]
+
+    if x1 <= x2:
+        return x1,x2,y1,y2,text
+    else:
+        return x2,x2,y2,y1,text
+
+
+def text_line_reduction(line_segments):
+    """
+    use if we want to cluster based on Hesse normal form - but want to retain the original values
+    :param line_segment:
+    :return:
+    """
+    reduced_markings = []
+
+    for line_seg in line_segments:
+        x1,y1,x2,y2,text = line_seg
+
+        x2 += random.uniform(-0.0001,0.0001)
+        x1 += random.uniform(-0.0001,0.0001)
+
+        dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
+
+        try:
+            tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
+            theta = math.atan(tan_theta)
+        except ZeroDivisionError:
+            theta = math.pi/2.
+
+        reduced_markings.append((dist,theta,text))
+
+    return reduced_markings
