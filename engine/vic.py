@@ -1,4 +1,4 @@
-import transcription_3
+import transcription
 import pickle
 import random
 import json
@@ -8,7 +8,7 @@ import latex_transcription
 
 retired_subjects = pickle.load(open("/home/ggdhines/245.retired","rb"))
 # print "retired subjects is " + str(len(retired_subjects))
-with transcription_3.Tate(245,"development") as project:
+with transcription.Tate(245, "development") as project:
     cursor = project.postgres_session.cursor()
 
     cursor.execute("SELECT id FROM users WHERE login = 'bootnecksbs'")

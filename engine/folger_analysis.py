@@ -1,4 +1,4 @@
-import transcription_3
+import transcription
 from latex_transcription import latex_output
 
 folger_ids = [49241,50769,53795,67272,81278,86365,86365,110543,110755,111232,1122]
@@ -8,7 +8,7 @@ corrected_ids = {}
 unmatched_ids = []
 
 # print "retired subjects is " + str(len(retired_subjects))
-with transcription_3.Tate(376,"development") as project:
+with transcription.Tate(376, "development") as project:
     postgres_cursor = project.postgres_session.cursor()
 
     postgres_cursor.execute("select distinct(subject_ids) from classifications where workflow_id = 205;")
