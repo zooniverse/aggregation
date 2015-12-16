@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 __author__ = 'greg'
 try:
-    from aggregation_api import AggregationAPI,InvalidMarking
+    from aggregation_api import AggregationAPI
+    import marking_helpers
     from classification import Classification
     import clustering
     import math
@@ -15,7 +16,6 @@ try:
     import unicodedata
     import os
     import requests
-    from aggregation_api import hesse_line_reduction
     from scipy import spatial
     from termcolor import colored
     import warnings
@@ -27,6 +27,10 @@ try:
     import sys
     import yaml
     from blob_clustering import BlobClustering
+    from copy import deepcopy
+    import boto3
+    import scipy.spatial.distance as ssd
+    import pickle
 
 except:
     # # if any errors were raised - probably because Greg thought
@@ -234,12 +238,23 @@ class TextCluster(clustering.Cluster):
 
         self.erroneous_tags = dict()
 
+        # stats to report back
+        self.stats["capitalized"] = 0
+        self.stats["double_spaces"] = 0
+        self.stats["errors"] = 0
+        self.stats["line_length"] = []
+
+        self.stats["retired lines"] = 0
+
     def __line_alignment__(self,lines):
         """
         align.py the text by using MAFFT
         :param lines:
         :return:
         """
+
+        if len(lines) == 1:
+            return lines
 
         # todo - try to remember why I give each output file an id
         id_ = str(random.uniform(0,1))
@@ -252,7 +267,7 @@ class TextCluster(clustering.Cluster):
                     line = "".join(line)
 
                 # line = unicodedata.normalize('NFKD', line).encode('ascii','ignore')
-                assert isinstance(line,str)
+                # assert isinstance(line,str)
 
                 # for i in range(max_length-len(line)):
                 #     fasta_line += "-"
@@ -354,12 +369,11 @@ class TextCluster(clustering.Cluster):
         use upper case letters to represent special characters which MAFFT cannot deal with
         return a string where upper case letters all represent special characters
         "A" is used to represent all tags (all for an abitrary number of tags)
-        so also return a dictionary which gives the index of each occurrence of "A" and what tag it originally referred to
-        also return a string where all special characters are represented by capital letters BUT
-        we also keep any capitalize found in the original line of text. Confusing but this will allow us
-        to rebuild the capitalization at the very end
+        also return a string which capitalization kept in tack and only the special tags removed
+        so going from lower_text to text, allows us to recover what the captialization should have been
         """
 
+        # text = text.replace("\u0018","")
         text = text.encode('ascii','ignore')
 
         # first we need to replace each tag with a one character representation
@@ -411,22 +425,13 @@ class TextCluster(clustering.Cluster):
 
     def __reset_special_characters__(self,text):
         """
-        python/postgres seem have a bit of a problem with non-standard ascii code
-        not sure why - but the easiest way to deal with this seems to be reset each non-standard ascii code
-        to the tag it corresponds to
+        make sure that text is in the capitalized version, i.e. capital letters
+        represent actual captial letters, instead of characters which MAFFT has trouble with
+        i.e. I should an actual captial I, not a space
         :param text:
         :return:
         """
-        # undo MAFFT special characters
-        text = re.sub("I"," ",text)
-        text = re.sub("J","=",text)
-        text = re.sub("K","\*",text)
-        text = re.sub("L","\(",text)
-        text = re.sub("M","\)",text)
-        text = re.sub("N","<",text)
-        text = re.sub("O",">",text)
-        text = re.sub("P","-",text)
-        text = re.sub("Q","\'",text)
+        assert isinstance(text,str)
 
         reverse_map = {v: k for k, v in self.tags.items()}
         # also go with something different for "not sure"
@@ -443,8 +448,7 @@ class TextCluster(clustering.Cluster):
             else:
                 ret_text += c
 
-
-
+        assert isinstance(text,str)
         return ret_text
 
     def __merge_aligned_text__(self,aligned_text):
@@ -461,6 +465,10 @@ class TextCluster(clustering.Cluster):
         # with the aggregate
         agreement_per_user = [0 for i in aligned_text]
 
+        self.stats["line_length"].append(len(aligned_text[0]))
+
+        vote_history = []
+
         for char_index in range(len(aligned_text[0])):
             # get all the possible characters
             # todo - we can reduce this down to having to loop over each character once
@@ -468,6 +476,7 @@ class TextCluster(clustering.Cluster):
             char_set = set(text[char_index] for text in aligned_text)
             # get the percentage of votes for each character at this position
             char_vote = {c:sum([1 for text in aligned_text if text[char_index] == c])/float(len(aligned_text)) for c in char_set}
+            vote_history.append(char_vote)
             # get the most common character (also the most likely to be the correct one) and the percentage of users
             # who "voted" for it
             most_likely_char,vote_percentage = max(char_vote.items(),key=lambda x:x[1])
@@ -482,19 +491,47 @@ class TextCluster(clustering.Cluster):
                 for i in range(len(aligned_text)):
                     if aligned_text[i][char_index] == most_likely_char:
                         agreement_per_user[i] += 1
+            # check for special cases with double spaces or only differences about capitalization
+            elif len(char_vote) == 2:
+                sorted_keys = [c for c in sorted(char_vote.keys())]
+                # 24 means a gap
+                if (ord(sorted_keys[0]) == 24) and (sorted_keys[1] == " "):
+                    # print most_likely_char,vote_percentage
+                    raw_counts = {c:sum([1 for text in aligned_text if text[char_index] == c]) for c in char_set}
+                    if raw_counts[chr(24)] >= 2:
+                        # if at least two people said there was no space, we will assume that this space is actually
+                        # a double space. So insert a gap - inserting a gap instead of just skipping it means
+                        # that everything should stay the same length
+                        aggregate_text += chr(24)
+                        self.stats["double_spaces"] += 1
+                    else:
+                        # this line is probably going to be counted as noise anyways, but just to be sure
+                        aggregate_text += chr(27)
+                        self.stats["errors"] += 1
+                # capitalization issues?
+                elif sorted_keys[0].lower() == sorted_keys[1].lower():
+                    aggregate_text += sorted_keys[0].upper()
+                    self.stats["capitalized"] += 1
+                else:
+                    aggregate_text += chr(27)
+                    self.stats["errors"] += 1
             else:
                 # "Z" represents characters which we are not certain about
                 aggregate_text += chr(27)
+                self.stats["errors"] += 1
 
         # what percentage of characters have we reached consensus on - i.e. we are fairly confident about?
-        percent_consensus = num_agreed/float(len(aggregate_text))
+        if len(aggregate_text) == 0:
+            percent_consensus = -1
+            agreement_per_user = -1
+        else:
+            percent_consensus = num_agreed/float(len(aggregate_text))
 
-        # convert the agreement per user to a percentage
-        agreement_per_user = [a/float(len(aggregate_text)) for a in agreement_per_user]
-
+            # convert the agreement per user to a percentage
+            agreement_per_user = [a/float(len(aggregate_text)) for a in agreement_per_user]
         return aggregate_text,percent_consensus,agreement_per_user
 
-    def __add_alignment_spaces__(self,aligned_text_list,non_fasta_text_dict,pts_and_users):
+    def __add_alignment_spaces__(self,aligned_text_list,capitalized_text):
         """
         take the text representation where we still have upper case and lower case letters
         plus special characters for tags (so definitely not the input for MAFFT) and add in whatever
@@ -505,9 +542,8 @@ class TextCluster(clustering.Cluster):
         """
 
         aligned_nf_text_list = []
-        for text,user_ident in zip(aligned_text_list,pts_and_users):
+        for text,nf_text in zip(aligned_text_list,capitalized_text):
             aligned_nf_text = ""
-            nf_text = non_fasta_text_dict[user_ident]
             i = 0
             for c in text:
                 if c == "-":
@@ -520,519 +556,187 @@ class TextCluster(clustering.Cluster):
         return aligned_nf_text_list
 
     def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,recusrive=False):
-        print "\nstarting"
-        # we want to first cluster first just on dist and theta - ignoring the text contents
-        # dist_list,theta_list,text_list,raw_pts_list = zip(*markings)
-        # mapped_markings = zip(dist_list,theta_list)
+        clusters_by_indices  = self.__get_clusters_indices(reduced_markings)
 
-        # cluster just on points, not on text
-        dist_l,theta_l,text_l = zip(*reduced_markings)
-
-        reduced_markings_without_text = zip(dist_l,theta_l)
-        ordering  = self.__preliminarily__clustering__(reduced_markings_without_text,user_ids)
-
-        # use the below 2 to build up each cluster
-        current_lines = {}
-        current_pts = {}
-        current_hessen = {}
         clusters = []
-
-        non_fasta_text = {}
-        original_text = {}
-
-        for a,b in ordering:
-            # a - line values - "intercept" and slope
-            user_index = reduced_markings_without_text.index(a)
-            user = user_ids[user_index]
-            # extract the corresponding text and the raw (unmapped) point
-            # text = text_list[user_index]
-            # raw_pt = raw_pts_list[user_index]
-
-            text = markings[user_index][-1]
-            raw_pt = markings[user_index][:-1]
-
-            text = text.encode("ascii","ignore")
-            original_text[(raw_pt,user)] = text
-            # text = folger_alpha_tags(text)
-
-            print str(a) + "\t" + text
-
-            # skip lines with new lines characters in them
-            # Roger has set things up so that new line characters are no longer allowed
-            # but we need to be careful with transcriptions submitted before that change
-            if "\n" in text:
-                print "multiline - skipping"
-                continue
-
-            # convert from unicode to ascii
-            assert isinstance(text,str)
-
-            # not sure if it is possible to have empty lines, but just in case
-            if text == "":
-                continue
-
-            # handle all characters which MAFFT cannot handle and keep a record of where all
-            # the tags are in the string
-            # text_with_capitalization is used (at the end) to determine the correct capitalization
-            # of character (since in the mean time capital letters are used for other stuff
-            text, nf_text = self.__set_special_characters__(text)
-
-            # save these values for later use
-            non_fasta_text[(raw_pt,user)] = nf_text
-
-
-            # if we currently have an empty cluster, just add the line
-            if current_lines == {}:
-                current_lines[user] = text
-                # adding the user id is slightly redundant but makes doing the actual clustering easier
-                current_pts[user] = (raw_pt,user)
-                current_hessen[user] = a
-            else:
-                # need to see if we want to merge the text with the existing cluster or start a new one
-                # do we already have some text from this user for this current cluster?
-                # IMPORTANT
-                # VERY IMPORTANT
-                # for the simplified transcription, we will assume that we should automatically start a new
-                # cluster - i.e. we don't deal with split lines
-                if user in current_pts:
-                    # if len(current_pts.keys()) > 2:
-                    #     print current_hessen[user]
-                    #     print a
-                    #     print current_lines.values()
-                    #     print text
-                    #     print
-
-                    clusters.append((current_lines.values(),current_pts.values()))
-                    current_lines = {user:text} #(text,special_characters)}
-                    current_pts = {user:(raw_pt,user)}
-                    current_hessen = {user:a}
-
-                else:
-                    # does adding this line to the cluster make sense?
-                    # todo - why am I sorting here? doesn't really seem necessary
-                    # users_and_lines = sorted(current_lines.items(),key = lambda x:x[0])
-                    # sorted_users,sorted_lines = zip(*users_and_lines)
-
-                    # take the current set of text lines and add in the new one
-                    new_lines = current_lines.values()
-                    new_lines.append(text)
-
-
-                    # uncomment below if you want to compare the new accuracy against the old
-                    # if len(current_lines) > 1:
-                    #     aligned_text = self.__get_aggregation_lines__(sorted_lines)
-                    #     current_accuracy = self.__agreement__(aligned_text)
-                    # else:
-                    #     current_accuracy = -1
-
-                    # what would the accuracy be if we added in this new user's line?
-                    # new_lines = list(sorted_lines)
-                    # assert isinstance(sorted_users,tuple)
-                    # user_index = sorted_users.index(user)
-
-                    # start by trying straight up replacing
-                    # new_lines.append(text)
-                    new_aligned = self.__line_alignment__(new_lines)
-                    new_accuracy = self.__agreement__(new_aligned)
-                    # todo - we can get two slightly different values for new_accuracy
-                    # todo - because of slightly different approaches - is one better?
-                    # todo - we might not need __agreement__, if not, we can remove it
-                    # temp1,temp2,new_accuracy = self.__merge_aligned_text__(new_aligned)
-
-                    # if the minimum accuracy resulted by adding in this line is still reasonably good
-                    # add the line to the current cluster
-                    if min(new_accuracy) >= 0.5:
-                        current_pts[user] = (raw_pt,user)
-                        current_lines[user] = text
-                        current_hessen[user] =a
-                    else:
-                        # otherwise, start a new cluster
-                        clusters.append((current_lines.values(),current_pts.values()))
-                        current_lines = {user:text}
-                        current_pts = {user:(raw_pt,user)}
-                        current_hessen = {user:a}
-
-        # make sure to add the final cluster that we were working on at the end
-        clusters.append((current_lines.values(),current_pts.values()))
-
-        error_clusters = []
-
-        # remove any clusters which have only one user - treat those as noise
-        for cluster_index in range(len(clusters)-1,-1,-1):
-            if len(clusters[cluster_index][0]) <= 2: #2
-                # assert len(clusters[cluster_index][1]) == 1
-                error_clusters.append(clusters.pop(cluster_index))
-
-        recursive_results = []
-        if not recusrive and (error_clusters != []):
-            recursive_marking = []
-            recursive_user_ids = []
-            recursive_reduced_markings = []
-            for c in error_clusters:
-
-                # todo - not sure exactly how this could happen
-                if c == [([], [])]:
-                    continue
-
-                for pt,user_id in c[1]:
-                    t = list(pt)
-
-                    line = original_text[(pt,user_id)]
-
-                    t.append(line)
-
-                    recursive_marking.append(tuple(t))
-                    recursive_user_ids.append(user_id)
-                    reduced = hesse_line_reduction([pt,])[0]
-                    reduced.append(line)
-                    recursive_reduced_markings.append(reduced)
-
-            if recursive_reduced_markings != []:
-                recursive_results = self.__cluster__(recursive_marking,recursive_user_ids,tools,recursive_reduced_markings,image_dimensions,recusrive = True)[0]
-
-        # if recursive_results != []:
-        #     print json.dumps(recursive_results,indent=4, separators=(',', ': '))
-        #     assert False
-        if len(clusters) == 0:
-            return [],0
-
-        # if we have more than one cluster - some of them might need to be merged
-        # after removing "error" clusters
-        # to do so - revert back to Hesse format
-        # todo - maybe only run this if we have removed any error lines
-        if len(clusters) > 1:
-
-            # represent each text cluster by a slope and intercept (using Hessen representation)
-            # based on median values
-            hessen_lines = []
-
-            for cluster_index in range(len(clusters)):
-                lines_segments,users = zip(*clusters[cluster_index][1])
-                x1_l, x2_l, y1_l, y2_l = zip(*lines_segments)
-                x1,x2,y1,y2 = np.median(x1_l),np.median(x2_l),np.median(y1_l),np.median(y2_l)
-                hessen_lines.append(hesse_line_reduction([[x1,x2,y1,y2],])[0])
-
-            slope_l,angle_l = zip(*hessen_lines)
-            max_s,min_s = max(slope_l),min(slope_l)
-            max_a,min_a = max(angle_l),min(angle_l)
-
-            # normalize values
-            hessen_lines = [((max_s-s)/(max_s-min_s),(max_a-a)/(max_a-min_a)) for s,a in hessen_lines]
-
-            tree = spatial.KDTree(hessen_lines)
-
-            # might not be the most efficient way of doing things but was a bit easier to reason about
-            # (I think) - to merge clusters, we'll actually create a new list of clusters and copy
-            # values over (and merged as we go)
-            # will_be_merged is the set of clusters which we are going to merge
-            # we're actually using that to keep track of which clusters aren't going to be merged - so they can
-            # be directly copied
-            to_merge = []
-            will_be_merged = set()
-
-            # go through the clusters in reverse order - that way if we pop something
-            # we don't mess up the ordering for other indices
-            for l_index in range(len(hessen_lines)-1,-1,-1):
-                # search for any nearby clusters, i.e. ones that might be reasonable to merge
-                for l2_index in tree.query_ball_point(hessen_lines[l_index],0.15):
-                    # if l_index<l2_index, then we will return to this pair later
-                    # again, so that indices aren't messed up
-                    if l2_index > l_index:
-                        # find the users in cluster
-                        # this type of possible merging of clusters only makes
-                        # sense if there is no overlap between the users
-                        _, users_l = zip(*clusters[l_index][1])
-                        _, users_l2 = zip(*clusters[l2_index][1])
-
-                        overlap = [u for u in users_l if u in users_l2]
-                        if overlap != []:
-                            continue
-
-                        # since we now know that there are no overlapping users
-                        # we can combine the individual texts by simply concatenating them
-                        t_lines = clusters[l_index][0][:]
-                        t_lines.extend(clusters[l2_index][0])
-
-                        # align the texts and get the accuracy (of each individual text compared to
-                        # the aggregate)
-                        aligned_text = self.__line_alignment__(t_lines)
-                        accuracy = self.__agreement__(aligned_text)
-
-                        # the minimum resulting accuracy is "pretty high" then these clusters should
-                        # probably be merged
-                        if min(accuracy) >= 0.5:
-                            will_be_merged.add(l_index)
-                            will_be_merged.add(l2_index)
-
-                            # have we already said that l or l2 should be merged with some other cluster
-                            # (for example, l should be merged with some l3) - then we want to merge all
-                            # three clusters
-                            # todo - maybe look into the accuracy of merging l2 and l3 in the above example
-                            # todo - instead of just inferring it
-                            # todo - probably won't matter but check it at some point (when I have free time - hah!)
-                            already_merged = False
-                            for m_index,m in enumerate(to_merge):
-                                if (l_index in m) or (l2_index in m):
-                                    already_merged = True
-                                    m.add(l_index)
-                                    m.add(l2_index)
-                                    break
-
-                            # if neither of the clusters have already been involved with a merger
-                            # add a brand new entry to the to_merge list
-                            if not already_merged:
-                                # just learnt that {} without : is the notation for creating sets
-                                to_merge.append({l_index, l2_index})
-
-            # might be a better way to do this but will multiple popping from list, safer
-            # to work with a copy
-            new_clusters = []
-
-            # first go through all the clusters which were not merged
-            for cluster_index in range(len(clusters)):
-                if cluster_index not in will_be_merged:
-                    new_clusters.append(clusters[cluster_index])
-            # now go through all the clusters which need to merged
-            # keep in mind that we might be merging more than 2 clusters at once (although unlikely)
-            for merged_clusters in to_merge:
-                t_cluster = [[],[]]
-                for cluster_index in merged_clusters:
-                    # clusters[cluster_index][0] is the list of individual text transcriptions from that cluster
-                    t_cluster[0].extend(clusters[cluster_index][0])
-                    # clusters[cluster_index][1] is the list of line segment pts + user ids
-                    t_cluster[1].extend(clusters[cluster_index][1])
-                new_clusters.append(t_cluster[:])
-
-            clusters = new_clusters
-
-        # and now, finally, the actual text clustering
-        cluster_centers = []
-        cluster_pts = []
-        cluster_users = []
-
-        cluster_members = []
-
-
-        agreement = []
-        self.line_agreement.append([])
-
-        for lines,pts_and_users in clusters:
-            pts,users = zip(*pts_and_users)
-            x1_values,x2_values,y1_values,y2_values = zip(*pts)
-
-            # todo - handle when some of the coordinate values are not numbers -
-            # todo - this corresponds to when there are multiple text segments from the same user
-            # todo - this in turn corresponds to the case where we look for "broken" lines
-            # todo - so definitely something down the line
-            x1 = np.median(x1_values)
-            x2 = np.median(x2_values)
-            y1 = np.median(y1_values)
-            y2 = np.median(y2_values)
-
-            # align.py the text
-            aligned_text = self.__line_alignment__(lines)
-
-            # align.py the non-fasta version of the text lines
-            nf_aligned_lines = self.__add_alignment_spaces__(aligned_text,non_fasta_text,pts_and_users)
-
-            # aggregate the lines - looking for character spots where there is mostly consensus
-            aggregate_text,character_agreement,per_user_agreement = self.__merge_aligned_text__(nf_aligned_lines)
-
-            aggregate_text = self.__reset_special_characters__(aggregate_text)
-            cluster_centers.append((x1,x2,y1,y2,aggregate_text))
-
-            # and deal with special characters for each individual lines
-            temp_pts_lines = []
-            for p,l in zip(pts,nf_aligned_lines):
-                # todo - uncomment
-
-                l = self.__reset_special_characters__(l)
-                temp_pts_lines.append((p,l))
-
-            cluster_pts.append(temp_pts_lines)
-
-            cluster_users.append(users)
-            agreement.append(character_agreement)
-            # cluster_members.append(aligned_text)
-
-            # use this if you want to keep track of stats
-            # self.line_agreement[-1].append((character_agreement,len(users)))
-
-        results = []
-        for center,pts,users,a in zip(cluster_centers,cluster_pts,cluster_users,agreement):
-            results.append({"center":center,"cluster members":pts,"tools":[],"num users":len(users),"agreement":a})
-
-        results.extend(recursive_results)
-
-        return results,0
-
-    def __preliminarily__clustering__(self,markings,user_ids):
+        for list_of_indices in clusters_by_indices:
+            c = self.__create_cluster__(markings,list_of_indices)
+            if c["num users"] > 2:
+                clusters.append(c)
+
+
+
+        return clusters,0
+
+    def __create_cluster__(self,markings,index_filter):
+        markings_in_cluster = [markings[i] for i in index_filter]
+
+        x1_values,x2_values,y1_values,y2_values,transcriptions = zip(*markings_in_cluster)
+
+        # print transcriptions
+
+        transformed_transcriptions = [self.__set_special_characters__(t) for t in transcriptions]
+        # print transformed_transcriptions
+        # in lower case transformed, all of the original characters have been put into lower case
+        # and upper case are used for special characters
+        # we'll use lower_case_transformed to align the strings and by mapping back to capitalized_transformed
+        # we can recover the correct capitalization for each string
+        lower_case_transformed,capitalized_transformed = zip(*transformed_transcriptions)
+
+        aligned_transcriptions = self.__line_alignment__(lower_case_transformed)
+        # recover the correct capitalizations
+        aligned_transcriptions = self.__add_alignment_spaces__(aligned_transcriptions,capitalized_transformed)
+
+        # in cases where there is disagreement, use voting to determine the most likely character
+        # if there is strong disagreement, we'll mark those spots as unknown
+        aggregate_text,character_agreement,per_user_agreement = self.__merge_aligned_text__(aligned_transcriptions)
+
+        aggregate_text = self.__reset_special_characters__(aggregate_text)
+
+        # for c in aggregate_text:
+        #     if ord(c) < 30:
+        #         print "\b" + colored("?","red"),
+        #     else:
+        #         print "\b" + c,
+        # print
+
+        x1 = np.median(x1_values)
+        x2 = np.median(x2_values)
+        y1 = np.median(y1_values)
+        y2 = np.median(y2_values)
+
+        cluster = {}
+        cluster["center"] = (x1,x2,y1,y2,aggregate_text)
+
+        cluster["tools"] = []
+
+        cluster["cluster members"] = []
+        for ii,m in enumerate(markings_in_cluster):
+            coords = m[:-1]
+            # print aligned_transcriptions[ii]
+            text = self.__reset_special_characters__(aligned_transcriptions[ii])
+            # print text
+            # print
+            # text = m[-1]
+            cluster["cluster members"].append((coords,text))
+        cluster["num users"] = len(cluster["cluster members"])
+
+        if cluster["num users"] >= 3:
+            self.retired_lines_3 += 1
+            self.stats["retired lines"] += 1
+        if cluster["num users"] >= 4:
+            self.retired_lines_4 += 1
+        if cluster["num users"] >= 5:
+            self.retired_lines_5 += 1
+
+        return cluster
+
+    def __normalize_lines__(self,intercepts,slopes):
         """
-        do an initial clustering based just on user ids and line coordinates (so ignore the text values)
+        normalize the lines so that the intercepts and slopes are all between 0 and 1
+        makes cluster better
+        also returns a dictionary which allows us to "unnormalize" lines so that we refer to the original values
         """
-        # l = [[(u,m[0]) for m in marking] for u,marking in zip(user_ids,markings)]
-        user_list,pts_list = user_ids,markings
-        # assert len(pts_list) == len(list(set(pts_list)))
+        mean_intercept = np.mean(intercepts)
+        std_intercept = np.std(intercepts)
 
-        intercepts,slopes = zip(*pts_list)
-        min_intercept,max_intercept = min(intercepts),max(intercepts)
-        min_slopes,max_slopes = min(slopes),max(slopes)
+        normalized_intercepts = [(i-mean_intercept)/std_intercept for i in intercepts]
 
-        if max_intercept > max_intercept:
-            normalized_intercepts = [10*(i-min_intercept)/(max_intercept-min_intercept) for i in intercepts]
-        else:
-            normalized_intercepts = [1 for i in intercepts]
+        mean_slopes = np.mean(slopes)
+        std_slopes = np.std(slopes)
 
-        if max_slopes > min_slopes:
-            normalized_slopes = [(i-min_slopes)/(max_slopes-min_slopes) for i in slopes]
-        else:
-            normalized_slopes = [1 for i in slopes]
+        normalized_slopes = [(s-mean_slopes)/std_slopes for s in slopes]
+
+        return normalized_intercepts,normalized_slopes
+
+    def __get_clusters_indices(self,reduced_markings):
+        """
+        get a list of the clusters - where each cluster gives just the indices
+        of the transcriptions in that cluster - so no text aggregation/alignmennt is actually happening here
+        actually I lied - there is some text alignment going on here to determine whether or not to add
+        a transcription to a cluster - this will need to "rehappen" else where to do the actual aggregation
+        which is slight redundant but I think will make things a lot easier for now
+        """
+        # start by splitting markings into lines and text and then the lines into slopes and intercepts
+        intercepts,slopes,text = zip(*reduced_markings)
+
+        # deal with special characters in the text and "recombine" the markings
+        # text has capital letters used only for special characters/tags
+        # while capitalized_text has the original capitalization which is useful for the final aggregate result
+        text,capitalized_text = zip(*[self.__set_special_characters__(t) for t in text])
+
+        # normalize the the slopes and intercepts
+        normalized_intercepts,normalized_slopes = self.__normalize_lines__(intercepts,slopes)
         pts_list = zip(normalized_intercepts,normalized_slopes)
+        # pts_list = zip(intercepts,slopes)
 
-        # so we can "unnormalize" this values
-        unnormalize_dict = {}
-        for p1,p2 in zip(pts_list,markings):
-            unnormalize_dict[p1] = p2
-
+        # see http://stackoverflow.com/questions/18952587/use-distance-matrix-in-scipy-cluster-hierarchy-linkage
         labels = range(len(pts_list))
         variables = ["X","Y"]
         # X = np.random.random_sample([5,3])*10
         df = pd.DataFrame(list(pts_list),columns=variables, index=labels)
 
-        row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
+        assigned_to_cluster = []
 
-        row_clusters = linkage(row_dist, method='single')
+        # variables = ["X"]
+        # # X = np.random.random_sample([5,3])*10
+        # df = pd.DataFrame(list(normalized_intercepts),columns=variables, index=labels)
 
-        nodes = [LeafNode(pt,ii) for ii,pt in enumerate(pts_list)]
+        # row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
+        dist_matrix = squareform(pdist(df, metric='euclidean'))
 
-        for merge in row_clusters:
-            rchild_index = int(merge[0])
-            lchild_index = int(merge[1])
-            dist = float(merge[2])
+        clusters_by_indices = []
 
-            rnode = nodes[rchild_index]
-            lnode = nodes[lchild_index]
+        for transcription_index in range(len(text)):
+            if transcription_index in assigned_to_cluster:
+                continue
 
-            # if both nodes are leaf nodes, just merge them
-            if isinstance(rnode,LeafNode) and isinstance(lnode,LeafNode):
-                nodes.append(InnerNode(rnode,lnode,dist))
-            # if rnode is an inner node - we might need to merge into it
-            elif isinstance(lnode,LeafNode):
-                r_dist = rnode.dist
+            if text[transcription_index] == "":
+                continue
 
-                if r_dist == dist:
-                    # merge
-                    pass
-                else:
-                    # create a new parent node
-                    nodes.append(InnerNode(rnode,lnode,dist))
-            elif isinstance(rnode,LeafNode):
-                l_dist = lnode.dist
-
-                if l_dist == dist:
-                    # merge
-                    pass
-                else:
-                    # create a new parent node
-                    nodes.append(InnerNode(rnode,lnode,dist))
-            else:
-                # we have two inner nodes
-                l_dist = lnode.dist
-                r_dist = rnode.dist
-
-                if dist == l_dist:
-                    assert dist == r_dist
-                    assert False
-                else:
-                    nodes.append(InnerNode(rnode,lnode,dist))
-
-        # set the depths of all of the nodes
-        set_depth(nodes[-1])
-
-        reachability_ordering = nodes[-1].__traversal__()
-
-        # unnormalize these values
-        retval = []
-        for pt,user_id in reachability_ordering:
-            retval.append((unnormalize_dict[pt],user_id))
-
-        return retval
-
-# def text_mapping(marking,image_dimensions):
-#     # want to extract the params x1,x2,y1,y2 but
-#     # ALSO make sure that x1 <= x2 and flip if necessary
-#
-#     x1 = marking["startPoint"]["x"]
-#     x2 = marking["endPoint"]["x"]
-#     y1 = marking["startPoint"]["y"]
-#     y2 = marking["endPoint"]["y"]
-#
-#     try:
-#         text = marking["text"]
-#     except KeyError:
-#         raise InvalidMarking(marking)
-#
-#     if x1 <= x2:
-#         return x1,x2,y1,y2,text
-#     else:
-#         return x2,x1,y2,y1,text
+            assigned_to_cluster.append(transcription_index)
+            transcriptions = [text[transcription_index]]
 
 
-def relevant_text_params(marking,image_dimensions):
-    """
-    extract the relevant params from the the transcription marking
-    note that the text is the last item - which means we can treat the results
-    pretty much like a line segment - which it mostly is
-    :param marking:
-    :param image_dimensions:
-    :return:
-    """
-    if ("startPoint" not in marking) or ("endPoint" not in marking):
-        raise InvalidMarking(marking)
-    x1 = marking["startPoint"]["x"]
-    y1 = marking["startPoint"]["y"]
-    x2 = marking["endPoint"]["x"]
-    y2 = marking["endPoint"]["y"]
 
-    if min(x1,x2,y1,y2) < 0:
-        raise InvalidMarking(marking)
+            indices = [transcription_index]
 
-    if "text" not in marking:
-        raise InvalidMarking(marking)
+            distances = dist_matrix[transcription_index]
+            distances = zip(range(len(distances)),distances)
 
-    text = marking["text"]
+            distances.sort(key = lambda x:x[1])
 
-    if x1 <= x2:
-        return x1,x2,y1,y2,text
-    else:
-        return x2,x2,y2,y1,text
+            # [1:] since the first element will be itself
+            skips = 0
+            allowable_skips = 5
+            for ii,d in distances[1:20]:
+                if ii not in assigned_to_cluster:
+                    if text[ii] == "":
+                        continue
 
+                    # create a new temp. set of transcriptions by adding in this next transcription
+                    temp_transcriptions = transcriptions[:]
+                    temp_transcriptions.append(text[ii])
 
-def text_line_reduction(line_segments):
-    """
-    use if we want to cluster based on Hesse normal form - but want to retain the original values
-    :param line_segment:
-    :return:
-    """
-    reduced_markings = []
+                    # check to see what the minimum accuracy is
+                    # if high, go with this new set of transcriptions
+                    # otherwise - allow one skip
+                    aligned_transcriptions = self.__line_alignment__(temp_transcriptions)
+                    accuracy = self.__agreement__(aligned_transcriptions)
 
-    for line_seg in line_segments:
-        x1,y1,x2,y2,text = line_seg
-
-        x2 += random.uniform(-0.0001,0.0001)
-        x1 += random.uniform(-0.0001,0.0001)
-
-        dist = (x2*y1-y2*x1)/math.sqrt((y2-y1)**2+(x2-x1)**2)
-
-        try:
-            tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
-            theta = math.atan(tan_theta)
-        except ZeroDivisionError:
-            theta = math.pi/2.
-
-        reduced_markings.append((dist,theta,text))
-
-    return reduced_markings
+                    if min(accuracy) >= 0.6:
+                        transcriptions = temp_transcriptions
+                        indices.append(ii)
+                        assigned_to_cluster.append(ii)
+                    else:
+                        skips += 1
+                        if skips == allowable_skips:
+                            clusters_by_indices.append(indices)
+                            break
+            if skips < allowable_skips:
+                clusters_by_indices.append(indices)
+        # assert False
+        return clusters_by_indices
 
 
 class SubjectRetirement(Classification):
@@ -1103,7 +807,9 @@ class SubjectRetirement(Classification):
         if self.environment == "development":
             print "we would have retired " + str(len(to_retire))
             print "with non-blanks " + str(len(to_retire)-blank_retirement)
-            print non_blanks
+            if not os.path.isfile("/home/ggdhines/"+str(self.project_id)+".retired"):
+                pickle.dump(non_blanks,open("/home/ggdhines/"+str(self.project_id)+".retired","wb"))
+            print str(len(to_retire)-blank_retirement)
 
         return aggregations
 
@@ -1113,7 +819,7 @@ class Tate(AggregationAPI):
         AggregationAPI.__init__(self,project_id,environment)#"tate")#"tate",environment="staging")
         # the code to extract the relevant params froma  text json file
 
-        self.marking_params_per_shape["text"] = relevant_text_params
+        self.marking_params_per_shape["text"] = marking_helpers.relevant_text_params
         # the code to cluster lines together
         self.default_clustering_algs["text"] = TextCluster
         self.default_clustering_algs["image"] = BlobClustering
@@ -1125,9 +831,9 @@ class Tate(AggregationAPI):
         api_details = yaml.load(open("/app/config/aggregation.yml","rb"))
         try:
             tag_file = api_details[self.project_id]["tags"]
-            self.additional_clustering_args = {"text": {"reduction":text_line_reduction,"tag_file":tag_file}}
+            self.additional_clustering_args = {"text": {"reduction":marking_helpers.text_line_reduction,"tag_file":tag_file}}
         except:
-            self.additional_clustering_args = {"text": {"reduction":text_line_reduction}}
+            self.additional_clustering_args = {"text": {"reduction":marking_helpers.text_line_reduction}}
 
         self.ignore_versions = True
         # self.instructions[683] = {}
@@ -1137,6 +843,8 @@ class Tate(AggregationAPI):
         self.only_recent_subjects = True
 
         self.rollbar_token = None
+
+
 
     def __setup__(self):
         AggregationAPI.__setup__(self)
@@ -1256,6 +964,8 @@ retired_subjects = retired_subjects[:200]
 
 if __name__ == "__main__":
     with Tate(sys.argv[1],sys.argv[2]) as project:
-        # project.__migrate__()
-        project.__aggregate__(subject_set=[671541])
+        project.__migrate__()
+        # project.__aggregate__(subject_set = [671541,663067,664482,662859])
+        project.__aggregate__()
+
         # print aggregated_text
