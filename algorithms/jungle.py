@@ -1,10 +1,75 @@
 __author__ = 'ggdhines'
+import matplotlib
+matplotlib.use('WXAgg')
 import aggregation_api
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from aggregation_api import AggregationAPI
+from sklearn.cluster import KMeans
+import matplotlib.cbook as cbook
+
+jungle = AggregationAPI(153,"development")
+# jungle.__migrate__()
+# jungle.__aggregate__()
+
+postgres_cursor = jungle.postgres_session.cursor()
+postgres_cursor.execute("select subject_ids,annotations from classifications where project_id = 153")
+
+markings = {}
+
+for subject_ids,annotations in postgres_cursor.fetchall():
+
+    if subject_ids == []:
+        continue
+    s = subject_ids[0]
+    for task in annotations:
+        if task["task"] == "T2":
+            try:
+                m = task["value"][0]["points"]
+                if s not in markings:
+                    markings[s] = [m]
+                else:
+                    markings[s].append(m)
+            except (KeyError,IndexError) as e:
+                pass
+
+for subject_id,points in markings.items():
+    fname = jungle.__image_setup__(subject_id)
+
+    image_file = cbook.get_sample_data(fname)
+    image = plt.imread(image_file)
+
+    fig, ax1 = plt.subplots(1, 1)
+    ax1.imshow(image)
+
+    all_points = []
+    for a in points:
+        for b in a:
+            all_points.append((b["x"],b["y"]))
+
+    if len(all_points) < 6:
+        plt.close()
+        continue
+
+    kmeans = KMeans(init='k-means++', n_clusters=6, n_init=10)
+    all_points = np.asarray(all_points)
+    kmeans.fit(all_points)
+
+    labels = kmeans.labels_
+
+    unique_labels = set(labels)
+    colors = plt.cm.Spectral(np.linspace(0, 1, len(unique_labels)))
+    for k, col in zip(unique_labels, colors):
+        class_member_mask = (labels == k)
+
+        xy = all_points[class_member_mask]
+        plt.plot(xy[:, 0], xy[:, 1], 'o', markerfacecolor=col,markeredgecolor='k', markersize=14)
 
 
+    plt.show()
+
+assert False
 
 def analyze(f_name,display=False):
     image = cv2.imread(f_name)
