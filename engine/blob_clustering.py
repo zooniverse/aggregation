@@ -317,18 +317,25 @@ class BlobClustering(clustering.Cluster):
             new_polygon_points = [(x_0,y_0)]
             new_polygon_points.extend(points[line_index+1:line_index2+1])
 
-            if explain_validity(Polygon(new_polygon_points)) != "Valid Geometry":
-                # if this is the first "sub"polygon - just accept it
-                if fixed_polygons is None:
-                    fixed_polygons = self.__fix_polygon__(new_polygon_points)
-                # else try to merge the results in
+            if len(new_polygon_points) < 3:
+                continue
+
+            try:
+                if explain_validity(Polygon(new_polygon_points)) != "Valid Geometry":
+                    # if this is the first "sub"polygon - just accept it
+                    if fixed_polygons is None:
+                        fixed_polygons = self.__fix_polygon__(new_polygon_points)
+                    # else try to merge the results in
+                    else:
+                        fixed_polygons.extend(self.__fix_polygon__(new_polygon_points))
                 else:
-                    fixed_polygons.extend(self.__fix_polygon__(new_polygon_points))
-            else:
-                if fixed_polygons is None:
-                    fixed_polygons = [Polygon(new_polygon_points)]
-                else:
-                    fixed_polygons.append(Polygon(new_polygon_points))
+                    if fixed_polygons is None:
+                        fixed_polygons = [Polygon(new_polygon_points)]
+                    else:
+                        fixed_polygons.append(Polygon(new_polygon_points))
+            except ValueError:
+                print new_polygon_points
+                raise
 
         return fixed_polygons
 
