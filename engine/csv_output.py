@@ -108,7 +108,7 @@ class CsvOut:
             os.makedirs(output_directory)
         self.workflow_directories[workflow_id] = output_directory
 
-        classification_tasks,marking_tasks = self.workflows[workflow_id]
+        classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
 
         # go through the classification tasks - they will either be simple c. tasks (one answer allowed)
         # multiple c. tasks (more than one answer allowed) and possibly a follow up question to a marking
@@ -135,6 +135,10 @@ class CsvOut:
         for task_id in marking_tasks:
             shapes = set(marking_tasks[task_id])
             self.__marking_header_setup__(workflow_id,task_id,shapes,output_directory)
+
+        for task_id in survey_tasks:
+            # todo - implement!!
+            print task_id
 
         return output_directory
 
@@ -214,7 +218,7 @@ class CsvOut:
         # if self.__count_check__(workflow_id,subject_id) < self.retirement_thresholds[workflow_id]:
         #     return
 
-        classification_tasks,marking_tasks = self.workflows[workflow_id]
+        classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
 
         # a subject might not have results for all tasks
         for task_id,task_type in classification_tasks.items():
@@ -272,6 +276,57 @@ class CsvOut:
                     else:
                         self.__marking_row__(workflow_id,task_id,subject_id,aggregations[task_id],shape)
                         self.__shape_summary_output__(workflow_id,task_id,subject_id,aggregations,shape)
+
+        for task_id in survey_tasks:
+            # print aggregations
+            self.__survey_row__(workflow_id,task_id,subject_id,aggregations)
+
+    def __survey_row__(self,workflow_id,task_id,subject_id,aggregations):
+        row = str(subject_id) + ","
+        for species in aggregations:
+
+            #self.instructions[workflow_id][task_id]["questions"]:
+            for followup_id in self.instructions[workflow_id][task_id]["questionsOrder"]:
+                followup_question = self.instructions[workflow_id][task_id]["questions"][followup_id]
+
+                if followup_id not in aggregations[species]:
+                    continue
+
+                if followup_question["multiple"]:
+                    votes = aggregations[species][followup_id]
+                    total_votes = sum(votes.values())
+                    for answer_id in self.instructions[workflow_id][task_id]["questions"][followup_id]["answersOrder"]:
+                        if answer_id in votes:
+                            row += str(votes[answer_id]/float(total_votes)) + ","
+                        else:
+                            row += "0,"
+                else:
+                    votes = aggregations[species][followup_id].items()
+                    top_candidate,num_votes = sorted(votes,key = lambda x:x[1])[0]
+                    percent = num_votes/float(sum(votes.values()))
+                    if followup_question["label"] == "How many?":
+                        answers_order = list(enumerate(followup_question["answersOrder"]))
+
+                        # what is the maximum answer given - because of bucket ranges (e.g. 10+ or 10 to 15)
+                        # we can't just convert the bucket labels into numerical values
+                        # first map from labels to indices
+                        votes_indices = [answers_order.index(v) for (v,c) in votes]
+                        maximum_species = followup_question["answersOrder"][max(votes_indices)]
+                        minimum_species = followup_question["answersOrder"][min(votes_indices)]
+
+                        row += minimum_species + ","+str(top_candidate)+","+str(percent)+","+maximum_species
+
+                        print row
+
+                        assert False
+                    else:
+                        label = followup_question["answers"][top_candidate]["label"]
+                        row += label + "," + str(percent)
+            # print aggregations
+        # print workflow_id
+        # assert False
+        # print aggregations
+
 
     def __polygon_row__(self,workflow_id,task_id,subject_id,aggregations):
         id_ = task_id,"polygon","detailed"

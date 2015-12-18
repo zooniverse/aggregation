@@ -105,7 +105,7 @@ class QuadTree:
         :return:
         """
         if self.children is None:
-            if len(self.polygons) >= 8:
+            if len(self.polygons) >= 1:
                 # what is the majority vote for what type of "kind" this box outlines
                 # for example, some people might say broad leave tree while others say it is a needle leaf tree
                 # technically speaking, people could outline this region with different polygons

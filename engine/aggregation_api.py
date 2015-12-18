@@ -755,9 +755,7 @@ class AggregationAPI:
             if not self.ignore_versions:
                 print "filtering based on workflow version"
                 # do this filter over two steps
-                print [r.workflow_version for r in self.cassandra_session.execute(stmt)]
-                print self.versions
-                print workflow_id
+
                 subjects = [(r.subject_id,r.created_at) for r in self.cassandra_session.execute(stmt) if int(r.workflow_version) == int(self.versions[workflow_id]) ]
                 subjects = set([r[0] for r in subjects if r[1] >= self.previous_runtime])
                 if subjects == set():
@@ -801,10 +799,9 @@ class AggregationAPI:
         updated_at_timestamps = {}
         versions = {}
 
-        assert data["workflows"] != []
-
         for individual_workflow in data["workflows"]:
             workflow_id = int(individual_workflow["id"])
+
 
             if (given_workflow_id is None) or (workflow_id == given_workflow_id):
                 # read in the basic structure of the workflow
@@ -861,7 +858,26 @@ class AggregationAPI:
                                     print subtask
                                     raise
                     elif task["type"] == "survey":
-                        pass
+                        instructions[workflow_id][task_id]["species"] = {}
+                        # print individual_workflow["tasks"].keys()
+                        # print len(data["workflows"])
+                        # print task["images"]
+                        # assert False
+                        for species in task["choices"]:
+                            label = task["choices"][species]["label"]
+                            instructions[workflow_id][task_id]["species"][species] = label
+
+                        instructions[workflow_id][task_id]["questions"] = task["questions"]
+                        instructions[workflow_id][task_id]["questionsOrder"] = task["questionsOrder"]
+
+                            # print task["choices"][species]
+
+                        # instructions[workflow_id][task_id] = task
+                        # print json.dumps(instructions[workflow_id][task_id],sort_keys=True,indent=4, separators=(',', ': '))
+                        # print json.dumps(task["questions"],sort_keys=True,indent=4, separators=(',', ': '))
+                        # print task.keys()
+                        # print task["questionsOrder"]
+                        # assert False
                     else:
                         assert False
 
@@ -1723,6 +1739,8 @@ class AggregationAPI:
                     if task["value"] != [[]]:
                         raw_surveys[task_id][subject_id].append((user_id,task["value"]))
                 else:
+                    print marking_tasks,classification_tasks,survey_tasks
+                    print task_id
                     assert False
 
         return raw_classifications,raw_markings,raw_surveys,image_dimensions

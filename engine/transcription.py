@@ -31,6 +31,7 @@ try:
     import boto3
     import scipy.spatial.distance as ssd
     import pickle
+    import datetime
 
 except:
     # # if any errors were raised - probably because Greg thought
@@ -573,10 +574,7 @@ class TextCluster(clustering.Cluster):
 
         x1_values,x2_values,y1_values,y2_values,transcriptions = zip(*markings_in_cluster)
 
-        # print transcriptions
-
         transformed_transcriptions = [self.__set_special_characters__(t) for t in transcriptions]
-        # print transformed_transcriptions
         # in lower case transformed, all of the original characters have been put into lower case
         # and upper case are used for special characters
         # we'll use lower_case_transformed to align the strings and by mapping back to capitalized_transformed
@@ -593,13 +591,6 @@ class TextCluster(clustering.Cluster):
 
         aggregate_text = self.__reset_special_characters__(aggregate_text)
 
-        # for c in aggregate_text:
-        #     if ord(c) < 30:
-        #         print "\b" + colored("?","red"),
-        #     else:
-        #         print "\b" + c,
-        # print
-
         x1 = np.median(x1_values)
         x2 = np.median(x2_values)
         y1 = np.median(y1_values)
@@ -613,12 +604,9 @@ class TextCluster(clustering.Cluster):
         cluster["cluster members"] = []
         for ii,m in enumerate(markings_in_cluster):
             coords = m[:-1]
-            # print aligned_transcriptions[ii]
             text = self.__reset_special_characters__(aligned_transcriptions[ii])
-            # print text
-            # print
-            # text = m[-1]
             cluster["cluster members"].append((coords,text))
+
         cluster["num users"] = len(cluster["cluster members"])
 
         if cluster["num users"] >= 3:
@@ -759,20 +747,25 @@ class SubjectRetirement(Classification):
             elif key == "workflow_id":
                 self.workflow_id = value
 
+        self.num_retired = None
+        self.non_blanks_retired = None
+
+        self.to_retire = None
+
         assert (self.host_api is not None) and (self.project_id is not None) and (self.token is not None) and (self.workflow_id is not None)
 
     def __aggregate__(self,raw_classifications,workflow,aggregations):
         # start by looking for empty subjects
 
-        to_retire = set()
+        self.to_retire = set()
         for subject_id in raw_classifications["T0"]:
             user_ids,is_subject_empty = zip(*raw_classifications["T0"][subject_id])
             if is_subject_empty != []:
                 empty_count = sum([1 for i in is_subject_empty if i == True])/float(len(is_subject_empty))
                 if (len(is_subject_empty) > 5) and (empty_count >= 0.8):
-                    to_retire.add(subject_id)
+                    self.to_retire.add(subject_id)
 
-        blank_retirement = len(to_retire)
+        blank_retirement = len(self.to_retire)
 
         non_blanks = []
 
@@ -781,7 +774,7 @@ class SubjectRetirement(Classification):
             user_ids,completely_transcribed = zip(*raw_classifications["T3"][subject_id])
 
             if sum([1 for i in completely_transcribed]) >= 3:
-                to_retire.add(subject_id)
+                self.to_retire.add(subject_id)
                 non_blanks.append(subject_id)
 
             # # have at least 4/5 of the last 5 people said the subject has been completely transcribed?
@@ -793,10 +786,10 @@ class SubjectRetirement(Classification):
             #         to_retire.add(subject_id)
 
         # don't retire if we are in the development environment
-        if (to_retire != set()) and (self.environment != "development"):
+        if (self.to_retire != set()) and (self.environment != "development"):
             try:
                 headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+self.token}
-                params = {"retired_subjects":list(to_retire)}
+                params = {"retired_subjects":list(self.to_retire)}
                 # r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
                 r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,data=json.dumps(params))
                 # rollbar.report_message("results from trying to retire subjects","info",extra_data=r.text)
@@ -805,11 +798,14 @@ class SubjectRetirement(Classification):
                 print e
                 rollbar.report_exc_info()
         if self.environment == "development":
-            print "we would have retired " + str(len(to_retire))
-            print "with non-blanks " + str(len(to_retire)-blank_retirement)
+            print "we would have retired " + str(len(self.to_retire))
+            print "with non-blanks " + str(len(self.to_retire)-blank_retirement)
             if not os.path.isfile("/home/ggdhines/"+str(self.project_id)+".retired"):
                 pickle.dump(non_blanks,open("/home/ggdhines/"+str(self.project_id)+".retired","wb"))
-            print str(len(to_retire)-blank_retirement)
+            print str(len(self.to_retire)-blank_retirement)
+
+        self.num_retired = len(self.to_retire)
+        self.non_blanks_retired = len(self.to_retire)-blank_retirement
 
         return aggregations
 
@@ -835,7 +831,7 @@ class Tate(AggregationAPI):
         except:
             self.additional_clustering_args = {"text": {"reduction":marking_helpers.text_line_reduction}}
 
-        self.ignore_versions = True
+        # self.ignore_versions = True
         # self.instructions[683] = {}
         self.instructions[121] = {}
 
@@ -844,6 +840,7 @@ class Tate(AggregationAPI):
 
         self.rollbar_token = None
 
+        # self.previous_runtime = datetime.datetime(2015,12,7)
 
 
     def __setup__(self):
@@ -909,17 +906,16 @@ class Tate(AggregationAPI):
             # todo - where is T1?
             classification_tasks = {"T3" : True}
 
-            return classification_tasks,marking_tasks
+            return classification_tasks,marking_tasks,{}
         elif self.project_id == 376:
             marking_tasks = {"T2":["text"]}
-            classification_tasks = {}
+            classification_tasks = {"T0":True,"T3":True}
 
-            return classification_tasks,marking_tasks
+            print AggregationAPI.__readin_tasks__(self,workflow_id)
+
+            return classification_tasks,marking_tasks,{}
         else:
             return AggregationAPI.__readin_tasks__(self,workflow_id)
-
-    def __plot_individual_points__(self,subject_id,task_id,shape):
-        print self.cluster_algs["text"]
 
     def __get_subjects_to_aggregate__(self,workflow_id,with_expert_classifications=None):
         """
@@ -957,6 +953,61 @@ class Tate(AggregationAPI):
 
         return aggregations
 
+    def __summarize__(self):
+        current_time  = datetime.datetime.now()
+        last_week = current_time - datetime.timedelta(7)
+
+        subject = "Annotate Aggregation Summary for " + last_week.strftime("%B %d %Y") + " to " + current_time.strftime("%B %d %Y")
+        print subject
+
+
+        postgres_cursor = self.postgres_session.cursor()
+        postgres_cursor.execute("select aggregation from aggregations where workflow_id = " + str(self.workflows.keys()[0]) + " and updated_at >= '" + str(last_week) + "'" )
+
+        lines_transcribed = 0
+        subjects_retired = 0
+
+        for aggregation in postgres_cursor.fetchall():
+            subjects_retired += 1
+            if "text clusters" in aggregation[0]["T2"]:
+                lines_transcribed += len(aggregation[0]["T2"])
+
+        body = "This week we have retired " + str(subjects_retired) + " subjects with a total of " + str(lines_transcribed) + " lines transcribed. \n Greg Hines \n Zooniverse \n \n PS This email was automatically generated."
+
+        client = boto3.client('ses')
+        response = client.send_email(
+            Source='greg@zooniverse.org',
+            Destination={
+                'ToAddresses': [
+                    'greg@zooniverse.org'#,'victoria@zooniverse.org','matt@zooniverse.org'
+                ]#,
+                # 'CcAddresses': [
+                #     'string',
+                # ],
+                # 'BccAddresses': [
+                #     'string',
+                # ]
+            },
+            Message={
+                'Subject': {
+                    'Data': subject,
+                    'Charset': 'ascii'
+                },
+                'Body': {
+                    'Text': {
+                        'Data': body,
+                        'Charset': 'ascii'
+                    }
+                }
+            },
+            ReplyToAddresses=[
+                'greg@zooniverse.org',
+            ],
+            ReturnPath='greg@zooniverse.org'
+        )
+
+        print response
+
 retired_subjects = [649216, 649217, 649218, 649219, 649220, 649222, 649223, 649224, 649225, 671754, 649227, 649228, 649229, 649230, 667309, 662872, 649234, 653332, 649239, 653336, 671769, 673482, 653339, 649244, 649245, 649246, 649248, 653346, 653348, 653349, 665642, 653356, 649261, 649262, 649263, 671752, 649267, 671796, 649269, 649270, 649272, 649226, 653316, 649281, 669763, 669765, 669766, 669769, 653390, 649231, 669793, 650598, 649233, 662887, 667764, 662890, 649362, 649363, 649365, 649366, 649368, 663705, 649370, 649371, 649372, 649373, 663710, 663711, 671904, 671905, 649378, 665627, 663717, 671910, 671911, 671912, 663722, 663723, 649388, 663726, 663727, 673480, 663730, 671923, 649397, 671927, 649400, 671932, 667338, 671936, 653344, 671938, 673483, 671940, 665634, 649426, 669923, 669926, 669927, 669932, 669933, 669937, 649461, 669942, 649463, 671992, 669946, 669947, 649258, 649470, 669951, 649472, 669954, 669955, 669957, 649478, 669960, 669962, 671447, 649484, 669965, 649486, 669969, 649490, 669972, 669976, 649497, 669978, 669981, 669982, 669984, 669985, 669987, 649508, 669989, 649510, 649265, 669992, 672896, 669995, 649505, 649518, 649519, 649520, 649521, 649522, 649523, 649524, 649525, 649526, 649527, 649528, 649529, 649530, 649531, 649532, 649533, 649534, 649535, 672283, 649537, 649538, 649540, 649541, 649542, 649543, 649544, 649545, 672081, 672083, 672084, 672086, 672087, 649564, 649573, 672102, 662929, 672104, 672106, 649592, 649601, 663939, 663940, 672136, 672834, 671811, 673518, 653381, 649639, 649644, 670127, 649653, 649578, 662945, 649647, 662948, 649511, 649728, 649744, 649745, 649747, 664089, 664090, 664091, 672284, 672285, 672286, 662961, 672297, 649780, 672310, 672313, 649788, 649793, 649798, 649828, 650342, 672360, 649836, 672366, 650344, 649845, 649848, 672385, 649858, 672409, 649890, 649892, 662641, 649900, 672541, 649907, 672439, 672443, 672885, 649922, 649937, 649942, 649944, 664301, 664303, 649369, 650366, 664313, 603264, 649995, 664334, 603268, 664346, 664349, 603270, 672551, 672554, 603271, 653341, 672558, 672561, 672562, 603273, 672906, 672907, 672567, 664396, 664403, 649387, 653114, 668518, 668522, 672915, 664454, 664463, 664469, 664471, 664473, 664474, 664488, 649374, 672714, 668628, 671909, 650212, 670700, 650688, 671914, 671915, 666640, 649390, 671919, 672797, 649462, 672803, 672808, 672809, 672810, 672814, 672815, 672817, 661465, 652344, 652347, 652354, 653010, 672858, 650336, 672870, 662632, 650346, 672875, 650349, 650352, 650353, 650355, 650357, 650358, 650360, 650361, 650363, 603262, 603263, 650368, 650369, 672898, 650371, 650372, 650374, 650375, 650377, 650378, 603275, 672909, 603279, 603280, 603281, 603283, 662676, 603285, 603288, 649466, 650400, 603297, 603299, 603300, 650411, 650413, 667334, 672952, 649608, 672968, 672973, 672977, 672980, 672295, 653015, 670979, 670993, 670998, 671007, 671014, 671017, 671019, 671022, 671024, 671030, 671034, 671036, 671037, 662847, 671042, 662851, 671047, 671048, 671061, 662870, 671064, 662874, 650590, 671073, 650594, 650596, 671078, 671079, 650602, 671083, 662894, 662895, 671088, 671089, 662898, 671091, 662901, 671094, 671099, 671101, 671102, 662922, 671115, 662924, 662926, 671119, 667024, 671121, 671125, 671126, 671128, 671129, 662941, 662943, 662944, 671137, 671138, 662947, 671140, 662949, 662950, 662951, 662953, 662955, 662956, 662958, 662959, 671153, 671154, 671156, 662910, 671158, 671161, 671163, 649203, 671168, 671170, 671173, 671174, 673481, 671179, 650701, 671184, 671640, 671189, 650636, 671994, 671198, 653364, 649467, 671204, 671206, 671208, 671209, 671220, 671222, 649471, 671230, 671232, 649474, 671249, 671253, 649477, 671267, 671269, 650797, 649480, 671282, 650809, 649482, 671296, 671302, 671303, 653239, 671330, 653240, 671327, 667234, 667238, 667240, 667242, 667244, 667248, 667252, 667258, 649496, 649498, 663204, 667303, 667305, 667306, 667307, 667308, 663213, 667313, 667315, 667318, 671417, 667322, 667324, 667326, 649504, 667331, 667332, 667333, 663238, 667335, 667336, 667337, 663242, 663243, 653004, 663245, 673486, 671442, 653011, 667350, 667351, 667352, 671449, 671452, 671453, 663262, 649509, 673505, 663268, 663269, 663270, 649213, 663278, 673520, 649512, 663282, 663283, 650537, 649514, 663296, 649515, 671939, 671510, 653273, 663323, 663324, 663326, 650544, 663330, 663334, 663335, 663337, 671532, 653307, 673594, 653279, 673606, 671565, 673614, 671568, 673620, 665435, 653149, 653151, 653152, 653154, 671588, 662844, 671594, 673672, 653310, 653294, 671638, 665495, 665496, 671727, 673693, 649200, 670022, 653231, 651185, 653234, 651187, 671671, 651192, 651193, 653243, 651197, 671678, 649205, 671680, 651201, 653250, 651203, 665540, 653253, 671686, 653257, 665547, 653260, 671693, 665550, 665551, 653304, 653270, 665559, 663512, 665561, 665564, 671709, 661471, 665569, 653283, 653285, 671718, 653288, 671721, 671722, 653291, 649198, 649199, 653296, 649201, 649202, 653299, 671733, 649206, 649207, 649208, 649209, 649211, 649212, 653309, 649214, 649215]
 import random
 random.seed(0)
@@ -965,7 +1016,10 @@ retired_subjects = retired_subjects[:200]
 if __name__ == "__main__":
     with Tate(sys.argv[1],sys.argv[2]) as project:
         project.__migrate__()
+        print "done migrating"
         # project.__aggregate__(subject_set = [671541,663067,664482,662859])
         project.__aggregate__()
+
+        # project.__summarize__()
 
         # print aggregated_text
