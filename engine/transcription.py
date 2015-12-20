@@ -843,7 +843,7 @@ class Tate(AggregationAPI):
         # self.previous_runtime = datetime.datetime(2015,12,7)
 
         # just to stop me from using transcription on other projects
-        assert project_id in [245,376]
+        assert int(project_id) in [245,376]
 
 
     def __setup__(self):
