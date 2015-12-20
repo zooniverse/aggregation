@@ -17,6 +17,8 @@ class Survey:
             users_and_annotations = raw_classifications[task_id][subject_id]
             users,annotations = zip(*users_and_annotations)
 
+            aggregated_results[subject_id]["num_users"] = len(users)
+
             num_species_per_user = [len(ann) for ann in annotations]
             num_species = int(np.median(num_species_per_user))
 
