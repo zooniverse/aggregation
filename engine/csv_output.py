@@ -25,6 +25,8 @@ class CsvOut:
         self.retirement_thresholds = project.retirement_thresholds
         self.versions = project.versions
 
+        self.__count_subjects_classified__ = project.__count_subjects_classified__
+
         # dictionary to hold the output files
         self.csv_files = {}
         # stores the file names
@@ -117,12 +119,12 @@ class CsvOut:
             if classification_tasks[task_id] == "single":
                 instructions = self.instructions[workflow_id][task_id]["instruction"]
                 self.__single_response_csv_header__(output_directory,task_id,instructions)
-
             elif classification_tasks[task_id] == "multiple":
                 # create both a detailed view and a summary view
                 instructions = self.instructions[workflow_id][task_id]["instruction"]
                 self.__multi_response_csv_header__(output_directory,task_id,instructions)
             else:
+                # this task is a marking task
                 for tool_id in classification_tasks[task_id]:
                     for followup_index,answer_type in enumerate(classification_tasks[task_id][tool_id]):
                         instructions = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_index]["question"]
@@ -132,13 +134,15 @@ class CsvOut:
                         else:
                             self.__multi_response_csv_header__(output_directory,id_,instructions)
 
+        # now set things up for the marking tasks
         for task_id in marking_tasks:
             shapes = set(marking_tasks[task_id])
             self.__marking_header_setup__(workflow_id,task_id,shapes,output_directory)
 
+        # and finally the survey tasks
         for task_id in survey_tasks:
-            # todo - implement!!
-            print task_id
+            instructions = self.instructions[workflow_id][task_id]
+            self.__survey_header_setup__(output_directory,task_id,instructions)
 
         return output_directory
 
@@ -281,7 +285,27 @@ class CsvOut:
             # print aggregations
             self.__survey_row__(workflow_id,task_id,subject_id,aggregations)
 
+    def __survey_header_setup__(self,output_directory,task_id,instructions):
+        fname = str(task_id) + "_survey"
+        fname += ".csv"
+
+        self.file_names[task_id] = fname
+        self.csv_files[task_id] = open(output_directory+fname,"wb")
+
+        # now write the header
+        print instructions
+        self.csv_files[task_id].write("\n")
+
     def __survey_row__(self,workflow_id,task_id,subject_id,aggregations):
+        """
+        for a given workflow, task and subject print one one row of aggregations to a csv file
+        where the task correspond to a survey task
+        :param workflow_id:
+        :param task_id:
+        :param subject_id:
+        :param aggregations:
+        :return:
+        """
         row = str(subject_id) + ","
         for species in aggregations:
 
@@ -303,29 +327,22 @@ class CsvOut:
                 else:
                     votes = aggregations[species][followup_id].items()
                     top_candidate,num_votes = sorted(votes,key = lambda x:x[1])[0]
-                    percent = num_votes/float(sum(votes.values()))
+                    percent = num_votes/float(sum(aggregations[species][followup_id].values()))
                     if followup_question["label"] == "How many?":
-                        answers_order = list(enumerate(followup_question["answersOrder"]))
-
                         # what is the maximum answer given - because of bucket ranges (e.g. 10+ or 10 to 15)
                         # we can't just convert the bucket labels into numerical values
                         # first map from labels to indices
-                        votes_indices = [answers_order.index(v) for (v,c) in votes]
+                        votes_indices = [followup_question["answersOrder"].index(v) for (v,c) in votes]
                         maximum_species = followup_question["answersOrder"][max(votes_indices)]
                         minimum_species = followup_question["answersOrder"][min(votes_indices)]
 
                         row += minimum_species + ","+str(top_candidate)+","+str(percent)+","+maximum_species
-
-                        print row
-
-                        assert False
                     else:
+                        # for any other follow up question (without just one answer) just give the most likely
+                        # answer and the percentage
                         label = followup_question["answers"][top_candidate]["label"]
                         row += label + "," + str(percent)
-            # print aggregations
-        # print workflow_id
-        # assert False
-        # print aggregations
+
 
 
     def __polygon_row__(self,workflow_id,task_id,subject_id,aggregations):
@@ -370,17 +387,20 @@ class CsvOut:
         if not os.path.exists("/tmp/"+str(self.project_id)):
             os.makedirs("/tmp/"+str(self.project_id))
 
+        # go through each workflow indepedently
         for workflow_id in self.workflows:
-            print "===---"
-            print workflow_id
-            # self.__readme_text__(workflow_id)
+            print "writing out workflow " + str(workflow_id)
+
+            if self.__count_subjects_classified__(workflow_id) == 0:
+                print "skipping due to no subjects being classified for the given workflow"
+                continue
+
             # # create the output files for this workflow
             self.__make_files__(workflow_id)
 
             # results are going to be ordered by subject id (because that's how the results are stored)
             # so we can going to be cycling through task_ids. That's why we can't loop through classification_tasks etc.
             for subject_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
-                print subject_id
                 self.__subject_output__(workflow_id,subject_id,aggregations)
 
         for f in self.csv_files.values():
@@ -440,7 +460,12 @@ class CsvOut:
 
             # extract the most likely tool for this particular marking and convert it to
             # a string label
-            tool_classification = cluster["tool_classification"][0].items()
+            try:
+                tool_classification = cluster["tool_classification"][0].items()
+            except KeyError:
+                print shape
+                print cluster
+                raise
             most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
             tool_str = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool)]["marking tool"]
             row += self.__csv_string__(tool_str) + ","
@@ -564,21 +589,22 @@ class CsvOut:
 
     def __marking_header_setup__(self,workflow_id,task_id,shapes,output_directory):
         """
-        tools - says what sorts of different types of shapes/tools we have to do deal with for this task
-        we can either give the output for each tool in a completely different csv file - more files, might
-        be slightly overwhelming, but then we could make the column headers more understandable
+        - create the csv output files for each workflow/task pairing where the task is a marking
+        also write out the header line
+        - since different tools (for the same task) can have completely different shapes, these shapes should
+        be printed out to different files - hence the multiple output files
+        - we will give both a summary file and a detailed report file
         """
         for shape in shapes:
             fname = str(task_id) + self.instructions[workflow_id][task_id]["instruction"][:50]
             fname = self.__csv_string__(fname)
             # fname += ".csv"
 
+
             self.file_names[(task_id,shape,"detailed")] = fname + "_" + shape + ".csv"
             self.file_names[(task_id,shape,"summary")] = fname + "_" + shape + "_summary.csv"
-            #
-            # self.csv_files[(task_id,shape,"detailed")] = open(output_directory+fname + "_" + shape + ".csv","wb")
-            # self.csv_files[(task_id,shape,"summary")] = open(output_directory+fname + "_" + shape + "_summary.csv","wb")
 
+            # polygons - since they have an arbitary number of points are handled slightly differently
             if shape == "polygon":
                 id_ = task_id,shape,"detailed"
                 self.csv_files[id_] = open(output_directory+fname+"_"+shape+".csv","wb")

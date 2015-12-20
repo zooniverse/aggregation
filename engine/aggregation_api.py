@@ -92,6 +92,7 @@ class AggregationAPI:
         self.cluster_algs = None
         # the one classification algorithm
         self.classification_alg = None
+        self.survey_alg = None
         # a dictionary of workflows - each workflow id number will map to a tuple - marking tasks and
         # classification tasks
         self.workflows = None
@@ -240,6 +241,8 @@ class AggregationAPI:
         # make the actual connection to Panoptes
         print "trying secure Panoptes connection"
         self.__panoptes_connect__(project_details)
+
+        self.__get_project_details__()
 
         # todo - refactor all this?
         # there may be more than one workflow associated with a project - read them all in
@@ -573,6 +576,22 @@ class AggregationAPI:
 
         return count
 
+    def __count_subjects_classified__(self,workflow_id):
+        """
+        there are sometimes workflows which haven't received any classifications (for any subjects)
+        this may be either due to just needing or wait, or more likely, the scientists created a workflow and
+        then changed to another - in these cases we don't want to confuse people and return empty csv files
+        so check first to see if any subjects have been classified (for the given workflow)
+        """
+
+        stmt = "select count(*) from aggregations where workflow_id = " + str(workflow_id)
+        cursor = self.postgres_session.cursor()
+
+        cursor.execute(stmt)
+        subjects_classified = cursor.fetchone()[0]
+
+        return subjects_classified
+
     def __enter__(self):
         # check if another instance of the aggregation engine is already running
         # if so, raise an error
@@ -580,9 +599,9 @@ class AggregationAPI:
         # todo - maybe write something to the lock file in case another instance checks at the
         # todo - exact same time. What about instances for different projects?
 
-        if os.path.isfile(expanduser("~")+"/aggregation.lock"):
-            raise InstanceAlreadyRunning()
-        open(expanduser("~")+"/aggregation.lock","w").close()
+        # if os.path.isfile(expanduser("~")+"/aggregation.lock"):
+        #     raise InstanceAlreadyRunning()
+        # open(expanduser("~")+"/aggregation.lock","w").close()
 
         return self
 
@@ -614,7 +633,10 @@ class AggregationAPI:
 
         # remove the lock only if we created the lock
         if exc_type != InstanceAlreadyRunning:
-            os.remove(expanduser("~")+"/aggregation.lock")
+            try:
+                os.remove(expanduser("~")+"/aggregation.lock")
+            except OSError:
+                pass
 
     def __get_classifications__(self,subject_id,task_id,cluster_index=None,question_id=None):
         # either both of these variables are None or neither of them are
@@ -676,6 +698,12 @@ class AggregationAPI:
                     retirement_thresholds[workflow_id] = threshold["classification_count"]["count"]
 
         return retirement_thresholds
+
+    def __get_project_details__(self):
+        request = "projects/"+str(self.project_id)+"?"
+        data = self.__panoptes_call__(request)
+
+        print "project is " + data["projects"][0]["display_name"]
 
     def __get_project_id(self):
         """
@@ -799,8 +827,11 @@ class AggregationAPI:
         updated_at_timestamps = {}
         versions = {}
 
+
+
         for individual_workflow in data["workflows"]:
             workflow_id = int(individual_workflow["id"])
+            print "getting details for workflow id: " + str(workflow_id)
 
 
             if (given_workflow_id is None) or (workflow_id == given_workflow_id):
@@ -878,7 +909,9 @@ class AggregationAPI:
                         # print task.keys()
                         # print task["questionsOrder"]
                         # assert False
+
                     else:
+                        print task["type"]
                         assert False
 
                 # read in when the workflow last went through a major change
@@ -1166,7 +1199,6 @@ class AggregationAPI:
         :return:
         """
         request = urllib2.Request(self.host_api+url)
-        print self.host_api+url
         request.add_header("Accept","application/vnd.api+json; version=1")
         # only add the token if we have a secure connection
         if self.token is not None:
@@ -1416,45 +1448,6 @@ class AggregationAPI:
 
         return probabilities
 
-
-
-
-    # def __plot__(self,workflow_id,task_id):
-    #     print "plotting"
-    #     try:
-    #         print "----"
-    #         for shape in self.cluster_alg.clusterResults[task_id]:
-    #             for subject_id in self.cluster_alg.clusterResults[task_id][shape]:
-    #                 print subject_id
-    #                 if (len(self.users_per_subject[subject_id]) >= 1):# and (subject_id in self.classification_alg.results):
-    #                     # if self.cluster_alg.clusterResults[task][shape][subject_id]["users"]
-    #                     self.__plot_image__(subject_id)
-    #                     self.__plot_individual_points__(subject_id,task_id,shape)
-    #                     # self.__plot_cluster_results__(subject_id,task,shape)
-    #
-    #                     if (self.classification_alg is not None) and (subject_id in self.classification_alg.results):
-    #                         classification_task = "init"
-    #                         classifications = self.classification_alg.results[subject_id][classification_task]
-    #                         # print classifications
-    #                         votes,total = classifications
-    #                         title = self.description[classification_task][0]
-    #                         # print self.description
-    #                         for answer_index,percentage in votes.items():
-    #                             if title != "":
-    #                                 title += "\n"
-    #                             title += self.description[classification_task][answer_index+1] + ": " + str(int(percentage*total))
-    #                         # print  self.description[classification_task][0]
-    #                         # print title
-    #
-    #                         plt.title(title)
-    #                     plt.title("number of users: " + str(len(self.users_per_subject[subject_id][task_id])))
-    #                     plt.savefig("/home/greg/Databases/"+self.project_short_name+"/markings/"+str(subject_id)+".jpg")
-    #                     plt.close()
-    #                     # assert False
-    #     except KeyError as e:
-    #         print self.cluster_alg.clusterResults.keys()
-    #         raise
-
     def __postgres_connect__(self,database_details):
         print "connecting to postgres db: " + database_details["postgres_host"]
 
@@ -1501,6 +1494,7 @@ class AggregationAPI:
         classification_tasks = {}
         # which have drawings associated with them
         marking_tasks = {}
+        survey_tasks = []
 
         survey_tasks = {}
 
@@ -1558,6 +1552,7 @@ class AggregationAPI:
             else:
                 print tasks[task_id]
                 print "***"
+                print tasks[task_id]["type"]
                 # unknown task type
                 assert False
 
@@ -1566,6 +1561,10 @@ class AggregationAPI:
     def __set_classification_alg__(self,alg,params={}):
         self.classification_alg = alg(self.environment,params)
         assert isinstance(self.classification_alg,classification.Classification)
+
+    def __set_survey_alg__(self,alg,params={}):
+        self.survey_alg = alg(self.environment,params)
+        assert isinstance(self.survey_alg,classification.Classification)
 
     def __sort_annotations__(self,workflow_id,subject_set,expert=None):
         """
@@ -1585,7 +1584,7 @@ class AggregationAPI:
         # keep track of the non-logged in users for each subject
         non_logged_in_users = dict()
 
-        # load the classification and marking json dicts - helps parse annotations
+        # load the classification, marking and survey json dicts - helps parse annotations
         classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
 
         # this is what we return
@@ -1619,7 +1618,11 @@ class AggregationAPI:
 
             # go through each annotation and get the associated task
             for task in annotation:
-                task_id = task["task"]
+                try:
+                    task_id = task["task"]
+                except KeyError:
+                    print task
+                    raise
 
                 # is this a marking task?
                 if task_id in marking_tasks:
@@ -1878,13 +1881,7 @@ class AggregationAPI:
 
             yield r[0],aggregation
 
-            # for task_id in aggregation:
-            #     if task_id in [" instructions"," metadata","param"]:
-            #         continue
-            #
-            #     # we have an instance of marking
-            #     # if isinstance(aggregation[task_id],dict):
-            #     yield r[0],task_id,aggregation[task_id]
+
         raise StopIteration()
 
 if __name__ == "__main__":
@@ -1898,7 +1895,7 @@ if __name__ == "__main__":
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
         # project.__migrate__()
-        project.__aggregate__()
+        # project.__aggregate__()
 
         with csv_output.CsvOut(project) as c:
             c.__write_out__()
