@@ -622,9 +622,9 @@ class AggregationAPI:
         # only update time stamp if there were no problems
         if exc_type is None:
             statements_and_params = []
-            # insert_statement = self.cassandra_session.prepare("insert into most_recent (project_id,classification) values (?,?)")
-            # statements_and_params.append((insert_statement, (self.project_id,self.new_runtime)))
-            # execute_concurrent(self.cassandra_session, statements_and_params)
+            insert_statement = self.cassandra_session.prepare("insert into most_recent (project_id,classification) values (?,?)")
+            statements_and_params.append((insert_statement, (self.project_id,self.new_runtime)))
+            execute_concurrent(self.cassandra_session, statements_and_params)
 
         # shutdown the connection to Cassandra and remove the lock so other aggregation instances
         # can run, regardless of whether an error occurred
