@@ -286,6 +286,14 @@ class CsvOut:
             self.__survey_row__(workflow_id,task_id,subject_id,aggregations)
 
     def __survey_header_setup__(self,output_directory,task_id,instructions):
+        """
+        create the csv output file for a survey task
+        and give the header row
+        :param output_directory:
+        :param task_id:
+        :param instructions:
+        :return:
+        """
         fname = str(task_id) + "_survey"
         fname += ".csv"
 
@@ -293,12 +301,36 @@ class CsvOut:
         self.csv_files[task_id] = open(output_directory+fname,"wb")
 
         # now write the header
-        print instructions
-        self.csv_files[task_id].write("\n")
+        header = "subject_id,num_classifications,species"
+
+        # todo - we'll assume, for now, that "how many" is always the first question
+        for followup_id in instructions["questionsOrder"]:
+            multiple_answers = instructions["questions"][followup_id]["multiple"]
+            label = instructions["questions"][followup_id]["label"]
+
+            # the question "how many" is treated differently - we'll give the minimum, maximum and mostly likely
+            if followup_id == "HWMN":
+                header += ",minimum_number_of_animals,most_likely_number_of_animals,percentage,maximum_number_of_animals"
+            elif multiple_answers:
+                if "behavior" in label:
+                    stem = "behaviour:"
+                elif "behaviour" in label:
+                    stem = "behaviour:"
+                else:
+                    stem = self.__csv_string__(label)
+
+                for answer_id in instructions["questions"][followup_id]["answersOrder"]:
+                    header += "," + stem + self.__csv_string__(instructions["questions"][followup_id]["answers"][answer_id]["label"])
+
+            else:
+                # we have a followup question with just one answer allowed
+                header += ","+ self.__csv_string__(instructions["questions"][followup_id]["label"]) + ",percentage"
+
+        self.csv_files[task_id].write(header+"\n")
 
     def __survey_row__(self,workflow_id,task_id,subject_id,aggregations):
         """
-        for a given workflow, task and subject print one one row of aggregations to a csv file
+        for a given workflow, task and subject print one row of aggregations per species found to a csv file
         where the task correspond to a survey task
         :param workflow_id:
         :param task_id:
@@ -306,28 +338,33 @@ class CsvOut:
         :param aggregations:
         :return:
         """
-        row = str(subject_id) + ","
-        for species in aggregations:
 
-            #self.instructions[workflow_id][task_id]["questions"]:
+        for species_id in aggregations:
+            if species_id == "num_users":
+                continue
+
+            species_label = self.__csv_string__(self.instructions[workflow_id][task_id]["species"][species_id])
+            row = str(subject_id) + "," + str(aggregations["num_users"]) + "," + self.__csv_string__(species_label)
+
             for followup_id in self.instructions[workflow_id][task_id]["questionsOrder"]:
                 followup_question = self.instructions[workflow_id][task_id]["questions"][followup_id]
 
-                if followup_id not in aggregations[species]:
+                # not every question is going to be asked of every species
+                if followup_id not in aggregations[species_id]:
                     continue
 
                 if followup_question["multiple"]:
-                    votes = aggregations[species][followup_id]
+                    votes = aggregations[species_id][followup_id]
                     total_votes = sum(votes.values())
                     for answer_id in self.instructions[workflow_id][task_id]["questions"][followup_id]["answersOrder"]:
                         if answer_id in votes:
-                            row += str(votes[answer_id]/float(total_votes)) + ","
+                            row += "," + str(votes[answer_id]/float(total_votes))
                         else:
-                            row += "0,"
+                            row += ",0"
                 else:
-                    votes = aggregations[species][followup_id].items()
+                    votes = aggregations[species_id][followup_id].items()
                     top_candidate,num_votes = sorted(votes,key = lambda x:x[1])[0]
-                    percent = num_votes/float(sum(aggregations[species][followup_id].values()))
+                    percent = num_votes/float(sum(aggregations[species_id][followup_id].values()))
                     if followup_question["label"] == "How many?":
                         # what is the maximum answer given - because of bucket ranges (e.g. 10+ or 10 to 15)
                         # we can't just convert the bucket labels into numerical values
@@ -336,12 +373,14 @@ class CsvOut:
                         maximum_species = followup_question["answersOrder"][max(votes_indices)]
                         minimum_species = followup_question["answersOrder"][min(votes_indices)]
 
-                        row += minimum_species + ","+str(top_candidate)+","+str(percent)+","+maximum_species
+                        row += "," + minimum_species + ","+str(top_candidate)+","+str(percent)+","+maximum_species
                     else:
                         # for any other follow up question (without just one answer) just give the most likely
                         # answer and the percentage
                         label = followup_question["answers"][top_candidate]["label"]
-                        row += label + "," + str(percent)
+                        row += "," + label + "," + str(percent)
+
+            self.csv_files[task_id].write(row+"\n")
 
 
 
@@ -433,7 +472,9 @@ class CsvOut:
         :param str:
         :return:
         """
-        string = unicodedata.normalize('NFKD', string).encode('ascii','ignore')
+        if type(string) == unicode:
+            string = unicodedata.normalize('NFKD', string).encode('ascii','ignore')
+        string = re.sub(' ', '_', string)
         string = re.sub(r'\W+', '', string)
 
         return string
