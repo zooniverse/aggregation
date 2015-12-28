@@ -308,7 +308,7 @@ class Classification:
     def __aggregate__(self,raw_classifications,workflow,aggregations):
         # use the first subject_id to find out which tasks we are aggregating the classifications for
         # aggregations = {}
-        classification_tasks,marking_tasks = workflow
+        classification_tasks,marking_tasks,_ = workflow
 
         # start by doing existence classifications for markings
         # i.e. determining whether a cluster is a true positive or false positive
