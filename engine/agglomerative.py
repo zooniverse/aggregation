@@ -89,7 +89,6 @@ class Agglomerative(clustering.Cluster):
 
         if len(user_ids) == len(set(user_ids)):
             # all of the markings are from different users => so only one cluster
-            # todo implement
             result = {"users":user_ids,"cluster members":markings,"tools":tools,"num users":len(user_ids)}
             result["center"] = [np.median(axis) for axis in zip(*markings)]
             return [result],0
@@ -110,7 +109,10 @@ class Agglomerative(clustering.Cluster):
 
         # use the results to build a tree representation
         # nodes = [LeafNode(pt,ii,user=user) for ii,(user,pt) in enumerate(zip(user_ids,markings))]
-        results = [{"users":[u],"cluster members":[p],"tools":[t],"num users":1} for u,p,t in zip(user_ids,markings,tools)]
+        print tools
+
+
+        results = [{"users":[u],"cluster members":[p],"tools":[t],"num users":1,"tool_classification":({t:1},-1)} for u,p,t in zip(user_ids,markings,tools)]
 
         # read through the results
         # each row gives a cluster/node to merge

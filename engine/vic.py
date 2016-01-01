@@ -1,10 +1,5 @@
 import transcription
 import pickle
-import random
-import json
-import numpy as np
-import json_transcription
-import latex_transcription
 
 retired_subjects = pickle.load(open("/home/ggdhines/245.retired","rb"))
 # print "retired subjects is " + str(len(retired_subjects))
