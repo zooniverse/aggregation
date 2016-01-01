@@ -121,8 +121,6 @@ class AggregationAPI:
         # as opposed to via rq (which is what happens when someone presses the aggregation button)
         self.report_roll = report_rollbar
 
-        self.__setup__()
-
     def __setup_clustering_algs__(self):
         # functions for converting json instances into values we can actually cluster on
         self.marking_params_per_shape = dict()
@@ -1894,6 +1892,7 @@ if __name__ == "__main__":
         environment = "development"
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
+        project.__setup__()
         project.__migrate__()
         project.__aggregate__()
 
