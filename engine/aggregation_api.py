@@ -740,8 +740,6 @@ class AggregationAPI:
             else:
                 subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt)])
 
-        print "***"
-        print len(subjects)
         return list(subjects)
 
     def __get_subject_metadata__(self,subject_id):
@@ -1502,7 +1500,6 @@ class AggregationAPI:
                 survey_tasks[task_id] = []
             else:
                 print tasks[task_id]
-                print "***"
                 print tasks[task_id]["type"]
                 # unknown task type
                 assert False

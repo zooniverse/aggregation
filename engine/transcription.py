@@ -220,9 +220,11 @@ class TextCluster(clustering.Cluster):
         self.stats["capitalized"] = 0
         self.stats["double_spaces"] = 0
         self.stats["errors"] = 0
-        self.stats["line_length"] = []
+        self.stats["characters"] = 0
 
         self.stats["retired lines"] = 0
+
+
 
     def __line_alignment__(self,lines):
         """
@@ -443,7 +445,7 @@ class TextCluster(clustering.Cluster):
         # with the aggregate
         agreement_per_user = [0 for i in aligned_text]
 
-        self.stats["line_length"].append(len(aligned_text[0]))
+        # self.stats["line_length"].append(len(aligned_text[0]))
 
         vote_history = []
 
@@ -481,22 +483,22 @@ class TextCluster(clustering.Cluster):
                         # a double space. So insert a gap - inserting a gap instead of just skipping it means
                         # that everything should stay the same length
                         aggregate_text += chr(24)
-                        self.stats["double_spaces"] += 1
+                        # self.stats["double_spaces"] += 1
                     else:
                         # this line is probably going to be counted as noise anyways, but just to be sure
                         aggregate_text += chr(27)
-                        self.stats["errors"] += 1
+                        # self.stats["errors"] += 1
                 # capitalization issues?
                 elif sorted_keys[0].lower() == sorted_keys[1].lower():
                     aggregate_text += sorted_keys[0].upper()
-                    self.stats["capitalized"] += 1
+                    # self.stats["capitalized"] += 1
                 else:
                     aggregate_text += chr(27)
-                    self.stats["errors"] += 1
+                    # self.stats["errors"] += 1
             else:
                 # "Z" represents characters which we are not certain about
                 aggregate_text += chr(27)
-                self.stats["errors"] += 1
+                # self.stats["errors"] += 1
 
         # what percentage of characters have we reached consensus on - i.e. we are fairly confident about?
         if len(aggregate_text) == 0:
@@ -587,12 +589,14 @@ class TextCluster(clustering.Cluster):
         cluster["num users"] = len(cluster["cluster members"])
 
         if cluster["num users"] >= 3:
-            self.retired_lines_3 += 1
             self.stats["retired lines"] += 1
-        if cluster["num users"] >= 4:
-            self.retired_lines_4 += 1
-        if cluster["num users"] >= 5:
-            self.retired_lines_5 += 1
+
+            aggregate_text = cluster["center"][-1]
+
+            errors = sum([1 for c in aggregate_text if ord(c) == 27])
+            self.stats["errors"] += errors
+            self.stats["characters"] += len(aggregate_text)
+
 
         return cluster
 
@@ -738,8 +742,8 @@ class SubjectRetirement(Classification):
         for subject_id in raw_classifications["T0"]:
             user_ids,is_subject_empty = zip(*raw_classifications["T0"][subject_id])
             if is_subject_empty != []:
-                empty_count = sum([1 for i in is_subject_empty if i == True])/float(len(is_subject_empty))
-                if (len(is_subject_empty) > 5) and (empty_count >= 0.8):
+                empty_count = sum([1 for i in is_subject_empty if i == True])
+                if empty_count >= 3:
                     self.to_retire.add(subject_id)
 
         blank_retirement = len(self.to_retire)
@@ -750,7 +754,8 @@ class SubjectRetirement(Classification):
         for subject_id in raw_classifications["T3"]:
             user_ids,completely_transcribed = zip(*raw_classifications["T3"][subject_id])
 
-            if sum([1 for i in completely_transcribed]) >= 3:
+            completely_count = sum([1 for i in completely_transcribed if i == True])
+            if completely_count >= 3:
                 self.to_retire.add(subject_id)
                 non_blanks.append(subject_id)
 
@@ -789,7 +794,7 @@ class SubjectRetirement(Classification):
 
 class TranscriptionAPI(AggregationAPI):
     def __init__(self,project_id,environment,end_date=None):
-        AggregationAPI.__init__(self,project_id,environment,end_date=None)
+        AggregationAPI.__init__(self,project_id,environment,end_date=end_date)
 
         self.only_retired_subjects = False
         self.only_recent_subjects = True
@@ -798,6 +803,31 @@ class TranscriptionAPI(AggregationAPI):
 
         # just to stop me from using transcription on other projects
         assert int(project_id) in [245,376]
+
+
+
+    def __cluster__(self,used_shapes,raw_markings,image_dimensions):
+        """
+        run the clustering algorithm for a given workflow
+        need to have already checked that the workflow requires clustering
+        :param workflow_id:
+        :return:
+        """
+
+        if raw_markings == {}:
+            print "warning - empty set of images"
+            # print subject_set
+            return {}
+
+        # start by clustering text
+        print "clustering text"
+        cluster_aggregation = self.text_algorithm.__aggregate__(raw_markings,image_dimensions)
+        print "clustering images"
+        image_aggregation = self.image_algorithm.__aggregate__(raw_markings,image_dimensions)
+
+        cluster_aggregation = self.__merge_aggregations__(cluster_aggregation,image_aggregation)
+
+        return cluster_aggregation
 
     def __setup__(self):
         AggregationAPI.__setup__(self)
@@ -810,16 +840,23 @@ class TranscriptionAPI(AggregationAPI):
 
         self.marking_params_per_shape["text"] = marking_helpers.relevant_text_params
         # the code to cluster lines together
-        self.default_clustering_algs["text"] = TextCluster
-        self.default_clustering_algs["image"] = BlobClustering
+        # self.default_clustering_algs["text"] = TextCluster
+        # self.default_clustering_algs["image"] = BlobClustering
 
+        # set up the text clusering algorithm
+        additional_text_args = {"reduction":marking_helpers.text_line_reduction}
         # load in the tag file if there is one
+
         api_details = yaml.load(open("/app/config/aggregation.yml","rb"))
-        try:
-            tag_file = api_details[self.project_id]["tags"]
-            self.additional_clustering_args = {"text": {"reduction":marking_helpers.text_line_reduction,"tag_file":tag_file}}
-        except:
-            self.additional_clustering_args = {"text": {"reduction":marking_helpers.text_line_reduction}}
+        if "tags" in api_details[self.project_id]:
+            additional_text_args["tags"] = api_details[self.project_id]["tags"]
+
+        # we need the clustering algorithms to exist after they've been used (so we can later extract
+        # some stats) - this is currently not the way its done with the aggregationAPI, so we'll do it
+        # slightly differently
+
+        self.text_algorithm = TextCluster("text",additional_text_args)
+        self.image_algorithm = BlobClustering("image",{})
 
     def __enter__(self):
         if self.environment != "development":
@@ -878,7 +915,7 @@ class TranscriptionAPI(AggregationAPI):
             # marking_tasks = {"T2":["image"]}
             marking_tasks = {"T2":["text","image"]}
             # todo - where is T1?
-            classification_tasks = {"T3" : True}
+            classification_tasks = {"T0":True,"T3" : True}
 
             return classification_tasks,marking_tasks,{}
         elif self.project_id == 376:
@@ -891,23 +928,23 @@ class TranscriptionAPI(AggregationAPI):
         else:
             return AggregationAPI.__readin_tasks__(self,workflow_id)
 
-    def __get_subjects_to_aggregate__(self,workflow_id,with_expert_classifications=None):
-        """
-        override the retired subjects function to get only subjects which have been transcribed since we last ran
-        the code
-        :param workflow_id:
-        :param with_expert_classifications:
-        :return:
-        """
-        recently_classified_subjects = set()
-        select = "SELECT subject_id,created_at from classifications where project_id="+str(self.project_id)
-
-        for r in self.cassandra_session.execute(select):
-            subject_id = r.subject_id
-            if r.created_at >= self.old_time:
-                recently_classified_subjects.add(subject_id)
-        # assert False
-        return list(recently_classified_subjects)
+    # def __get_subjects_to_aggregate__(self,workflow_id,with_expert_classifications=None):
+    #     """
+    #     override the retired subjects function to get only subjects which have been transcribed since we last ran
+    #     the code
+    #     :param workflow_id:
+    #     :param with_expert_classifications:
+    #     :return:
+    #     """
+    #     recently_classified_subjects = set()
+    #     select = "SELECT subject_id,created_at from classifications where project_id="+str(self.project_id)
+    #
+    #     for r in self.cassandra_session.execute(select):
+    #         subject_id = r.subject_id
+    #         if r.created_at >= self.old_time:
+    #             recently_classified_subjects.add(subject_id)
+    #     # assert False
+    #     return list(recently_classified_subjects)
 
     def __prune__(self,aggregations):
         assert isinstance(aggregations,dict)
@@ -928,32 +965,29 @@ class TranscriptionAPI(AggregationAPI):
         return aggregations
 
     def __summarize__(self):
-        current_time  = datetime.datetime.now()
-        last_week = current_time - datetime.timedelta(7)
+        num_retired = self.classification_alg.num_retired
+        non_blanks_retired = self.classification_alg.non_blanks_retired
 
-        subject = "Annotate Aggregation Summary for " + last_week.strftime("%B %d %Y") + " to " + current_time.strftime("%B %d %Y")
-        print subject
+        stats = self.text_algorithm.stats
 
+        old_time_string = self.previous_runtime.strftime("%B %d %Y")
+        new_time_string = end_date.strftime("%B %d %Y")
 
-        postgres_cursor = self.postgres_session.cursor()
-        postgres_cursor.execute("select aggregation from aggregations where workflow_id = " + str(self.workflows.keys()[0]) + " and updated_at >= '" + str(last_week) + "'" )
+        accuracy =  1. - stats["errors"]/float(stats["characters"])
 
-        lines_transcribed = 0
-        subjects_retired = 0
+        subject = "Aggregation summary for " + str(old_time_string) + " to " + str(new_time_string)
 
-        for aggregation in postgres_cursor.fetchall():
-            subjects_retired += 1
-            if "text clusters" in aggregation[0]["T2"]:
-                lines_transcribed += len(aggregation[0]["T2"])
-
-        body = "This week we have retired " + str(subjects_retired) + " subjects with a total of " + str(lines_transcribed) + " lines transcribed. \n Greg Hines \n Zooniverse \n \n PS This email was automatically generated."
+        body = "This week we have retired " + str(num_retired) + " subjects, of which " + str(non_blanks_retired) + " where not blank."
+        body += " A total of " + str(stats["retired lines"]) + " lines were retired. "
+        body += " The accuracy of these lines was " + "{:2.1f}".format(accuracy*100) + "% - defined as the percentage of characters where at least 3/4's of the users were in agreement."
+        body += "\n Greg Hines \n Zooniverse \n \n PS This email was automatically generated."
 
         client = boto3.client('ses')
         response = client.send_email(
             Source='greg@zooniverse.org',
             Destination={
                 'ToAddresses': [
-                    'greg@zooniverse.org'#,'victoria@zooniverse.org','matt@zooniverse.org'
+                    'greg@zooniverse.org','victoria@zooniverse.org','matt@zooniverse.org'
                 ]#,
                 # 'CcAddresses': [
                 #     'string',
@@ -1015,7 +1049,7 @@ if __name__ == "__main__":
 
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
-        project.__migrate__()
+        # project.__migrate__()
         print "done migrating"
         # project.__aggregate__(subject_set = [671541,663067,664482,662859])
         project.__aggregate__()
