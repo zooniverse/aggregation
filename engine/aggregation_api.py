@@ -117,6 +117,8 @@ class AggregationAPI:
         # as opposed to via rq (which is what happens when someone presses the aggregation button)
         self.report_roll = report_rollbar
 
+        self.end_date = end_date
+
     def __setup_clustering_algs__(self):
         # functions for converting json instances into values we can actually cluster on
         self.marking_params_per_shape = dict()
@@ -180,20 +182,13 @@ class AggregationAPI:
         param_file = open("/app/config/aggregation.yml","rb")
         param_details = yaml.load(param_file)
 
-        # sometimes we want params specific to a project - ie. we are in development but want to read
-        # off the staging postgres db - in such case we just provide an extra yaml file
-        # if self.project_id in param_details:
-        #     project_details = param_details[self.project_id]
-        #     if "project_name" in project_details:
-        #         print "aggregating project: " + project_details["project_name"]
-        # else:
-        project_details = param_details[self.environment]
+        environment_details = param_details[self.environment]
 
         # connect to whatever postgres db we want to
-        self.__postgres_connect__(project_details)
+        self.__postgres_connect__(environment_details)
 
         # connect to the Cassandra DB
-        self.__cassandra_connect__(project_details["cassandra"])
+        self.__cassandra_connect__(environment_details["cassandra"])
         # as soon as we have a cassandra connection - check to see when the last time we ran
         # the aggregation engine for this project - if this query fails for whatever reason
         # fall back a default date
@@ -234,7 +229,7 @@ class AggregationAPI:
 
         # make the actual connection to Panoptes
         print "trying secure Panoptes connection"
-        self.__panoptes_connect__(project_details)
+        self.__panoptes_connect__(environment_details)
 
         self.__get_project_details__()
 
@@ -247,7 +242,8 @@ class AggregationAPI:
 
         # is there an entry for the project in the yaml file?
         # if so, has a specific workflow id has been provided?
-        if "workflow_id" in project_details:
+        # todo - this can be removed or rewritten
+        if "workflow_id" in environment_details:
             workflow_id = int(project_details["workflow_id"])
             try:
                 print "aggregating only for workflow id : " + str(workflow_id)
@@ -263,16 +259,6 @@ class AggregationAPI:
         # load the default classification algorithm
         self.__set_classification_alg__(classification.VoteCount)
 
-        # # todo - do in this in Cassandra
-        # # for reading in from classifications only done since the last run
-        # # if any trouble - start over from the beginning
-        # try:
-        #     self.old_time = pickle.load(open("/tmp/"+str(self.project_id)+".time","rb"))
-        # except:
-        #     self.old_time = datetime.datetime(2000,01,01)
-        #
-        # self.current_time = datetime.datetime.now()
-
         self.ignore_versions = False
         self.only_retired_subjects = True
         # a bit of a sanity check in case I forget to change back up before uploading
@@ -281,9 +267,6 @@ class AggregationAPI:
         if self.environment in ["production","staging"]:
             self.ignore_versions = False
             self.only_retired_subjects = True
-
-
-
 
         # bit of a stop gap measure - stores how many people have classified a given subject
         self.classifications_per_subject = {}
@@ -770,7 +753,7 @@ class AggregationAPI:
                 subjects.append(subject[0])
 
         else:
-            stmt = "SELECT subject_id,workflow_version,created_at FROM classifications WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)#+ " and created_at >= '" + str(self.new_runtime) +"'"
+            stmt = "SELECT subject_id,workflow_version,created_at FROM classifications WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)
             print "selecting all subjects - including those not retired"
             # assert False
             # filter for subjects which have the correct major version number
@@ -779,7 +762,13 @@ class AggregationAPI:
                 # do this filter over two steps
 
                 subjects = [(r.subject_id,r.created_at) for r in self.cassandra_session.execute(stmt) if int(r.workflow_version) == int(self.versions[workflow_id]) ]
-                subjects = set([r[0] for r in subjects if r[1] >= self.previous_runtime])
+
+                # if we are not filtering on a maximum end date - which is probably most of the time
+                if self.end_date is None:
+                    subjects = set([r[0] for r in subjects if r[1] >= self.previous_runtime])
+                else:
+                    subjects = set([r[0] for r in subjects if (r[1] >= self.previous_runtime) and (r[1] <= self.end_date)])
+
                 if subjects == set():
                     print "no subjects found - maybe remove version filter"
             else:
