@@ -15,11 +15,11 @@ import math
 import sys
 import agglomerative
 import blob_clustering
-import random
 from os.path import expanduser
 import csv_output
 import time
 import survey_aggregation
+from dateutil import parser
 
 # these are libraries which are only needed if you are working directly with the db
 # so if they are not on your computer - we'll just skip them
@@ -120,6 +120,10 @@ class AggregationAPI:
         self.end_date = end_date
 
         self.marking_params_per_shape = dict()
+
+        # default filters for which subjects we look at
+        self.ignore_versions = False
+        self.only_retired_subjects = True
 
     def __setup_clustering_algs__(self):
         # functions for converting json instances into values we can actually cluster on
@@ -232,8 +236,7 @@ class AggregationAPI:
         # load the default classification algorithm
         self.__set_classification_alg__(classification.VoteCount)
 
-        self.ignore_versions = False
-        self.only_retired_subjects = True
+
         # a bit of a sanity check in case I forget to change back up before uploading
         # production and staging should ALWAYS pay attention to the version and only
         # aggregate retired subjects
@@ -344,10 +347,6 @@ class AggregationAPI:
         # filter on only the major version (the whole number part)
         version = int(math.floor(float(self.versions[workflow_id])))
 
-        # classification_tasks,marking_tasks = self.workflows[workflow_id]
-        # raw_classifications = {}
-        # raw_markings = {}
-
         if subject_set is None:
             subject_set = self.__load_subjects__(workflow_id)
 
@@ -381,14 +380,6 @@ class AggregationAPI:
 
 
                 for ii,record in enumerate(record_list):
-                    # if record.created_at < self.starting_date:#datetime.datetime(2015,8,27):
-                    #     print "too early"
-                    #     print record.created_at
-                    #     continue
-
-                    if record.created_at < self.minimum_time:
-                        continue
-
                     # check to see if the metadata contains image size
                     metadata = record.metadata
                     if isinstance(metadata,str) or isinstance(metadata,unicode):
@@ -714,7 +705,7 @@ class AggregationAPI:
         # but for printing out the json blobs, then we want only retired subjects - which
         # is where we set only_retired_subjects=True
         if self.__is_project_live__() and (self.only_retired_subjects or only_retired_subjects):
-            print "here"
+            print "selecting only subjects retired since last run"
             stmt = """ SELECT * FROM "subjects"
                     INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."subject_id" = "subjects"."id"
                     WHERE "subject_workflow_counts"."workflow_id" = """ + str(workflow_id) + """ AND "subject_workflow_counts"."retired_at" >= '""" + str(self.previous_runtime) + """'"""
@@ -738,8 +729,10 @@ class AggregationAPI:
 
                 # if we are not filtering on a maximum end date - which is probably most of the time
                 if self.end_date is None:
+                    print "searching for subjects classified since " + str(self.previous_runtime)
                     subjects = set([r[0] for r in subjects if r[1] >= self.previous_runtime])
                 else:
+                    print "searching for subjects classified between " + str(self.previous_runtime) + " and " + str(self.end_date)
                     subjects = set([r[0] for r in subjects if (r[1] >= self.previous_runtime) and (r[1] <= self.end_date)])
 
                 if subjects == set():
@@ -747,6 +740,8 @@ class AggregationAPI:
             else:
                 subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt)])
 
+        print "***"
+        print len(subjects)
         return list(subjects)
 
     def __get_subject_metadata__(self,subject_id):
@@ -1537,7 +1532,7 @@ class AggregationAPI:
         if (self.project_id in param_details) and ("default_date" in param_details[self.project_id]):
             time_string = param_details[self.project_id]["default_date"]
             # don't know if this conversion is needed, but playing it safe
-            minimum_time = time.strptime(time_string,"%Y %m %d")
+            minimum_time = parser.parse(time_string)
             self.previous_runtime = max(self.previous_runtime,minimum_time)
 
         # use this one for figuring out the most recent classification read in
