@@ -21,6 +21,7 @@ import boto3
 import pickle
 import datetime
 import getopt
+from dateutil import parser
 
 __author__ = 'greg'
 
@@ -789,42 +790,36 @@ class SubjectRetirement(Classification):
 class TranscriptionAPI(AggregationAPI):
     def __init__(self,project_id,environment,end_date=None):
         AggregationAPI.__init__(self,project_id,environment,end_date=None)
-        # the code to extract the relevant params froma  text json file
-
-        self.marking_params_per_shape["text"] = marking_helpers.relevant_text_params
-        # the code to cluster lines together
-        self.default_clustering_algs["text"] = TextCluster
-        self.default_clustering_algs["image"] = BlobClustering
-        # the code for reducing a line segment (4d) into a 2d object
-        # todo - can probably replace this with the standard for line segments
-        # self.reduction_algs["text"] = text_line_reduction
-
-        # load in the tag file
-        api_details = yaml.load(open("/app/config/aggregation.yml","rb"))
-        try:
-            tag_file = api_details[self.project_id]["tags"]
-            self.additional_clustering_args = {"text": {"reduction":marking_helpers.text_line_reduction,"tag_file":tag_file}}
-        except:
-            self.additional_clustering_args = {"text": {"reduction":marking_helpers.text_line_reduction}}
-
-        # self.ignore_versions = True
-        # self.instructions[683] = {}
-        self.instructions[121] = {}
 
         self.only_retired_subjects = False
         self.only_recent_subjects = True
 
         self.rollbar_token = None
 
-        # self.previous_runtime = datetime.datetime(2015,12,7)
-
         # just to stop me from using transcription on other projects
         assert int(project_id) in [245,376]
 
-
     def __setup__(self):
         AggregationAPI.__setup__(self)
-        self.__set_classification_alg__(SubjectRetirement,{"host":self.host_api,"project_id":self.project_id,"token":self.token,"workflow_id":121})
+
+        workflow_id = self.workflows.keys()[0]
+
+        self.__set_classification_alg__(SubjectRetirement,{"host":self.host_api,"project_id":self.project_id,"token":self.token,"workflow_id":workflow_id})
+
+        self.instructions[workflow_id] = {}
+
+        self.marking_params_per_shape["text"] = marking_helpers.relevant_text_params
+        # the code to cluster lines together
+        self.default_clustering_algs["text"] = TextCluster
+        self.default_clustering_algs["image"] = BlobClustering
+
+        # load in the tag file if there is one
+        api_details = yaml.load(open("/app/config/aggregation.yml","rb"))
+        try:
+            tag_file = api_details[self.project_id]["tags"]
+            self.additional_clustering_args = {"text": {"reduction":marking_helpers.text_line_reduction,"tag_file":tag_file}}
+        except:
+            self.additional_clustering_args = {"text": {"reduction":marking_helpers.text_line_reduction}}
 
     def __enter__(self):
         if self.environment != "development":
@@ -996,7 +991,7 @@ class TranscriptionAPI(AggregationAPI):
 
 if __name__ == "__main__":
     try:
-        opts, args = getopt.getopt(sys.argv,"i:e:d:",["project_id=","environment=","end_date="])
+        opts, args = getopt.getopt(sys.argv[1:],"shi:e:d:",["summary","project_id=","environment=","end_date="])
     except getopt.GetoptError:
         print 'transcription.py -i <project_id> -e: <environment> -d: <end_date>'
         sys.exit(2)
@@ -1004,12 +999,17 @@ if __name__ == "__main__":
     environment = "development"
     project_id = None
     end_date = None
+    summary = False
 
     for opt, arg in opts:
         if opt in ["-i","--project_id"]:
             project_id = int(arg)
         elif opt in ["-e","--environment"]:
             environment = arg
+        elif opt in ["-d","--end_date"]:
+            end_date = parser.parse(arg)
+        elif opt in ["-s","--summary"]:
+            summary = True
 
     assert project_id is not None
 
@@ -1020,6 +1020,7 @@ if __name__ == "__main__":
         # project.__aggregate__(subject_set = [671541,663067,664482,662859])
         project.__aggregate__()
 
-        # project.__summarize__()
+        if summary:
+            project.__summarize__()
 
         # print aggregated_text

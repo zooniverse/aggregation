@@ -119,9 +119,11 @@ class AggregationAPI:
 
         self.end_date = end_date
 
+        self.marking_params_per_shape = dict()
+
     def __setup_clustering_algs__(self):
         # functions for converting json instances into values we can actually cluster on
-        self.marking_params_per_shape = dict()
+
         self.marking_params_per_shape["line"] = marking_helpers.relevant_line_params
         self.marking_params_per_shape["point"] = marking_helpers.relevant_point_params
         self.marking_params_per_shape["ellipse"] = marking_helpers.relevant_ellipse_params
