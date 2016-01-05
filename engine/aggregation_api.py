@@ -191,40 +191,11 @@ class AggregationAPI:
 
         # connect to the Cassandra DB
         self.__cassandra_connect__(environment_details["cassandra"])
-        # as soon as we have a cassandra connection - check to see when the last time we ran
-        # the aggregation engine for this project - if this query fails for whatever reason
-        # fall back a default date
-        # either 2000,1,1 or check if one has been provided by the yml file
-        # (this is really useful if we know that we have some annotations of the incorrect form
-        # i.e. someone has changed something, and we want to exclude those ones)
-        if (self.project_id in param_details) and ("default_date" in param_details[self.project_id]):
-            time_string = param_details[self.project_id]["default_date"]
-            # don't know if this conversion is needed, but playing it safe
-            t = time.strptime(time_string,"%Y %m %d")
-            self.minimum_time = datetime.datetime(t.tm_year,t.tm_mon,t.tm_mday)
-        else:
-            self.minimum_time = datetime.datetime(2000,1,1)
 
-        self.previous_runtime = datetime.datetime(2000,1,1)
-        # use this one for figuring out the most recent classification read in
-        # we need to use as our runtime value, not the clock (since classifications could still be coming in
-        # if we used datetime.datetime.now() we might skip some classifications)
-        self.new_runtime = datetime.datetime(2000,1,1)
-
-        try:
-            r = self.cassandra_session.execute("select classification from most_recent where project_id = " + str(self.project_id))
-            if r != []:
-                print "here here"
-                print r
-                self.previous_runtime = r[0].classification
-        except:
-            print "could not find most_recent classification - falling back on default"
-            pass
+        # set the minimum date for classifications
+        self.__set_date_filters__(param_details)
 
         print "we have already aggregated classifications up to: " + str(self.previous_runtime)
-
-        # use this to determine the time frame for reading in classifications
-        # self.old_new_classification = None
 
         # use for Cassandra connection - can override for Ourboros projects
         self.classification_table = "classifications"
@@ -1546,6 +1517,34 @@ class AggregationAPI:
     def __set_classification_alg__(self,alg,params={}):
         self.classification_alg = alg(self.environment,params)
         assert isinstance(self.classification_alg,classification.Classification)
+
+    def __set_date_filters__(self,param_details):
+        # check to see when the last time we ran the aggregation engine for this project -
+        # if this query fails for whatever reason fall back to 2000,1,1
+        self.previous_runtime = datetime.datetime(2000,1,1)
+
+        try:
+            r = self.cassandra_session.execute("select classification from most_recent where project_id = " + str(self.project_id))
+            if r != []:
+                print "found date from previous aggregation"
+                self.previous_runtime = r[0].classification
+        except:
+            print "could not find most_recent classification - falling back on default"
+
+        # check if we there is a minimum date given in the aggregation yml file
+        # this is for when we know that there are problems with a certain range of classifications and want
+        # to exclude them - not going to happen often
+        if (self.project_id in param_details) and ("default_date" in param_details[self.project_id]):
+            time_string = param_details[self.project_id]["default_date"]
+            # don't know if this conversion is needed, but playing it safe
+            minimum_time = time.strptime(time_string,"%Y %m %d")
+            self.previous_runtime = max(self.previous_runtime,minimum_time)
+
+        # use this one for figuring out the most recent classification read in
+        # we need to use as our runtime value, not the clock (since classifications could still be coming in
+        # if we used datetime.datetime.now() we might skip some classifications)
+        self.new_runtime = datetime.datetime(2000,1,1)
+
 
     def __set_survey_alg__(self,alg,params={}):
         self.survey_alg = alg(self.environment,params)
