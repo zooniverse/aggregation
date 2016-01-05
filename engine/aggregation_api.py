@@ -76,12 +76,8 @@ class InstanceAlreadyRunning(Exception):
         return "aggregation engine already running"
 
 
-
-
-
-
 class AggregationAPI:
-    def __init__(self,project_id,environment,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None),public_panoptes_connection=False,report_rollbar=False):
+    def __init__(self,project_id,environment,end_date=None,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None),public_panoptes_connection=False,report_rollbar=False):
         # the panoptes project id - and the environment are the two main things to set
         self.project_id = int(project_id)
         self.environment = environment
