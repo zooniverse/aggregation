@@ -1,4 +1,4 @@
-from learning import NearestNeighbours
+from active_weather.learning import NearestNeighbours
 try:
     import Image
 except ImportError:
@@ -7,12 +7,11 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib.cbook as cbook
 import numpy as np
-import shutil
+
 image_directory = "/home/ggdhines/Databases/old_weather/aligned_images/"
 # log_pages = list(os.listdir(image_directory))
 
 from cassandra.cluster import Cluster
-import cassandra
 
 cluster = Cluster()
 

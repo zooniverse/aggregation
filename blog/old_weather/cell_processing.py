@@ -1,4 +1,4 @@
-from learning import NearestNeighbours
+from active_weather.learning import NearestNeighbours
 try:
     import Image
 except ImportError:
