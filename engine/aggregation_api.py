@@ -1133,14 +1133,12 @@ class AggregationAPI:
         :param url:
         :return:
         """
-        print self.host_api+url
         request = urllib2.Request(self.host_api+url)
         request.add_header("Accept","application/vnd.api+json; version=1")
         # only add the token if we have a secure connection
         if self.token is not None:
             request.add_header("Authorization","Bearer "+self.token)
 
-        print request
         try:
             response = urllib2.urlopen(request)
         except urllib2.HTTPError as e:
@@ -1822,7 +1820,7 @@ class AggregationAPI:
         generator for giving aggregation results per subject id/task
         """
 
-        stmt = "select subject_id,aggregation,updated_at from aggregations where workflow_id = " + str(workflow_id)
+        stmt = "select subject_id,aggregation,updated_at from aggregations"# where workflow_id = " + str(workflow_id)
         if subject_id != None:
             stmt += " and subject_id = " + str(subject_id)
         cursor = self.postgres_session.cursor()
