@@ -1,19 +1,7 @@
 #!/usr/bin/env python
 __author__ = 'ggdhines'
-from transcription import Tate
 import json
-import re
-from latex_transcription import get_updated_tags
-from copy import deepcopy
-import collections
-
-project_id = 245
-environment = "development"
-workflow_id = 121
-transcription_task = "T2"
-
-# project_id = 376
-# workflow_id = 205
+import tarfile
 
 first = True
 count = 0
@@ -22,18 +10,15 @@ count = 0
 
 aggregations_to_json = {}
 
-# print replacement_tags
 
-def json_dump(project,subject_ids):
-
+def json_dump(project):
 
     # get the list of all retired subjects
     # retired_subjects = project.__get_subjects__(workflow_id,only_retired_subjects=True)
 
-    for subject_id in subject_ids:
-        # there will only be one aggregation per subject so a loop would be slightly silly
-        # instead I'll just cast to a list and take the first element
-        aggregation_list = list(project.__yield_aggregations__(workflow_id,subject_id=subject_id))
+    workflow_id = project.workflows.keys()[0]
+
+    for subject_id,aggregations in list(project.__yield_aggregations__(workflow_id))[:10]:
         print subject_id
 
         # an empty subject is represented by not having an image value or text value
@@ -45,29 +30,22 @@ def json_dump(project,subject_ids):
         # metadata = json.dumps(metadata)
         aggregations_to_json[subject_id]["metadata"] = metadata
 
-        if len(aggregation_list) == 0:
-            # these should be empty subjects
-            # todo - double check
-            print "empty subject :: " + str(subject_id)
-            continue
-
-        _,aggregation = aggregation_list[0]
 
         # are there any images in this subject?
         # there will always be "all_users" so we can looking for a list longer than one
-        if len(aggregation["T2"]["image clusters"]) > 1:
+        if len(aggregations["T2"]["image clusters"]) > 1:
             aggregations_to_json[subject_id]["images"] = []
-            for image_index,image in aggregation["T2"]["image clusters"].items():
+            for image_index,image in aggregations["T2"]["image clusters"].items():
                 if image_index == "all_users":
                     continue
                 aggregations_to_json[subject_id]["images"].append(image["center"])
 
         # are there any text clusters?
-        if len(aggregation["T2"]["text clusters"]) > 1:
+        if len(aggregations["T2"]["text clusters"]) > 1:
             aggregations_to_json[subject_id]["text"] = []
 
             # now build up each one of the results
-            for cluster_index,cluster in aggregation["T2"]["text clusters"].items():
+            for cluster_index,cluster in aggregations["T2"]["text clusters"].items():
 
                 if cluster_index == "all_users":
                     continue
@@ -88,17 +66,11 @@ def json_dump(project,subject_ids):
 
                 # we need to retokenize everything
                 # print aggregated_line
-                tags = dict()
+                tags = project.text_algorithm.tags
                 reverse_tags = dict()
-                tag_counter = 149
 
-                # print project.additional_clustering_args["text"]["tag_file"]
-                with open(project.additional_clustering_args["text"]["tag_file"],"rb") as f:
-                    for l in f.readlines():
-                        tags[l[:-1]] = tag_counter
-                        reverse_tags[tag_counter] = l[:-1]
-                        tag_counter += 1
-
+                for a,b in tags.items():
+                    reverse_tags[b] = a
 
                 tokenized_strings = []
                 for _,l_m in cluster["cluster members"]:
@@ -249,11 +221,18 @@ def json_dump(project,subject_ids):
                 individual_text = individual_text.encode('ascii','ignore')
                 aggregations_to_json[subject_id]["raw transcriptions"].append({"coordinates":coords,"text":individual_text})
 
-    with open('/home/ggdhines/tate.json', 'w') as outfile:
+    project_id = str(project.project_id)
+    with open("/tmp/"+project_id+".json", 'w') as outfile:
         # print aggregations_to_json
         # print json.dumps(aggregations_to_json, sort_keys=True,indent=4, separators=(',', ': '))
         # assert False
         json.dump(aggregations_to_json,outfile)
+
+    tar_file_path = "/tmp/" + project_id + "_export.tar.gz"
+    with tarfile.open(tar_file_path, "w:gz") as tar:
+        tar.add("/tmp/"+project_id+".json")
+
+    return tar_file_path
 
 if __name__ == "__main__":
     json_dump([649644])
