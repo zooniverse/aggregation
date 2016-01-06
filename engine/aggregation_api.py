@@ -501,21 +501,24 @@ class AggregationAPI:
         """
         for when we want to double check the number of classifications a subject has received
         """
-        print subject_id
-        # check to see if we have previously stored values, hopefully will task on calls to the DB
-        if workflow_id in self.classifications_per_subject:
-            if subject_id in self.classifications_per_subject[workflow_id]:
-                return self.classifications_per_subject[workflow_id][subject_id]
-        else:
-            self.classifications_per_subject[workflow_id] = {}
-
-        cursor = self.postgres_session.cursor()
-        cursor.execute("SELECT count(*) from classifications where workflow_id="+str(workflow_id) +" AND subject_ids=ARRAY["+ str(subject_id) + "]")
-        count = int(cursor.fetchone()[0])
-
-        self.classifications_per_subject[workflow_id][subject_id] = count
-
-        return count
+        # todo - implement correct version - subject_ids no longer exists in the postgres db
+        # todo - not sure if this function is ever called - so only fixed if it is actually called somewhere
+        # print subject_id
+        # # check to see if we have previously stored values, hopefully will task on calls to the DB
+        # if workflow_id in self.classifications_per_subject:
+        #     if subject_id in self.classifications_per_subject[workflow_id]:
+        #         return self.classifications_per_subject[workflow_id][subject_id]
+        # else:
+        #     self.classifications_per_subject[workflow_id] = {}
+        #
+        # cursor = self.postgres_session.cursor()
+        # cursor.execute("SELECT count(*) from classifications where workflow_id="+str(workflow_id) +" AND subject_ids=ARRAY["+ str(subject_id) + "]")
+        # count = int(cursor.fetchone()[0])
+        #
+        # self.classifications_per_subject[workflow_id][subject_id] = count
+        #
+        # return count
+        assert False
 
     def __count_subjects_classified__(self,workflow_id):
         """
@@ -753,14 +756,6 @@ class AggregationAPI:
 
         data = json.loads(body)
         return data
-
-        # select = "SELECT workflow_id from classifications where project_id="+str(6) +" and subject_ids = ARRAY[" + str(subject_id) +"]"
-        # select = "SELECT count(*) from classifications where workflow_id=6 AND subject_ids=ARRAY[493554]"
-        # print select
-        # cur = self.postgres_session.cursor()
-        # cur.execute(select)
-        # print cur.fetchall()
-
 
     def __get_workflow_details__(self,given_workflow_id=None):
         """
@@ -1050,7 +1045,7 @@ class AggregationAPI:
         cur.execute(select)
 
         print "going to migrate " + str(cur.fetchone()[0]) + " classifications"
-        select = "SELECT id,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version, classification_subjects.subject_id from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
+        select = "SELECT id,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,workflow_version, classification_subjects.subject_id from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
         # select = "SELECT * from classifications where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
 
         cur.execute(select)
@@ -1067,14 +1062,12 @@ class AggregationAPI:
         most_recent_classification = datetime.datetime(2000,1,1)
 
         for ii,t in enumerate(cur.fetchall()):
-            id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,subject_ids,workflow_version,subject_id = t
+            id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,workflow_version,subject_id = t
 
             self.new_runtime = max(self.new_runtime,created_at)
 
             most_recent_classification = max(most_recent_classification,updated_at)
 
-            # can't really handle pairwise comparisons yet
-            # self.migrated_subjects.add(subject_ids[0])
 
             if gold_standard != True:
                 gold_standard = False
@@ -1086,13 +1079,6 @@ class AggregationAPI:
                 user_id = -1
             # get only the major version of the workflow
             workflow_version = int(math.floor(float(workflow_version)))
-            # id = workflow_id,subject_id
-            # # if subject_ids[0] == 4153:
-            # #     print workflow_id,user_ip
-            #
-            # if id not in migrated:
-            #     migrated[id] = 0
-            # migrated[id] += 1
 
             # cassandra can only handle json in str format - so convert if necessary
             # "if necessary" - I think annotations should always start off as json format but
@@ -1147,13 +1133,14 @@ class AggregationAPI:
         :param url:
         :return:
         """
+        print self.host_api+url
         request = urllib2.Request(self.host_api+url)
         request.add_header("Accept","application/vnd.api+json; version=1")
         # only add the token if we have a secure connection
         if self.token is not None:
             request.add_header("Authorization","Bearer "+self.token)
 
-        # request
+        print request
         try:
             response = urllib2.urlopen(request)
         except urllib2.HTTPError as e:
@@ -1765,10 +1752,6 @@ class AggregationAPI:
         :param aggregations:
         :return:
         """
-        # subject_ids = [id_ for id_ in aggregations if id_ != "param"]
-        # cur.executemany("""INSERT INTO bar(first_name,last_name) VALUES (%(first_name)s, %(last_name)s)""", namedict)
-
-        # self.postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id int, aggregation jsonb, created_at timestamp, updated_at timestamp)")
         postgres_cursor = self.postgres_session.cursor()
 
         try:
