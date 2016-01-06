@@ -19,9 +19,10 @@ import yaml
 from blob_clustering import BlobClustering
 import boto3
 import pickle
-import datetime
 import getopt
 from dateutil import parser
+import json_transcription
+import botocore
 
 __author__ = 'greg'
 
@@ -33,6 +34,20 @@ folger_replacements = {}
 #             l2 = l2.strip()
 #             folger_replacements[l1] = l2
 
+# from https://gist.github.com/richarvey/637cd595362760858496
+def get_signed_url(time, bucket, obj):
+    s3 = boto3.resource('s3')
+
+    url = s3.generate_url(
+        time,
+        'GET',
+        bucket,
+        obj,
+        response_headers={
+          'response-content-type': 'application/octet-stream'
+        }
+    )
+    return url
 
 def folger_alpha_tags(text):
     assert isinstance(text,str)
@@ -208,8 +223,8 @@ class TextCluster(clustering.Cluster):
         self.tags = dict()
         tag_counter = 149
 
-        if "tag_file" in param_dict:
-            with open(param_dict["tag_file"],"rb") as f:
+        if "tags" in param_dict:
+            with open(param_dict["tags"],"rb") as f:
                 for l in f.readlines():
                     self.tags[l[:-1]] = tag_counter
                     tag_counter += 1
@@ -964,7 +979,7 @@ class TranscriptionAPI(AggregationAPI):
 
         return aggregations
 
-    def __summarize__(self):
+    def __summarize__(self,tar_path=None):
         num_retired = self.classification_alg.num_retired
         non_blanks_retired = self.classification_alg.non_blanks_retired
 
@@ -980,6 +995,30 @@ class TranscriptionAPI(AggregationAPI):
         body = "This week we have retired " + str(num_retired) + " subjects, of which " + str(non_blanks_retired) + " where not blank."
         body += " A total of " + str(stats["retired lines"]) + " lines were retired. "
         body += " The accuracy of these lines was " + "{:2.1f}".format(accuracy*100) + "% - defined as the percentage of characters where at least 3/4's of the users were in agreement."
+
+        print self.__panoptes_call__("projects/"+str(self.project_id)+"/aggregations_export?admin=true")
+        assert False
+        if tar_path is not None:
+            bucket = "s3://zooniverse-static/panoptes-uploads.zooniverse.org/"+str(self.project_id)+"/"
+            s3 = boto3.resource('s3')
+            try:
+                s3.meta.client.head_bucket(Bucket=bucket)
+            except botocore.exceptions.ClientError as e:
+                # If a client error is thrown, then check that it was a 404 error.
+                # If it was a 404 error, then the bucket does not exist.
+                error_code = int(e.response['Error']['Code'])
+                if error_code == 404:
+                    s3.create_bucket(Bucket=bucket,CreateBucketConfiguration={'LocationConstraint': 'us-west-1'})
+
+            object = s3.Object('mybucket', 'hello.txt')
+            object.put(Body=open('/tmp/hello.txt', 'rb'))
+
+            url = get_signed_url(604800, bucket, object)
+
+
+
+
+
         body += "\n Greg Hines \n Zooniverse \n \n PS This email was automatically generated."
 
         client = boto3.client('ses')
@@ -1049,12 +1088,14 @@ if __name__ == "__main__":
 
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
-        # project.__migrate__()
+        project.__migrate__()
         print "done migrating"
         # project.__aggregate__(subject_set = [671541,663067,664482,662859])
         project.__aggregate__()
 
         if summary:
-            project.__summarize__()
+            tar_path = json_transcription.json_dump(project)
+
+            project.__summarize__(tar_path)
 
         # print aggregated_text
