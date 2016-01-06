@@ -19,6 +19,7 @@ setup(
         license='LICENSE',
         cmdclass={'build_ext':build_ext},
         setup_requires=['numpy==1.8.1'],
+        packages=["engine"],
         description='Aggregation for Zooniverse projects',
         long_description=open('README.md').read(),
         install_requires=[
