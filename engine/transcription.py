@@ -811,8 +811,7 @@ class TranscriptionAPI(AggregationAPI):
     def __init__(self,project_id,environment,end_date=None):
         AggregationAPI.__init__(self,project_id,environment,end_date=end_date)
 
-        self.only_retired_subjects = False
-        self.only_recent_subjects = True
+
 
         self.rollbar_token = None
 
@@ -872,6 +871,9 @@ class TranscriptionAPI(AggregationAPI):
 
         self.text_algorithm = TextCluster("text",additional_text_args)
         self.image_algorithm = BlobClustering("image",{})
+
+        self.only_retired_subjects = False
+        self.only_recent_subjects = True
 
     def __enter__(self):
         if self.environment != "development":

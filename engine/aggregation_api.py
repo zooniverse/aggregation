@@ -707,6 +707,9 @@ class AggregationAPI:
         # so self.only_retired_subjects would be False
         # but for printing out the json blobs, then we want only retired subjects - which
         # is where we set only_retired_subjects=True
+        print self.__is_project_live__()
+        print self.only_retired_subjects
+        print only_retired_subjects
         if self.__is_project_live__() and (self.only_retired_subjects or only_retired_subjects):
             print "selecting only subjects retired since last run"
             stmt = """ SELECT * FROM "subjects"
