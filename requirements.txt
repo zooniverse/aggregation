@@ -1,2 +1,6 @@
-urllib
+rollbar
 matplotlib
+botocore
+boto3
+pandas
+termcolor
