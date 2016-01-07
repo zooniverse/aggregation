@@ -562,12 +562,18 @@ class AggregationAPI:
             rollbar.init(rollbar_token,self.environment)
             rollbar.report_exc_info()
 
+            self.postgres_session.rollback()
+
+
+
         # only update time stamp if there were no problems
         if exc_type is None:
             statements_and_params = []
             insert_statement = self.cassandra_session.prepare("insert into most_recent (project_id,classification) values (?,?)")
             statements_and_params.append((insert_statement, (self.project_id,self.new_runtime)))
             execute_concurrent(self.cassandra_session, statements_and_params)
+
+            self.postgres_session.commit()
 
         # shutdown the connection to Cassandra and remove the lock so other aggregation instances
         # can run, regardless of whether an error occurred
@@ -714,6 +720,7 @@ class AggregationAPI:
 
             cursor = self.postgres_session.cursor()
             cursor.execute(stmt)
+            self.postgres_session.commit()
 
             for subject in cursor.fetchall():
                 subjects.append(subject[0])
@@ -1048,6 +1055,7 @@ class AggregationAPI:
         # select = "SELECT * from classifications where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
 
         cur.execute(select)
+        self.postgres_session.commit()
 
         # self.migrated_subjects = set()
 
@@ -1062,6 +1070,15 @@ class AggregationAPI:
 
         for ii,t in enumerate(cur.fetchall()):
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,workflow_version,subject_id = t
+
+            # temp_string = json.dumps(annotations)
+            if len(annotations) > 1:
+                temp_ann = annotations[1]
+                if temp_ann["task"] == "T2":
+                    for ann in temp_ann["value"]:
+                        if ("text" in ann) and ("363" in ann["text"]):
+                            print subject_id,ann
+
 
             self.new_runtime = max(self.new_runtime,created_at)
 
@@ -1351,6 +1368,7 @@ class AggregationAPI:
         stmt = "select aggregation from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = '" + str(subject_id) + "'"
         # stmt = "select aggregation from aggregations where subject_id = '" + str(subject_id) + "'"
         postgres_cursor.execute(stmt)
+        self.postgres_session.commit()
 
         # todo - this should be a dict but doesn't seem to be - hmmmm :/
         agg = postgres_cursor.fetchone()
@@ -1395,8 +1413,7 @@ class AggregationAPI:
 
         for i in range(20):
             try:
-                self.postgres_session = psycopg2.connect(details)
-                # self.postgres_cursor = self.postgres_session.cursor()
+                self.postgres_session = psycopg2.connect(details,autocommit=True)
                 break
             except psycopg2.OperationalError as e:
                 print e
@@ -1418,6 +1435,7 @@ class AggregationAPI:
         cursor = self.postgres_session.cursor()
 
         cursor.execute(select)
+        self.postgres_session.commit()
         try:
             tasks = cursor.fetchone()[0]
         except:
@@ -1825,6 +1843,7 @@ class AggregationAPI:
         cursor = self.postgres_session.cursor()
 
         cursor.execute(stmt)
+        self.postgres_session.commit()
 
         for r in cursor.fetchall():
             aggregation = r[1]
