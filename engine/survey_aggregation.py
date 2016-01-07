@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class Survey:
     def __init__(self):
         pass
@@ -24,6 +25,7 @@ class Survey:
 
             species_vote = {}
             for ann in annotations:
+                print annotations
                 for species_ann in ann:
                     species = species_ann["choice"]
 
@@ -39,7 +41,6 @@ class Survey:
                 continue
             top_species,count = zip(*top_votes)
 
-
             for species in top_species:
                 followup_answers = {}
                 for ann in annotations:
@@ -47,6 +48,7 @@ class Survey:
                         if species_ann["choice"] == species:
 
                             for question,answer in species_ann["answers"].items():
+
                                 if question not in followup_answers:
                                     followup_answers[question] = {}
 
