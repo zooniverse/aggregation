@@ -224,8 +224,8 @@ class CsvOut:
 
         classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
 
-        # a subject might not have results for all tasks
         for task_id,task_type in classification_tasks.items():
+            # a subject might not have results for all tasks
             if task_id not in aggregations:
                 continue
 
@@ -264,6 +264,7 @@ class CsvOut:
             else:
                 answers = self.instructions[workflow_id][task_id]["answers"]
                 results = aggregations[task_id]
+                print "workflow id is " + str(workflow_id)
                 if task_type == "single":
                     answers = self.instructions[workflow_id][task_id]["answers"]
                     self.__single_choice_classification_row__(answers,task_id,subject_id,results)
