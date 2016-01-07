@@ -1,19 +1,9 @@
 __author__ = 'greg'
 import bisect
-import math
 import abc
-import numpy as np
-import os
-import re
-# import ibcc
-import csv
 import matplotlib.pyplot as plt
-import random
-import socket
-import warnings
-import scipy
-from shapely.geometry import Polygon
-# import panoptes_api
+import matplotlib.cbook as cbook
+
 
 
 def index(a, x):
@@ -40,19 +30,21 @@ def chunk_it(seq, num):
 
 # mappings are for use in dimension reduction
 def identity_mapping(markings):
+    print "identiy mapping"
     return markings
 
 
 class Cluster:
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self,shape,additional_params):
+    def __init__(self,shape,project,additional_params):
         """
         :param project_api: how to talk to whatever project we are clustering for (Panoptes/Ouroboros shouldn't matter)
         :param min_cluster_size: minimum number of points in a cluster to not be considered noise
         :return:
         """
         self.shape = shape
+
         if "reduction" in additional_params:
             self.dim_reduction_alg = additional_params["reduction"]
         else:
@@ -63,6 +55,7 @@ class Cluster:
         self.retired_lines_5 = 0
 
         self.stats = {}
+        self.project = project
 
 
     @abc.abstractmethod
@@ -99,15 +92,16 @@ class Cluster:
         # all_markings =  self.project_api.__get_markings__(subject_id,gold_standard)
         # print all_markings
         # self.clusterResults[subject_id] = {"param":"task_id"}
+        print "clustering " + self.shape
         for task_id in raw_markings:
-            # go through each shape independently
+            # go through each marking tool - multiple tools may use the desired shape tool
+            # so pay attention to only those markings
             for shape in raw_markings[task_id].keys():
-                # if is this shape does not correspond to the specific shape this clustering algorithm was
-                # created for - skip
                 if shape != self.shape:
                     continue
 
                 for subject_count,subject_id in enumerate(raw_markings[task_id][shape]):
+                    print subject_id
                     assert raw_markings[task_id][shape][subject_id] != []
 
                     # remove any "markings" which correspond to the user not making a marking
@@ -126,7 +120,11 @@ class Cluster:
                         reduced_markings = self.dim_reduction_alg(markings)
 
                         # do the actual clustering
-                        cluster_results,time_to_cluster = self.__cluster__(markings,users,tools,reduced_markings,image_dimensions[subject_id])
+                        fname = self.project.__image_setup__(subject_id)
+                        image_file = cbook.get_sample_data(fname)
+                        image = plt.imread(image_file)
+
+                        cluster_results,time_to_cluster = self.__cluster__(markings,users,tools,reduced_markings,image_dimensions[subject_id],image=image)
 
                     # store the results - note we need to store even for empty images
                     if subject_id not in aggregation:
