@@ -585,6 +585,16 @@ class TextCluster(clustering.Cluster):
         return aligned_nf_text_list
 
     def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,recusrive=False,image=None):
+        clusters = []
+        temp_markings = []
+        for x1,x2,y1,y2,text in markings:
+            if text == "":
+                continue
+            clusters.append([(x1,x2,y1,y2,self.__set_special_characters__(text)),])
+            temp_markings.append((x1,x2,y1,y2,text))
+
+        markings = temp_markings
+
         X1,X2,Y1,Y2,text = zip(*markings)
         m = np.asarray(zip(X1,X2,Y1,Y2))
         pca = PCA(n_components=3)
@@ -601,14 +611,13 @@ class TextCluster(clustering.Cluster):
             fig, ax = plt.subplots()
             im = ax.imshow(image)
         print "number of transcriptions : " + str(len(markings))
+        print "******\n******"
         marking_dict = {}
         for x1,x2,y1,y2,text in markings:
 
             # if "363" in text:
             #     print x1,x2,y1,y2,text
             plt.plot([x1,x2],[y1,y2],color="blue")
-            assert (x1,x2,y1,y2) not in marking_dict
-            marking_dict[(x1,x2,y1,y2)] = text
 
         plt.show()
 
@@ -620,8 +629,7 @@ class TextCluster(clustering.Cluster):
         end_clusters = []
 
 
-        clusters = [[(x1,x2,y1,y2,self.__set_special_characters__(text)),] for x1,x2,y1,y2,text in markings]#[[(x1,x2,y1,y2),] for (x1,x2,y1,y2) in zip(X1,X2,Y1,Y2)]
-        assert False
+        # assert False
         for i1,i2,dist,num_elements in linkage_matrix:
             i1 = int(i1)
             i2 = int(i2)
@@ -645,26 +653,30 @@ class TextCluster(clustering.Cluster):
                 level = []
                 for i,t in enumerate(text):
                     for t_2 in text[i+1:]:
-                        level.append(levenshtein(t,t_2))
+                        l = float(min(len(t),len(t_2)))
+                        level.append(levenshtein(t,t_2)/l)
                 print dist,level
                 print text
-                for a,b,c,d,e in temp_cluster:
-                    print marking_dict[(a,b,c,d)]
                 print
+                if max(level) > 0.6:
+                    end_clusters.append(clusters[i1])
+                    end_clusters.append(clusters[i2])
+                    clusters[i1] = None
+                    clusters[i2] = None
+                    clusters.append(None)
 
-                clusters.append(temp_cluster)
+                else:
+                    temp_cluster = clusters[i1]
+                    temp_cluster.extend(clusters[i2])
+                    clusters.append(temp_cluster)
+
 
             # elif dist < 40:
             #     temp_cluster = clusters[i1]
             #     temp_cluster.extend(clusters[i2])
             #     clusters.append(temp_cluster)
             # else:
-            #     end_clusters.append(clusters[i1])
-            #     end_clusters.append(clusters[i2])
-            #     clusters[i1] = None
-            #     clusters[i2] = None
-
-                # clusters.append(None)
+            #
         if clusters[-1] is not None:
             end_clusters.append(clusters[-1])
 
