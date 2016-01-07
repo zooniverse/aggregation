@@ -255,9 +255,9 @@ class QuadTree:
 
 
 class BlobClustering(clustering.Cluster):
-    def __init__(self,shape,additional_params):
+    def __init__(self,shape,project,additional_params):
         assert shape != "point"
-        clustering.Cluster.__init__(self,shape,additional_params)
+        clustering.Cluster.__init__(self,shape,project,additional_params)
         self.rectangle = (shape == "rectangle") or (shape == "image")
 
     def __fix_polygon__(self,points):
