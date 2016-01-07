@@ -1413,7 +1413,8 @@ class AggregationAPI:
 
         for i in range(20):
             try:
-                self.postgres_session = psycopg2.connect(details,autocommit=True)
+                self.postgres_session = psycopg2.connect(details)
+                self.postgres_session.autocommit = True
                 break
             except psycopg2.OperationalError as e:
                 print e
