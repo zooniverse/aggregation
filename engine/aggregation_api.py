@@ -305,7 +305,6 @@ class AggregationAPI:
             if survey_tasks == {}:
                 # do we have any marking tasks?
                 if marking_tasks != {}:
-                    print "clustering"
                     aggregations = self.__cluster__(used_shapes,raw_markings,image_dimensions)
                     # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
 
@@ -707,9 +706,6 @@ class AggregationAPI:
         # so self.only_retired_subjects would be False
         # but for printing out the json blobs, then we want only retired subjects - which
         # is where we set only_retired_subjects=True
-        print self.__is_project_live__()
-        print self.only_retired_subjects
-        print only_retired_subjects
         if self.__is_project_live__() and (self.only_retired_subjects or only_retired_subjects):
             print "selecting only subjects retired since last run"
             stmt = """ SELECT * FROM "subjects"
@@ -835,7 +831,7 @@ class AggregationAPI:
                                 except KeyError:
                                     print subtask
                                     raise
-                    elif task["type"] == "survey":
+                    elif task["type"] in ["survey","flexibleSurvey"]:
                         instructions[workflow_id][task_id]["species"] = {}
                         # print individual_workflow["tasks"].keys()
                         # print len(data["workflows"])
@@ -1484,7 +1480,7 @@ class AggregationAPI:
             elif task_type in ["single","multiple"]:
                 # multiple means that more than one response is allowed
                 classification_tasks[task_id] = tasks[task_id]["type"]
-            elif task_type == "survey":
+            elif task_type in ["survey","flexibleSurvey"]:
                 survey_tasks[task_id] = []
             else:
                 print tasks[task_id]
@@ -1823,7 +1819,7 @@ class AggregationAPI:
         generator for giving aggregation results per subject id/task
         """
 
-        stmt = "select subject_id,aggregation,updated_at from aggregations"# where workflow_id = " + str(workflow_id)
+        stmt = "select subject_id,aggregation,updated_at from aggregations where workflow_id = " + str(workflow_id)
         if subject_id != None:
             stmt += " and subject_id = " + str(subject_id)
         cursor = self.postgres_session.cursor()
