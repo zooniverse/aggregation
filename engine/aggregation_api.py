@@ -950,7 +950,7 @@ class AggregationAPI:
 
         if not(os.path.isfile(image_path)):
             if download:
-                print "downloading"
+                # print "downloading"
                 urllib.urlretrieve(url, image_path)
             # raise ImageNotDownloaded()
 
@@ -1070,15 +1070,6 @@ class AggregationAPI:
 
         for ii,t in enumerate(cur.fetchall()):
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,workflow_version,subject_id = t
-
-            # temp_string = json.dumps(annotations)
-            if len(annotations) > 1:
-                temp_ann = annotations[1]
-                if temp_ann["task"] == "T2":
-                    for ann in temp_ann["value"]:
-                        if ("text" in ann) and ("363" in ann["text"]):
-                            print subject_id,ann
-
 
             self.new_runtime = max(self.new_runtime,created_at)
 
