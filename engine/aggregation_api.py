@@ -763,6 +763,87 @@ class AggregationAPI:
         data = json.loads(body)
         return data
 
+    def __get_workflow_instructions__(self,task_dict):
+        # read in the instructions associated with the workflow
+        # not used for the actual aggregation but for printing out results to the user
+        instructions = {}
+        
+        for task_id,task in task_dict.items():
+            instructions[task_id] = {}
+            # classification task
+            if task["type"] in ["single","multiple"]:
+                question = task["question"]
+                instructions[task_id]["instruction"] = re.sub("'","",question)
+                instructions[task_id]["answers"] = {}
+                for answer_id,answer in enumerate(task["answers"]):
+                    label = answer["label"]
+                    label = re.sub("'","",label)
+                    instructions[task_id]["answers"][answer_id] = label
+
+            elif task["type"] == "drawing":
+                instruct_string = task["instruction"]
+                instructions[task_id]["instruction"] = re.sub("'","",instruct_string)
+
+                instructions[task_id]["tools"] = {}
+
+                # assert False
+                for tool_index,tool in enumerate(task["tools"]):
+                    instructions[task_id]["tools"][tool_index] = {}
+                    label = tool["label"]
+                    instructions[task_id]["tools"][tool_index]["marking tool"] = re.sub("'","",label)
+
+                    if ("details" in tool) and (tool["details"] != []):
+                        instructions[task_id]["tools"][tool_index]["followup_questions"] = {}
+
+                        try:
+                            for subtask_index,subtask in enumerate(tool["details"]):
+                                instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index] = {}
+
+                                # what kind of follow up question is this?
+                                # could be a multiple choice or could be a text field
+                                if "question" in subtask:
+                                    instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["type"] = "question"
+                                    instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["question"] = subtask["question"]
+                                    instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"] = {}
+                                    for answer_index,answers in enumerate(subtask["answers"]):
+                                        instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"][answer_index] = answers
+                                else:
+                                    # for now the only other type of follow up question is a text field
+                                    assert "type" in subtask
+                                    assert subtask["type"] == "text"
+                                    instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["type"] = "text"
+                        except KeyError:
+                            print subtask
+                            raise
+            elif task["type"] in ["survey","flexibleSurvey"]:
+                instructions[task_id]["species"] = {}
+                # print individual_workflow["tasks"].keys()
+                # print len(data["workflows"])
+                # print task["images"]
+                # assert False
+                for species in task["choices"]:
+                    label = task["choices"][species]["label"]
+                    instructions[task_id]["species"][species] = label
+
+                instructions[task_id]["questions"] = task["questions"]
+                instructions[task_id]["questionsOrder"] = task["questionsOrder"]
+
+                    # print task["choices"][species]
+
+                # instructions[workflow_id][task_id] = task
+                # print json.dumps(instructions[workflow_id][task_id],sort_keys=True,indent=4, separators=(',', ': '))
+                # print json.dumps(task["questions"],sort_keys=True,indent=4, separators=(',', ': '))
+                # print task.keys()
+                # print task["questionsOrder"]
+                # assert False
+
+            else:
+                print task["type"]
+                assert False
+
+        return instructions
+
+
     def __get_workflow_details__(self,given_workflow_id=None):
         """
         get everything about the workflows - if no id is provided, go with everything
@@ -777,100 +858,24 @@ class AggregationAPI:
         updated_at_timestamps = {}
         versions = {}
 
-
-
-        for individual_workflow in data["workflows"]:
-            workflow_id = int(individual_workflow["id"])
-            print "getting details for workflow id: " + str(workflow_id)
-
+        for workflow in data["workflows"]:
+            workflow_id = workflow["id"]
+            tasks = workflow["tasks"]
 
             if (given_workflow_id is None) or (workflow_id == given_workflow_id):
                 # read in the basic structure of the workflow
-                workflows[workflow_id] = self.__readin_tasks__(workflow_id)
+                workflows[workflow_id] = self.__readin_tasks__(tasks)
 
-                # read in the instructions associated with the workflow
-                # not used for the actual aggregation but for printing out results to the user
-                instructions[workflow_id] = {}
-                for task_id,task in individual_workflow["tasks"].items():
-                    instructions[workflow_id][task_id] = {}
-                    # classification task
-                    if task["type"] in ["single","multiple"]:
-                        question = task["question"]
-                        instructions[workflow_id][task_id]["instruction"] = re.sub("'","",question)
-                        instructions[workflow_id][task_id]["answers"] = {}
-                        for answer_id,answer in enumerate(task["answers"]):
-                            label = answer["label"]
-                            label = re.sub("'","",label)
-                            instructions[workflow_id][task_id]["answers"][answer_id] = label
-
-                    elif task["type"] == "drawing":
-                        instruct_string = task["instruction"]
-                        instructions[workflow_id][task_id]["instruction"] = re.sub("'","",instruct_string)
-
-                        instructions[workflow_id][task_id]["tools"] = {}
-
-                        # assert False
-                        for tool_index,tool in enumerate(task["tools"]):
-                            instructions[workflow_id][task_id]["tools"][tool_index] = {}
-                            label = tool["label"]
-                            instructions[workflow_id][task_id]["tools"][tool_index]["marking tool"] = re.sub("'","",label)
-
-                            if ("details" in tool) and (tool["details"] != []):
-                                instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"] = {}
-
-                                try:
-                                    for subtask_index,subtask in enumerate(tool["details"]):
-                                        instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index] = {}
-
-                                        # what kind of follow up question is this?
-                                        # could be a multiple choice or could be a text field
-                                        if "question" in subtask:
-                                            instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["type"] = "question"
-                                            instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["question"] = subtask["question"]
-                                            instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"] = {}
-                                            for answer_index,answers in enumerate(subtask["answers"]):
-                                                instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["answers"][answer_index] = answers
-                                        else:
-                                            # for now the only other type of follow up question is a text field
-                                            assert "type" in subtask
-                                            assert subtask["type"] == "text"
-                                            instructions[workflow_id][task_id]["tools"][tool_index]["followup_questions"][subtask_index]["type"] = "text"
-                                except KeyError:
-                                    print subtask
-                                    raise
-                    elif task["type"] in ["survey","flexibleSurvey"]:
-                        instructions[workflow_id][task_id]["species"] = {}
-                        # print individual_workflow["tasks"].keys()
-                        # print len(data["workflows"])
-                        # print task["images"]
-                        # assert False
-                        for species in task["choices"]:
-                            label = task["choices"][species]["label"]
-                            instructions[workflow_id][task_id]["species"][species] = label
-
-                        instructions[workflow_id][task_id]["questions"] = task["questions"]
-                        instructions[workflow_id][task_id]["questionsOrder"] = task["questionsOrder"]
-
-                            # print task["choices"][species]
-
-                        # instructions[workflow_id][task_id] = task
-                        # print json.dumps(instructions[workflow_id][task_id],sort_keys=True,indent=4, separators=(',', ': '))
-                        # print json.dumps(task["questions"],sort_keys=True,indent=4, separators=(',', ': '))
-                        # print task.keys()
-                        # print task["questionsOrder"]
-                        # assert False
-
-                    else:
-                        print task["type"]
-                        assert False
+                # and then the instructions - used for printing out csv files
+                instructions[workflow_id] = self.__get_workflow_instructions__(tasks)
 
                 # read in when the workflow last went through a major change
                 # real problems with subjects that were retired before that date or classifications
                 # given for a subject before that date (since the workflow may have changed completely)
-                updated_at_timestamps[workflow_id] = individual_workflow["updated_at"]
+                updated_at_timestamps[workflow_id] = workflow["updated_at"]
 
                 # get the MAJOR version number
-                versions[workflow_id] = int(math.floor(float(individual_workflow["version"])))
+                versions[workflow_id] = int(math.floor(float(workflow["version"])))
 
         return workflows,versions,instructions,updated_at_timestamps
 
@@ -1134,13 +1139,13 @@ class AggregationAPI:
 
 
 
-    def __panoptes_call__(self,url):
+    def __panoptes_call__(self,query):
         """
         for all the times we want to call the panoptes api
         :param url:
         :return:
         """
-        request = urllib2.Request(self.host_api+url)
+        request = urllib2.Request(self.host_api+query)
         request.add_header("Accept","application/vnd.api+json; version=1")
         # only add the token if we have a secure connection
         if self.token is not None:
@@ -1416,22 +1421,31 @@ class AggregationAPI:
 
         # cursor = self.postgres_session.cursor()
 
-    def __readin_tasks__(self,workflow_id):
+    def __readin_tasks__(self,tasks):
         """
         get the details for each task - for example, what tasks might we want to run clustering algorithms on
         and if so, what params related to that task are relevant
         :return:
         """
-        # get the tasks associated with the given workflow
-        select = "SELECT tasks from workflows where id = " + str(workflow_id)
-        cursor = self.postgres_session.cursor()
+        # tasks = self.__panoptes_call__("workflows/"+str(workflow_id)+"?")["workflows"][0]["tasks"]
 
-        cursor.execute(select)
-        self.postgres_session.commit()
-        try:
-            tasks = cursor.fetchone()[0]
-        except:
-            raise WorkflowNotfound(workflow_id)
+        # # get the tasks associated with the given workflow
+        # select = "SELECT tasks from workflows where id = " + str(workflow_id)
+        # cursor = self.postgres_session.cursor()
+        #
+        # cursor.execute(select)
+        # self.postgres_session.commit()
+        # try:
+        #     tasks = cursor.fetchone()[0]
+        # except:
+        #     raise WorkflowNotfound(workflow_id)
+        #
+        # print self.__panoptes_call__("workflows/"+str(workflow_id)+"?")["workflows"][0]
+        # assert False
+        #
+        # print tasks.keys()
+        # print panoptes_api_tasks.keys()
+
 
         # which of these tasks have classifications associated with them?
         classification_tasks = {}
