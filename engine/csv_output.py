@@ -7,6 +7,8 @@ import math
 import sys
 import shapely.geometry as geometry
 import unicodedata
+import helper_functions
+
 
 class CsvOut:
     def __init__(self,project):
@@ -61,7 +63,7 @@ class CsvOut:
 
     def __single_response_csv_header__(self,output_directory,id_,instructions):
         fname = str(id_) + instructions[:50]
-        fname = self.__csv_string__(fname)
+        fname = helper_functions.csv_string(fname)
         fname += ".csv"
 
         self.file_names[id_] = fname
@@ -72,7 +74,7 @@ class CsvOut:
 
     def __multi_response_csv_header__(self,output_directory,id_,instructions):
         fname = str(id_) + instructions[:50]
-        fname = self.__csv_string__(fname)
+        fname = helper_functions.csv_string(fname)
         fname += ".csv"
 
         self.file_names[(id_,"detailed")] = fname
@@ -80,7 +82,7 @@ class CsvOut:
 
         # and now the summary now
         fname = str(id_) + instructions[:50] + "_summary"
-        fname = self.__csv_string__(fname)
+        fname = helper_functions.csv_string(fname)
         fname += ".csv"
 
         self.file_names[(id_,"summary")] = fname
@@ -102,8 +104,14 @@ class CsvOut:
         self.csv_files = {}
 
         # now create a sub directory specific to the workflow
-        workflow_name = self.workflow_names[workflow_id]
-        workflow_name = self.__csv_string__(workflow_name)
+        try:
+            workflow_name = self.workflow_names[workflow_id]
+        except KeyError:
+            print self.workflows
+            print self.workflow_names
+            raise
+
+        workflow_name = helper_functions.csv_string(workflow_name)
         output_directory = "/tmp/"+str(self.project_id)+"/" +str(workflow_id) + "_" + workflow_name + "/"
 
         if not os.path.exists(output_directory):
@@ -160,9 +168,9 @@ class CsvOut:
                 row += str(cluster_index) + ","
             # todo - figure out if both choices are needed
             if isinstance(answers[int(candidate)],dict):
-                row += self.__csv_string__(answers[int(candidate)]["label"]) + "," + str(percent) + "," + str(num_users) + "\n"
+                row += helper_functions.csv_string(answers[int(candidate)]["label"]) + "," + str(percent) + "," + str(num_users) + "\n"
             else:
-                row += self.__csv_string__(answers[int(candidate)]) + "," + str(percent) + "," + str(num_users) + "\n"
+                row += helper_functions.csv_string(answers[int(candidate)]) + "," + str(percent) + "," + str(num_users) + "\n"
 
             self.csv_files[(task_id,"detailed")].write(row)
 
@@ -198,7 +206,7 @@ class CsvOut:
         # this corresponds to when the question is a follow up
         if isinstance(most_likely_label,dict):
             most_likely_label = most_likely_label["label"]
-        most_likely_label = self.__csv_string__(most_likely_label)
+        most_likely_label = helper_functions.csv_string(most_likely_label)
 
         probabilities = votes.values()
         entropy = self.__shannon_entropy__(probabilities)
@@ -264,7 +272,6 @@ class CsvOut:
             else:
                 answers = self.instructions[workflow_id][task_id]["answers"]
                 results = aggregations[task_id]
-                print "workflow id is " + str(workflow_id)
                 if task_type == "single":
                     answers = self.instructions[workflow_id][task_id]["answers"]
                     self.__single_choice_classification_row__(answers,task_id,subject_id,results)
@@ -318,14 +325,14 @@ class CsvOut:
                 elif "behaviour" in label:
                     stem = "behaviour:"
                 else:
-                    stem = self.__csv_string__(label)
+                    stem = helper_functions.csv_string(label)
 
                 for answer_id in instructions["questions"][followup_id]["answersOrder"]:
-                    header += "," + stem + self.__csv_string__(instructions["questions"][followup_id]["answers"][answer_id]["label"])
+                    header += "," + stem + helper_functions.csv_string(instructions["questions"][followup_id]["answers"][answer_id]["label"])
 
             else:
                 # we have a followup question with just one answer allowed
-                header += ","+ self.__csv_string__(instructions["questions"][followup_id]["label"]) + ",percentage"
+                header += ","+ helper_functions.csv_string(instructions["questions"][followup_id]["label"]) + ",percentage"
 
         self.csv_files[task_id].write(header+"\n")
 
@@ -344,8 +351,8 @@ class CsvOut:
             if species_id == "num_users":
                 continue
 
-            species_label = self.__csv_string__(self.instructions[workflow_id][task_id]["species"][species_id])
-            row = str(subject_id) + "," + str(aggregations["num_users"]) + "," + self.__csv_string__(species_label)
+            species_label = helper_functions.csv_string(self.instructions[workflow_id][task_id]["species"][species_id])
+            row = str(subject_id) + "," + str(aggregations["num_users"]) + "," + helper_functions.csv_string(species_label)
 
             for followup_id in self.instructions[workflow_id][task_id]["questionsOrder"]:
                 followup_question = self.instructions[workflow_id][task_id]["questions"][followup_id]
@@ -403,7 +410,7 @@ class CsvOut:
             tool_classification = cluster["tool_classification"][0].items()
             most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
             tool = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool)]["marking tool"]
-            tool = self.__csv_string__(tool)
+            tool = helper_functions.csv_string(tool)
 
             for polygon in cluster["center"]:
                 p = geometry.Polygon(polygon)
@@ -467,18 +474,7 @@ class CsvOut:
 
             return tar_file_path
 
-    def __csv_string__(self,string):
-        """
-        remove or replace all characters which might cause problems in a csv template
-        :param str:
-        :return:
-        """
-        if type(string) == unicode:
-            string = unicodedata.normalize('NFKD', string).encode('ascii','ignore')
-        string = re.sub(' ', '_', string)
-        string = re.sub(r'\W+', '', string)
 
-        return string
 
     def __marking_row__(self,workflow_id,task_id,subject_id,aggregations,shape):
         """
@@ -510,7 +506,7 @@ class CsvOut:
                 raise
             most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
             tool_str = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool)]["marking tool"]
-            row += self.__csv_string__(tool_str) + ","
+            row += helper_functions.csv_string(tool_str) + ","
 
             # get the central coordinates next
             for center_param in cluster["center"]:
@@ -639,7 +635,7 @@ class CsvOut:
         """
         for shape in shapes:
             fname = str(task_id) + self.instructions[workflow_id][task_id]["instruction"][:50]
-            fname = self.__csv_string__(fname)
+            fname = helper_functions.csv_string(fname)
             # fname += ".csv"
 
 
@@ -659,9 +655,8 @@ class CsvOut:
                 header = "subject_id,"
                 for tool_id in polygon_tools:
                     tool = self.instructions[workflow_id][task_id]["tools"][tool_id]["marking tool"]
-                    tool = self.__csv_string__(tool)
+                    tool = helper_functions.csv_string(tool)
                     header += "area("+tool+"),"
-                print header
                 self.csv_files[id_].write(header+"\n")
 
             else:
@@ -702,7 +697,7 @@ class CsvOut:
             found_shape = self.workflows[workflow_id][1][task_id][tool_id]
             if found_shape == shape:
                 tool_label = self.instructions[workflow_id][task_id]["tools"][tool_id]["marking tool"]
-                tool_label = self.__csv_string__(tool_label)
+                tool_label = helper_functions.csv_string(tool_label)
                 header += ",median(" + tool_label +")"
         header += ",mean_probability,median_probability,mean_tool,median_tool"
         self.csv_files[id_].write(header+"\n")

@@ -339,7 +339,7 @@ class BlobClustering(clustering.Cluster):
 
         return fixed_polygons
 
-    def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions):
+    def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions,subject_id):
         poly_dictionary = {}
         # the polygon dictionary will contain the "processed" polygons for each user along with that
         # polygon's type so the points stored for those polygons might not actually correspond to the users

@@ -50,16 +50,12 @@ class Cluster:
         else:
             self.dim_reduction_alg = identity_mapping
 
-        self.retired_lines_3 = 0
-        self.retired_lines_4 = 0
-        self.retired_lines_5 = 0
-
         self.stats = {}
         self.project = project
 
 
     @abc.abstractmethod
-    def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions):
+    def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions,subject_id):
         """
         the main function for clustering
         :param user_ids:
@@ -101,7 +97,9 @@ class Cluster:
                     continue
 
                 for subject_count,subject_id in enumerate(raw_markings[task_id][shape]):
-                    print subject_id
+
+                    # if subject_id not in [1278861]:
+                    #     continue
                     assert raw_markings[task_id][shape][subject_id] != []
 
                     # remove any "markings" which correspond to the user not making a marking
@@ -120,11 +118,11 @@ class Cluster:
                         reduced_markings = self.dim_reduction_alg(markings)
 
                         # do the actual clustering
-                        fname = self.project.__image_setup__(subject_id)
-                        image_file = cbook.get_sample_data(fname)
-                        image = plt.imread(image_file)
-
-                        cluster_results,time_to_cluster = self.__cluster__(markings,users,tools,reduced_markings,image_dimensions[subject_id],image=image)
+                        # fname = self.project.__image_setup__(subject_id)
+                        # image_file = cbook.get_sample_data(fname)
+                        # image = plt.imread(image_file)
+                        # print subject_id,
+                        cluster_results,time_to_cluster = self.__cluster__(markings,users,tools,reduced_markings,image_dimensions[subject_id],subject_id)
 
                     # store the results - note we need to store even for empty images
                     if subject_id not in aggregation:

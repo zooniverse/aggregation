@@ -29,7 +29,7 @@ from cassandra.cluster import Cluster
 from cassandra.concurrent import execute_concurrent
 import psycopg2
 import rollbar
-import marking_helpers
+import helper_functions
 
 
 
@@ -128,13 +128,13 @@ class AggregationAPI:
     def __setup_clustering_algs__(self):
         # functions for converting json instances into values we can actually cluster on
 
-        self.marking_params_per_shape["line"] = marking_helpers.relevant_line_params
-        self.marking_params_per_shape["point"] = marking_helpers.relevant_point_params
-        self.marking_params_per_shape["ellipse"] = marking_helpers.relevant_ellipse_params
-        self.marking_params_per_shape["rectangle"] = marking_helpers.relevant_rectangle_params
-        self.marking_params_per_shape["circle"] = marking_helpers.relevant_circle_params
-        self.marking_params_per_shape["polygon"] = marking_helpers.relevant_polygon_params
-        self.marking_params_per_shape["image"] = marking_helpers.relevant_rectangle_params
+        self.marking_params_per_shape["line"] = helper_functions.relevant_line_params
+        self.marking_params_per_shape["point"] = helper_functions.relevant_point_params
+        self.marking_params_per_shape["ellipse"] = helper_functions.relevant_ellipse_params
+        self.marking_params_per_shape["rectangle"] = helper_functions.relevant_rectangle_params
+        self.marking_params_per_shape["circle"] = helper_functions.relevant_circle_params
+        self.marking_params_per_shape["polygon"] = helper_functions.relevant_polygon_params
+        self.marking_params_per_shape["image"] = helper_functions.relevant_rectangle_params
 
         # load the default clustering algorithms
         self.default_clustering_algs = dict()
@@ -148,7 +148,7 @@ class AggregationAPI:
         self.default_clustering_algs["polygon"] = blob_clustering.BlobClustering
         self.default_clustering_algs["image"] = blob_clustering.BlobClustering
         # and set any reduction algorithms - to reduce the dimensionality of markings
-        self.additional_clustering_args = {"line": {"reduction":marking_helpers.hesse_line_reduction}}
+        self.additional_clustering_args = {"line": {"reduction":helper_functions.hesse_line_reduction}}
         # self.__set_clustering_algs__(default_clustering_algs,reduction_algs)
 
         self.cluster_algs = {}
@@ -707,7 +707,7 @@ class AggregationAPI:
         :return:
         """
         subjects = []
-
+        print 'finding subjects classified for workflow ' + str(workflow_id)
         # for tate/folger we want to aggregate subjects while they are alive (not retired)
         # so self.only_retired_subjects would be False
         # but for printing out the json blobs, then we want only retired subjects - which
@@ -746,8 +746,11 @@ class AggregationAPI:
 
                 if subjects == set():
                     print "no subjects found - maybe remove version filter"
+                    print "current workflow version " + str(int(self.versions[workflow_id]))
+                    print "workflow versions with classifications " + str(set([r.workflow_version for r in self.cassandra_session.execute(stmt)]))
             else:
                 subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt)])
+            print
 
         return list(subjects)
 
@@ -767,7 +770,7 @@ class AggregationAPI:
         # read in the instructions associated with the workflow
         # not used for the actual aggregation but for printing out results to the user
         instructions = {}
-        
+
         for task_id,task in task_dict.items():
             instructions[task_id] = {}
             # classification task
@@ -859,7 +862,7 @@ class AggregationAPI:
         versions = {}
 
         for workflow in data["workflows"]:
-            workflow_id = workflow["id"]
+            workflow_id = int(workflow["id"])
             tasks = workflow["tasks"]
 
             if (given_workflow_id is None) or (workflow_id == given_workflow_id):
@@ -1478,22 +1481,20 @@ class AggregationAPI:
                     # shape = ellipse, line, pt etc.
                     shape = tool["type"]
 
-                    # extract the label of the tool - this means that things don't have to ordered
-                    label = tool["label"]
-                    label_words = label.split(".")
-                    tool_id = int(label_words[2])
-
                     # are there any classification questions associated with this marking?
                     if ("details" in tool) and (tool["details"] is not None) and (tool["details"] != []):
+                        # extract the label of the tool - this means that things don't have to ordered
+                        label = helper_functions.csv_string(tool["label"])
+
                         # is this the first follow up question associated with this task?
                         if task_id not in classification_tasks:
                             classification_tasks[task_id] = {}
-                        classification_tasks[task_id][tool_id] = []
+                        classification_tasks[task_id][label] = []
 
                         # note whether each of these questions are single or multiple response
                         for followup_question in tool["details"]:
                             question_type = followup_question["type"]
-                            classification_tasks[task_id][tool_id].append(question_type)
+                            classification_tasks[task_id][label].append(question_type)
 
                     # if the tool is the one of the recognized ones, add it. Otherwise report an error
                     if tool["type"] in ["line","ellipse","point","circle","rectangle","polygon"]:
@@ -1662,7 +1663,7 @@ class AggregationAPI:
                         try:
                             # extract the params specifically relevant to the given shape
                             relevant_params = self.marking_params_per_shape[shape](marking,dimensions)
-                        except (marking_helpers.InvalidMarking,marking_helpers.EmptyPolygon,KeyError) as e:
+                        except (helper_functions.InvalidMarking,helper_functions.EmptyPolygon,KeyError) as e:
                             # badly formed marking - or the marking is slightly off the image
                             # either way - just skip it
                             continue

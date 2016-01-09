@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-import matplotlib
-matplotlib.use('WXAgg')
+# import matplotlib
+# matplotlib.use('WXAgg')
 from aggregation_api import AggregationAPI
-import marking_helpers
+import helper_functions
 from classification import Classification
 import clustering
 import pandas as pd
@@ -28,6 +28,50 @@ import botocore
 import matplotlib.pyplot as plt
 import scipy.cluster.hierarchy as hierarchy
 from sklearn.decomposition import PCA
+import math
+from shapely.geometry import Polygon
+
+def convex_hull(points):
+    """Computes the convex hull of a set of 2D points.
+
+    Input: an iterable sequence of (x, y) pairs representing the points.
+    Output: a list of vertices of the convex hull in counter-clockwise order,
+      starting from the vertex with the lexicographically smallest coordinates.
+    Implements Andrew's monotone chain algorithm. O(n log n) complexity.
+    """
+
+    # Sort the points lexicographically (tuples are compared lexicographically).
+    # Remove duplicates to detect the case we have just one unique point.
+    points = sorted(set(points))
+
+    # Boring case: no points or a single point, possibly repeated multiple times.
+    if len(points) <= 1:
+        return points
+
+    # 2D cross product of OA and OB vectors, i.e. z-component of their 3D cross product.
+    # Returns a positive value, if OAB makes a counter-clockwise turn,
+    # negative for clockwise turn, and zero if the points are collinear.
+    def cross(o, a, b):
+        return (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0])
+
+    # Build lower hull
+    lower = []
+    for p in points:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 0:
+            lower.pop()
+        lower.append(p)
+
+    # Build upper hull
+    upper = []
+    for p in reversed(points):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 0:
+            upper.pop()
+        upper.append(p)
+
+    # Concatenation of the lower and upper hulls gives the convex hull.
+    # Last point of each list is omitted because it is repeated at the beginning of the other list.
+    return lower[:-1] + upper[:-1]
+
 
 def levenshtein(s1, s2):
     if len(s1) < len(s2):
@@ -395,14 +439,16 @@ class TextCluster(clustering.Cluster):
 
         # text = text.replace("\u0018","")
         text = text.encode('ascii','ignore')
-        print text
+        # print text
         # first we need to replace each tag with a one character representation
         for chr_representation in sorted(self.tags.keys()):
             tag = self.tags[chr_representation]
-            print tag,chr_representation
+            # print tag,chr_representation
             text = re.sub(tag,chr(chr_representation),text)
-        print text
-        print
+            # print text
+        # print text
+        # print
+        # assert False
         # for tag,chr_representation in self.erroneous_tags.items():
         #     text = re.sub(tag,chr_representation,text)
 
@@ -584,23 +630,38 @@ class TextCluster(clustering.Cluster):
 
         return aligned_nf_text_list
 
-    def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,recusrive=False,image=None):
+    def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,recusrive=False,subject_id=None):
         clusters = []
         temp_markings = []
         for x1,x2,y1,y2,text in markings:
             if text == "":
                 continue
+
+            try:
+                tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
+                theta = math.atan(tan_theta)
+            except ZeroDivisionError:
+                theta = math.pi/2.
+
+            # if math.fabs(theta - math.pi/2.) < 0.2:
+            #     continue
+            # print theta
             clusters.append([(x1,x2,y1,y2,self.__set_special_characters__(text)),])
             temp_markings.append((x1,x2,y1,y2,text))
 
+
+
         markings = temp_markings
+        if markings == []:
+            print 0
+            return [],0
 
         X1,X2,Y1,Y2,text = zip(*markings)
         m = np.asarray(zip(X1,X2,Y1,Y2))
         pca = PCA(n_components=3)
         reduced_markings = pca.fit(m).transform(m)
-        print pca.explained_variance_ratio_
-        print sum(pca.explained_variance_ratio_)
+        # print pca.explained_variance_ratio_
+        # print sum(pca.explained_variance_ratio_)
 
         # for x1,x2,y1,y2,text in markings:
         #     print text
@@ -610,8 +671,8 @@ class TextCluster(clustering.Cluster):
         if image is not None:
             fig, ax = plt.subplots()
             im = ax.imshow(image)
-        print "number of transcriptions : " + str(len(markings))
-        print "******\n******"
+        # print "number of transcriptions : " + str(len(markings))
+        # print "******\n******"
         marking_dict = {}
         for x1,x2,y1,y2,text in markings:
 
@@ -620,6 +681,7 @@ class TextCluster(clustering.Cluster):
             plt.plot([x1,x2],[y1,y2],color="blue")
 
         plt.show()
+        # plt.close()
 
         X1,X2,Y1,Y2,text = zip(*markings)
         linkage_matrix = hierarchy.linkage(reduced_markings)
@@ -655,10 +717,10 @@ class TextCluster(clustering.Cluster):
                     for t_2 in text[i+1:]:
                         l = float(min(len(t),len(t_2)))
                         level.append(levenshtein(t,t_2)/l)
-                print dist,level
-                print text
-                print
-                if max(level) > 0.6:
+                # print dist,level
+                # print text
+                # print
+                if max(level) >= 0.5:
                     end_clusters.append(clusters[i1])
                     end_clusters.append(clusters[i2])
                     clusters[i1] = None
@@ -684,23 +746,42 @@ class TextCluster(clustering.Cluster):
             fig, ax = plt.subplots()
             im = ax.imshow(image)
 
-        print len(end_clusters)
+        # print len(end_clusters)
+        tot = 0
+        hull_list = []
         for c in end_clusters:
-            if len(c) == 1:
+            if len(c) <= 2:
                 continue
-            X1,X2,Y1,Y2,_ = zip(*c)
+            X1,X2,Y1,Y2,text = zip(*c)
+            # assert min([len(t) for t in text]) > 0
+            tot += np.median([len(t) for t in text])
 
-            x_min = min(min(X1),min(X2))
-            x_max = max(max(X1),max(X2))
-            y_min = min(min(Y1),min(Y2))
-            y_max = max(max(Y1),max(Y2))
-            plt.plot([x_min,x_max,x_max,x_min,x_min],[y_min,y_min,y_max,y_max,y_min])
+            X = list(X1)
+            X.extend(list(X2))
+            Y = list(Y1)
+            Y.extend(list(Y2))
+            hull = convex_hull(zip(X,Y))
+            hull_list.append(Polygon(hull))
+            h_x,h_y = zip(*hull)
+            h_x = list(h_x)
+            h_y = list(h_y)
+            h_x.append(h_x[0])
+            h_y.append(h_y[0])
+            plt.plot(h_x,h_y)
+            # print text
+
+            # x_min = min(min(X1),min(X2))
+            # x_max = max(max(X1),max(X2))
+            # y_min = min(min(Y1),min(Y2))
+            # y_max = max(max(Y1),max(Y2))
+            # plt.plot([x_min,x_max,x_max,x_min,x_min],[y_min,y_min,y_max,y_max,y_min])
 
 
 
 
         plt.show()
-
+        # plt.close()
+        print tot
 
         return [],0
         print "number of transcriptions : " + str(len(markings))
@@ -1011,13 +1092,13 @@ class TranscriptionAPI(AggregationAPI):
 
         self.instructions[workflow_id] = {}
 
-        self.marking_params_per_shape["text"] = marking_helpers.relevant_text_params
+        self.marking_params_per_shape["text"] = helper_functions.relevant_text_params
         # the code to cluster lines together
         # self.default_clustering_algs["text"] = TextCluster
         # self.default_clustering_algs["image"] = BlobClustering
 
         # set up the text clusering algorithm
-        additional_text_args = {"reduction":marking_helpers.text_line_reduction}
+        additional_text_args = {"reduction":helper_functions.text_line_reduction}
         # load in the tag file if there is one
 
         api_details = yaml.load(open("/app/config/aggregation.yml","rb"))

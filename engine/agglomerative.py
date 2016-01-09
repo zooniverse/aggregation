@@ -43,7 +43,7 @@ def text_line_mappings(line_segments):
 
 class Agglomerative(clustering.Cluster):
     def __init__(self,shape,additional_params):
-        clustering.Cluster.__init__(self,shape,additional_params)
+        clustering.Cluster.__init__(self,shape,None,additional_params)
         self.all_distances = []
         self.max = 0
 
@@ -69,7 +69,7 @@ class Agglomerative(clustering.Cluster):
     #
     #     return results
 
-    def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions):
+    def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,subject_id):
         """
         the actual clustering algorithm
         markings and user_ids should be the same length - a one to one mapping
@@ -109,7 +109,6 @@ class Agglomerative(clustering.Cluster):
 
         # use the results to build a tree representation
         # nodes = [LeafNode(pt,ii,user=user) for ii,(user,pt) in enumerate(zip(user_ids,markings))]
-        print tools
 
 
         results = [{"users":[u],"cluster members":[p],"tools":[t],"num users":1,"tool_classification":({t:1},-1)} for u,p,t in zip(user_ids,markings,tools)]
