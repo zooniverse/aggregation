@@ -2,7 +2,7 @@ __author__ = 'greg'
 import bisect
 import abc
 import matplotlib.pyplot as plt
-import matplotlib.cbook as cbook
+
 
 
 
@@ -97,8 +97,7 @@ class Cluster:
                     continue
 
                 for subject_count,subject_id in enumerate(raw_markings[task_id][shape]):
-
-                    # if subject_id not in [1278861]:
+                    # if subject_id not in [1278157]:
                     #     continue
                     assert raw_markings[task_id][shape][subject_id] != []
 
