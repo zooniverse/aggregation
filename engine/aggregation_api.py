@@ -1154,6 +1154,12 @@ class AggregationAPI:
         if self.token is not None:
             request.add_header("Authorization","Bearer "+self.token)
 
+        # todo - implement:
+        #         try:
+        #     urllib2.urlopen("http://example.com", timeout = 1)
+        # except urllib2.URLError, e:
+        #     raise MyException("There was an error: %r" % e)
+
         try:
             response = urllib2.urlopen(request)
         except urllib2.HTTPError as e:
