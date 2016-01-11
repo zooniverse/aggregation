@@ -30,6 +30,10 @@ import scipy.cluster.hierarchy as hierarchy
 from sklearn.decomposition import PCA
 import math
 from shapely.geometry import Polygon
+import matplotlib.cbook as cbook
+import tempfile
+import networkx
+from sympy import Point, Line
 
 def convex_hull(points):
     """Computes the convex hull of a set of 2D points.
@@ -320,37 +324,31 @@ class TextCluster(clustering.Cluster):
         if len(lines) == 1:
             return lines
 
-        # todo - try to remember why I give each output file an id
-        id_ = str(random.uniform(0,1))
+        aligned_text = []
+
 
         # with open(base_directory+"/Databases/transcribe"+id_+".fasta","wb") as f:
-        with open("/tmp/transcribe"+id_+".fasta","wb") as f:
+        with tempfile.NamedTemporaryFile(suffix=".fasta") as f_fasta, tempfile.NamedTemporaryFile() as f_out:
             for line in lines:
-                if isinstance(line,tuple):
-                    # we have a list of text segments which we should join together
-                    line = "".join(line)
-
-                # line = unicodedata.normalize('NFKD', line).encode('ascii','ignore')
-                # assert isinstance(line,str)
-
-                # for i in range(max_length-len(line)):
-                #     fasta_line += "-"
-
                 try:
-                    f.write(">\n"+line+"\n")
+                    f_fasta.write(">\n"+line+"\n")
+                    print ">\n"+line+"\n"
                 except UnicodeEncodeError:
                     print line
                     print unicodedata.normalize('NFKD', line).encode('ascii','ignore')
                     raise
+            f_fasta.flush()
+            # todo - play around with gap penalty --op 0.5
+            print f_fasta.name
+            print f_out.name
+            raw_input("hello")
+            t = "mafft  --text " + f_fasta.name + " > " + f_out.name + " 2> /dev/null"
+            print t
+            os.system(t)
 
-        # todo - play around with gap penalty --op 0.5
-        t = "mafft  --text /tmp/transcribe"+id_+".fasta> /tmp/transcribe"+id_+".out 2> /dev/null"
-        os.system(t)
 
-        aligned_text = []
-        with open("/tmp/transcribe"+id_+".out","rb") as f:
             cumulative_line = ""
-            for line in f.readlines():
+            for line in f_out.readlines():
                 if (line == ">\n"):
                     if (cumulative_line != ""):
                         aligned_text.append(cumulative_line)
@@ -362,9 +360,6 @@ class TextCluster(clustering.Cluster):
                 print lines
                 assert False
             aligned_text.append(cumulative_line)
-
-        os.remove("/tmp/transcribe"+id_+".fasta")
-        os.remove("/tmp/transcribe"+id_+".out")
 
         return aligned_text
 
@@ -428,6 +423,24 @@ class TextCluster(clustering.Cluster):
     #
     #     return agreement/float(len(text[0]))
 
+    def __process_tags__(self,text):
+        # the order of the keys matters - we need them to constant across all uses cases
+        # we could sort .items() but that would be a rather large statement
+        # replace each tag with a single non-standard ascii character (given by chr(num) for some number)
+        for chr_representation in sorted(self.tags.keys()):
+            tag = self.tags[chr_representation]
+
+            text = re.sub(tag,chr(chr_representation),text)
+
+        # get rid of some other random tags and commands that shouldn't be included at all
+        # todo - generalize
+        text = re.sub("<br>","",text)
+        text = re.sub("<font size=\"1\">","",text)
+        text = re.sub("</font>","",text)
+        text = re.sub("&nbsp","",text)
+
+        return text
+
     def __set_special_characters__(self,text):
         """
         use upper case letters to represent special characters which MAFFT cannot deal with
@@ -437,26 +450,19 @@ class TextCluster(clustering.Cluster):
         so going from lower_text to text, allows us to recover what the captialization should have been
         """
 
-        # text = text.replace("\u0018","")
+        # convert to ascii
         text = text.encode('ascii','ignore')
-        # print text
-        # first we need to replace each tag with a one character representation
-        for chr_representation in sorted(self.tags.keys()):
-            tag = self.tags[chr_representation]
-            # print tag,chr_representation
-            text = re.sub(tag,chr(chr_representation),text)
-            # print text
-        # print text
-        # print
-        # assert False
-        # for tag,chr_representation in self.erroneous_tags.items():
-        #     text = re.sub(tag,chr_representation,text)
 
-        # we can do this afterwards because non-alphabet characters are not affected by .lower
+        # convert all tags to a single character representation
+        text = self.__process_tags__(text)
+
+        # lower text is what we will give to MAFFT - it can contain upper case letters but those will
+        # all represent something special, e.g. a tag
         lower_text = text.lower()
 
-        # then record were each tag occurs
-        # tag_indices = {}
+        # for lower_text, every tag will be represented by "A" - MAFFT cannot handle characters with
+        # a value of greater than 127. To actually determine which characters we are talking about
+        # will have to refer to text
         new_lower_text = ""
         for char_index in range(len(lower_text)):
             if ord(lower_text[char_index]) > 127:
@@ -465,10 +471,6 @@ class TextCluster(clustering.Cluster):
             else:
                 new_lower_text += lower_text[char_index]
         lower_text = new_lower_text
-
-        lower_text = re.sub("<br>","",lower_text)
-        lower_text = re.sub("<font size=\"1\">","",lower_text)
-        lower_text = re.sub("</font>","",lower_text)
 
         # take care of other characters which MAFFT cannot handle
         # note that text contains the original characters
@@ -482,21 +484,7 @@ class TextCluster(clustering.Cluster):
         lower_text = re.sub("-","P",lower_text)
         lower_text = re.sub("\'","Q",lower_text)
 
-
-
-        # text = re.sub(" ",chr(160),text)
-        # text = re.sub("=",chr(161),text)
-        # text = re.sub("\*",chr(162),text)
-        # text = re.sub("\(",chr(163),text)
-        # text = re.sub("\)",chr(164),text)
-        # text = re.sub("<",chr(165),text)
-        # text = re.sub(">",chr(166),text)
-        # text = re.sub("-",chr(167),text)
-
-        # todo - find a way to fix this - stupid postgres/json
-        # text = re.sub(r'\'',chr(168),text)
-
-        return lower_text
+        return text,lower_text
 
     def __reset_special_characters__(self,text):
         """
@@ -630,7 +618,114 @@ class TextCluster(clustering.Cluster):
 
         return aligned_nf_text_list
 
-    def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,recusrive=False,subject_id=None):
+    def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,subject_id,recursive=False):
+        G = networkx.Graph()
+        G.add_nodes_from(range(len(markings)))
+
+        if subject_id is not None:
+            print subject_id
+            fname = self.project.__image_setup__(subject_id)
+            image_file = cbook.get_sample_data(fname)
+            image = plt.imread(image_file)
+
+
+
+
+        else:
+            image = None
+
+        print len(markings)
+
+        for m_i,(x1,x2,y1,y2,_) in enumerate(markings):
+            try:
+                tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
+                theta = math.atan(tan_theta)
+            except ZeroDivisionError:
+                theta = math.pi/2.
+
+            if math.fabs(theta) > 0.1:
+                continue
+
+            for m_i2,(x1_,x2_,y1_,y2_,_) in enumerate(markings):
+                try:
+                    tan_theta = math.fabs(y1_-y2_)/math.fabs(x1_-x2_)
+                    theta = math.atan(tan_theta)
+                except ZeroDivisionError:
+                    theta = math.pi/2.
+
+                if math.fabs(theta) > 0.1:
+                    continue
+                if m_i == m_i2:
+                    continue
+
+                slope = (y2_-y1_)/float(x2_-x1_)
+                inter = y2_ - slope*x2_
+
+                a = -slope
+                b = 1
+                c = -inter
+                # print a,b,c
+                dist_1 = math.fabs(a*x1+b*y1+c)/math.sqrt(a**2+b**2)
+                x = (b*(b*x1-a*y1)-a*c)/float(a**2+b**2)
+                # y = (a*(-b*x1+a*y1)-b*c)/float(a**2+b**2)
+
+                if x < x1_:
+                    x = x1_
+                    y = y1_
+                    dist_1 = math.sqrt((x-x1)**2+(y-y1)**2)
+                elif x > x2_:
+                    x = x2_
+                    y = y2_
+                    dist_1 = math.sqrt((x-x1)**2+(y-y1)**2)
+
+                dist_2 = math.fabs(a*x2+b*y2+c)/math.sqrt(a**2+b**2)
+                x = (b*(b*x2-a*y2)-a*c)/float(a**2+b**2)
+                # y = (a*(-b*x2+a*y2)-b*c)/float(a**2+b**2)
+
+                if x < x1_:
+                    x = x1_
+                    y = y1_
+                    dist_2 = math.sqrt((x-x2)**2+(y-y2)**2)
+                elif x > x2_:
+                    x = x2_
+                    y = y2_
+                    dist_2 = math.sqrt((x-x2)**2+(y-y2)**2)
+
+                if (dist_1+dist_2)/2. < 10:
+                    G.add_path([m_i,m_i2])
+
+        clusters = [c for c in list(networkx.connected_components(G)) if len(c) > 1]
+        colours = plt.cm.Spectral(np.linspace(0, 1, len(clusters)))
+        fig, ax = plt.subplots()
+        im = ax.imshow(image)
+        for c,col in zip(clusters,colours):
+            text_items = [self.__set_special_characters__(markings[i][-1]) for i in c]
+            original_items,lowercase_items = zip(*text_items)
+            # print text_items
+            aligned_text = self.__line_alignment__(lowercase_items)
+            for t in aligned_text:
+                print t
+
+            print "****"
+            for i in c:
+                x1,x2,y1,y2,t = markings[i]
+                plt.plot([x1,x2],[y1,y2],color=col)
+
+
+
+
+        y_dim,x_dim,_ = image.shape
+        plt.xlim((0,x_dim))
+        plt.ylim((y_dim,0))
+        plt.show()
+        # plt.savefig("/home/ggdhines/Databases/"+str(subject_id)+".png",bbox_inches='tight', pad_inches=0,dpi=72)
+        # plt.show()
+
+
+        # raw_input("hello world")
+        return [],0
+
+
         clusters = []
         temp_markings = []
         for x1,x2,y1,y2,text in markings:
@@ -643,13 +738,15 @@ class TextCluster(clustering.Cluster):
             except ZeroDivisionError:
                 theta = math.pi/2.
 
-            # if math.fabs(theta - math.pi/2.) < 0.2:
-            #     continue
+            if math.fabs(theta - math.pi/2.) < 0.2:
+                continue
             # print theta
             clusters.append([(x1,x2,y1,y2,self.__set_special_characters__(text)),])
             temp_markings.append((x1,x2,y1,y2,text))
 
+            plt.plot([x1,x2],[y1,y2],color="blue")
 
+        plt.show()
 
         markings = temp_markings
         if markings == []:
@@ -668,22 +765,10 @@ class TextCluster(clustering.Cluster):
         #     print self.__set_special_characters__(text)
         # assert False
 
-        if image is not None:
-            fig, ax = plt.subplots()
-            im = ax.imshow(image)
         # print "number of transcriptions : " + str(len(markings))
         # print "******\n******"
         marking_dict = {}
-        for x1,x2,y1,y2,text in markings:
 
-            # if "363" in text:
-            #     print x1,x2,y1,y2,text
-            plt.plot([x1,x2],[y1,y2],color="blue")
-
-        plt.show()
-        # plt.close()
-
-        X1,X2,Y1,Y2,text = zip(*markings)
         linkage_matrix = hierarchy.linkage(reduced_markings)
 
         num_clusters = 0
@@ -733,55 +818,120 @@ class TextCluster(clustering.Cluster):
                     clusters.append(temp_cluster)
 
 
-            # elif dist < 40:
-            #     temp_cluster = clusters[i1]
-            #     temp_cluster.extend(clusters[i2])
-            #     clusters.append(temp_cluster)
-            # else:
-            #
         if clusters[-1] is not None:
+            print
+            print "***"
             end_clusters.append(clusters[-1])
 
-        if image is not None:
-            fig, ax = plt.subplots()
-            im = ax.imshow(image)
-
-        # print len(end_clusters)
-        tot = 0
-        hull_list = []
-        for c in end_clusters:
-            if len(c) <= 2:
+        marking_dict = {}
+        for i,c in enumerate(end_clusters):
+            if len(c) <= 1:
                 continue
-            X1,X2,Y1,Y2,text = zip(*c)
-            # assert min([len(t) for t in text]) > 0
-            tot += np.median([len(t) for t in text])
+            for (x1,x2,y1,y2,_) in c:
+                marking_dict[(x1,x2,y1,y2)] = i
 
-            X = list(X1)
-            X.extend(list(X2))
-            Y = list(Y1)
-            Y.extend(list(Y2))
-            hull = convex_hull(zip(X,Y))
-            hull_list.append(Polygon(hull))
-            h_x,h_y = zip(*hull)
-            h_x = list(h_x)
-            h_y = list(h_y)
-            h_x.append(h_x[0])
-            h_y.append(h_y[0])
-            plt.plot(h_x,h_y)
-            # print text
-
-            # x_min = min(min(X1),min(X2))
-            # x_max = max(max(X1),max(X2))
-            # y_min = min(min(Y1),min(Y2))
-            # y_max = max(max(Y1),max(Y2))
-            # plt.plot([x_min,x_max,x_max,x_min,x_min],[y_min,y_min,y_max,y_max,y_min])
+        # print
+        # print end_clusters
+        # print marking_dict.keys()
+        # print
 
 
 
 
-        plt.show()
-        # plt.close()
-        print tot
+        print "***"
+        for x1,x2,y1,y2,text in markings:
+
+            if (x1,x2,y1,y2) not in marking_dict:
+                closest = None
+                min_dist = float("inf")
+                for c in end_clusters:
+                    if len(c) <= 1:
+                        continue
+                    X1,X2,Y1,Y2,_ = zip(*c)
+
+                    x_s = np.median(X1)
+                    x_e = np.median(X2)
+                    y_s = np.median(Y1)
+                    y_e = np.median(Y2)
+
+                    # p1 = Point(x_s,y_s)
+                    # p2 = Point(x_e,y_e)
+                    # s = Line(p1,p2)
+                    # # p3 = Point(x1,x2)
+                    # p3 = Point(x1,y1)
+                    # dist_1 = float(s.distance(p3))
+                    # # print dist_1
+
+                    slope = (y_e-y_s)/float(x_e-x_s)
+                    inter = y_e - slope*x_e
+
+                    # a,b,c = s.coefficients
+                    # print float(a/b),float(b/b),float(c/b)
+
+
+                    a = -slope
+                    b = 1
+                    c = -inter
+                    # print a,b,c
+                    dist_1 = math.fabs(a*x1+b*y1+c)/math.sqrt(a**2+b**2)
+                    # print dist_1
+                    # print
+                    dist_2 = math.fabs(a*x2+b*y2+c)/math.sqrt(a**2+b**2)
+
+                    # min_dist = min(min_dist,max( dist_1,dist_2))
+                    avg_dist =  (dist_1+dist_2)/2.
+                    # min_dist = min(min_dist,()
+                    if avg_dist < min_dist:
+                        min_dist = avg_dist
+                        closest = x_s,x_e,y_s,y_e
+                print min_dist
+                if min_dist < 60:
+                    fig, ax = plt.subplots()
+                    im = ax.imshow(image)
+                    # print closest[:2],closest[2:]
+                    # print [x1,x2],[y1,y2]
+                    plt.plot(closest[:2],closest[2:],color="yellow")
+                    plt.plot([x1,x2],[y1,y2],color="red")
+                    plt.show()
+        # if image is not None:
+        #     fig, ax = plt.subplots()
+        #     im = ax.imshow(image)
+
+        # # print len(end_clusters)
+        # tot = 0
+        # hull_list = []
+
+        #     if len(c) <= 1:
+        #         continue
+        #     X1,X2,Y1,Y2,text = zip(*c)
+        #     # assert min([len(t) for t in text]) > 0
+        #     tot += np.median([len(t) for t in text])
+        #
+        #     X = list(X1)
+        #     X.extend(list(X2))
+        #     Y = list(Y1)
+        #     Y.extend(list(Y2))
+        #     hull = convex_hull(zip(X,Y))
+        #     hull_list.append(Polygon(hull))
+        #     h_x,h_y = zip(*hull)
+        #     h_x = list(h_x)
+        #     h_y = list(h_y)
+        #     h_x.append(h_x[0])
+        #     h_y.append(h_y[0])
+        #     plt.plot(h_x,h_y)
+        #     # print text
+        #
+        #     # x_min = min(min(X1),min(X2))
+        #     # x_max = max(max(X1),max(X2))
+        #     # y_min = min(min(Y1),min(Y2))
+        #     # y_max = max(max(Y1),max(Y2))
+        #     # plt.plot([x_min,x_max,x_max,x_min,x_min],[y_min,y_min,y_max,y_max,y_min])
+
+        # for x1,x2,y1,y2,t in markings:
+
+
+
+        # plt.show()
 
         return [],0
         print "number of transcriptions : " + str(len(markings))
@@ -1332,6 +1482,7 @@ if __name__ == "__main__":
         project.__setup__()
         # project.__migrate__()
         print "done migrating"
+
         # project.__aggregate__(subject_set = [671541,663067,664482,662859])
         project.__aggregate__()
 
