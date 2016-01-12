@@ -123,7 +123,7 @@ class AggregationAPI:
 
         # default filters for which subjects we look at
         self.ignore_versions = False
-        self.only_retired_subjects = True
+        self.only_retired_subjects = False
 
     def __setup_clustering_algs__(self):
         # functions for converting json instances into values we can actually cluster on
@@ -194,12 +194,14 @@ class AggregationAPI:
         self.__postgres_connect__(environment_details)
 
         # connect to the Cassandra DB
-        self.__cassandra_connect__(environment_details["cassandra"])
+        # only if we have given the necessary param
+        if "cassandra" in environment_details:
+            self.__cassandra_connect__(environment_details["cassandra"])
 
-        # set the minimum date for classifications
-        self.__set_date_filters__(param_details)
+            # set the minimum date for classifications
+            self.__set_date_filters__(param_details)
 
-        print "we have already aggregated classifications up to: " + str(self.previous_runtime)
+            print "we have already aggregated classifications up to: " + str(self.previous_runtime)
 
         # use for Cassandra connection - can override for Ourboros projects
         self.classification_table = "classifications"
@@ -947,22 +949,26 @@ class AggregationAPI:
 
         data = self.__panoptes_call__("subjects/"+str(subject_id)+"?")
 
-        url = str(data["subjects"][0]["locations"][0]["image/jpeg"])
+        # url = str(data["subjects"][0]["locations"][0]["image/jpeg"])
 
-        slash_index = url.rfind("/")
-        fname = url[slash_index+1:]
-        url = "http://zooniverse-static.s3.amazonaws.com/panoptes-uploads.zooniverse.org/production/subject_location/"+url[slash_index+1:]
+        image_paths = []
+        for image in data["subjects"][0]["locations"]:
+            url = image["image/jpeg"]
 
+            slash_index = url.rfind("/")
+            fname = url[slash_index+1:]
+            url = "http://zooniverse-static.s3.amazonaws.com/panoptes-uploads.zooniverse.org/production/subject_location/"+url[slash_index+1:]
 
-        image_path = base_directory+"/Databases/images/"+fname
+            path = base_directory+"/Databases/images/"+fname
+            image_paths.append(path)
 
-        if not(os.path.isfile(image_path)):
-            if download:
-                # print "downloading"
-                urllib.urlretrieve(url, image_path)
-            # raise ImageNotDownloaded()
+            if not(os.path.isfile(path)):
+                if download:
+                    # print "downloading"
+                    urllib.urlretrieve(url, path)
+                # raise ImageNotDownloaded()
 
-        return image_path
+        return image_paths
 
     def __load_subjects__(self,workflow_id):
         """
