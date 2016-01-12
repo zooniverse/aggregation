@@ -13,8 +13,9 @@ with open("/tmp/764/1224_PreProduction_Workflow/initDoes_this_look_like_a_pulsar
 
     subjects.sort(key=lambda x:x[1])
 
-    for a,b,c in subjects:
-        s = project.__get_subject_metadata__(a)
-        m = s["subjects"][0]["metadata"]["CandidateFile"]
+    with open("/tmp/pulsars.csv","wb") as f:
+        for a,b,c in subjects:
+            s = project.__get_subject_metadata__(a)
+            m = s["subjects"][0]["metadata"]["CandidateFile"]
 
-        print a,b,c,"https://www.zooniverse.org/projects/zooniverse/pulsar-hunters/talk/subjects/"+a,m
+            f.write(str(a)+","+str(b)+","+str(c)+"," + "https://www.zooniverse.org/projects/zooniverse/pulsar-hunters/talk/subjects/"+a + "," + str(m) + "\n")
