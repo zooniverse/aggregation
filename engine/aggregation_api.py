@@ -1032,13 +1032,13 @@ class AggregationAPI:
 
         # uncomment this code if this is the first time you've run migration on whatever machine
         # will create the necessary cassandra tables for you - also useful if you need to reset
-        # try:
-        #     self.cassandra_session.execute("drop table classifications")
-        #     self.cassandra_session.execute("drop table subjects")
-        #     self.cassandra_session.execute("drop table most_recent")
-        #     print "tables dropped"
-        # except cassandra.InvalidRequest:
-        #     print "tables did not already exist"
+        try:
+            self.cassandra_session.execute("drop table classifications")
+            self.cassandra_session.execute("drop table subjects")
+            self.cassandra_session.execute("drop table most_recent")
+            print "tables dropped"
+        except cassandra.InvalidRequest:
+            print "tables did not already exist"
 
 
         try:
@@ -1062,6 +1062,7 @@ class AggregationAPI:
         # use >= just in case some classifications have the exact same time stamp - rare but could happen
         cur = self.postgres_session.cursor()
         select = "SELECT count(*) from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
+        print select
         cur.execute(select)
 
         print "going to migrate " + str(cur.fetchone()[0]) + " classifications"
@@ -1083,6 +1084,8 @@ class AggregationAPI:
         most_recent_classification = datetime.datetime(2000,1,1)
 
         for ii,t in enumerate(cur.fetchall()):
+            if ii % 10000 == 0:
+                print ii
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,workflow_version,subject_id = t
 
             self.new_runtime = max(self.new_runtime,created_at)
@@ -1116,7 +1119,14 @@ class AggregationAPI:
             subject_listing.add((project_id,workflow_id,workflow_version,subject_id))
 
             if len(statements_and_params) == 100:
-                results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
+
+                for i in range(10):
+                    try:
+                        results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
+                        break
+                    except cassandra.WriteTimeout:
+                        if i == 9:
+                            raise
                 # print results
                 statements_and_params = []
 
