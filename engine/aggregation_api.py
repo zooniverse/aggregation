@@ -761,7 +761,7 @@ class AggregationAPI:
         request = urllib2.Request(self.host_api+"subjects/"+str(subject_id)+"?")
         request.add_header("Accept","application/vnd.api+json; version=1")
         request.add_header("Authorization","Bearer "+self.token)
-
+        # print self.host_api+"subjects/"+str(subject_id)+"?"
         response = urllib2.urlopen(request)
         body = response.read()
 
@@ -1556,6 +1556,7 @@ class AggregationAPI:
         # use this one for figuring out the most recent classification read in
         # we need to use as our runtime value, not the clock (since classifications could still be coming in
         # if we used datetime.datetime.now() we might skip some classifications)
+        self.previous_runtime = datetime.datetime(2000,1,1)
         self.new_runtime = datetime.datetime(2000,1,1)
 
 
