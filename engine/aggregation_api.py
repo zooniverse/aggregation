@@ -1064,8 +1064,10 @@ class AggregationAPI:
         select = "SELECT count(*) from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
         print select
         cur.execute(select)
+        num_migrated = cur.fetchone()[0]
+        rollbar.report_message("migrating " + str(num_migrated) + " with command : " + select, 'info')
 
-        print "going to migrate " + str(cur.fetchone()[0]) + " classifications"
+        print "going to migrate " + str(num_migrated) + " classifications"
         select = "SELECT id,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,workflow_version, classification_subjects.subject_id from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
         # select = "SELECT * from classifications where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
 
