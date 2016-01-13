@@ -103,6 +103,7 @@ class AggregationAPI:
         self.public_panoptes_connection = public_panoptes_connection
 
         self.postgres_session = None
+        self.postgres_writeable_session = None
         self.cassandra_session = None
 
         # user id and password used to connect to the panoptes api
@@ -560,11 +561,11 @@ class AggregationAPI:
                 panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
             api_details = yaml.load(panoptes_file)
 
-            rollbar_token = api_details[self.environment]["rollbar"]
-            rollbar.init(rollbar_token,self.environment)
-            rollbar.report_exc_info()
+            # rollbar_token = api_details[self.environment]["rollbar"]
+            # rollbar.init(rollbar_token,self.environment)
+            # rollbar.report_exc_info()
 
-            self.postgres_session.rollback()
+            # self.postgres_session.rollback()
 
 
 
@@ -1168,7 +1169,7 @@ class AggregationAPI:
         # todo - get this to work. I've tired every combination I can think of
         # self.cassandra_session.execute("UPDATE most_recent SET classification=:ts WHERE project_id=:id;", dict(ts=most_recent_classification.isoformat(), id=self.project_id))
 
-        print self.new_runtime
+        # print self.new_runtime
 
 
 
@@ -1306,35 +1307,35 @@ class AggregationAPI:
                 print "trying to connect/init again again"
                 pass
 
-    def __panoptes_aggregation__(self):
-
-        # request = urllib2.Request(self.host_api+"aggregations?workflow_id="+str(2)+"&subject_id="+str(458021)+"&admin=true")
-        request = urllib2.Request(self.host_api+"aggregations?workflow_id="+str(2)+"&admin=true")
-        print self.host_api+"aggregations?workflow_id="+str(2)+",subject_id="+str(458021)
-        # request = urllib2.Request(self.host_api+"workflows/project_id="+str(self.project_id))
-        request.add_header("Accept","application/vnd.api+json; version=1")
-        request.add_header("Authorization","Bearer "+self.token)
-
-        # request
-        try:
-            response = urllib2.urlopen(request)
-        except urllib2.HTTPError as e:
-            sys.stderr.write('The server couldn\'t fulfill the request.\n')
-            sys.stderr.write('Error code: ' + str(e.code) + "\n")
-            sys.stderr.write('Error response body: ' + str(e.read()) + "\n")
-            raise
-        except urllib2.URLError as e:
-            sys.stderr.write('We failed to reach a server.\n')
-            sys.stderr.write('Reason: ' + str(e.reason) + "\n")
-            raise
-        else:
-            # everything is fine
-            body = response.read()
-
-        # put it in json structure and extract id
-        data = json.loads(body)
-
-        print data
+    # def __panoptes_aggregation__(self):
+    #
+    #     # request = urllib2.Request(self.host_api+"aggregations?workflow_id="+str(2)+"&subject_id="+str(458021)+"&admin=true")
+    #     request = urllib2.Request(self.host_api+"aggregations?workflow_id="+str(2)+"&admin=true")
+    #     print self.host_api+"aggregations?workflow_id="+str(2)+",subject_id="+str(458021)
+    #     # request = urllib2.Request(self.host_api+"workflows/project_id="+str(self.project_id))
+    #     request.add_header("Accept","application/vnd.api+json; version=1")
+    #     request.add_header("Authorization","Bearer "+self.token)
+    #
+    #     # request
+    #     try:
+    #         response = urllib2.urlopen(request)
+    #     except urllib2.HTTPError as e:
+    #         sys.stderr.write('The server couldn\'t fulfill the request.\n')
+    #         sys.stderr.write('Error code: ' + str(e.code) + "\n")
+    #         sys.stderr.write('Error response body: ' + str(e.read()) + "\n")
+    #         raise
+    #     except urllib2.URLError as e:
+    #         sys.stderr.write('We failed to reach a server.\n')
+    #         sys.stderr.write('Reason: ' + str(e.reason) + "\n")
+    #         raise
+    #     else:
+    #         # everything is fine
+    #         body = response.read()
+    #
+    #     # put it in json structure and extract id
+    #     data = json.loads(body)
+    #
+    #     # print data
 
 
     def __plot_image__(self,subject_id,axes):
@@ -1458,7 +1459,39 @@ class AggregationAPI:
         if self.postgres_session is None:
             raise psycopg2.OperationalError()
 
-        # cursor = self.postgres_session.cursor()
+        if "writeable_postgres_host" in database_details:
+            details = ""
+            details += "host ='" + database_details["writeable_postgres_host"] + "' "
+
+            # sometimes I'll want to write to my personal computer but read from somewhere else
+            # mainly just for SGL stuff
+            if "writeable_postgres_username" in database_details:
+                details += " dbname = '" +database_details["writeable_postgres_db"] +"' "
+                details += " user = '" + database_details["writeable_postgres_username"] + "' "
+                details += " password = '"+database_details["writeable_postgres_password"]+"' "
+            else:
+                details += " dbname = '" +database_details["postgres_db"] +"' "
+                details += " user = '" + database_details["postgres_username"] + "' "
+                details += " password = '"+database_details["postgres_password"]+"' "
+
+            print "the writeable postgres db is: " + database_details["writeable_postgres_host"]
+
+            # print details
+
+            for i in range(20):
+                try:
+                    self.postgres_writeable_session = psycopg2.connect(details)
+                    self.postgres_writeable_session.autocommit = True
+                    break
+                except psycopg2.OperationalError as e:
+                    print e
+                    pass
+
+            if self.postgres_writeable_session is None:
+                raise psycopg2.OperationalError()
+        else:
+            self.postgres_writeable_session = self.postgres_session
+            print "using the same postgres db session to read and write to - hopefully this means development environment"
 
     def __readin_tasks__(self,tasks):
         """
@@ -1813,6 +1846,9 @@ class AggregationAPI:
         """
         postgres_cursor = self.postgres_writeable_session.cursor()
 
+        # if (workflow_id == 1224) and (self.environment == "production"):
+        #     return
+
         try:
             postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation jsonb)")
         except psycopg2.ProgrammingError as e:
@@ -1828,10 +1864,11 @@ class AggregationAPI:
         try:
             postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
             r = [i[0] for i in postgres_cursor.fetchall()]
-        except psycopg2.ProgrammingError:
+        except psycopg2.ProgrammingError as e:
+            print e
             self.postgres_session.rollback()
             postgres_cursor = self.postgres_writeable_session.cursor()
-            postgres_cursor.execute("create table aggregations(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation json,created_at timestamp, updated_at timestamp)")
+            # postgres_cursor.execute("create table aggregations(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation json,created_at timestamp, updated_at timestamp)")
             r = []
 
         update_str = ""
@@ -1914,8 +1951,8 @@ if __name__ == "__main__":
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
         project.__setup__()
-        project.__migrate__()
-        project.__aggregate__()
+        # project.__migrate__()
+        # project.__aggregate__()
 
         with csv_output.CsvOut(project) as c:
             c.__write_out__()
