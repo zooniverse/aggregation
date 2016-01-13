@@ -1065,6 +1065,15 @@ class AggregationAPI:
         print select
         cur.execute(select)
         num_migrated = cur.fetchone()[0]
+
+        try:
+            panoptes_file = open("/app/config/aggregation.yml","rb")
+        except IOError:
+            panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
+        api_details = yaml.load(panoptes_file)
+
+        rollbar_token = api_details[self.environment]["rollbar"]
+        rollbar.init(rollbar_token,self.environment)
         rollbar.report_message("migrating " + str(num_migrated) + " with command : " + select, 'info')
 
         print "going to migrate " + str(num_migrated) + " classifications"
