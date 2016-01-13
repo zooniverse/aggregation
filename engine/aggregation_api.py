@@ -1037,7 +1037,7 @@ class AggregationAPI:
             self.cassandra_session.execute("drop table subjects")
             self.cassandra_session.execute("drop table most_recent")
             print "tables dropped"
-        except cassandra.InvalidRequest:
+        except cassandra.InvalidRequest,cassandra.protocol.ServerError:
             print "tables did not already exist"
 
 
