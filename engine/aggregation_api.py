@@ -1061,7 +1061,7 @@ class AggregationAPI:
         # only migrate classifications created since we last ran this code
         # use >= just in case some classifications have the exact same time stamp - rare but could happen
         cur = self.postgres_session.cursor()
-        select = "SELECT count(*) from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
+        select = "SELECT count(*) from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)#+ " and created_at >= '" + str(self.previous_runtime) +"'"
         print select
         cur.execute(select)
         num_migrated = cur.fetchone()[0]
@@ -1077,7 +1077,7 @@ class AggregationAPI:
         rollbar.report_message("migrating " + str(num_migrated) + " with command : " + select, 'info')
 
         print "going to migrate " + str(num_migrated) + " classifications"
-        select = "SELECT id,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,workflow_version, classification_subjects.subject_id from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
+        select = "SELECT id,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,workflow_version, classification_subjects.subject_id from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)#+ " and created_at >= '" + str(self.previous_runtime) +"'"
         # select = "SELECT * from classifications where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
 
         cur.execute(select)
@@ -1098,6 +1098,9 @@ class AggregationAPI:
             if ii % 10000 == 0:
                 print ii
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,workflow_version,subject_id = t
+
+            if created_at < self.previous_runtime:
+                continue
 
             self.new_runtime = max(self.new_runtime,created_at)
 
@@ -1808,7 +1811,7 @@ class AggregationAPI:
         :param aggregations:
         :return:
         """
-        postgres_cursor = self.postgres_session.cursor()
+        postgres_cursor = self.postgres_writeable_session.cursor()
 
         try:
             postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation jsonb)")
@@ -1817,7 +1820,7 @@ class AggregationAPI:
             # todo - need to reset the connection
             print "temporary table already exists - huh"
             self.postgres_session.rollback()
-            postgres_cursor = self.postgres_session.cursor()
+            postgres_cursor = self.postgres_writeable_session.cursor()
             postgres_cursor.execute("truncate table newvals")
             self.postgres_session.commit()
 
@@ -1827,7 +1830,7 @@ class AggregationAPI:
             r = [i[0] for i in postgres_cursor.fetchall()]
         except psycopg2.ProgrammingError:
             self.postgres_session.rollback()
-            postgres_cursor = self.postgres_session.cursor()
+            postgres_cursor = self.postgres_writeable_session.cursor()
             postgres_cursor.execute("create table aggregations(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation json,created_at timestamp, updated_at timestamp)")
             r = []
 
@@ -1871,7 +1874,7 @@ class AggregationAPI:
         if insert_str != "":
             print "inserting " + str(insert_counter) + " subjects"
             postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
-        self.postgres_session.commit()
+        self.postgres_writeable_session.commit()
 
     def __yield_aggregations__(self,workflow_id,subject_id=None):
         """
