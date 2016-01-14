@@ -199,11 +199,6 @@ class AggregationAPI:
         if "cassandra" in environment_details:
             self.__cassandra_connect__(environment_details["cassandra"])
 
-            # set the minimum date for classifications
-            self.__set_date_filters__(param_details)
-
-            print "we have already aggregated classifications up to: " + str(self.previous_runtime)
-
         # use for Cassandra connection - can override for Ourboros projects
         self.classification_table = "classifications"
 
@@ -715,6 +710,9 @@ class AggregationAPI:
         # so self.only_retired_subjects would be False
         # but for printing out the json blobs, then we want only retired subjects - which
         # is where we set only_retired_subjects=True
+
+        self.previous_runtime = datetime.datetime(2000,1,1)
+
         if self.__is_project_live__() and (self.only_retired_subjects or only_retired_subjects):
             print "selecting only subjects retired since last run"
             stmt = """ SELECT * FROM "subjects"
@@ -1042,12 +1040,13 @@ class AggregationAPI:
             print "tables did not already exist"
 
 
-        try:
-            self.cassandra_session.execute("CREATE TABLE most_recent (project_id int, classification timestamp, PRIMARY KEY(project_id))")
-        except cassandra.AlreadyExists:
-            pass
+        # try:
+        #     self.cassandra_session.execute("CREATE TABLE most_recent (project_id int, classification timestamp, PRIMARY KEY(project_id))")
+        # except cassandra.AlreadyExists:
+        #     pass
 
         try:
+            # self.cassandra_session.execute("CREATE TABLE classifications( classification_id, project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(classification_id, project_id,workflow_id,subject_id,workflow_version,user_ip,user_id,created_at) ) WITH CLUSTERING ORDER BY (project_id ASC,workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC,created_at ASC);")
             self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id,created_at) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC,created_at ASC);")
         except cassandra.AlreadyExists:
             pass
@@ -1100,8 +1099,8 @@ class AggregationAPI:
                 print ii
             id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,workflow_version,subject_id = t
 
-            if created_at < self.previous_runtime:
-                continue
+            # if created_at < self.previous_runtime:
+            #     continue
 
             self.new_runtime = max(self.new_runtime,created_at)
 
@@ -1588,33 +1587,33 @@ class AggregationAPI:
         self.classification_alg = alg(self.environment,params)
         assert isinstance(self.classification_alg,classification.Classification)
 
-    def __set_date_filters__(self,param_details):
-        # check to see when the last time we ran the aggregation engine for this project -
-        # if this query fails for whatever reason fall back to 2000,1,1
-        self.previous_runtime = datetime.datetime(2000,1,1)
-
-        try:
-            r = self.cassandra_session.execute("select classification from most_recent where project_id = " + str(self.project_id))
-            if r != []:
-                print "found date from previous aggregation"
-                self.previous_runtime = r[0].classification
-        except:
-            print "could not find most_recent classification - falling back on default"
-
-        # check if we there is a minimum date given in the aggregation yml file
-        # this is for when we know that there are problems with a certain range of classifications and want
-        # to exclude them - not going to happen often
-        if (self.project_id in param_details) and ("default_date" in param_details[self.project_id]):
-            time_string = param_details[self.project_id]["default_date"]
-            # don't know if this conversion is needed, but playing it safe
-            minimum_time = parser.parse(time_string)
-            self.previous_runtime = max(self.previous_runtime,minimum_time)
-
-        # use this one for figuring out the most recent classification read in
-        # we need to use as our runtime value, not the clock (since classifications could still be coming in
-        # if we used datetime.datetime.now() we might skip some classifications)
-        self.previous_runtime = datetime.datetime(2000,1,1)
-        self.new_runtime = datetime.datetime(2000,1,1)
+    # def __set_date_filters__(self,param_details):
+    #     # check to see when the last time we ran the aggregation engine for this project -
+    #     # if this query fails for whatever reason fall back to 2000,1,1
+    #     self.previous_runtime = datetime.datetime(2000,1,1)
+    #
+    #     try:
+    #         r = self.cassandra_session.execute("select classification from most_recent where project_id = " + str(self.project_id))
+    #         if r != []:
+    #             print "found date from previous aggregation"
+    #             self.previous_runtime = r[0].classification
+    #     except:
+    #         print "could not find most_recent classification - falling back on default"
+    #
+    #     # check if we there is a minimum date given in the aggregation yml file
+    #     # this is for when we know that there are problems with a certain range of classifications and want
+    #     # to exclude them - not going to happen often
+    #     if (self.project_id in param_details) and ("default_date" in param_details[self.project_id]):
+    #         time_string = param_details[self.project_id]["default_date"]
+    #         # don't know if this conversion is needed, but playing it safe
+    #         minimum_time = parser.parse(time_string)
+    #         self.previous_runtime = max(self.previous_runtime,minimum_time)
+    #
+    #     # use this one for figuring out the most recent classification read in
+    #     # we need to use as our runtime value, not the clock (since classifications could still be coming in
+    #     # if we used datetime.datetime.now() we might skip some classifications)
+    #     self.previous_runtime = datetime.datetime(2000,1,1)
+    #     self.new_runtime = datetime.datetime(2000,1,1)
 
 
     def __set_survey_alg__(self,alg,params={}):
@@ -1951,8 +1950,8 @@ if __name__ == "__main__":
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
         project.__setup__()
-        # project.__migrate__()
-        # project.__aggregate__()
+        project.__migrate__()
+        project.__aggregate__()
 
         with csv_output.CsvOut(project) as c:
             c.__write_out__()
