@@ -3,6 +3,15 @@ import csv
 from aggregation_api import AggregationAPI
 import json
 
+old_subjects = []
+
+with open("/home/ggdhines/764/1224_PreProduction_Workflow/initDoes_this_look_like_a_pulsar.csv","rb") as old_subject_file:
+    reader = csv.reader(old_subject_file)
+
+    for row in reader:
+        old_subjects.append(int(row[0]))
+
+
 with open("/home/ggdhines/Downloads/tmp/764/1224_PreProduction_Workflow/initDoes_this_look_like_a_pulsar.csv","rb")as infile, open("/home/ggdhines/Downloads/dab0480f-1e81-4e2d-8403-e7cd81899a58.csv","rb") as subject_file:
     reader = csv.reader(infile)
     next(reader, None)
@@ -38,6 +47,10 @@ with open("/home/ggdhines/Downloads/tmp/764/1224_PreProduction_Workflow/initDoes
             # s = project.__get_subject_metadata__(a)
             if int(a) not in metadata:
                 continue
+
+            if int(a) in old_subjects:
+                continue
+
             m = metadata[int(a)]["CandidateFile"]
             if "#Class" in metadata[int(a)]:
                 print "skipping"
