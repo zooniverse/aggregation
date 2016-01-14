@@ -1102,7 +1102,7 @@ class AggregationAPI:
             # if created_at < self.previous_runtime:
             #     continue
 
-            self.new_runtime = max(self.new_runtime,created_at)
+            # self.new_runtime = max(self.new_runtime,created_at)
 
             most_recent_classification = max(most_recent_classification,updated_at)
 
