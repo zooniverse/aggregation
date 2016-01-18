@@ -79,12 +79,11 @@ def relevant_rectangle_params(marking,image_dimensions):
     if min(x,y,x2,y2) < 0:
         raise InvalidMarking(marking)
 
-
     if (float(marking["width"]) == 0) or (float(marking["height"]) == 0):
         raise EmptyPolygon()
 
     if (image_dimensions is not None) and (image_dimensions != (None,None)):
-        if(x2 > image_dimensions[0]) or(y2>image_dimensions[1]):
+        if(x2 > image_dimensions[1]) or(y2>image_dimensions[0]):
             raise InvalidMarking(marking)
 
     return (x,y),(x,y2),(x2,y2),(x2,y)
