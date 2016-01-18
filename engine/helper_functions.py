@@ -102,6 +102,31 @@ def relevant_polygon_params(marking,image_dimensions):
     return tuple([(p["x"],p["y"]) for p in points])
 
 
+def relevant_bezier_params(marking,image_dimensions):
+    points = marking["points"]
+    output = [(points[0]["x"], points[0]["y"])]
+    def get_points_along_curve(pStart, pControl, pEnd, output):
+        # t is position along curve, add more to get better approximation
+        # this splits each segment into 5 straight lines
+        for t in [0.2, 0.4, 0.6, 0.8, 1]:
+            x = (1 - t) * (1 - t) * pStart["x"] + 2 * (1 - t) * t * pControl["x"] + t * t * pEnd["x"]
+            y = (1 - t) * (1 - t) * pStart["y"] + 2 * (1 - t) * t * pControl["y"] + t * t * pEnd["y"]
+            output.append((x, y))
+    N = len(points)
+    for idx in range(0, N, 2):
+        # check if closed automatically (odd length to points) and add in the final point
+        if idx+1 == N:
+            output.append((points[idx + 1]["x"], points[idx + 1]["y"]))
+        # check if this is the last segment and close with the first point
+        elif idx+2 == N:
+            get_points_along_curve(points[idx], points[idx + 1], points[0], output)
+            # don't duplicate the inital point
+            output = output[:-1]
+        else:
+            get_points_along_curve(points[idx], points[idx + 1], points[idx + 2], output)
+    return output
+
+
 def hesse_line_reduction(line_segments):
     """
     use if we want to cluster based on Hesse normal form - but want to retain the original values
