@@ -18,7 +18,7 @@ def nCr(n,r):
 
 
 class QuadTree:
-    def __init__(self,((lb_x,lb_y),(ub_x,ub_y)),parent=None):
+    def __init__(self,((lb_x,lb_y),(ub_x,ub_y)),total_users=None,parent=None):
         self.lb_x = lb_x
         self.ub_x = ub_x
         self.lb_y = lb_y
@@ -35,9 +35,15 @@ class QuadTree:
             raise
 
         self.user_ids = []
+        if parent is None:
+            self.total_users = total_users
+        else:
+            self.total_users = parent.total_users
+
+        assert self.total_users is not None
 
     def __get_splits__(self):
-        if (self.bounding_box.area < 5000) or (len(self.polygons) < 8):
+        if (self.bounding_box.area < 500) or (len(self.polygons) < 3):
             return []
 
         complete_agreement = 0
@@ -79,10 +85,17 @@ class QuadTree:
         upper_left = (self.lb_x,self.lb_y+new_height),(self.lb_x+new_width,self.ub_y)
         upper_right = (self.lb_x+new_width,self.lb_y+new_height),(self.ub_x,self.ub_y)
 
-        self.children = [QuadTree(lower_left,self) ,QuadTree(lower_right,self),QuadTree(upper_left,self),QuadTree(upper_right,self)]
+        self.children = []
+        for coords in [lower_left,lower_right,upper_left,upper_right]:
+            self.children.append(QuadTree(coords,parent=self))
+        # self.children = [QuadTree(lower_left,self) ,QuadTree(lower_right,self),QuadTree(upper_left,self),QuadTree(upper_right,self)]
+
         for c in self.children:
             assert isinstance(c,QuadTree)
             assert math.fabs((c.bounding_box.area - self.bounding_box.area/4.) < 0.0001)
+
+            for user,(poly,poly_type) in self.__poly_iteration__():
+                c.__add_polygon__(user,poly,poly_type)
 
         return self.children
 
@@ -102,10 +115,15 @@ class QuadTree:
         """
         total_area is needed for calculating the "noise" area
         :param total_area:
-        :return:
+        return_polygons,return_stats,total_incorrect_area,total_polygons_user_density
+        :return return_polygons: the actual polygons
+        :return return_stats: some basic stats about the polygons
+        :return total_incorrect_area:
         """
+        # we have reached a base case
         if self.children is None:
-            if len(self.polygons) >= 1:
+            # at least one person marked a polygon in this area
+            if len(self.polygons) >= (self.total_users*0.75):
                 # what is the majority vote for what type of "kind" this box outlines
                 # for example, some people might say broad leave tree while others say it is a needle leaf tree
                 # technically speaking, people could outline this region with different polygons
@@ -155,6 +173,7 @@ class QuadTree:
                         return {},{},combined_polygon.area,{}
                     else:
                         return {},{},self.bounding_box.area,{}
+        # else get the results from each child and aggregate the results together
         else:
             return_polygons = {}
             return_stats = {}
@@ -206,7 +225,7 @@ class QuadTree:
 
                 assert not isinstance(return_polygons[tool_id],list)
 
-            if self.parent == None:
+            if self.parent is None:
                 for u in total_polygons_user_density:
                     total_polygons_user_density[u] = cascaded_union(total_polygons_user_density[u])
 
@@ -399,31 +418,25 @@ class BlobClustering(clustering.Cluster):
             box = [[0,0],[dimensions[1],0],[dimensions[1],dimensions[0]],[0,dimensions[1]]]
             image_area = dimensions[0]*dimensions[1]
 
-        quad_root = QuadTree((box[0],box[2]))
+        self.quad_root = QuadTree((box[0],box[2]),len(user_ids))
 
         for user,polygon_list in poly_dictionary.items():
             for polygon,poly_type,index in polygon_list:
-                quad_root.__add_polygon__(user,polygon,poly_type)
+                self.quad_root.__add_polygon__(user,polygon,poly_type)
 
-        to_process = [quad_root]
+        to_process = [self.quad_root]
 
         # do a depth first traversal of the tree to populate each of the nodes
         while to_process != []:
             node = to_process.pop(-1)
             assert isinstance(node,QuadTree)
 
-            # if (we have parent =>  !the root) => need to read in parent's polygons
-            # some of which will become ours
-            if node.parent is not None:
-                for user,(poly,poly_type) in node.parent.__poly_iteration__():
-                    node.__add_polygon__(user,poly,poly_type)
-
             new_children = node.__get_splits__()
 
             to_process.extend(new_children)
 
         # now get the results - start from the root node
-        aggregate_polygons,aggregate_stats,total_incorrect_area,polygons_by_user_density = quad_root.__aggregate__(image_area)
+        aggregate_polygons,aggregate_stats,total_incorrect_area,polygons_by_user_density = self.quad_root.__aggregate__(image_area)
 
         for tool_id in aggregate_stats:
             vote_percentage,tool_area = aggregate_stats[tool_id]
