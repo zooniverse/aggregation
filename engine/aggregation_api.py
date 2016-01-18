@@ -1622,6 +1622,104 @@ class AggregationAPI:
         self.survey_alg = alg(self.environment,params)
         assert isinstance(self.survey_alg,classification.Classification)
 
+    def __add_markings_annotations__(self,subject_id,workflow_id,task_id,user_id,task_value,raw_markings,raw_classifications,marking_tasks,classification_tasks,dimensions):
+        # if this is the first we have encountered this task
+        if task_id not in raw_markings:
+            raw_markings[task_id] = {}
+
+        # for each shape associated with this task - is this the first time we've encountered this shape?
+        # remember that there can be multiple marking tools associated with each task and multiple marking
+        # tools can be made with the same shape
+        for shape in set(marking_tasks[task_id]):
+            if shape not in raw_markings[task_id]:
+                raw_markings[task_id][shape] = {}
+
+            # is this the first time we've seen this subject_id?
+            if subject_id not in raw_markings[task_id][shape]:
+                raw_markings[task_id][shape][subject_id] = []
+
+        # kind track of which shapes the user did mark - we need to keep track of any shapes
+        # for which the user did not make any marks at all of
+        # because a user not seeing something is important
+        spotted_shapes = set()
+
+        for marking in task_value:
+            # what kind of tool made this marking and what was the shape of that tool?
+            if "tool" in marking:
+                tool = marking["tool"]
+                shape = marking_tasks[task_id][tool]
+            elif "type" in marking:
+                tool = None
+                shape = marking["type"]
+            else:
+                print "skipping unknown type of marking"
+                print marking
+                continue
+
+            # for development only really - if we are not interested in a certain type of marking
+            # right now - just skip it
+            if shape not in self.workflows[workflow_id][1][task_id]:
+                continue
+
+            if shape not in self.marking_params_per_shape:
+                print "unrecognized shape: (skipping) " + shape
+                continue
+
+            try:
+                # extract the params specifically relevant to the given shape
+                relevant_params = self.marking_params_per_shape[shape](marking,dimensions)
+            except (helper_functions.InvalidMarking,helper_functions.EmptyPolygon,KeyError) as e:
+                # badly formed marking - or the marking is slightly off the image
+                # either way - just skip it
+                print "skipping marking from user " + str(user_id)
+                print e
+                continue
+
+            spotted_shapes.add(shape)
+            raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
+
+            # is this a confusing shape?
+            # i.e. multiple tools can be make this shape - if so, we can a classification task of deciding which
+            # tool should actually be associated with each aggregate marking
+            if (task_id in classification_tasks) and ("shapes" in classification_tasks[task_id]) and (shape in classification_tasks[task_id]["shapes"]):
+                if task_id not in raw_classifications:
+                    raw_classifications[task_id] = {}
+                if shape not in raw_classifications[task_id]:
+                    raw_classifications[task_id][shape] = {}
+                if subject_id not in raw_classifications[task_id][shape]:
+                    raw_classifications[task_id][shape][subject_id] = {}
+
+                # the [:5] is to make sure that the relevant params don't become any arbitrarly long list of values (which could happen with polygons)
+                raw_classifications[task_id][shape][subject_id][(relevant_params[:5],user_id)] = tool
+
+            # are there follow up questions? - check that both this task has any follow ups
+            # and that this particular tool has a follow up
+            if (task_id in classification_tasks) and (tool in classification_tasks[task_id]):
+
+                # there could be multiple follow up questions
+                # need to use range(len()) since the individual values are either "single" or "multiple"
+                for local_subtask_id in range(len(classification_tasks[task_id][tool])):
+                    global_subtask_id = str(task_id)+"_"+str(tool)+"_"+str(local_subtask_id)
+                    if global_subtask_id not in raw_classifications:
+                        raw_classifications[global_subtask_id] = {}
+                    if subject_id not in raw_classifications[global_subtask_id]:
+                        raw_classifications[global_subtask_id][subject_id] = {}
+
+                    # # specific tool matters, not just shape
+                    subtask_value = marking["details"][local_subtask_id]["value"]
+                    # if tool not in raw_classifications[global_subtask_id][subject_id]:
+                    #     raw_classifications[global_subtask_id][subject_id][tool] = {}
+                    raw_classifications[global_subtask_id][subject_id][(relevant_params[:5],user_id)] = subtask_value
+
+        # note which shapes the user saw nothing of
+        # otherwise, it will be as if the user didn't see the subject in the first place
+        # useful for calculating the probability of existence for clusters
+        for shape in set(marking_tasks[task_id]):
+            if shape not in spotted_shapes:
+                raw_markings[task_id][shape][subject_id].append((user_id,None,None))
+
+        return raw_markings,raw_classifications
+
     def __sort_annotations__(self,workflow_id,subject_set,expert=None):
         """
         experts is when you have experts for whom you don't want to read in there classifications
@@ -1682,103 +1780,12 @@ class AggregationAPI:
 
                 # is this a marking task?
                 if task_id in marking_tasks:
-                    # if a user gets to marking task but makes no markings, we want to record that the user
-                    # has still seen that image/task. If a user never gets to a marking task for that image
-                    # than they are irrelevant
-                    # create here so even if we have empty images, we will know that we aggregated them
-                    # make sure to not overwrite/delete existing information - sigh
-                    if task_id not in raw_markings:
-                        raw_markings[task_id] = {}
-                    for shape in set(marking_tasks[task_id]):
-                        if shape not in raw_markings[task_id]:
-                            raw_markings[task_id][shape] = {}
-                        if subject_id not in raw_markings[task_id][shape]:
-                            raw_markings[task_id][shape][subject_id] = []
-
-                    # if (subject_id,workflow_id,task_id) not in users_per_marking_task:
-                    #     users_per_marking_task[(subject_id,workflow_id,task_id)] = 1
-                    # else:
-                    #     users_per_marking_task[(subject_id,workflow_id,task_id)] += 1
-
+                    # skip over any improperly formed annotations - due to browser problems etc.
                     if not isinstance(task["value"],list):
                         print "not properly formed marking - skipping"
                         continue
 
-                    # kind track of which shapes the user did mark - we need to keep track of any shapes
-                    # for which the user did not make any marks at all of
-                    # because a user not seeing something is important
-                    spotted_shapes = set()
-
-                    for marking in task["value"]:
-                        # what kind of tool made this marking and what was the shape of that tool?
-                        if "tool" in marking:
-                            tool = marking["tool"]
-                            shape = marking_tasks[task_id][tool]
-                        elif "type" in marking:
-                            tool = None
-                            shape = marking["type"]
-                        else:
-                            print "skipping unknown type of marking"
-                            print marking
-                            continue
-
-                        # for development only really - if we are not interested in a certain type of marking
-                        # right now - just skip it
-                        if shape not in self.workflows[workflow_id][1][task_id]:
-                            continue
-
-                        if shape not in self.marking_params_per_shape:
-                            print "unrecognized shape: (skipping) " + shape
-                            continue
-
-                        try:
-                            # extract the params specifically relevant to the given shape
-                            relevant_params = self.marking_params_per_shape[shape](marking,dimensions)
-                        except (helper_functions.InvalidMarking,helper_functions.EmptyPolygon,KeyError) as e:
-                            # badly formed marking - or the marking is slightly off the image
-                            # either way - just skip it
-                            continue
-
-                        spotted_shapes.add(shape)
-                        raw_markings[task_id][shape][subject_id].append((user_id,relevant_params,tool))
-
-                        # is this a confusing shape?
-                        if (task_id in classification_tasks) and ("shapes" in classification_tasks[task_id]) and (shape in classification_tasks[task_id]["shapes"]):
-                            if task_id not in raw_classifications:
-                                raw_classifications[task_id] = {}
-                            if shape not in raw_classifications[task_id]:
-                                raw_classifications[task_id][shape] = {}
-                            if subject_id not in raw_classifications[task_id][shape]:
-                                raw_classifications[task_id][shape][subject_id] = {}
-
-                            # the [:5] is to make sure that the relevant params don't become any arbitrarly long list of values (which could happen with polygons)
-                            raw_classifications[task_id][shape][subject_id][(relevant_params[:5],user_id)] = tool
-
-                        # are there follow up questions? - check that both this task has any follow ups
-                        # and that this particular tool has a follow up
-                        if (task_id in classification_tasks) and (tool in classification_tasks[task_id]):
-
-                            # there could be multiple follow up questions
-                            # need to use range(len()) since the individual values are either "single" or "multiple"
-                            for local_subtask_id in range(len(classification_tasks[task_id][tool])):
-                                global_subtask_id = str(task_id)+"_"+str(tool)+"_"+str(local_subtask_id)
-                                if global_subtask_id not in raw_classifications:
-                                    raw_classifications[global_subtask_id] = {}
-                                if subject_id not in raw_classifications[global_subtask_id]:
-                                    raw_classifications[global_subtask_id][subject_id] = {}
-
-                                # # specific tool matters, not just shape
-                                subtask_value = marking["details"][local_subtask_id]["value"]
-                                # if tool not in raw_classifications[global_subtask_id][subject_id]:
-                                #     raw_classifications[global_subtask_id][subject_id][tool] = {}
-                                raw_classifications[global_subtask_id][subject_id][(relevant_params[:5],user_id)] = subtask_value
-
-                    # note which shapes the user saw nothing of
-                    # otherwise, it will be as if the user didn't see the subject in the first place
-                    # useful for calculating the probability of existence for clusters
-                    for shape in set(marking_tasks[task_id]):
-                        if shape not in spotted_shapes:
-                            raw_markings[task_id][shape][subject_id].append((user_id,None,None))
+                    raw_markings,raw_classifications = self.__add_markings_annotations__(subject_id,workflow_id,task_id,user_id,task["value"],raw_markings,raw_classifications,marking_tasks,classification_tasks,dimensions)
 
                 # we a have a pure classification task
                 elif task_id in classification_tasks:
