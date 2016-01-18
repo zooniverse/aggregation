@@ -135,6 +135,7 @@ class AggregationAPI:
         self.marking_params_per_shape["rectangle"] = helper_functions.relevant_rectangle_params
         self.marking_params_per_shape["circle"] = helper_functions.relevant_circle_params
         self.marking_params_per_shape["polygon"] = helper_functions.relevant_polygon_params
+        self.marking_params_per_shape["bezier"] = helper_functions.relevant_bezier_params
         self.marking_params_per_shape["image"] = helper_functions.relevant_rectangle_params
 
         # load the default clustering algorithms
@@ -147,6 +148,7 @@ class AggregationAPI:
         # these shapes use the blob clustering approach
         self.default_clustering_algs["rectangle"] = blob_clustering.BlobClustering
         self.default_clustering_algs["polygon"] = blob_clustering.BlobClustering
+        self.default_clustering_algs["bezier"] = blob_clustering.BlobClustering
         self.default_clustering_algs["image"] = blob_clustering.BlobClustering
         # and set any reduction algorithms - to reduce the dimensionality of markings
         self.additional_clustering_args = {"line": {"reduction":helper_functions.hesse_line_reduction}}
@@ -1565,7 +1567,7 @@ class AggregationAPI:
                             classification_tasks[task_id][label].append(question_type)
 
                     # if the tool is the one of the recognized ones, add it. Otherwise report an error
-                    if tool["type"] in ["line","ellipse","point","circle","rectangle","polygon"]:
+                    if tool["type"] in ["line","ellipse","point","circle","rectangle","polygon", "bezier"]:
                         marking_tasks[task_id].append(tool["type"])
                     else:
                         assert False
