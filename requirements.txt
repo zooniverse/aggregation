@@ -8,4 +8,4 @@ PyYAML
 networkx
 scipy
 shapely
-cassandra
+cassandra-driver
