@@ -33,7 +33,7 @@ from shapely.geometry import Polygon
 import matplotlib.cbook as cbook
 import tempfile
 import networkx
-from sympy import Point, Line
+import botocore.session
 
 def convex_hull(points):
     """Computes the convex hull of a set of 2D points.
@@ -630,17 +630,19 @@ class TextCluster(clustering.Cluster):
         G = networkx.Graph()
         G.add_nodes_from(range(len(markings)))
 
-        if subject_id is not None:
-            print subject_id
-            fname = self.project.__image_setup__(subject_id)
-            image_file = cbook.get_sample_data(fname)
-            image = plt.imread(image_file)
+        # if subject_id is not None:
+        #     print subject_id
+        #     fname = self.project.__image_setup__(subject_id)
+        #     image_file = cbook.get_sample_data(fname)
+        #     image = plt.imread(image_file)
+        #
+        #
+        #
+        #
+        # else:
+        #     image = None
 
-
-
-
-        else:
-            image = None
+        image = None
 
         # print len(markings)
 
@@ -1420,45 +1422,55 @@ class TranscriptionAPI(AggregationAPI):
         old_time_string = self.previous_runtime.strftime("%B %d %Y")
         new_time_string = end_date.strftime("%B %d %Y")
 
-        accuracy =  1. - stats["errors"]/float(stats["characters"])
+        if float(stats["characters"]) == 0:
+            accuracy = -1
+        else:
+            accuracy =  1. - stats["errors"]/float(stats["characters"])
 
         subject = "Aggregation summary for " + str(old_time_string) + " to " + str(new_time_string)
 
         body = "This week we have retired " + str(num_retired) + " subjects, of which " + str(non_blanks_retired) + " where not blank."
         body += " A total of " + str(stats["retired lines"]) + " lines were retired. "
-        body += " The accuracy of these lines was " + "{:2.1f}".format(accuracy*100) + "% - defined as the percentage of characters where at least 3/4's of the users were in agreement."
+        body += " The accuracy of these lines was " + "{:2.1f}".format(accuracy*100) + "% - defined as the percentage of characters where at least 3/4's of the users were in agreement. -1 indicates nothing was retired. \n\n"
 
-        print self.__panoptes_call__("projects/"+str(self.project_id)+"/aggregations_export?admin=true")
-        assert False
+        # if a path has been provided to the tar results, upload them to s3 and create a signed link to them
         if tar_path is not None:
-            bucket = "s3://zooniverse-static/panoptes-uploads.zooniverse.org/"+str(self.project_id)+"/"
+            # just to maintain some order - store the results in the already existing tar file created for this
+            # project - can cause trouble if we have never asked for the aggregation results via the PFE before
+            aggregation_export_summary = self.__panoptes_call__("projects/"+str(self.project_id)+"/aggregations_export?admin=true")
+            aws_bucket = aggregation_export_summary["media"][0]["src"]
+
+            aws_fname,_ = aws_bucket.split("?")
+            fname = aws_bucket.split("/")[-1]
+
+            # create the actual connection to s3 and upload the file
             s3 = boto3.resource('s3')
-            try:
-                s3.meta.client.head_bucket(Bucket=bucket)
-            except botocore.exceptions.ClientError as e:
-                # If a client error is thrown, then check that it was a 404 error.
-                # If it was a 404 error, then the bucket does not exist.
-                error_code = int(e.response['Error']['Code'])
-                if error_code == 404:
-                    s3.create_bucket(Bucket=bucket,CreateBucketConfiguration={'LocationConstraint': 'us-west-1'})
-
-            object = s3.Object('mybucket', 'hello.txt')
-            object.put(Body=open('/tmp/hello.txt', 'rb'))
-
-            url = get_signed_url(604800, bucket, object)
+            key_base = "panoptes-uploads.zooniverse.org/production/project_aggregations_export/"
+            data = open(tar_path,"rb")
+            bucket_name = "zooniverse-static"
+            bucket = s3.Bucket(bucket_name)
 
 
+            bucket.put_object(Key=key_base+fname, Body=data)
 
+            # now create the signed link
+            # results_key = bucket.get_key(fname)
+            # results_url = results_key.generate_url(3600, query_auth=False, force_http=True)
 
+            session = botocore.session.get_session()
+            client = session.create_client('s3')
+            presigned_url = client.generate_presigned_url('get_object', Params={'Bucket': bucket_name, 'Key': key_base+fname},ExpiresIn = 3600)
 
-        body += "\n Greg Hines \n Zooniverse \n \n PS This email was automatically generated."
+            body += "The aggregation results can found at " + presigned_url
+
+        body += "\n Greg Hines \n Zooniverse \n \n PS The above link may contain a zip file within a zip file - I'm working on that."
 
         client = boto3.client('ses')
         response = client.send_email(
             Source='greg@zooniverse.org',
             Destination={
                 'ToAddresses': [
-                    'greg@zooniverse.org','victoria@zooniverse.org','matt@zooniverse.org'
+                    'greg@zooniverse.org'#,'victoria@zooniverse.org','matt@zooniverse.org'
                 ]#,
                 # 'CcAddresses': [
                 #     'string',
@@ -1517,6 +1529,9 @@ if __name__ == "__main__":
             summary = True
 
     assert project_id is not None
+
+    if summary:
+        assert end_date is not None
 
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
