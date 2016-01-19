@@ -8,3 +8,4 @@ PyYAML
 networkx
 scipy
 shapely
+cassandra
