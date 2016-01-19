@@ -1499,7 +1499,6 @@ class AggregationAPI:
                 raise psycopg2.OperationalError()
         else:
             self.postgres_writeable_session = self.postgres_session
-            print "using the same postgres db session to read and write to - hopefully this means development environment"
 
     def __readin_tasks__(self,tasks):
         """

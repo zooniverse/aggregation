@@ -96,9 +96,8 @@ class Cluster:
                 if shape != self.shape:
                     continue
 
-                for subject_count,subject_id in enumerate(raw_markings[task_id][shape]):
-                    # if subject_id not in [1278157]:
-                    #     continue
+                for subject_count,subject_id in list(enumerate(raw_markings[task_id][shape]))[:5]:
+                    print subject_id
                     assert raw_markings[task_id][shape][subject_id] != []
 
                     # remove any "markings" which correspond to the user not making a marking
@@ -117,10 +116,6 @@ class Cluster:
                         reduced_markings = self.dim_reduction_alg(markings)
 
                         # do the actual clustering
-                        # fname = self.project.__image_setup__(subject_id)
-                        # image_file = cbook.get_sample_data(fname)
-                        # image = plt.imread(image_file)
-                        # print subject_id,
                         cluster_results,time_to_cluster = self.__cluster__(markings,users,tools,reduced_markings,image_dimensions[subject_id],subject_id)
 
                     # store the results - note we need to store even for empty images
@@ -133,9 +128,11 @@ class Cluster:
                         # used for determining false vs. true positives
                         aggregation[subject_id][task_id][str(shape) + " clusters"] = {"all_users":all_users}
 
+                    # assert cluster_results == []
                     for cluster_index,cluster in enumerate(cluster_results):
                         aggregation[subject_id][task_id][shape+ " clusters"][cluster_index] = cluster
-
+                    # print aggregation[subject_id][task_id][shape+ " clusters"].keys()
+                    # assert False
         # we should have some results
         # assert aggregation != {"param":"subject_id"}
 
