@@ -27,26 +27,6 @@ import networkx
 import botocore.session
 import tarfile
 
-def levenshtein(s1, s2):
-    if len(s1) < len(s2):
-        return levenshtein(s2, s1)
-
-    # len(s1) >= len(s2)
-    if len(s2) == 0:
-        return len(s1)
-
-    previous_row = range(len(s2) + 1)
-    for i, c1 in enumerate(s1):
-        current_row = [i + 1]
-        for j, c2 in enumerate(s2):
-            insertions = previous_row[j + 1] + 1 # j+1 instead of j since previous_row and current_row are one character longer
-            deletions = current_row[j] + 1       # than s2
-            substitutions = previous_row[j] + (c1 != c2)
-            current_row.append(min(insertions, deletions, substitutions))
-        previous_row = current_row
-
-    return previous_row[-1]
-
 __author__ = 'greg'
 
 if os.path.exists("/home/ggdhines"):
@@ -315,6 +295,8 @@ class TextCluster(clustering.Cluster):
 
         vote_history = []
 
+        uncompleted_characters = 0
+
         for char_index in range(len(aligned_text[0])):
             # get all the possible characters
             # todo - we can reduce this down to having to loop over each character once
@@ -329,6 +311,8 @@ class TextCluster(clustering.Cluster):
 
             # have at least 3 people transcribed this character?
             if sum(char_vote.values()) >= 3:
+                self.stats["characters"] += 1
+
                 most_likely_char,max_votes = max(char_vote.items(),key=lambda x:x[1])
                 vote_percentage = max_votes/float(sum(char_vote.values()))
 
@@ -351,6 +335,7 @@ class TextCluster(clustering.Cluster):
                         else:
                             # 27 => disagreement
                             aggregate_text += chr(27)
+                            self.stats["errors"] += 1
 
                     # capitalization issues? only two different transcriptions given
                     # one the lower case version of the other
@@ -359,13 +344,18 @@ class TextCluster(clustering.Cluster):
                     # otherwise two different transcriptions but doesn't meet either of the special cases
                     else:
                         aggregate_text += chr(27)
+                        self.stats["errors"] += 1
                 else:
                     # chr(27) => disagreement
                     aggregate_text += chr(27)
+                    self.stats["errors"] += 1
             else:
                 # not enough people have transcribed this character
                 aggregate_text += chr(26)
+                uncompleted_characters += 1
 
+        if uncompleted_characters == 0:
+            self.stats["retired lines"] += 1
         assert len(aggregate_text) > 0
 
         try:
@@ -375,7 +365,7 @@ class TextCluster(clustering.Cluster):
             percent_complete = 0
             percent_consensus = -1
 
-        return aggregate_text,percent_consensus,percent_complete
+        return aggregate_text,(uncompleted_characters != 0)
 
     def __add_alignment_spaces__(self,aligned_text_list,capitalized_text):
         """
@@ -539,7 +529,7 @@ class TextCluster(clustering.Cluster):
             aligned_uppercase_text = self.__add_alignment_spaces__(aligned_text,original_items)
 
             # finally aggregate the individual pieces of text together
-            aggregate_text,percent_consensus,percent_complete = self.__merge_aligned_text__(aligned_uppercase_text)
+            aggregate_text,completed = self.__merge_aligned_text__(aligned_uppercase_text)
 
             new_cluster = {}
             # get the average starting and ending points
@@ -900,7 +890,11 @@ class TranscriptionAPI(AggregationAPI):
             # return True
         pass
 
-    # def __add_meta_data__(self):
+    def __add_metadata__(self):
+        for subject_id in self.overall_aggregation:
+            metadata = self.__get_subject_metadata__(subject_id)
+            self.overall_aggregation[subject_id] = self.overall_aggregation[subject_id]["T2"]
+            self.overall_aggregation[subject_id]["metadata"] = metadata["subjects"][0]["metadata"]
 
     def __cluster_output_with_colour__(self,workflow_id,ax,subject_id):
         """
@@ -1012,7 +1006,7 @@ class TranscriptionAPI(AggregationAPI):
 
         body = "This week we have retired " + str(num_retired) + " subjects, of which " + str(non_blanks_retired) + " where not blank."
         body += " A total of " + str(stats["retired lines"]) + " lines were retired. "
-        body += " The accuracy of these lines was " + "{:2.1f}".format(accuracy*100) + "% - defined as the percentage of characters where at least 3/4's of the users were in agreement. A negative value indicates nothing was retired. \n\n"
+        body += " The accuracy of these lines was " + "{:2.1f}".format(accuracy*100) + "% - defined as the percentage of characters transcribed by at least 3 people where a strict majority of the users are in agreement.\n\n"
 
         # if a path has been provided to the tar results, upload them to s3 and create a signed link to them
         if tar_path is not None:
@@ -1040,11 +1034,12 @@ class TranscriptionAPI(AggregationAPI):
 
             session = botocore.session.get_session()
             client = session.create_client('s3')
-            presigned_url = client.generate_presigned_url('get_object', Params={'Bucket': bucket_name, 'Key': key_base+fname},ExpiresIn = 3600)
+            presigned_url = client.generate_presigned_url('get_object', Params={'Bucket': bucket_name, 'Key': key_base+fname},ExpiresIn = 604800)
 
             body += "The aggregation results can found at " + presigned_url
 
-        body += "\n Greg Hines \n Zooniverse \n \n PS The above link may contain a zip file within a zip file - I'm working on that."
+        body += "\n Greg Hines \n Zooniverse \n \nPS The above link contains a zip file within a zip file - I'm working on that. \nPPS The above link will be good for one week.\n"
+        body += "PPS The number of retired lines is based on a set of 50 subjects and, for slightly complicated reasons, is a low estimate for even those ones. I'm also working on that."
 
         client = boto3.client('ses')
         response = client.send_email(
@@ -1117,11 +1112,13 @@ if __name__ == "__main__":
         project.__aggregate__()
 
         if summary:
+            project.__add_metadata__()
 
             tar_path = "/tmp/"+str(project_id)+".tar.gz"
-            t = tarfile.TarFile(tar_path,"w")
-            json.dump(project.overall_aggregation,open("/tmp/"+str(project_id)+".json","wb"))
-            t.add("/tmp/"+str(project_id)+".json")
+            t = tarfile.open(tar_path,mode="w:gz")
+            json.dump(project.overall_aggregation,open("/tmp/"+str(project_id)+".txt","wb"))
+            t.add("/tmp/"+str(project_id)+".txt")
+            t.close()
 
             project.__summarize__(tar_path)
 
