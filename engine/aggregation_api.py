@@ -649,10 +649,17 @@ class AggregationAPI:
         return retirement_thresholds
 
     def __get_project_details__(self):
+        """
+        prints out the project name
+        :return:
+        """
         request = "projects/"+str(self.project_id)+"?"
         data = self.__panoptes_call__(request)
 
-        print "project is " + data["projects"][0]["display_name"]
+        display_name =  data["projects"][0]["display_name"]
+        ascii_name = display_name.encode('ascii', 'ignore')
+
+        print "project is " + ascii_name
 
     def __get_project_id(self):
         """
