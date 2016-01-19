@@ -22,6 +22,8 @@ setup(
         packages=["engine"],
         description='Aggregation for Zooniverse projects',
         long_description=open('README.md').read(),
+        test_suite='nose.collector',
+        tests_require=['nose'],
         install_requires=[
             "networkx==1.8.1",
             "pymongo==2.7",
