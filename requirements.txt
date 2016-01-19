@@ -6,3 +6,4 @@ pandas
 termcolor
 PyYAML
 networkx
+scipy
