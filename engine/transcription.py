@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 from aggregation_api import AggregationAPI
-import marking_helpers
+import helper_functions
 from classification import Classification
 import clustering
 import pandas as pd
@@ -852,13 +852,13 @@ class TranscriptionAPI(AggregationAPI):
 
         self.instructions[workflow_id] = {}
 
-        self.marking_params_per_shape["text"] = marking_helpers.relevant_text_params
+        self.marking_params_per_shape["text"] = helper_functions.relevant_text_params
         # the code to cluster lines together
         # self.default_clustering_algs["text"] = TextCluster
         # self.default_clustering_algs["image"] = BlobClustering
 
         # set up the text clusering algorithm
-        additional_text_args = {"reduction":marking_helpers.text_line_reduction}
+        additional_text_args = {"reduction":helper_functions.text_line_reduction}
         # load in the tag file if there is one
 
         api_details = yaml.load(open("/app/config/aggregation.yml","rb"))
