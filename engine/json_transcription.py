@@ -33,7 +33,7 @@ def json_dump(project):
 
         # are there any images in this subject?
         # there will always be "all_users" so we can looking for a list longer than one
-        if len(aggregations["T2"]["image clusters"]) > 1:
+        if ("image clusters" in aggregations["T2"]) and len(aggregations["T2"]["image clusters"]) > 1:
             aggregations_to_json[subject_id]["images"] = []
             for image_index,image in aggregations["T2"]["image clusters"].items():
                 if image_index == "all_users":
