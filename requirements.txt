@@ -7,3 +7,4 @@ termcolor
 PyYAML
 networkx
 scipy
+shapely
