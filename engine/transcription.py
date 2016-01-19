@@ -217,7 +217,7 @@ def Levenshtein(a,b):
 
 class TextCluster(clustering.Cluster):
     def __init__(self,shape,param_dict):
-        clustering.Cluster.__init__(self,shape,param_dict)
+        clustering.Cluster.__init__(self,shape,None,param_dict)
         self.line_agreement = []
 
         self.tags = dict()
@@ -870,7 +870,7 @@ class TranscriptionAPI(AggregationAPI):
         # slightly differently
 
         self.text_algorithm = TextCluster("text",additional_text_args)
-        self.image_algorithm = BlobClustering("image",{})
+        self.image_algorithm = BlobClustering("image",None,{})
 
         self.only_retired_subjects = False
         self.only_recent_subjects = True
