@@ -36,7 +36,15 @@ else:
 
 
 def Levenshtein(a,b):
-    "Calculates the Levenshtein distance between a and b."
+    """
+    Calculates the Levenshtein distance between a and b
+    :param a:
+    :param b:
+    :return:
+    """
+    assert isinstance(a,str)
+    assert isinstance(b,str)
+
     n, m = len(a), len(b)
     if n > m:
         # Make sure n <= m, to use O(min(n,m)) space
@@ -128,61 +136,6 @@ class TextCluster(clustering.Cluster):
         assert isinstance(s,str)
         assert len(s) > 0
         return sum([1 for c in s if c != "-"])/float(len(s))
-
-    # # todo - is this function really necessary?
-    # def __agreement__(self,text):
-    #     """
-    #     calculate the % of characters in each line of text where all characters at this position (over all lines)
-    #     are in agreement. I ignore any starting or trailing "-" (spaces inserted for alignment)
-    #     :param text:
-    #     :return:
-    #     """
-    #     assert isinstance(text,list)
-    #     assert len(text) > 1
-    #     assert isinstance(text[0],str)
-    #     assert min([len(t) for t in text]) == max([len(t) for t in text])
-    #
-    #     retval = []
-    #
-    #     for t in text:
-    #         leftmost_char = -1
-    #         rightmost_char = -1
-    #         for i,c in enumerate(t):
-    #             if c != "-":
-    #                 leftmost_char = i
-    #                 break
-    #         for i,c in reversed(list(enumerate(t))):
-    #             if c != "-":
-    #                 rightmost_char = i
-    #                 break
-    #
-    #         agreement = 0
-    #
-    #         for i in range(leftmost_char,rightmost_char+1):
-    #             c = [t2[i].lower() for t2 in text]
-    #             if min(c) == max(c):
-    #                 assert c[0] != "-"
-    #                 agreement += 1
-    #
-    #         retval.append(agreement/float(rightmost_char-leftmost_char+1))
-    #     return retval
-
-    # todo - can probably remove this function but double check
-    # def __complete_agreement__(self,text):
-    #     assert isinstance(text,list)
-    #     assert len(text) > 1
-    #     assert isinstance(text[0],str)
-    #     assert min([len(t) for t in text]) == max([len(t) for t in text])
-    #
-    #     agreement = 0
-    #     for i in range(len(text[0])):
-    #
-    #         c = [t[i].lower() for t in text if t[i] != "-"]
-    #         if min(c) == max(c):
-    #             assert c[0] != "-"
-    #             agreement += 1
-    #
-    #     return agreement/float(len(text[0]))
 
     def __set_tags__(self,text):
         # convert to ascii
@@ -354,6 +307,10 @@ class TextCluster(clustering.Cluster):
                 aggregate_text += chr(26)
                 uncompleted_characters += 1
 
+                for a in aligned_text:
+                    print a + "|"
+                assert False
+
         if uncompleted_characters == 0:
             self.stats["retired lines"] += 1
         assert len(aggregate_text) > 0
@@ -396,8 +353,10 @@ class TextCluster(clustering.Cluster):
             for j,c in enumerate(text):
                 if c == "-":
                     if first_char <= j <= last_char:
+                        # this is a gap where the person may have missed something
                         aligned_nf_text += chr(24)
                     else:
+                        # this corresponds to before or after the person started transcribing
                         aligned_nf_text += chr(25)
                 else:
                     aligned_nf_text += nf_text[i]
@@ -527,6 +486,9 @@ class TextCluster(clustering.Cluster):
             aligned_text = self.__line_alignment__(lowercase_items)
             # use the alignment spaces to align the original text
             aligned_uppercase_text = self.__add_alignment_spaces__(aligned_text,original_items)
+
+            print aligned_text
+            print aligned_uppercase_text
 
             # finally aggregate the individual pieces of text together
             aggregate_text,completed = self.__merge_aligned_text__(aligned_uppercase_text)
@@ -839,7 +801,6 @@ class TranscriptionAPI(AggregationAPI):
         image_aggregation = self.image_algorithm.__aggregate__(raw_markings,image_dimensions)
 
         self.overall_aggregation = self.__merge_aggregations__(cluster_aggregation,image_aggregation)
-
         return self.overall_aggregation
 
     def __setup__(self):
@@ -1106,7 +1067,7 @@ if __name__ == "__main__":
 
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
-        #project.__migrate__()
+        project.__migrate__()
         print "done migrating"
 
         project.__aggregate__()
