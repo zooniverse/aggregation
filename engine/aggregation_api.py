@@ -1488,32 +1488,12 @@ class AggregationAPI:
         else:
             self.postgres_writeable_session = self.postgres_session
 
-    def __readin_tasks__(self,tasks):
+    def __readin_tasks__(self,task_dict):
         """
         get the details for each task - for example, what tasks might we want to run clustering algorithms on
         and if so, what params related to that task are relevant
         :return:
         """
-        # tasks = self.__panoptes_call__("workflows/"+str(workflow_id)+"?")["workflows"][0]["tasks"]
-
-        # # get the tasks associated with the given workflow
-        # select = "SELECT tasks from workflows where id = " + str(workflow_id)
-        # cursor = self.postgres_session.cursor()
-        #
-        # cursor.execute(select)
-        # self.postgres_session.commit()
-        # try:
-        #     tasks = cursor.fetchone()[0]
-        # except:
-        #     raise WorkflowNotfound(workflow_id)
-        #
-        # print self.__panoptes_call__("workflows/"+str(workflow_id)+"?")["workflows"][0]
-        # assert False
-        #
-        # print tasks.keys()
-        # print panoptes_api_tasks.keys()
-
-
         # which of these tasks have classifications associated with them?
         classification_tasks = {}
         # which have drawings associated with them
@@ -1522,16 +1502,16 @@ class AggregationAPI:
 
         survey_tasks = {}
 
-        # convert to json is necessary - not sure why this is necessary but it does happen
+        # convert to json if necessary - not sure why this is necessary but it does happen
         # see https://github.com/zooniverse/aggregation/issues/7
-        if isinstance(tasks,str) or isinstance(tasks,unicode):
-            tasks = json.loads(tasks)
+        if isinstance(task_dict,str) or isinstance(task_dict,unicode):
+            task_dict = json.loads(task_dict)
 
-        for task_id in tasks:
+        for task_id,task in task_dict.items():
             # self.task_type[task_id] = tasks[task_id]["type"]
             # if the task is a drawing one, get the necessary details for clustering
 
-            task_type = tasks[task_id]["type"]
+            task_type = task["type"]
 
             if task_type == "drawing":
                 marking_tasks[task_id] = []
@@ -1541,24 +1521,20 @@ class AggregationAPI:
                 # # see if mulitple tools are creating the same shape
                 # counter = {}
 
-                for tool in tasks[task_id]["tools"]:
-                    # shape = ellipse, line, pt etc.
-                    shape = tool["type"]
-
+                for tool_id,tool in enumerate(task["tools"]):
                     # are there any classification questions associated with this marking?
                     if ("details" in tool) and (tool["details"] is not None) and (tool["details"] != []):
                         # extract the label of the tool - this means that things don't have to ordered
-                        label = helper_functions.csv_string(tool["label"])
 
                         # is this the first follow up question associated with this task?
                         if task_id not in classification_tasks:
                             classification_tasks[task_id] = {}
-                        classification_tasks[task_id][label] = []
+                        classification_tasks[task_id][tool_id] = []
 
                         # note whether each of these questions are single or multiple response
                         for followup_question in tool["details"]:
                             question_type = followup_question["type"]
-                            classification_tasks[task_id][label].append(question_type)
+                            classification_tasks[task_id][tool_id].append(question_type)
 
                     # if the tool is the one of the recognized ones, add it. Otherwise report an error
                     if tool["type"] in ["line","ellipse","point","circle","rectangle","polygon", "bezier"]:
@@ -1568,15 +1544,17 @@ class AggregationAPI:
 
             elif task_type in ["single","multiple"]:
                 # multiple means that more than one response is allowed
-                classification_tasks[task_id] = tasks[task_id]["type"]
+                classification_tasks[task_id] = task["type"]
             elif task_type in ["survey","flexibleSurvey"]:
                 survey_tasks[task_id] = []
             else:
-                print tasks[task_id]
-                print tasks[task_id]["type"]
+                print task
+                print task["type"]
                 # unknown task type
                 assert False
 
+        # note that for follow up questions to marking tasks - the key used is the marking tool label
+        # NOT the follow up question label
         return classification_tasks,marking_tasks,survey_tasks
 
     def __set_classification_alg__(self,alg,params={}):
@@ -1617,6 +1595,21 @@ class AggregationAPI:
         assert isinstance(self.survey_alg,classification.Classification)
 
     def __add_markings_annotations__(self,subject_id,workflow_id,task_id,user_id,task_value,raw_markings,raw_classifications,marking_tasks,classification_tasks,dimensions):
+        """
+        given a certain marking for a given subject_id,workflow_id and task_id add the marking to our overall list of marking annotations
+        also add in any follow up classification ids
+        :param subject_id:
+        :param workflow_id:
+        :param task_id:
+        :param user_id:
+        :param task_value:
+        :param raw_markings:
+        :param raw_classifications:
+        :param marking_tasks:
+        :param classification_tasks:
+        :param dimensions:
+        :return:
+        """
         # if this is the first we have encountered this task
         if task_id not in raw_markings:
             raw_markings[task_id] = {}
@@ -1649,6 +1642,8 @@ class AggregationAPI:
                 print "skipping unknown type of marking"
                 print marking
                 continue
+
+            print tool
 
             # for development only really - if we are not interested in a certain type of marking
             # right now - just skip it
@@ -1761,7 +1756,7 @@ class AggregationAPI:
 
             # annotations = json.loads(record.annotations)
             annotation = json.loads(annotation)
-
+            print annotation
             # go through each annotation and get the associated task
             for task in annotation:
                 try:
@@ -1778,6 +1773,7 @@ class AggregationAPI:
                         continue
 
                     raw_markings,raw_classifications = self.__add_markings_annotations__(subject_id,workflow_id,task_id,user_id,task["value"],raw_markings,raw_classifications,marking_tasks,classification_tasks,dimensions)
+                    print raw_classifications
 
                 # we a have a pure classification task
                 elif task_id in classification_tasks:
