@@ -570,28 +570,10 @@ class AggregationAPI:
 
             # self.postgres_session.rollback()
 
-
-
-        # only update time stamp if there were no problems
-        # if exc_type is None:
-        #     statements_and_params = []
-        #     insert_statement = self.cassandra_session.prepare("insert into most_recent (project_id,classification) values (?,?)")
-        #     statements_and_params.append((insert_statement, (self.project_id,self.new_runtime)))
-        #     execute_concurrent(self.cassandra_session, statements_and_params)
-
-            self.postgres_session.commit()
-
         # shutdown the connection to Cassandra and remove the lock so other aggregation instances
         # can run, regardless of whether an error occurred
         if self.cassandra_session is not None:
             self.cassandra_session.shutdown()
-
-        # remove the lock only if we created the lock
-        if exc_type != InstanceAlreadyRunning:
-            try:
-                os.remove(expanduser("~")+"/aggregation.lock")
-            except OSError:
-                pass
 
     def __get_classifications__(self,subject_id,task_id,cluster_index=None,question_id=None):
         # either both of these variables are None or neither of them are
