@@ -35,24 +35,28 @@ with AggregationAPI(592,"development") as sea:
         plt.show()
 
 
-        kernelx = cv2.getStructuringElement(cv2.MORPH_RECT,(2,10))
+        kernelx = cv2.getStructuringElement(cv2.MORPH_RECT,(1,10))
 
         dx = cv2.Sobel(im_bw,cv2.CV_16S,1,0)
         dx = cv2.convertScaleAbs(dx)
         cv2.normalize(dx,dx,0,255,cv2.NORM_MINMAX)
         ret,close = cv2.threshold(dx,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
         close = cv2.morphologyEx(close,cv2.MORPH_DILATE,kernelx,iterations = 1)
+        cv2.imwrite("/home/ggdhines/temp.png",close)
 
         _,contour, hier = cv2.findContours(close,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         for cnt in contour:
             x,y,w,h = cv2.boundingRect(cnt)
-            if h/w > 5:
+            if (cv2.arcLength(cnt,True) > 250) and (h/w > 2):
+                # print cv2.arcLength(cnt,True)
+                print h/w
+            # if h/w > 10:
                 cv2.drawContours(close,[cnt],0,255,-1)
             else:
                 cv2.drawContours(close,[cnt],0,0,-1)
         close = cv2.morphologyEx(close,cv2.MORPH_CLOSE,None,iterations = 2)
         # closex = close.copy()
-
+        print
         cv2.imwrite("/home/ggdhines/vert.png",close)
 
         kernely = cv2.getStructuringElement(cv2.MORPH_RECT,(10,2))
