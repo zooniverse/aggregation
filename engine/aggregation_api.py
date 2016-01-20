@@ -126,6 +126,8 @@ class AggregationAPI:
         self.ignore_versions = False
         self.only_retired_subjects = False
 
+        self.previous_runtime = datetime.datetime(2000,1,1)
+
     def __setup_clustering_algs__(self):
         # functions for converting json instances into values we can actually cluster on
 
@@ -192,6 +194,10 @@ class AggregationAPI:
         param_details = yaml.load(param_file)
 
         environment_details = param_details[self.environment]
+
+        # do we have a specific date as the minimum date for this project?
+        if (self.project_id in param_details) and ("default_date" in param_details[self.project_id]):
+            self.previous_runtime = parser.parse(param_details[self.project_id]["default_date"])
 
         # connect to whatever postgres db we want to
         self.__postgres_connect__(environment_details)
@@ -720,7 +726,7 @@ class AggregationAPI:
         # but for printing out the json blobs, then we want only retired subjects - which
         # is where we set only_retired_subjects=True
 
-        self.previous_runtime = datetime.datetime(2000,1,1)
+
 
         if self.__is_project_live__() and (self.only_retired_subjects or only_retired_subjects):
             print "selecting only subjects retired since last run"
@@ -1677,8 +1683,6 @@ class AggregationAPI:
             except (helper_functions.InvalidMarking,helper_functions.EmptyPolygon,KeyError) as e:
                 # badly formed marking - or the marking is slightly off the image
                 # either way - just skip it
-                print "skipping marking from user " + str(user_id)
-                print e
                 continue
 
             spotted_shapes.add(shape)
