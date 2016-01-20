@@ -26,6 +26,8 @@ import tempfile
 import networkx
 import botocore.session
 import tarfile
+import datetime
+import cassandra
 
 __author__ = 'greg'
 
@@ -307,9 +309,9 @@ class TextCluster(clustering.Cluster):
                 aggregate_text += chr(26)
                 uncompleted_characters += 1
 
-                for a in aligned_text:
-                    print a + "|"
-                assert False
+                # for a in aligned_text:
+                #     print a + "|"
+                # assert False
 
         if uncompleted_characters == 0:
             self.stats["retired lines"] += 1
@@ -474,6 +476,8 @@ class TextCluster(clustering.Cluster):
 
         return_value_clusters = []
 
+        total_retired_lines = 0
+
         for c,col in zip(clusters,colours):
             # deal with tags (make them all the same length) and any characters that MAFFT can't handle
             text_items = [self.__set_special_characters__(pruned_markings[i][-1]) for i in c]
@@ -492,6 +496,9 @@ class TextCluster(clustering.Cluster):
 
             # finally aggregate the individual pieces of text together
             aggregate_text,completed = self.__merge_aligned_text__(aligned_uppercase_text)
+
+            if completed:
+                total_retired_lines += 1
 
             new_cluster = {}
             # get the average starting and ending points
@@ -781,7 +788,8 @@ class TranscriptionAPI(AggregationAPI):
         # just to stop me from using transcription on other projects
         assert int(project_id) in [245,376]
 
-
+        today = datetime.date.today()
+        self.previous_monday = today - datetime.timedelta(days=today.weekday())
 
     def __cluster__(self,used_shapes,raw_markings,image_dimensions):
         """
@@ -835,8 +843,15 @@ class TranscriptionAPI(AggregationAPI):
         self.only_retired_subjects = False
         self.only_recent_subjects = True
 
+        # we need to provide summary stats on a weekly basis - so as the week progresses, each time we run the
+        # aggregation, we'll need to store some stats - use cassandra for this
+        try:
+            self.cassandra_session.execute("CREATE TABLE line_retirement_history( subject_id int, monday timestamp, num_retired int, PRIMARY KEY(subject_id, monday))")
+        except cassandra.AlreadyExists:
+            print "line retirement table already exists"
+
     def __enter__(self):
-        if self.environment != "development":
+        if True:#self.environment != "development":
             panoptes_file = open("/app/config/aggregation.yml","rb")
             api_details = yaml.load(panoptes_file)
             self.rollbar_token = api_details[self.environment]["rollbar"]
@@ -845,11 +860,8 @@ class TranscriptionAPI(AggregationAPI):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        # if (self.rollbar_token is not None) and (self.environment != "development") and (exc_type is not None):
-        #     rollbar.report_exc_info()
-
-            # return True
-        pass
+        TranscriptionAPI.__exit__(self, exc_type, exc_val, exc_tb)
+        rollbar.report_message('Finished normally', 'info')
 
     def __add_metadata__(self):
         for subject_id in self.overall_aggregation:
@@ -857,41 +869,41 @@ class TranscriptionAPI(AggregationAPI):
             self.overall_aggregation[subject_id] = self.overall_aggregation[subject_id]["T2"]
             self.overall_aggregation[subject_id]["metadata"] = metadata["subjects"][0]["metadata"]
 
-    def __cluster_output_with_colour__(self,workflow_id,ax,subject_id):
-        """
-        use colour to show where characters match and don't match between different transcriptions of
-        the same text
-        :param subject_id:
-        :return:
-        """
-        selection_stmt = "SELECT aggregation FROM aggregations WHERE workflow_id = " + str(workflow_id) + " AND subject_id = " + str(subject_id)
-        cursor = self.postgres_session.cursor()
-        cursor.execute(selection_stmt)
-
-        aggregated_text = cursor.fetchone()[0]["T2"]["text clusters"].values()
-        assert isinstance(aggregated_text,list)
-        # remove the list of all users
-        aggregated_text = [a for a in aggregated_text if isinstance(a,dict)]
-
-        # sort the text by y coordinates (should give the order in which the text is supposed to appear)
-        aggregated_text.sort(key = lambda x:x["center"][2])
-
-        for text in aggregated_text:
-            ax.plot([text["center"][0],text["center"][1]],[text["center"][2],text["center"][3]],color="red")
-            actual_text = text["center"][-1]
-            atomic_text = self.cluster_algs["text"].__set_special_characters__(actual_text)[1]
-
-            for c in atomic_text:
-                if ord(c) == 27:
-                    # no agreement was reached
-                    print chr(8) + unicode(u"\u2224"),
-                elif ord(c) == 28:
-                    # the agreement was that nothing was here
-                    # technically not a space but close enough
-                    print chr(8) + " ",
-                else:
-                    print chr(8) + c,
-            print
+    # def __cluster_output_with_colour__(self,workflow_id,ax,subject_id):
+    #     """
+    #     use colour to show where characters match and don't match between different transcriptions of
+    #     the same text
+    #     :param subject_id:
+    #     :return:
+    #     """
+    #     selection_stmt = "SELECT aggregation FROM aggregations WHERE workflow_id = " + str(workflow_id) + " AND subject_id = " + str(subject_id)
+    #     cursor = self.postgres_session.cursor()
+    #     cursor.execute(selection_stmt)
+    #
+    #     aggregated_text = cursor.fetchone()[0]["T2"]["text clusters"].values()
+    #     assert isinstance(aggregated_text,list)
+    #     # remove the list of all users
+    #     aggregated_text = [a for a in aggregated_text if isinstance(a,dict)]
+    #
+    #     # sort the text by y coordinates (should give the order in which the text is supposed to appear)
+    #     aggregated_text.sort(key = lambda x:x["center"][2])
+    #
+    #     for text in aggregated_text:
+    #         ax.plot([text["center"][0],text["center"][1]],[text["center"][2],text["center"][3]],color="red")
+    #         actual_text = text["center"][-1]
+    #         atomic_text = self.cluster_algs["text"].__set_special_characters__(actual_text)[1]
+    #
+    #         for c in atomic_text:
+    #             if ord(c) == 27:
+    #                 # no agreement was reached
+    #                 print chr(8) + unicode(u"\u2224"),
+    #             elif ord(c) == 28:
+    #                 # the agreement was that nothing was here
+    #                 # technically not a space but close enough
+    #                 print chr(8) + " ",
+    #             else:
+    #                 print chr(8) + c,
+    #         print
 
     def __readin_tasks__(self,workflow_id):
         if self.project_id == 245:
@@ -1036,13 +1048,11 @@ class TranscriptionAPI(AggregationAPI):
 
         assert response["ResponseMetadata"]["HTTPStatusCode"] == 200
 
-
-
 if __name__ == "__main__":
     try:
         opts, args = getopt.getopt(sys.argv[1:],"shi:e:d:",["summary","project_id=","environment=","end_date="])
     except getopt.GetoptError:
-        print 'transcription.py -i <project_id> -e: <environment> -d: <end_date>'
+        print 'transcription.py -i <project_id> -e: <environment> -d: <end_date> --sumary'
         sys.exit(2)
 
     environment = "development"
