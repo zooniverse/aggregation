@@ -1643,8 +1643,6 @@ class AggregationAPI:
                 print marking
                 continue
 
-            print tool
-
             # for development only really - if we are not interested in a certain type of marking
             # right now - just skip it
             if shape not in self.workflows[workflow_id][1][task_id]:
@@ -1756,7 +1754,7 @@ class AggregationAPI:
 
             # annotations = json.loads(record.annotations)
             annotation = json.loads(annotation)
-            print annotation
+
             # go through each annotation and get the associated task
             for task in annotation:
                 try:
@@ -1773,7 +1771,6 @@ class AggregationAPI:
                         continue
 
                     raw_markings,raw_classifications = self.__add_markings_annotations__(subject_id,workflow_id,task_id,user_id,task["value"],raw_markings,raw_classifications,marking_tasks,classification_tasks,dimensions)
-                    print raw_classifications
 
                 # we a have a pure classification task
                 elif task_id in classification_tasks:
