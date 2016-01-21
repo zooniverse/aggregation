@@ -232,6 +232,103 @@ class TextCluster(clustering.Cluster):
         assert isinstance(text,str)
         return ret_text
 
+    def __find_completed_components__(self,aligned_text,coordinates,aggregated_text):
+        completed_indices = []
+        for char_index in range(len(aligned_text[0])):
+            char_set = set(text[char_index] for text in aligned_text)
+            # 25 means that user hasn't transcribed this part of the line - NOT an inserted gap
+            char_vote = {c:sum([1 for text in aligned_text if text[char_index] == c]) for c in char_set if ord(c) != 25}
+
+            if sum(char_vote.values()) >= 3:
+                completed_indices.append(char_index)
+
+        completed_starting_point = {}
+        completed_ending_point = {}
+
+        transcription_range = {}
+
+        # find consecutive blocks
+        if completed_indices != []:
+            blocks = [[completed_indices[0]],]
+            for i,char_index in list(enumerate(completed_indices))[1:]:
+                if completed_indices[i-1] != (char_index-1):
+                    blocks[-1].append(completed_indices[i-1])
+                    blocks.append([char_index])
+
+            blocks[-1].append(completed_indices[-1])
+
+            # technically we can have multiple transcriptions from the same user so
+            # instead of user_index, I'll use transcription_index
+            # also, technically the same user could give transcribe the same piece of text twice (or more)
+            # and include those transcriptions in different annotations. Going to assume that doesn't happen
+            for transcription_index,(text,coord) in enumerate(zip(aligned_text,coordinates)):
+                x1,x2,y1,y2 = coord
+                non_space_characters = [i for (i,c) in enumerate(text) if ord(c) != 25]
+
+                first_char = min(non_space_characters)
+                last_char = max(non_space_characters)
+
+                transcription_range[transcription_index] = (first_char,last_char)
+
+                # look for transcriptions which exactly match up with the completed segment
+                # match on either starting OR ending point matching up
+                # we'll use these transcriptions to determine where to place the red dots
+                # telling people to no longer transcribe that text
+                # such transcriptions may not exist - in which case we cannot really do anything
+                for b in blocks:
+                    # does the start of the transcription match up with the start of the completed segment
+                    if b[0] == first_char:
+                        if (first_char,last_char) in completed_starting_point:
+                            completed_starting_point[(first_char,last_char)].append((x1,y1))
+                        else:
+                            completed_starting_point[(first_char,last_char)] = [(x1,y1)]
+
+                    # does the end of the transcription match up with the end of the completed segment?
+                    if b[1] == last_char:
+                        if (first_char,last_char) in completed_ending_point:
+                            completed_ending_point[(first_char,last_char)].append((x2,y2))
+                        else:
+                            completed_ending_point[(first_char,last_char)] = [(x2,y2)]
+
+        # go through every segment that is considered done
+        for (lb,ub) in completed_starting_point:
+            # not sure how likely this is to happen, but just to be sure
+            # make sure that we have both a starting and ending point
+            if (lb,ub) not in completed_ending_point:
+                continue
+
+            new_cluster = {}
+
+            X1,Y1 = zip(*completed_starting_point[(lb,ub)])
+            X2,Y2 = zip(*completed_ending_point[(lb,ub)])
+
+            x1 = np.median(X1)
+            x2 = np.median(X2)
+            y1 = np.median(Y1)
+            y2 = np.median(Y2)
+
+            new_cluster["center"] = (x1,x2,y1,y2,aggregated_text[lb:ub+1])
+
+            new_cluster["cluster members"] = []
+            # for i in c:
+            #     text = pruned_markings[i][-1]
+            #     original_text = self.__reset_tags__(text)
+            #     new_cluster["cluster members"].append((pruned_markings[i][:-1],original_text))
+            #
+            # new_cluster["num users"] = len(new_cluster["cluster members"])
+            #
+            # return_value_clusters.append(new_cluster)
+
+            # which transcriptions contributed to this piece of text being considered done?
+            # note that we are not looking for (lb_j,ub_j) to completely contain the completed segment
+            # (although I think most of the time that will be the case) - any overlap will count
+            # this will be needed if people want to go back and look at the raw data
+            for j,(lb_j,ub_j) in transcription_range.items():
+                if (lb_j <= lb <= ub_j) or (lb_j <= ub <= ub_j):
+                    pass
+
+
+
     def __merge_aligned_text__(self,aligned_text):
         """
         once we have aligned the text using MAFFT, use this function to actually decide on an aggregate
@@ -380,8 +477,6 @@ class TextCluster(clustering.Cluster):
         # image is kept mainly just for debugging
         image = None
 
-        # print len(markings)
-
         pruned_markings = []
 
         removed_count = 0
@@ -481,6 +576,7 @@ class TextCluster(clustering.Cluster):
         for c,col in zip(clusters,colours):
             # deal with tags (make them all the same length) and any characters that MAFFT can't handle
             text_items = [self.__set_special_characters__(pruned_markings[i][-1]) for i in c]
+            coordinates = [pruned_markings[i][:-1] for i in c]
             # original_items are the text with each tag represented by a single number taking up just one
             # character
             original_items,lowercase_items = zip(*text_items)
@@ -491,11 +587,15 @@ class TextCluster(clustering.Cluster):
             # use the alignment spaces to align the original text
             aligned_uppercase_text = self.__add_alignment_spaces__(aligned_text,original_items)
 
-            print aligned_text
-            print aligned_uppercase_text
+            for t in aligned_text:
+                print t
+
+            print
+            # print aligned_uppercase_text
 
             # finally aggregate the individual pieces of text together
             aggregate_text,completed = self.__merge_aligned_text__(aligned_uppercase_text)
+            self.__find_completed_components__(aligned_uppercase_text,coordinates,aggregate_text)
 
             if completed:
                 total_retired_lines += 1
@@ -530,168 +630,6 @@ class TextCluster(clustering.Cluster):
             return_value_clusters.append(new_cluster)
 
         return return_value_clusters,0
-
-
-
-
-    # def __create_cluster__(self,markings,index_filter):
-    #     markings_in_cluster = [markings[i] for i in index_filter]
-    #
-    #     x1_values,x2_values,y1_values,y2_values,transcriptions = zip(*markings_in_cluster)
-    #
-    #     transformed_transcriptions = [self.__set_special_characters__(t) for t in transcriptions]
-    #     # in lower case transformed, all of the original characters have been put into lower case
-    #     # and upper case are used for special characters
-    #     # we'll use lower_case_transformed to align the strings and by mapping back to capitalized_transformed
-    #     # we can recover the correct capitalization for each string
-    #     lower_case_transformed,capitalized_transformed = zip(*transformed_transcriptions)
-    #
-    #     aligned_transcriptions = self.__line_alignment__(lower_case_transformed)
-    #     # recover the correct capitalizations
-    #     aligned_transcriptions = self.__add_alignment_spaces__(aligned_transcriptions,capitalized_transformed)
-    #
-    #     # in cases where there is disagreement, use voting to determine the most likely character
-    #     # if there is strong disagreement, we'll mark those spots as unknown
-    #     aggregate_text,character_agreement,per_user_agreement = self.__merge_aligned_text__(aligned_transcriptions)
-    #
-    #     aggregate_text = self.__reset_special_characters__(aggregate_text)
-    #
-    #     x1 = np.median(x1_values)
-    #     x2 = np.median(x2_values)
-    #     y1 = np.median(y1_values)
-    #     y2 = np.median(y2_values)
-    #
-    #     cluster = {}
-    #     cluster["center"] = (x1,x2,y1,y2,aggregate_text)
-    #
-    #     cluster["tools"] = []
-    #
-    #     cluster["cluster members"] = []
-    #     for ii,m in enumerate(markings_in_cluster):
-    #         coords = m[:-1]
-    #         text = self.__reset_special_characters__(aligned_transcriptions[ii])
-    #         cluster["cluster members"].append((coords,text))
-    #
-    #     cluster["num users"] = len(cluster["cluster members"])
-    #
-    #     if cluster["num users"] >= 3:
-    #         self.stats["retired lines"] += 1
-    #
-    #         aggregate_text = cluster["center"][-1]
-    #
-    #         errors = sum([1 for c in aggregate_text if ord(c) == 27])
-    #         self.stats["errors"] += errors
-    #         self.stats["characters"] += len(aggregate_text)
-    #
-    #
-    #     return cluster
-
-    # def __normalize_lines__(self,intercepts,slopes):
-    #     """
-    #     normalize the lines so that the intercepts and slopes are all between 0 and 1
-    #     makes cluster better
-    #     also returns a dictionary which allows us to "unnormalize" lines so that we refer to the original values
-    #     """
-    #     mean_intercept = np.mean(intercepts)
-    #     std_intercept = np.std(intercepts)
-    #
-    #     normalized_intercepts = [(i-mean_intercept)/std_intercept for i in intercepts]
-    #
-    #     mean_slopes = np.mean(slopes)
-    #     std_slopes = np.std(slopes)
-    #
-    #     normalized_slopes = [(s-mean_slopes)/std_slopes for s in slopes]
-    #
-    #     return normalized_intercepts,normalized_slopes
-
-    # def __get_clusters_indices(self,reduced_markings):
-    #     """
-    #     get a list of the clusters - where each cluster gives just the indices
-    #     of the transcriptions in that cluster - so no text aggregation/alignment is actually happening here
-    #     actually I lied - there is some text alignment going on here to determine whether or not to add
-    #     a transcription to a cluster - this will need to "rehappen" else where to do the actual aggregation
-    #     which is slight redundant but I think will make things a lot easier for now
-    #     """
-    #     # start by splitting markings into lines and text and then the lines into slopes and intercepts
-    #     intercepts,slopes,text = zip(*reduced_markings)
-    #
-    #     # deal with special characters in the text and "recombine" the markings
-    #     # text has capital letters used only for special characters/tags
-    #     # while capitalized_text has the original capitalization which is useful for the final aggregate result
-    #     text,capitalized_text = zip(*[self.__set_special_characters__(t) for t in text])
-    #
-    #     # normalize the the slopes and intercepts
-    #     normalized_intercepts,normalized_slopes = self.__normalize_lines__(intercepts,slopes)
-    #     pts_list = zip(normalized_intercepts,normalized_slopes)
-    #     # pts_list = zip(intercepts,slopes)
-    #
-    #     # see http://stackoverflow.com/questions/18952587/use-distance-matrix-in-scipy-cluster-hierarchy-linkage
-    #     labels = range(len(pts_list))
-    #     variables = ["X","Y"]
-    #     # X = np.random.random_sample([5,3])*10
-    #     df = pd.DataFrame(list(pts_list),columns=variables, index=labels)
-    #
-    #     assigned_to_cluster = []
-    #
-    #     # variables = ["X"]
-    #     # # X = np.random.random_sample([5,3])*10
-    #     # df = pd.DataFrame(list(normalized_intercepts),columns=variables, index=labels)
-    #
-    #     # row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
-    #     dist_matrix = squareform(pdist(df, metric='euclidean'))
-    #
-    #     clusters_by_indices = []
-    #
-    #     for transcription_index in range(len(text)):
-    #         if transcription_index in assigned_to_cluster:
-    #             continue
-    #
-    #         if text[transcription_index] == "":
-    #             continue
-    #
-    #         assigned_to_cluster.append(transcription_index)
-    #         transcriptions = [text[transcription_index]]
-    #
-    #
-    #
-    #         indices = [transcription_index]
-    #
-    #         distances = dist_matrix[transcription_index]
-    #         distances = zip(range(len(distances)),distances)
-    #
-    #         distances.sort(key = lambda x:x[1])
-    #
-    #         # [1:] since the first element will be itself
-    #         skips = 0
-    #         allowable_skips = 5
-    #         for ii,d in distances[1:20]:
-    #             if ii not in assigned_to_cluster:
-    #                 if text[ii] == "":
-    #                     continue
-    #
-    #                 # create a new temp. set of transcriptions by adding in this next transcription
-    #                 temp_transcriptions = transcriptions[:]
-    #                 temp_transcriptions.append(text[ii])
-    #
-    #                 # check to see what the minimum accuracy is
-    #                 # if high, go with this new set of transcriptions
-    #                 # otherwise - allow one skip
-    #                 aligned_transcriptions = self.__line_alignment__(temp_transcriptions)
-    #                 accuracy = self.__agreement__(aligned_transcriptions)
-    #
-    #                 if min(accuracy) >= 0.6:
-    #                     transcriptions = temp_transcriptions
-    #                     indices.append(ii)
-    #                     assigned_to_cluster.append(ii)
-    #                 else:
-    #                     skips += 1
-    #                     if skips == allowable_skips:
-    #                         clusters_by_indices.append(indices)
-    #                         break
-    #         if skips < allowable_skips:
-    #             clusters_by_indices.append(indices)
-    #     # assert False
-    #     return clusters_by_indices
 
 
 class SubjectRetirement(Classification):
@@ -851,59 +789,25 @@ class TranscriptionAPI(AggregationAPI):
             print "line retirement table already exists"
 
     def __enter__(self):
-        if True:#self.environment != "development":
-            panoptes_file = open("/app/config/aggregation.yml","rb")
-            api_details = yaml.load(panoptes_file)
-            self.rollbar_token = api_details[self.environment]["rollbar"]
-            rollbar.init(self.rollbar_token,self.environment)
+        AggregationAPI.__enter__(self)
+
+        # if True:#self.environment != "development":
+        #     panoptes_file = open("/app/config/aggregation.yml","rb")
+        #     api_details = yaml.load(panoptes_file)
+        #     self.rollbar_token = api_details[self.environment]["rollbar"]
+        #     rollbar.init(self.rollbar_token,self.environment)
 
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        TranscriptionAPI.__exit__(self, exc_type, exc_val, exc_tb)
-        rollbar.report_message('Finished normally', 'info')
+        AggregationAPI.__exit__(self, exc_type, exc_val, exc_tb)
+        # rollbar.report_message('Finished normally', 'info')
 
     def __add_metadata__(self):
         for subject_id in self.overall_aggregation:
             metadata = self.__get_subject_metadata__(subject_id)
             self.overall_aggregation[subject_id] = self.overall_aggregation[subject_id]["T2"]
             self.overall_aggregation[subject_id]["metadata"] = metadata["subjects"][0]["metadata"]
-
-    # def __cluster_output_with_colour__(self,workflow_id,ax,subject_id):
-    #     """
-    #     use colour to show where characters match and don't match between different transcriptions of
-    #     the same text
-    #     :param subject_id:
-    #     :return:
-    #     """
-    #     selection_stmt = "SELECT aggregation FROM aggregations WHERE workflow_id = " + str(workflow_id) + " AND subject_id = " + str(subject_id)
-    #     cursor = self.postgres_session.cursor()
-    #     cursor.execute(selection_stmt)
-    #
-    #     aggregated_text = cursor.fetchone()[0]["T2"]["text clusters"].values()
-    #     assert isinstance(aggregated_text,list)
-    #     # remove the list of all users
-    #     aggregated_text = [a for a in aggregated_text if isinstance(a,dict)]
-    #
-    #     # sort the text by y coordinates (should give the order in which the text is supposed to appear)
-    #     aggregated_text.sort(key = lambda x:x["center"][2])
-    #
-    #     for text in aggregated_text:
-    #         ax.plot([text["center"][0],text["center"][1]],[text["center"][2],text["center"][3]],color="red")
-    #         actual_text = text["center"][-1]
-    #         atomic_text = self.cluster_algs["text"].__set_special_characters__(actual_text)[1]
-    #
-    #         for c in atomic_text:
-    #             if ord(c) == 27:
-    #                 # no agreement was reached
-    #                 print chr(8) + unicode(u"\u2224"),
-    #             elif ord(c) == 28:
-    #                 # the agreement was that nothing was here
-    #                 # technically not a space but close enough
-    #                 print chr(8) + " ",
-    #             else:
-    #                 print chr(8) + c,
-    #         print
 
     def __readin_tasks__(self,workflow_id):
         if self.project_id == 245:
@@ -922,24 +826,6 @@ class TranscriptionAPI(AggregationAPI):
             return classification_tasks,marking_tasks,{}
         else:
             return AggregationAPI.__readin_tasks__(self,workflow_id)
-
-    # def __get_subjects_to_aggregate__(self,workflow_id,with_expert_classifications=None):
-    #     """
-    #     override the retired subjects function to get only subjects which have been transcribed since we last ran
-    #     the code
-    #     :param workflow_id:
-    #     :param with_expert_classifications:
-    #     :return:
-    #     """
-    #     recently_classified_subjects = set()
-    #     select = "SELECT subject_id,created_at from classifications where project_id="+str(self.project_id)
-    #
-    #     for r in self.cassandra_session.execute(select):
-    #         subject_id = r.subject_id
-    #         if r.created_at >= self.old_time:
-    #             recently_classified_subjects.add(subject_id)
-    #     # assert False
-    #     return list(recently_classified_subjects)
 
     def __prune__(self,aggregations):
         assert isinstance(aggregations,dict)
@@ -1077,7 +963,7 @@ if __name__ == "__main__":
 
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
-        project.__migrate__()
+        # project.__migrate__()
         print "done migrating"
 
         project.__aggregate__()
@@ -1092,5 +978,4 @@ if __name__ == "__main__":
             t.close()
 
             project.__summarize__(tar_path)
-
-        # print aggregated_text
+            print "hello?"
