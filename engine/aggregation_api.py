@@ -369,6 +369,7 @@ class AggregationAPI:
                     params = (int(self.project_id),subject_id,int(workflow_id))
                 else:
                     params = (int(self.project_id),subject_id,int(workflow_id),version)
+
                 statements_and_params.append((select_statement, params))
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
 
@@ -1028,13 +1029,13 @@ class AggregationAPI:
 
         # uncomment this code if this is the first time you've run migration on whatever machine
         # will create the necessary cassandra tables for you - also useful if you need to reset
-        try:
-            self.cassandra_session.execute("drop table classifications")
-            self.cassandra_session.execute("drop table subjects")
-            self.cassandra_session.execute("drop table most_recent")
-            print "tables dropped"
-        except cassandra.InvalidRequest,cassandra.protocol.ServerError:
-            print "tables did not already exist"
+        # try:
+        #     self.cassandra_session.execute("drop table classifications")
+        #     self.cassandra_session.execute("drop table subjects")
+        #     self.cassandra_session.execute("drop table most_recent")
+        #     print "tables dropped"
+        # except cassandra.InvalidRequest,cassandra.protocol.ServerError:
+        #     print "tables did not already exist"
 
 
         # try:
@@ -1508,6 +1509,7 @@ class AggregationAPI:
             task_dict = json.loads(task_dict)
 
         for task_id,task in task_dict.items():
+
             # self.task_type[task_id] = tasks[task_id]["type"]
             # if the task is a drawing one, get the necessary details for clustering
 
