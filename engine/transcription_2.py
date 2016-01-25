@@ -636,6 +636,7 @@ class TextCluster(clustering.Cluster):
             markings_in_cluster = [filtered_markings[i] for i in c]
             clusters.extend(self.__create_clusters__(completed_components,aggregate_text,transcription_range,markings_in_cluster))
 
+        print "number of completed components: " + str(len(clusters))
         return clusters,0
 
 
