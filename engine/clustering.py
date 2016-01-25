@@ -96,7 +96,7 @@ class Cluster:
                 if shape != self.shape:
                     continue
 
-                for subject_count,subject_id in list(enumerate(raw_markings[task_id][shape]))[:5]:
+                for subject_count,subject_id in list(enumerate(raw_markings[task_id][shape])):
                     print subject_id
                     assert raw_markings[task_id][shape][subject_id] != []
 
