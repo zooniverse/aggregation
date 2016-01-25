@@ -1060,7 +1060,6 @@ class AggregationAPI:
         # use >= just in case some classifications have the exact same time stamp - rare but could happen
         cur = self.postgres_session.cursor()
         select = "SELECT count(*) from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)#+ " and created_at >= '" + str(self.previous_runtime) +"'"
-        print select
         cur.execute(select)
         num_migrated = cur.fetchone()[0]
 
