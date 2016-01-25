@@ -338,9 +338,9 @@ class TextCluster(clustering.Cluster):
             for j,(lb_j,ub_j) in enumerate(transcription_range):
 
                 if (lb_j <= lb <= ub_j) or (lb_j <= ub <= ub_j):
-                    new_cluster["clusters"].append(markings[j])
+                    new_cluster["cluster members"].append(markings[j])
 
-            new_cluster["num users"] = len(new_cluster["clusters"])
+            new_cluster["num users"] = len(new_cluster["cluster members"])
 
             clusters.append(new_cluster)
 
@@ -603,14 +603,11 @@ class TextCluster(clustering.Cluster):
         filtered_markings = self.__filter_markings__(markings)
 
         # cluster the filtered components
-        clusters = self.__find_connected_transcriptions__(filtered_markings)
-
-        # colours are just for debugging stuff
-        colours = plt.cm.Spectral(np.linspace(0, 1, len(clusters)))
+        connected_components = self.__find_connected_transcriptions__(filtered_markings)
 
         clusters = []
 
-        for c,col in zip(clusters,colours):
+        for c in connected_components:
             # extract the starting/ending x-y coordinates for each transcription in the cluster
             coordinates = [filtered_markings[i][:-1] for i in c]
             # as well as the text - at the same time deal with tags (make them all 1 character long)
@@ -638,38 +635,6 @@ class TextCluster(clustering.Cluster):
             # (completed_starting_point,completed_ending_point),aggregated_text,transcription_range,markings
             markings_in_cluster = [filtered_markings[i] for i in c]
             clusters.extend(self.__create_clusters__(completed_components,aggregate_text,transcription_range,markings_in_cluster))
-
-            # if completed:
-            #     total_retired_lines += 1
-            #
-            # new_cluster = {}
-            # # get the average starting and ending points
-            # # todo - multiple small transcriptions are going to cause problems
-            # x1_list,x2_list,y1_list,y2_list,_ = zip(*[pruned_markings[i] for i in c])
-            # x1 = np.median(x1_list)
-            # x2 = np.median(x2_list)
-            # y1 = np.median(y1_list)
-            # y2 = np.median(y2_list)
-            #
-            # # aggregate_text still has whole tag "sets" represented by one individual character with ord() > 128
-            # # which postgres can't handle in text. So we need to replace each of those characters with its original
-            # # tag "set" ("set" because for folger, we can have a whole bunch of tags)
-            # # note for Folger - this IS where we convert to the tag format that Folger wants
-            # # also things like using "I" to represent " " should have been taken care of when we started using
-            # # aligned_uppercase_text
-            # aggregate_text = self.__reset_tags__(aggregate_text)
-            #
-            # new_cluster["center"] = (x1,x2,y1,y2,aggregate_text)
-            #
-            # new_cluster["cluster members"] = []
-            # for i in c:
-            #     text = pruned_markings[i][-1]
-            #     original_text = self.__reset_tags__(text)
-            #     new_cluster["cluster members"].append((pruned_markings[i][:-1],original_text))
-            #
-            # new_cluster["num users"] = len(new_cluster["cluster members"])
-            #
-            # return_value_clusters.append(new_cluster)
 
         return clusters,0
 
@@ -1005,7 +970,7 @@ if __name__ == "__main__":
 
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
-        project.__migrate__()
+        # project.__migrate__()
         print "done migrating"
 
         project.__aggregate__()
