@@ -232,7 +232,13 @@ class TextCluster(clustering.Cluster):
         assert isinstance(text,str)
         return ret_text
 
-    def __find_completed_components__(self,aligned_text,coordinates,aggregated_text):
+    def __find_completed_components__(self,aligned_text,coordinates):
+        """
+        go through the aggregated text looking for subsets where at least 3 people have transcribed everything
+        :param aligned_text:
+        :param coordinates:
+        :return:
+        """
         completed_indices = []
         for char_index in range(len(aligned_text[0])):
             char_set = set(text[char_index] for text in aligned_text)
@@ -245,7 +251,7 @@ class TextCluster(clustering.Cluster):
         completed_starting_point = {}
         completed_ending_point = {}
 
-        transcription_range = {}
+        # transcription_range = {}
 
         # find consecutive blocks
         if completed_indices != []:
@@ -268,7 +274,7 @@ class TextCluster(clustering.Cluster):
                 first_char = min(non_space_characters)
                 last_char = max(non_space_characters)
 
-                transcription_range[transcription_index] = (first_char,last_char)
+                # transcription_range[transcription_index] = (first_char,last_char)
 
                 # look for transcriptions which exactly match up with the completed segment
                 # match on either starting OR ending point matching up
@@ -290,6 +296,20 @@ class TextCluster(clustering.Cluster):
                         else:
                             completed_ending_point[(first_char,last_char)] = [(x2,y2)]
 
+        return completed_starting_point,completed_ending_point
+
+    def __create_clusters__(self,(completed_starting_point,completed_ending_point),aggregated_text,transcription_range,markings):
+        """
+        the aggregated text, split up into completed components and make a result (aggregate) cluster for each
+        of those components
+        :param aggregated_text:
+        :param transcription_range: where (relative to the aggregate text) each transcription string starts and stops
+        useful for differentiating between gap markers before or after the text and gaps inside the text
+        :param markings: the original markings - without the tags tokenized
+        :return:
+        """
+        clusters = []
+
         # go through every segment that is considered done
         for (lb,ub) in completed_starting_point:
             # not sure how likely this is to happen, but just to be sure
@@ -310,24 +330,21 @@ class TextCluster(clustering.Cluster):
             new_cluster["center"] = (x1,x2,y1,y2,aggregated_text[lb:ub+1])
 
             new_cluster["cluster members"] = []
-            # for i in c:
-            #     text = pruned_markings[i][-1]
-            #     original_text = self.__reset_tags__(text)
-            #     new_cluster["cluster members"].append((pruned_markings[i][:-1],original_text))
-            #
-            # new_cluster["num users"] = len(new_cluster["cluster members"])
-            #
-            # return_value_clusters.append(new_cluster)
 
             # which transcriptions contributed to this piece of text being considered done?
             # note that we are not looking for (lb_j,ub_j) to completely contain the completed segment
             # (although I think most of the time that will be the case) - any overlap will count
             # this will be needed if people want to go back and look at the raw data
-            for j,(lb_j,ub_j) in transcription_range.items():
+            for j,(lb_j,ub_j) in enumerate(transcription_range):
+
                 if (lb_j <= lb <= ub_j) or (lb_j <= ub <= ub_j):
-                    pass
+                    new_cluster["clusters"].append(markings[j])
 
+            new_cluster["num users"] = len(new_cluster["clusters"])
 
+            clusters.append(new_cluster)
+
+        return clusters
 
     def __merge_aligned_text__(self,aligned_text):
         """
@@ -421,9 +438,9 @@ class TextCluster(clustering.Cluster):
             percent_complete = 0
             percent_consensus = -1
 
-        return aggregate_text,(uncompleted_characters != 0)
+        return aggregate_text
 
-    def __add_alignment_spaces__(self,aligned_text_list,capitalized_text):
+    def __add_alignment_spaces__(self,aligned_text_list,tokenized_text):
         """
         take the text representation where we still have upper case and lower case letters
         plus special characters for tags (so definitely not the input for MAFFT) and add in whatever
@@ -434,7 +451,8 @@ class TextCluster(clustering.Cluster):
         """
 
         aligned_nf_text_list = []
-        for text,nf_text in zip(aligned_text_list,capitalized_text):
+        transcription_range = []
+        for text,nf_text in zip(aligned_text_list,tokenized_text):
             aligned_nf_text = ""
 
             # added spaces before or after all of the text need to be treated differently
@@ -447,6 +465,8 @@ class TextCluster(clustering.Cluster):
                 print aligned_text_list
                 raise
             last_char = max(non_space_characters)
+
+            transcription_range.append((first_char,last_char))
 
             i = 0
             for j,c in enumerate(text):
@@ -462,26 +482,16 @@ class TextCluster(clustering.Cluster):
                     i += 1
             aligned_nf_text_list.append(aligned_nf_text)
 
-        return aligned_nf_text_list
+        return aligned_nf_text_list,transcription_range
 
-    def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,subject_id,recursive=False):
+    def __filter_markings__(self,markings):
         """
-        cluster the line segments transcriptions together - look for overlaping parts
-        note that overlaping is not transitive - if A overlaps B and B overlap C, it does not follow
-        that A overlaps C. So we'll use some graph theory instead to search for
+        filter out any markings which are not horizontal or are empty after removing bad characters
+        :return:
         """
+        # todo - generalize for non-horizontal markings
+        filtered_markings = []
 
-        G = networkx.Graph()
-        G.add_nodes_from(range(len(markings)))
-
-        # image is kept mainly just for debugging
-        image = None
-
-        pruned_markings = []
-
-        removed_count = 0
-
-        # throw out any non-horizontal lines or those with non-ascii transcriptions
         for m_i,(x1,x2,y1,y2,t) in enumerate(markings):
             # skip empty strings - but make sure when checking to first remove tags that shouldn't
             # be there in the first place
@@ -499,16 +509,27 @@ class TextCluster(clustering.Cluster):
                 theta = math.pi/2.
 
             if math.fabs(theta) > 0.1:
-                removed_count += 1
+                # removed_count += 1
                 continue
 
-            pruned_markings.append((x1,x2,y1,y2,processed_text))
+            filtered_markings.append((x1,x2,y1,y2,processed_text))
 
-        # now look for the overlapping parts
+        return filtered_markings
+
+    def __find_connected_transcriptions__(self,markings):
+        """
+        cluster transcriptions such that each cluster corresponds to the same line of text
+        do this with connected components in a graph - hence the function name
+        :return a list of lists - each "sub" list is list of indices for markings in that transcription:
+        """
+        G = networkx.Graph()
+        G.add_nodes_from(range(len(markings)))
+
+         # now look for the overlapping parts
         # examine every pair - note that distance from A to B does not necessarily equal
         # the distance from B to A - so order matters
-        for m_i,(x1,x2,y1,y2,t) in enumerate(pruned_markings):
-            for m_i2,(x1_,x2_,y1_,y2_,_) in enumerate(pruned_markings):
+        for m_i,(x1,x2,y1,y2,t) in enumerate(markings):
+            for m_i2,(x1_,x2_,y1_,y2_,_) in enumerate(markings):
                 # assuming two purely horizontal lines - consider the following example
                 # x1 ----------- x2
                 #     x1_----x2_
@@ -566,70 +587,91 @@ class TextCluster(clustering.Cluster):
         # look for connect components - i.e. sets of overlapping transcriptions
         clusters = [c for c in list(networkx.connected_components(G)) if len(c) > 1]
 
+        return clusters
+
+    def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,subject_id,recursive=False):
+        """
+        cluster the line segments transcriptions together - look for overlaping parts
+        note that overlaping is not transitive - if A overlaps B and B overlap C, it does not follow
+        that A overlaps C. So we'll use some graph theory instead to search for
+        """
+
+        # image is kept mainly just for debugging
+        image = None
+
+        # remove any non-horizontal markings or empty transcriptions
+        filtered_markings = self.__filter_markings__(markings)
+
+        # cluster the filtered components
+        clusters = self.__find_connected_transcriptions__(filtered_markings)
+
         # colours are just for debugging stuff
         colours = plt.cm.Spectral(np.linspace(0, 1, len(clusters)))
 
-        return_value_clusters = []
-
-        total_retired_lines = 0
+        clusters = []
 
         for c,col in zip(clusters,colours):
-            # deal with tags (make them all the same length) and any characters that MAFFT can't handle
-            text_items = [self.__set_special_characters__(pruned_markings[i][-1]) for i in c]
-            coordinates = [pruned_markings[i][:-1] for i in c]
-            # original_items are the text with each tag represented by a single number taking up just one
-            # character
-            original_items,lowercase_items = zip(*text_items)
+            # extract the starting/ending x-y coordinates for each transcription in the cluster
+            coordinates = [filtered_markings[i][:-1] for i in c]
+            # as well as the text - at the same time deal with tags (make them all 1 character long)
+            # and other special characters that MAFFT can't deal with
+            text_items = [self.__set_special_characters__(filtered_markings[i][-1]) for i in c]
 
-            # align based on the lower case items (such strings can contain upper case letters but they represent
-            # something special)
-            aligned_text = self.__line_alignment__(lowercase_items)
-            # use the alignment spaces to align the original text
-            aligned_uppercase_text = self.__add_alignment_spaces__(aligned_text,original_items)
+            # tokenized_text has each tag (several characters) represented by just one (non-standard ascii) character
+            # aka a token
+            # lowercase_text converts all upper case letters to lower case
+            # and uses upper case letters to represent things that MAFFT can't deal with (e.g. tag tokens)
+            tokenized_text,lowercase_text = zip(*text_items)
 
-            for t in aligned_text:
-                print t
+            # align based on the lower case items
+            aligned_text = self.__line_alignment__(lowercase_text)
+            # use that alignment to align the tokenized text items (which is isomorphic to the original text)
+            # also a good place where to which exactly what part of the line each transcription transcribed
+            # since there is a difference for gaps inserted before or after the transcription (which reall aren't
+            # gaps at all) and gaps inside the transcription
+            aligned_uppercase_text,transcription_range = self.__add_alignment_spaces__(aligned_text,tokenized_text)
 
-            print
-            # print aligned_uppercase_text
+            # aggregate the individual pieces of text together
+            aggregate_text = self.__merge_aligned_text__(aligned_uppercase_text)
+            # find where the text has been transcribed by at least 3 people
+            completed_components = self.__find_completed_components__(aligned_uppercase_text,coordinates)
+            # (completed_starting_point,completed_ending_point),aggregated_text,transcription_range,markings
+            markings_in_cluster = [filtered_markings[i] for i in c]
+            clusters.extend(self.__create_clusters__(completed_components,aggregate_text,transcription_range,markings_in_cluster))
 
-            # finally aggregate the individual pieces of text together
-            aggregate_text,completed = self.__merge_aligned_text__(aligned_uppercase_text)
-            self.__find_completed_components__(aligned_uppercase_text,coordinates,aggregate_text)
+            # if completed:
+            #     total_retired_lines += 1
+            #
+            # new_cluster = {}
+            # # get the average starting and ending points
+            # # todo - multiple small transcriptions are going to cause problems
+            # x1_list,x2_list,y1_list,y2_list,_ = zip(*[pruned_markings[i] for i in c])
+            # x1 = np.median(x1_list)
+            # x2 = np.median(x2_list)
+            # y1 = np.median(y1_list)
+            # y2 = np.median(y2_list)
+            #
+            # # aggregate_text still has whole tag "sets" represented by one individual character with ord() > 128
+            # # which postgres can't handle in text. So we need to replace each of those characters with its original
+            # # tag "set" ("set" because for folger, we can have a whole bunch of tags)
+            # # note for Folger - this IS where we convert to the tag format that Folger wants
+            # # also things like using "I" to represent " " should have been taken care of when we started using
+            # # aligned_uppercase_text
+            # aggregate_text = self.__reset_tags__(aggregate_text)
+            #
+            # new_cluster["center"] = (x1,x2,y1,y2,aggregate_text)
+            #
+            # new_cluster["cluster members"] = []
+            # for i in c:
+            #     text = pruned_markings[i][-1]
+            #     original_text = self.__reset_tags__(text)
+            #     new_cluster["cluster members"].append((pruned_markings[i][:-1],original_text))
+            #
+            # new_cluster["num users"] = len(new_cluster["cluster members"])
+            #
+            # return_value_clusters.append(new_cluster)
 
-            if completed:
-                total_retired_lines += 1
-
-            new_cluster = {}
-            # get the average starting and ending points
-            # todo - multiple small transcriptions are going to cause problems
-            x1_list,x2_list,y1_list,y2_list,_ = zip(*[pruned_markings[i] for i in c])
-            x1 = np.median(x1_list)
-            x2 = np.median(x2_list)
-            y1 = np.median(y1_list)
-            y2 = np.median(y2_list)
-
-            # aggregate_text still has whole tag "sets" represented by one individual character with ord() > 128
-            # which postgres can't handle in text. So we need to replace each of those characters with its original
-            # tag "set" ("set" because for folger, we can have a whole bunch of tags)
-            # note for Folger - this IS where we convert to the tag format that Folger wants
-            # also things like using "I" to represent " " should have been taken care of when we started using
-            # aligned_uppercase_text
-            aggregate_text = self.__reset_tags__(aggregate_text)
-
-            new_cluster["center"] = (x1,x2,y1,y2,aggregate_text)
-
-            new_cluster["cluster members"] = []
-            for i in c:
-                text = pruned_markings[i][-1]
-                original_text = self.__reset_tags__(text)
-                new_cluster["cluster members"].append((pruned_markings[i][:-1],original_text))
-
-            new_cluster["num users"] = len(new_cluster["cluster members"])
-
-            return_value_clusters.append(new_cluster)
-
-        return return_value_clusters,0
+        return clusters,0
 
 
 class SubjectRetirement(Classification):
@@ -963,7 +1005,7 @@ if __name__ == "__main__":
 
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
-        # project.__migrate__()
+        project.__migrate__()
         print "done migrating"
 
         project.__aggregate__()
