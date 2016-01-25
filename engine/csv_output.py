@@ -8,6 +8,7 @@ import sys
 import shapely.geometry as geometry
 import unicodedata
 import helper_functions
+import numpy as np
 
 
 class CsvOut:
@@ -41,56 +42,153 @@ class CsvOut:
     def __exit__(self, exc_type, exc_value, traceback):
         pass
 
-    def __classification_output__(self,workflow_id,task_id,subject_id,aggregations):
+    def __classification_output__(self,workflow_id,task_id,subject_id,aggregations,shape_id=None,followup_id=None):
         """
-        add a row to the classifciation csv output file
+        add a row to both the summary and detailed csv output files
         """
-        # first column is the subject id
-        row = str(subject_id)
+        # a dictionary containing the index id of each answer and its corresponding label
+        answer_dict = self.instructions[workflow_id][task_id]["answers"]
 
-        # now go through each of the possible resposnes
-        for answer_index in self.instructions[workflow_id][task_id]["answers"].keys():
-            # at some point the integer indices seem to have been converted into strings
-            # if a value isn't there - use 0
-            if str(answer_index) in aggregations[0].keys():
-                row += "," + str(aggregations[0][str(answer_index)])
-            else:
-                row += ",0"
+        # start with the summary file
+        id_ = (workflow_id,task_id,shape_id,followup_id,"summary")
 
-        # add the number of people who saw this subject
-        row += "," + str(aggregations[1])
-        self.csv_files[task_id].write(row+"\n")
+        self.__add_summary_row__(id_,subject_id,aggregations,answer_dict)
 
-    def __single_response_csv_header__(self,output_directory,id_,instructions):
-        fname = str(id_) + instructions[:50]
+        id_ = (workflow_id,task_id,shape_id,followup_id,"detailed")
+        self.__add_detailed_row__(id_,subject_id,aggregations,answer_dict)
+
+    def __add_detailed_row__(self,id_,subject_id,results,answer_dict):
+        """
+        given the results for a given workflow/task and subject_id (and possibly shape and follow up id for marking)
+        give a detailed results with the probabilities for each class
+        :param id_:
+        :param subject_id:
+        :param results:
+        :param answer_dict:
+        :return:
+        """
+        votes,num_users = results
+
+        with open(self.file_names[id_],"a") as results_file:
+            results_file.write(str(subject_id))
+
+            for answer_key in sorted(answer_dict.keys()):
+                # if no one chose this particular answer, the probability was 0
+                if str(answer_key) not in votes:
+                    percentage = 0
+                else:
+                    percentage = votes[str(answer_key)]
+
+                results_file.write(","+str(percentage))
+
+            results_file.write(","+str(num_users)+"\n")
+
+
+    def __add_summary_row__(self,id_,subject_id,results,answer_dict):
+        """
+        given a result for a specific subject (and possibily a specific cluster within that specific subject)
+        add one row of results to the summary file. that row contains
+        subject_id,tool_index,cluster_index,most_likely,p(most_likely),shannon_entropy,mean_agreement,median_agreement,num_users
+        tool_index & cluster_index are only there if we have a follow up to marking task
+        :param id_:
+        :param subject_id:
+        :param results:
+        :param answer_dict:
+        :return:
+        """
+        votes,num_users = results
+
+        # get the top choice
+        most_likely,top_probability = max(votes.items(), key = lambda x:x[1])
+
+        # extract the text corresponding to the most likely answer
+        most_likely_label = answer_dict[int(most_likely)]
+        # and get rid of any bad characters
+        most_likely_label = helper_functions.csv_string(most_likely_label)
+
+        probabilities = votes.values()
+        entropy = self.__shannon_entropy__(probabilities)
+
+        mean_p = np.mean(votes.values())
+        median_p = np.median(votes.values())
+
+        with open(self.file_names[id_],"a") as results_file:
+            results_file.write(str(subject_id)+",")
+
+            # write out details regarding the top choice
+            # this might not be a useful value if multiple choices are allowed - in which case just ignore it
+            results_file.write(str(most_likely_label)+","+str(top_probability))
+            # write out some summaries about the distributions of people's answers
+            # again entropy probably only makes sense if only one answer is allowed
+            # and mean_p and median_p probably only make sense if multiple answers are allowed
+            # so people will need to pick and choose what they want
+            results_file.write(","+str(entropy)+","+str(mean_p)+","+str(median_p))
+            # finally - how many people have seen this subject for this task
+            results_file.write(","+str(num_users)+"\n")
+
+    def __get_filename__(self,workflow_id,task_id,summary=False,tool_id=None,followup_id=None):
+        """
+        use the user's instructions to help create a file name to store the results in
+        :param workflow_id:
+        :param task_id:
+        :param summary:
+        :return:
+        """
+        assert (tool_id is None) or (followup_id is not None)
+
+        # read in the instructions
+        # if just a simple classification question
+        if tool_id is None:
+            instructions = self.instructions[workflow_id][task_id]["instruction"]
+        # else a follow up question to a marking - so the instructions are stored in a sligghtly different spot
+        else:
+            instructions = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_id]["question"]
+
+        fname = str(task_id) + instructions[:50]
+        if summary:
+            fname += "_summary"
+        # get rid of any characters (like extra ","s) that could cause problems
         fname = helper_functions.csv_string(fname)
         fname += ".csv"
 
-        self.file_names[id_] = fname
-        self.csv_files[id_] = open(output_directory+fname,"wb")
+        return fname
 
-        # now write the header
-        self.csv_files[id_].write("subject_id,most_likely_label,p(most_likely_label),shannon_entropy,num_users\n")
+    def __classification_header__(self,output_directory,workflow_id,task_id,tool_id=None,followup_id=None):
+        assert (tool_id is None) or (followup_id is not None)
+        # start with the detailed results
+        fname = self.__get_filename__(workflow_id,task_id,tool_id=tool_id,followup_id=followup_id)
 
-    def __multi_response_csv_header__(self,output_directory,id_,instructions):
-        fname = str(id_) + instructions[:50]
-        fname = helper_functions.csv_string(fname)
-        fname += ".csv"
+        id_ = (workflow_id,task_id,tool_id,followup_id,"detailed")
+        self.file_names[id_] = output_directory+fname
+        with open(output_directory+fname,"wb") as detailed_results:
+            # now write the headers
+            detailed_results.write("subject_id")
 
-        self.file_names[(id_,"detailed")] = fname
-        self.csv_files[(id_,"detailed")] = open(output_directory+fname,"wb")
+            if tool_id is not None:
+                detailed_results.write(",cluster_id")
 
-        # and now the summary now
-        fname = str(id_) + instructions[:50] + "_summary"
-        fname = helper_functions.csv_string(fname)
-        fname += ".csv"
+            answer_dict = self.instructions[workflow_id][task_id]["answers"]
+            for answer_key in sorted(answer_dict.keys()):
+                # break this up into multiple lines so we can be sure that the answers are sorted correctly
+                # order might not matter in the end, but just to be sure
+                answer = answer_dict[answer_key]
+                answer_string = helper_functions.csv_string(answer)[:50]
+                detailed_results.write(",p("+answer_string+")")
 
-        self.file_names[(id_,"summary")] = fname
-        self.csv_files[(id_,"summary")] = open(output_directory+fname,"wb")
+            detailed_results.write(",num_users\n")
 
-        # now write the headers
-        self.csv_files[(id_,"detailed")].write("subject_id,label,p(label),num_users\n")
-        self.csv_files[(id_,"summary")].write("subject_id,mean_agreement,median_agreement,num_users\n")
+        # now setup the summary file
+        fname = self.__get_filename__(workflow_id,task_id,summary = True,tool_id=tool_id,followup_id=followup_id)
+        id_ = (workflow_id,task_id,tool_id,followup_id,"summary")
+        self.file_names[id_] = output_directory+fname
+        with open(output_directory+fname,"wb") as summary_results:
+            self.csv_files[id_] = summary_results
+            self.csv_files[id_].write("subject_id,")
+
+            if tool_id is not None:
+                self.csv_files[id_].write("cluster_id,")
+
+            self.csv_files[id_].write("most_likely,p(most_likely),shannon_entropy,mean_agreement,median_agreement,num_users\n")
 
     def __make_files__(self,workflow_id):
         """
@@ -124,23 +222,21 @@ class CsvOut:
         # multiple c. tasks (more than one answer allowed) and possibly a follow up question to a marking
         for task_id in classification_tasks:
             # is this task a simple classification task?
-            if classification_tasks[task_id] == "single":
-                instructions = self.instructions[workflow_id][task_id]["instruction"]
-                self.__single_response_csv_header__(output_directory,task_id,instructions)
-            elif classification_tasks[task_id] == "multiple":
-                # create both a detailed view and a summary view
-                instructions = self.instructions[workflow_id][task_id]["instruction"]
-                self.__multi_response_csv_header__(output_directory,task_id,instructions)
+            # don't care if the questions allows for multiple answers, or requires a single one
+            if classification_tasks[task_id] in ["single","multiple"]:
+                self.__classification_header__(output_directory,workflow_id,task_id)
+
             else:
-                # this task is a marking task
+                # this classification task is actually a follow up to a marking task
                 for tool_id in classification_tasks[task_id]:
-                    for followup_index,answer_type in enumerate(classification_tasks[task_id][tool_id]):
-                        instructions = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_index]["question"]
-                        id_ = (task_id,tool_id,followup_index)
-                        if answer_type == "single":
-                            self.__single_response_csv_header__(output_directory,id_,instructions)
-                        else:
-                            self.__multi_response_csv_header__(output_directory,id_,instructions)
+                    for followup_id,answer_type in enumerate(classification_tasks[task_id][tool_id]):
+                        # instructions = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_index]["question"]
+                        self.__classification_header__(output_directory,workflow_id,task_id,tool_id,followup_id)
+                        # id_ = (task_id,tool_id,followup_index)
+                        # if answer_type == "single":
+                        #     self.__single_response_csv_header__(output_directory,id_,instructions)
+                        # else:
+                        #     self.__multi_response_csv_header__(output_directory,id_,instructions)
 
         # now set things up for the marking tasks
         for task_id in marking_tasks:
@@ -157,33 +253,33 @@ class CsvOut:
     def __shannon_entropy__(self,probabilities):
         return -sum([p*math.log(p) for p in probabilities])
 
-    def __multi_choice_classification_row__(self,answers,task_id,subject_id,results,cluster_index=None):
-        votes,num_users = results
-        if votes == {}:
-            return
-
-        for candidate,percent in votes.items():
-            row = str(subject_id) + ","
-            if cluster_index is not None:
-                row += str(cluster_index) + ","
-            # todo - figure out if both choices are needed
-            if isinstance(answers[int(candidate)],dict):
-                row += helper_functions.csv_string(answers[int(candidate)]["label"]) + "," + str(percent) + "," + str(num_users) + "\n"
-            else:
-                row += helper_functions.csv_string(answers[int(candidate)]) + "," + str(percent) + "," + str(num_users) + "\n"
-
-            self.csv_files[(task_id,"detailed")].write(row)
-
-        percentages = votes.values()
-        mean_percent = numpy.mean(percentages)
-        median_percent = numpy.median(percentages)
-
-        row = str(subject_id) + ","
-        if cluster_index is not None:
-            row += str(cluster_index) + ","
-
-        row += str(mean_percent) + "," + str(median_percent) + "," + str(num_users) + "\n"
-        self.csv_files[(task_id,"summary")].write(row)
+    # def __multi_choice_classification_row__(self,answers,task_id,subject_id,results,cluster_index=None):
+    #     votes,num_users = results
+    #     if votes == {}:
+    #         return
+    #
+    #     for candidate,percent in votes.items():
+    #         row = str(subject_id) + ","
+    #         if cluster_index is not None:
+    #             row += str(cluster_index) + ","
+    #         # todo - figure out if both choices are needed
+    #         if isinstance(answers[int(candidate)],dict):
+    #             row += helper_functions.csv_string(answers[int(candidate)]["label"]) + "," + str(percent) + "," + str(num_users) + "\n"
+    #         else:
+    #             row += helper_functions.csv_string(answers[int(candidate)]) + "," + str(percent) + "," + str(num_users) + "\n"
+    #
+    #         self.csv_files[(task_id,"detailed")].write(row)
+    #
+    #     percentages = votes.values()
+    #     mean_percent = numpy.mean(percentages)
+    #     median_percent = numpy.median(percentages)
+    #
+    #     row = str(subject_id) + ","
+    #     if cluster_index is not None:
+    #         row += str(cluster_index) + ","
+    #
+    #     row += str(mean_percent) + "," + str(median_percent) + "," + str(num_users) + "\n"
+    #     self.csv_files[(task_id,"summary")].write(row)
 
     def __single_choice_classification_row__(self,answers,task_id,subject_id,results,cluster_index=None):
         """
@@ -219,6 +315,7 @@ class CsvOut:
         # finally write the stuff out to file
         self.csv_files[task_id].write(row)
 
+
     def __subject_output__(self,workflow_id,subject_id,aggregations):
         """
         add csv rows for all the output related to this particular workflow/subject_id
@@ -227,8 +324,6 @@ class CsvOut:
         :param aggregations:
         :return:
         """
-        # if self.__count_check__(workflow_id,subject_id) < self.retirement_thresholds[workflow_id]:
-        #     return
 
         classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
 
@@ -270,13 +365,8 @@ class CsvOut:
                             else:
                                 self.__multi_choice_classification_row__(possible_answers,id_,subject_id,results,cluster_index)
             else:
-                answers = self.instructions[workflow_id][task_id]["answers"]
                 results = aggregations[task_id]
-                if task_type == "single":
-                    answers = self.instructions[workflow_id][task_id]["answers"]
-                    self.__single_choice_classification_row__(answers,task_id,subject_id,results)
-                else:
-                    self.__multi_choice_classification_row__(answers,task_id,subject_id,results)
+                self.__classification_output__(workflow_id,task_id,subject_id,results)
 
         for task_id,possible_shapes in marking_tasks.items():
             for shape in set(possible_shapes):
