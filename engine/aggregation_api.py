@@ -20,6 +20,7 @@ import csv_output
 import time
 import survey_aggregation
 from dateutil import parser
+import procname
 
 # these are libraries which are only needed if you are working directly with the db
 # so if they are not on your computer - we'll just skip them
@@ -127,6 +128,9 @@ class AggregationAPI:
         self.only_retired_subjects = False
 
         self.previous_runtime = datetime.datetime(2000,1,1)
+
+        # so ps will show us which projects are actually aggregating and for now long
+        procname.setprocname("aggregation project " + str(project_id))
 
     def __setup_clustering_algs__(self):
         # functions for converting json instances into values we can actually cluster on
