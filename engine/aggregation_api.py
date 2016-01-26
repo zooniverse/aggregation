@@ -20,7 +20,8 @@ import csv_output
 import time
 import survey_aggregation
 from dateutil import parser
-import procname
+import setproctitle
+import time
 
 # these are libraries which are only needed if you are working directly with the db
 # so if they are not on your computer - we'll just skip them
@@ -130,7 +131,7 @@ class AggregationAPI:
         self.previous_runtime = datetime.datetime(2000,1,1)
 
         # so ps will show us which projects are actually aggregating and for now long
-        procname.setprocname("aggregation project " + str(project_id))
+        setproctitle.setproctitle("aggregation project " + str(project_id))
 
     def __setup_clustering_algs__(self):
         # functions for converting json instances into values we can actually cluster on
@@ -866,6 +867,7 @@ class AggregationAPI:
 
         for workflow in data["workflows"]:
             workflow_id = int(workflow["id"])
+            print workflow_id
             tasks = workflow["tasks"]
 
             if (given_workflow_id is None) or (workflow_id == given_workflow_id):
@@ -954,7 +956,12 @@ class AggregationAPI:
 
         image_paths = []
         for image in data["subjects"][0]["locations"]:
-            url = image["image/jpeg"]
+            if "image/jpeg" in image:
+                url = image["image/jpeg"]
+            elif "image/png" in image:
+                url = image["image/png"]
+            else:
+                assert False
 
             slash_index = url.rfind("/")
             fname = url[slash_index+1:]
