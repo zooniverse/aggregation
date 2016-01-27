@@ -344,7 +344,8 @@ class TextCluster(clustering.Cluster):
             y1 = np.median(Y1)
             y2 = np.median(Y2)
 
-            new_cluster["center"] = (x1,x2,y1,y2,aggregated_text[lb:ub+1])
+            completed_text = self.__reset_tags__(aggregated_text[lb:ub+1])
+            new_cluster["center"] = (x1,x2,y1,y2,completed_text)
 
             new_cluster["cluster members"] = []
 
@@ -355,6 +356,7 @@ class TextCluster(clustering.Cluster):
             for j,(lb_j,ub_j) in enumerate(transcription_range):
 
                 if (lb_j <= lb <= ub_j) or (lb_j <= ub <= ub_j):
+                    markings[j][-1] = self.__reset_tags__(markings[j][-1])
                     new_cluster["cluster members"].append(markings[j])
 
             new_cluster["num users"] = len(new_cluster["cluster members"])
