@@ -99,92 +99,38 @@ class TextCluster(clustering.Cluster):
         self.stats["retired lines"] = 0
 
     def __line_alignment__(self,lines):
-        """
-        align.py the text by using MAFFT
-        :param lines:
-        :return:
-        """
-        assert len(lines) > 1
+        print "there are " + str(len(lines))
+        aligned_text = []
 
-        dist_matrix = np.zeros((len(lines),len(lines)))
+        # with open(base_directory+"/Databases/transcribe"+id_+".fasta","wb") as f:
+        with tempfile.NamedTemporaryFile(suffix=".fasta") as f_fasta, tempfile.NamedTemporaryFile() as f_out:
+            for line in lines:
+                try:
+                    f_fasta.write(">\n"+line+"\n")
+                except UnicodeEncodeError:
+                    print line
+                    print unicodedata.normalize('NFKD', line).encode('ascii','ignore')
+                    raise
+            f_fasta.flush()
+            # todo - play around with gap penalty --op 0.5
+            t = "mafft  --text " + f_fasta.name + " > " + f_out.name + " 2> /dev/null"
+            os.system(t)
 
-        print dist_matrix
+            cumulative_line = ""
+            for line in f_out.readlines():
+                if (line == ">\n"):
+                    if (cumulative_line != ""):
+                        aligned_text.append(cumulative_line)
+                        cumulative_line = ""
+                else:
+                    cumulative_line += line[:-1]
 
-        for index1,l1 in enumerate(lines):
-            for index2,l2 in list(enumerate(lines))[index1+1:]:
-                score = Levenshtein(l1,l2)
+            if cumulative_line == "":
+                print lines
+                assert False
+            aligned_text.append(cumulative_line)
 
-                dist_matrix[index1,index2] = score
-                dist_matrix[index2,index1] = score
-
-        print linkage(dist_matrix,"ward")
-
-        assert False
-
-        for index1,index2,_ in merging_order:
-            if index2 < index1:
-                t = index1
-                index1 = index2
-                index2 = t
-
-            a = Sequence(list(lines[index1]))
-            b = Sequence(list(lines[index2]))
-
-            # Create a vocabulary and encode the sequences.
-            v = Vocabulary()
-            aEncoded = v.encodeSequence(a)
-            bEncoded = v.encodeSequence(b)
-
-            # Create a scoring and align the sequences using global aligner.
-            scoring = SimpleScoring(2, -1)
-            aligner = GlobalSequenceAligner(scoring, -2)
-            score, encodeds = aligner.align(aEncoded, bEncoded, backtrace=True)
-
-            for encoded in encodeds:
-                    alignment = v.decodeSequenceAlignment(encoded)
-                    l1_aligned = "".join([str(e) for e in alignment.first.elements])
-                    l2_aligned = "".join([str(e) for e in alignment.second.elements])
-
-                    break
-
-            merged_text = ""
-            for c1,c2 in zip(l1_aligned,l2_aligned):
-                pass
-
-        assert False
-
-    # def __old_line_alignment__(self,lines):
-    #     aligned_text = []
-    #
-    #     # with open(base_directory+"/Databases/transcribe"+id_+".fasta","wb") as f:
-    #     with tempfile.NamedTemporaryFile(suffix=".fasta") as f_fasta, tempfile.NamedTemporaryFile() as f_out:
-    #         for line in lines:
-    #             try:
-    #                 f_fasta.write(">\n"+line+"\n")
-    #             except UnicodeEncodeError:
-    #                 print line
-    #                 print unicodedata.normalize('NFKD', line).encode('ascii','ignore')
-    #                 raise
-    #         f_fasta.flush()
-    #         # todo - play around with gap penalty --op 0.5
-    #         t = "mafft  --text " + f_fasta.name + " > " + f_out.name + " 2> /dev/null"
-    #         os.system(t)
-    #
-    #         cumulative_line = ""
-    #         for line in f_out.readlines():
-    #             if (line == ">\n"):
-    #                 if (cumulative_line != ""):
-    #                     aligned_text.append(cumulative_line)
-    #                     cumulative_line = ""
-    #             else:
-    #                 cumulative_line += line[:-1]
-    #
-    #         if cumulative_line == "":
-    #             print lines
-    #             assert False
-    #         aligned_text.append(cumulative_line)
-    #
-    #     return aligned_text
+        return aligned_text
 
     def __accuracy__(self,s):
         assert isinstance(s,str)
@@ -660,6 +606,9 @@ class TextCluster(clustering.Cluster):
         clusters = []
 
         for c in connected_components:
+            if len(c) <= 2:
+                continue
+
             # extract the starting/ending x-y coordinates for each transcription in the cluster
             coordinates = [filtered_markings[i][:-1] for i in c]
             # as well as the text - at the same time deal with tags (make them all 1 character long)
