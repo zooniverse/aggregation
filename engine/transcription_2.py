@@ -40,6 +40,26 @@ if os.path.exists("/home/ggdhines"):
 else:
     base_directory = "/home/greg"
 
+def longest_common_substring(s1, s2):
+    """
+    taken from https://en.wikibooks.org/wiki/Algorithm_Implementation/Strings/Longest_common_substring#Python2
+    :param s1:
+    :param s2:
+    :return:
+    """
+    m = [[0] * (1 + len(s2)) for i in xrange(1 + len(s1))]
+    longest, x_longest = 0, 0
+    for x in xrange(1, 1 + len(s1)):
+        for y in xrange(1, 1 + len(s2)):
+            if s1[x - 1] == s2[y - 1]:
+                m[x][y] = m[x - 1][y - 1] + 1
+                if m[x][y] > longest:
+                    longest = m[x][y]
+                    x_longest = x
+            else:
+                m[x][y] = 0
+    return s1[x_longest - longest: x_longest]
+
 
 def Levenshtein(a,b):
     """
@@ -99,7 +119,12 @@ class TextCluster(clustering.Cluster):
         self.stats["retired lines"] = 0
 
     def __line_alignment__(self,lines):
-        print "there are " + str(len(lines))
+
+
+        if len(lines) == 3:
+            sorted_lines = sorted(lines, key = lambda x:len(x))
+            common_substrings = [longest_common_substring(sorted_lines[0],l) for l in sorted_lines[1:]]
+            print common_substrings
         aligned_text = []
 
         # with open(base_directory+"/Databases/transcribe"+id_+".fasta","wb") as f:
