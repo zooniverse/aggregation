@@ -119,12 +119,6 @@ class TextCluster(clustering.Cluster):
         self.stats["retired lines"] = 0
 
     def __line_alignment__(self,lines):
-
-
-        if len(lines) == 3:
-            sorted_lines = sorted(lines, key = lambda x:len(x))
-            common_substrings = [longest_common_substring(sorted_lines[0],l) for l in sorted_lines[1:]]
-            print common_substrings
         aligned_text = []
 
         # with open(base_directory+"/Databases/transcribe"+id_+".fasta","wb") as f:
