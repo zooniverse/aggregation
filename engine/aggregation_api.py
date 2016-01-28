@@ -331,7 +331,11 @@ class AggregationAPI:
                 aggregations = self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],aggregations)
             else:
                 print "classifying a survey"
-                survey_alg = survey_aggregation.Survey()
+                if self.project_id == 376:
+                    # Wildcam Gorongosa is different - because why not?
+                    survey_alg = survey_aggregation.WildcamGorongosaSurvey()
+                else:
+                    survey_alg = survey_aggregation.Survey()
                 aggregations = survey_alg.__aggregate__(raw_surveys)
 
             # unless we are provided with specific subjects, reset for the extra workflow
