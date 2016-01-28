@@ -133,6 +133,12 @@ class AggregationAPI:
         # so ps will show us which projects are actually aggregating and for now long
         setproctitle.setproctitle("aggregation project " + str(project_id))
 
+        # some survey projects have incorrectly labelled task ids (the id given is task type)
+        # so for these projects we will have individually correct the ids
+        # for now such projects have only one task - so for each annotation we will just need to relabel
+        # the task id
+        self.survey_projects = [593]
+
     def __setup_clustering_algs__(self):
         # functions for converting json instances into values we can actually cluster on
 
@@ -867,7 +873,6 @@ class AggregationAPI:
 
         for workflow in data["workflows"]:
             workflow_id = int(workflow["id"])
-            print workflow_id
             tasks = workflow["tasks"]
 
             if (given_workflow_id is None) or (workflow_id == given_workflow_id):
@@ -1518,6 +1523,8 @@ class AggregationAPI:
         if isinstance(task_dict,str) or isinstance(task_dict,unicode):
             task_dict = json.loads(task_dict)
 
+        # print json.dumps(task_dict, sort_keys=True,indent=4, separators=(',', ': '))
+
         for task_id,task in task_dict.items():
 
             # self.task_type[task_id] = tasks[task_id]["type"]
@@ -1567,6 +1574,7 @@ class AggregationAPI:
 
         # note that for follow up questions to marking tasks - the key used is the marking tool label
         # NOT the follow up question label
+
         return classification_tasks,marking_tasks,survey_tasks
 
     def __set_classification_alg__(self,alg,params={}):
@@ -1775,6 +1783,10 @@ class AggregationAPI:
                     print task
                     raise
 
+                # see https://github.com/zooniverse/Panoptes-Front-End/issues/2155 for why this is needed
+                if self.project_id in self.survey_projects:
+                    task_id = survey_tasks.keys()[0]
+
                 # is this a marking task?
                 if task_id in marking_tasks:
                     # skip over any improperly formed annotations - due to browser problems etc.
@@ -1804,6 +1816,7 @@ class AggregationAPI:
                 else:
                     print marking_tasks,classification_tasks,survey_tasks
                     print task_id
+                    print task
                     assert False
 
         return raw_classifications,raw_markings,raw_surveys,image_dimensions
@@ -1956,7 +1969,7 @@ if __name__ == "__main__":
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
         project.__setup__()
-        project.__migrate__()
+        # project.__migrate__()
         project.__aggregate__()
 
         with csv_output.CsvOut(project) as c:
