@@ -356,8 +356,9 @@ class TextCluster(clustering.Cluster):
             for j,(lb_j,ub_j) in enumerate(transcription_range):
 
                 if (lb_j <= lb <= ub_j) or (lb_j <= ub <= ub_j):
-                    markings[j][-1] = self.__reset_tags__(markings[j][-1])
-                    new_cluster["cluster members"].append(markings[j])
+                    (x1,x2,y1,y2,transcription) = markings[j]
+                    new_marking = (x1,x2,y1,y2,self.__reset_tags__(transcription))
+                    new_cluster["cluster members"].append(new_marking)
 
             new_cluster["num users"] = len(new_cluster["cluster members"])
 
