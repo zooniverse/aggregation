@@ -1,1 +1,0 @@
-more ~/Databases/2014-09-14_condor_classifications.csv | /home/greg/github/reduction/experimental/aws/mapreduce/mapper.py /home/greg/github/reduction/experimental/condor/aws/config.py | sort | /home/greg/github/reduction/experimental/aws/mapreduce/blank.py /home/greg/github/reduction/experimental/condor/aws/config.py
