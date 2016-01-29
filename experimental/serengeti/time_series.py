@@ -5,31 +5,65 @@ from matplotlib import pyplot as plt
 MIN_MATCH_COUNT = 10
 
 # img1 = cv2.imread("/home/ggdhines/Databases/images/50c210188a607540b9000003_0.jpg",0)          # queryImage
-img3 = cv2.imread("/home/ggdhines/Databases/images/50c210188a607540b900000e_1.jpg",0) # trainImage
-img2 = cv2.imread("/home/ggdhines/Databases/images/50c210188a607540b900000f_0.jpg",0) # trainImage
-# img1 = cv2.imread("/home/ggdhines/Databases/images/50c210188a607540b900000e_0.jpg",0) # trainImage
-# img4 = cv2.imread("/home/ggdhines/Databases/images/50c210188a607540b9000011_0.jpg",0) # trainImage
-# img5 = cv2.imread("/home/ggdhines/Databases/images/50c210188a607540b900000c_1.jpg",0) # trainImage
-# img6 = cv2.imread("/home/ggdhines/Databases/images/50c210188a607540b9000014_1.jpg",0) # trainImage
-# img7 = cv2.imread("/home/ggdhines/Databases/images/50c210188a607540b9000012_1.jpg",0) # trainImage
-# img8 = cv2.imread("/home/ggdhines/Databases/images/50c210188a607540b9000007_1.jpg",0) # trainImage
+f_names = ["/home/ggdhines/Databases/images/50c210188a607540b900000e_1.jpg","/home/ggdhines/Databases/images/50c210188a607540b900000f_0.jpg","/home/ggdhines/Databases/images/50c210188a607540b900000e_0.jpg","/home/ggdhines/Databases/images/50c210188a607540b9000011_0.jpg","/home/ggdhines/Databases/images/50c210188a607540b900000c_1.jpg","/home/ggdhines/Databases/images/50c210188a607540b9000014_1.jpg","/home/ggdhines/Databases/images/50c210188a607540b9000012_1.jpg"]
 
-kernel = np.ones((5,5),np.float32)/25
-img2 = cv2.filter2D(img2,-1,kernel)
-img3 = cv2.filter2D(img3,-1,kernel)
+# image = plt.imread(f_names[0])
 
-clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-img3 = clahe.apply(img3)
-img2 = clahe.apply(img2)
+# fig, ax1 = plt.subplots(1, 1)
+# ax1.imshow(image)
+# temp_image = cv2.imread(f_names[0])
+# blue = temp_image[:,:,2] > 100
+# y,x = np.where(blue)
+# plt.plot(x,y,".")
+# plt.ylim((temp_image.shape[0],0))
+# plt.xlim((0,temp_image.shape[1]))
+# plt.show()
 
-diff = cv2.subtract(img2,img3)
-cv2.imwrite('/home/ggdhines/diff1.jpg',diff)
+# images = []
+for f in f_names:
+    temp_image = cv2.imread(f)
+    R = temp_image[:,:,0]
+    G = temp_image[:,:,1]
+    B = temp_image[:,:,2]
 
-diff = cv2.subtract(img3,img2)
-cv2.imwrite('/home/ggdhines/diff2.jpg',diff)
+    bool1 = abs(R-G) < 5
+    bool2 = abs(G-B) < 5
+    bool3 = B>R
+    bool4 = B>G
+    bool5 = B > 50
+    bool6 = B < 230
+    sky = bool1 & bool2 & bool3 & bool4 & bool5 & bool6
 
-diff2 = (img2+img3)/2
-cv2.imwrite('/home/ggdhines/diff3.jpg',diff2)
+    fig, ax1 = plt.subplots(1, 1)
+    ax1.imshow(temp_image)
+    # temp_image = cv2.imread(f_names[0])
+
+    y,x = np.where(sky)
+    print y,x
+    plt.plot(x,y,".")
+    # plt.ylim((temp_image.shape[0],0))
+    # plt.xlim((0,temp_image.shape[1]))
+    plt.show()
+
+    # assert False
+    # images.append(cv2.imread(f))
+
+# kernel = np.ones((5,5),np.float32)/25
+# img2 = cv2.filter2D(img2,-1,kernel)
+# img3 = cv2.filter2D(img3,-1,kernel)
+
+# clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+# img3 = clahe.apply(img3)
+# img2 = clahe.apply(img2)
+
+# diff = cv2.subtract(img2,img3)
+# cv2.imwrite('/home/ggdhines/diff1.jpg',diff)
+#
+# diff = cv2.subtract(img3,img2)
+# cv2.imwrite('/home/ggdhines/diff2.jpg',diff)
+#
+# diff2 = (img2+img3)/2
+# cv2.imwrite('/home/ggdhines/diff3.jpg',diff2)
 
 # img3 = clahe.apply(img3)
 # img4 = clahe.apply(img4)
@@ -39,37 +73,56 @@ cv2.imwrite('/home/ggdhines/diff3.jpg',diff2)
 #
 
 
-dst_2 = cv2.filter2D(diff2,-1,kernel)
-cv2.imwrite('/home/ggdhines/diff4.jpg',dst_2)
+# dst_2 = cv2.filter2D(diff2,-1,kernel)
+# cv2.imwrite('/home/ggdhines/diff4.jpg',dst_2)
 # dst_3 = cv2.filter2D(img3,-1,kernel)
 # dst_4 = cv2.filter2D(img4,-1,kernel)
 
 # base_image = (dst+dst_2+dst_3+dst_4)/4
-a = np.asarray([img1,img2,img3,img4,img5,img6,img7])
+# a = np.asarray([img1,img2,img3,img4,img5,img6,img7])
+a = np.asarray(images)
 print a.shape
 base_image = np.median(a,axis=[0])
-base_image = cv2.filter2D(base_image,-1,kernel)
+# base_image = cv2.filter2D(base_image,-1,kernel)
 # base_image = base_image.astype(np.uint8)
 print type(base_image[0][0])
 print base_image
 
-# img5 = cv2.subtract(base_image,dst)
-cv2.imwrite('/home/ggdhines/clahe_3.jpg',base_image)
-test_image = cv2.filter2D(img2,-1,kernel)
+fig, ax1 = plt.subplots(1, 1)
+ax1.imshow(base_image)
+# temp_image = cv2.imread(f_names[0])
+blue = base_image[:,:,2] > 150
+y,x = np.where(blue)
+plt.plot(x,y,".")
+# plt.ylim((temp_image.shape[0],0))
+# plt.xlim((0,temp_image.shape[1]))
+plt.show()
 
-print test_image
-test_image = test_image.astype(float)
-diff = np.absolute(test_image-base_image)
+# img5 = cv2.subtract(base_image,dst)
+cv2.imwrite('/home/ggdhines/base_image.jpg',base_image)
+blurred = cv2.blur(base_image,(5,5))
+cv2.imwrite('/home/ggdhines/blurred_base.jpg',blurred)
+# test_image = cv2.filter2D(img2,-1,kernel)
+
+
+# print test_image
+# test_image = test_image.astype(float)
+# img1 = cv2.blur(images[4],(5,5))
+diff = np.absolute(images[3]-base_image)
 diff = diff.astype(np.uint8)
+
+kernel = np.ones((5,5),np.uint8)
+opening = cv2.morphologyEx(diff, cv2.MORPH_OPEN, kernel)
+
 # assert False
 #
 # print type(img4[0][0])
 # diff = cv2.subtract(test_image,base_image)
 # diff2 = cv2.subtract(base_image,test_image)
 # diff = clahe.apply(diff)
-cv2.imwrite('/home/ggdhines/clahe_4.jpg',diff)
+cv2.imwrite('/home/ggdhines/diff1.jpg',opening)
 # cv2.imwrite('/home/ggdhines/clahe_6.jpg',diff2)
-cv2.imwrite('/home/ggdhines/clahe_5.jpg',test_image)
+# cv2.imwrite('/home/ggdhines/clahe_5.jpg',test_image)
 assert False
 # # create a CLAHE object (Arguments are optional).
 
