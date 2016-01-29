@@ -1,8 +1,7 @@
 # Site settings
 title: Zooniverse Aggregation Blog
 email: greg@zooniverse.org
-description: > # this means to ignore newlines until "baseurl:"
-A site to talk about the features that Zooniverse aggregation code provides. Aggregation takes all of the individual classifications/markings/transcriptions that our volunteers have done for a project and combines them into aggregate results.
+description: A site to talk about the features that Zooniverse aggregation code provides. Aggregation takes all of the individual classifications/markings/transcriptions that our volunteers have done for a project and combines them into aggregate results.
 baseurl: /aggregation # the subpath of your site, e.g. /blog/
 url: "http://yourdomain.com" # the base hostname & protocol for your site
 twitter_username: jekyllrb
