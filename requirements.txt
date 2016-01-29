@@ -1,0 +1,13 @@
+rollbar
+matplotlib
+botocore
+boto3
+pandas
+termcolor
+PyYAML
+networkx
+scipy
+shapely
+cassandra-driver
+psycopg2
+alignment
