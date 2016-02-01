@@ -1969,7 +1969,11 @@ if __name__ == "__main__":
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
         project.__setup__()
-        # project.__migrate__()
+        if environment == "production":
+            project.__migrate__()
+        if environment == "development":
+            project.__migrate__()
+        project.__migrate__()
         project.__aggregate__()
 
         with csv_output.CsvOut(project) as c:
