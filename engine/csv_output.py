@@ -399,7 +399,7 @@ class CsvOut:
         self.csv_files[task_id] = open(output_directory+fname,"wb")
 
         # now write the header
-        header = "subject_id,num_classifications,species"
+        header = "subject_id,num_classifications,species,votes_for_species"
 
         # todo - we'll assume, for now, that "how many" is always the first question
         for followup_id in instructions["questionsOrder"]:
@@ -443,6 +443,9 @@ class CsvOut:
 
             species_label = helper_functions.csv_string(self.instructions[workflow_id][task_id]["species"][species_id])
             row = str(subject_id) + "," + str(aggregations["num_users"]) + "," + helper_functions.csv_string(species_label)
+
+            print aggregations
+            assert False
 
             for followup_id in self.instructions[workflow_id][task_id]["questionsOrder"]:
                 followup_question = self.instructions[workflow_id][task_id]["questions"][followup_id]
