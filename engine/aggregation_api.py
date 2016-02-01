@@ -21,11 +21,6 @@ import time
 import survey_aggregation
 from dateutil import parser
 import setproctitle
-import time
-
-# these are libraries which are only needed if you are working directly with the db
-# so if they are not on your computer - we'll just skip them
-
 import cassandra
 from cassandra.cluster import Cluster
 from cassandra.concurrent import execute_concurrent
@@ -1187,8 +1182,6 @@ class AggregationAPI:
 
         # print self.new_runtime
 
-
-
     def __panoptes_call__(self,query):
         """
         for all the times we want to call the panoptes api
@@ -1201,29 +1194,32 @@ class AggregationAPI:
         if self.token is not None:
             request.add_header("Authorization","Bearer "+self.token)
 
-        # todo - implement:
-        #         try:
-        #     urllib2.urlopen("http://example.com", timeout = 1)
-        # except urllib2.URLError, e:
-        #     raise MyException("There was an error: %r" % e)
+        data = None
 
-        try:
-            response = urllib2.urlopen(request)
-        except urllib2.HTTPError as e:
-            print 'The server couldn\'t fulfill the request.'
-            print 'Error code: ', e.code
-            print 'Error response body: ', e.read()
-            raise
-        except urllib2.URLError as e:
-            print 'We failed to reach a server.'
-            print 'Reason: ', e.reason
-            raise
-        else:
-            # everything is fine
-            body = response.read()
+        for i in range(10):
+            try:
+                response = urllib2.urlopen(request)
+                body = response.read()
+                data = json.loads(body)
+                break
+            except urllib2.HTTPError as e:
+                print 'The server couldn\'t fulfill the request.'
+                print 'Error code: ', e.code
+                print 'Error response body: ', e.read()
 
-        data = json.loads(body)
+                if i == 9:
+                    raise
 
+            except urllib2.URLError as e:
+                print 'We failed to reach a server.'
+                print 'Reason: ', e.reason
+
+                if i == 9:
+                    raise
+
+            time.sleep(10)
+
+        assert data is not None
         return data
 
     def __panoptes_connect__(self,api_details):
