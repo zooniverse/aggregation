@@ -134,6 +134,8 @@ class AggregationAPI:
         # the task id
         self.survey_projects = [593]
 
+        self.oldest_new_classification = None
+
     def __setup_clustering_algs__(self):
         # functions for converting json instances into values we can actually cluster on
 
@@ -264,6 +266,8 @@ class AggregationAPI:
         # do we want to aggregate over only subjects that have been retired/classified since
         # the last time we ran the code?
         self.only_recent_subjects = False
+
+        self.oldest_new_classification = datetime.datetime.now()
 
     def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[]),expert=None,store_values=True,only_retired_subjects=None):
         """
@@ -601,17 +605,6 @@ class AggregationAPI:
 
         return data["projects"][0]["live"]
 
-
-    def __get_most_recent_cassandra_classification__(self):
-        select_statement = "select created_at from classifications where project_id = " + str(self.project_id) + " order by created_at"
-        classification_timestamps = self.cassandra_session.execute(select_statement)
-
-        most_recent_date = datetime.datetime(2000,1,1)
-        for r in classification_timestamps:
-            print classification_timestamps
-            most_recent_date = max(most_recent_date,r.created_at)
-        print most_recent_date
-
     def __get_raw_classifications__(self,subject_id,workflow_id):
         version = int(math.floor(float(self.versions[workflow_id])))
         select_statement = self.cassandra_session.prepare("select annotations from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
@@ -719,13 +712,11 @@ class AggregationAPI:
         # but for printing out the json blobs, then we want only retired subjects - which
         # is where we set only_retired_subjects=True
 
-
-
         if self.__is_project_live__() and (self.only_retired_subjects or only_retired_subjects):
             print "selecting only subjects retired since last run"
             stmt = """ SELECT * FROM "subjects"
                     INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."subject_id" = "subjects"."id"
-                    WHERE "subject_workflow_counts"."workflow_id" = """ + str(workflow_id) + """ AND "subject_workflow_counts"."retired_at" >= '""" + str(self.previous_runtime) + """'"""
+                    WHERE "subject_workflow_counts"."workflow_id" = """ + str(workflow_id) + """ AND "subject_workflow_counts"."retired_at" >= '""" + str(self.oldest_new_classification) + """'"""
 
             cursor = self.postgres_session.cursor()
             cursor.execute(stmt)
@@ -735,23 +726,20 @@ class AggregationAPI:
                 subjects.append(subject[0])
 
         else:
-            stmt = "SELECT subject_id,workflow_version,created_at FROM classifications WHERE project_id = " + str(self.project_id) + " and workflow_id = " + str(workflow_id)
+            # see http://stackoverflow.com/questions/25513447/unable-to-coerce-2012-11-11-to-a-formatted-date-long
+            # for discussion about acceptable cassandra time stamp formats
+            # why is this not a problem in migration? who knows :(
+            t = self.__get_most_recent__()
+
+            stmt = "SELECT subject_id,workflow_version FROM classifications WHERE workflow_id = " + str(workflow_id) + " and id >= " + str(t)
             print "selecting all subjects - including those not retired"
             # assert False
             # filter for subjects which have the correct major version number
             if not self.ignore_versions:
                 print "filtering based on workflow version"
-                # do this filter over two steps
+                workflow_v = int(self.versions[workflow_id])
 
-                subjects = [(r.subject_id,r.created_at) for r in self.cassandra_session.execute(stmt) if int(r.workflow_version) == int(self.versions[workflow_id]) ]
-
-                # if we are not filtering on a maximum end date - which is probably most of the time
-                if self.end_date is None:
-                    print "searching for subjects classified since " + str(self.previous_runtime)
-                    subjects = set([r[0] for r in subjects if r[1] >= self.previous_runtime])
-                else:
-                    print "searching for subjects classified between " + str(self.previous_runtime) + " and " + str(self.end_date)
-                    subjects = set([r[0] for r in subjects if (r[1] >= self.previous_runtime) and (r[1] <= self.end_date)])
+                subjects = [r.subject_id for r in self.cassandra_session.execute(stmt) if int(r.workflow_version) == workflow_v]
 
                 if subjects == set():
                     print "no subjects found - maybe remove version filter"
@@ -759,7 +747,6 @@ class AggregationAPI:
                     print "workflow versions with classifications " + str(set([r.workflow_version for r in self.cassandra_session.execute(stmt)]))
             else:
                 subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt)])
-            print
 
         return list(subjects)
 
@@ -1031,6 +1018,27 @@ class AggregationAPI:
         assert isinstance(agg1,dict)
         return agg1
 
+    def __get_most_recent__(self):
+        """
+        get the id of the most recent classification that was processed
+        :return:
+        """
+        try:
+            # if the table doesn't already exist, return 0, i.e. start over again
+            recent_table = "CREATE TABLE most_recent (project_id int, classification_id int, PRIMARY KEY(project_id))"
+            self.cassandra_session.execute(recent_table)
+            print "most_recent table did not already exist"
+            return 0
+        except cassandra.AlreadyExists:
+            print "most_recent table already exists"
+
+        results = self.cassandra_session.execute("SELECT classification_id from most_recent where project_id = " + str(self.project_id))
+
+        if results == []:
+            return 0
+        else:
+            return results[0]
+
     def __migrate__(self):
         """
         move data from postgres to cassandra
@@ -1040,115 +1048,100 @@ class AggregationAPI:
         if self.csv_classification_file is not None:
             return
 
-
-
         # uncomment this code if this is the first time you've run migration on whatever machine
         # will create the necessary cassandra tables for you - also useful if you need to reset
         # try:
         #     self.cassandra_session.execute("drop table classifications")
-        #     self.cassandra_session.execute("drop table subjects")
         #     self.cassandra_session.execute("drop table most_recent")
         #     print "tables dropped"
-        # except cassandra.InvalidRequest,cassandra.protocol.ServerError:
-        #     print "tables did not already exist"
+        # except cassandra.InvalidRequest:
+        #     pass
 
+        # for cassandra
+        # metadata is needed to possibly get image dimensions which are used to make sure that a marking is valid
+        # and not off the screen (problem sometimes with smart phones etc.)
+        columns = "id int, user_id int, workflow_id int, created_at timestamp,annotations text, user_ip inet, gold_standard boolean, subject_id int, workflow_version int,metadata text"
+        primary_key = "workflow_id,id"
+        ordering = "id ASC"
+
+        try:
+            self.cassandra_session.execute("CREATE TABLE classifications(" + columns + ", PRIMARY KEY( " + primary_key + ")) WITH CLUSTERING ORDER BY ( " + ordering + ");")
+        except cassandra.AlreadyExists:
+            # if table already exists, that's fine :)
+            pass
+
+        # self.cassandra_session.execute("create index table1_valuea on classifications (workflow_id);")
+        # self.cassandra_session.execute("create index table1_valueb on classifications (created_at);")
 
         # try:
-        #     self.cassandra_session.execute("CREATE TABLE most_recent (project_id int, classification timestamp, PRIMARY KEY(project_id))")
+        #     self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
         # except cassandra.AlreadyExists:
         #     pass
 
-        try:
-            # self.cassandra_session.execute("CREATE TABLE classifications( classification_id, project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(classification_id, project_id,workflow_id,subject_id,workflow_version,user_ip,user_id,created_at) ) WITH CLUSTERING ORDER BY (project_id ASC,workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC,created_at ASC);")
-            self.cassandra_session.execute("CREATE TABLE classifications( project_id int, user_id int, workflow_id int, created_at timestamp,annotations text,  updated_at timestamp, user_group_id int, user_ip inet,  completed boolean, gold_standard boolean, subject_id int, workflow_version int,metadata text, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version,user_ip,user_id,created_at) ) WITH CLUSTERING ORDER BY (workflow_id ASC,subject_id ASC,workflow_version ASC,user_ip ASC,user_id ASC,created_at ASC);")
-        except cassandra.AlreadyExists:
-            pass
-
-        try:
-            self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
-        except cassandra.AlreadyExists:
-            pass
+        # what is the most recent classification we read in
+        most_recent = self.__get_most_recent__()
 
         subject_listing = set()
 
-        # only migrate classifications created since we last ran this code
-        # use >= just in case some classifications have the exact same time stamp - rare but could happen
+        # some useful postgres bits of code
+        postgres_constraint = "classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id) + " and id > " + str(most_recent)
+        postgres_table = "classifications INNER JOIN classification_subjects"
+
+        # how many classifications are we going to migrate
         cur = self.postgres_session.cursor()
-        select = "SELECT count(*) from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)#+ " and created_at >= '" + str(self.previous_runtime) +"'"
+        select = "SELECT count(*) from " + postgres_table + " ON  " + postgres_constraint
         cur.execute(select)
         num_migrated = cur.fetchone()[0]
-
-        try:
-            panoptes_file = open("/app/config/aggregation.yml","rb")
-        except IOError:
-            panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
-        api_details = yaml.load(panoptes_file)
-
-        rollbar_token = api_details[self.environment]["rollbar"]
-        rollbar.init(rollbar_token,self.environment)
-        rollbar.report_message("migrating " + str(num_migrated) + " with command : " + select, 'info')
-
         print "going to migrate " + str(num_migrated) + " classifications"
-        select = "SELECT id,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,workflow_version, classification_subjects.subject_id from classifications INNER JOIN classification_subjects ON classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)#+ " and created_at >= '" + str(self.previous_runtime) +"'"
-        # select = "SELECT * from classifications where project_id="+str(self.project_id)+ " and created_at >= '" + str(self.previous_runtime) +"'"
 
+        # what do we want from the classifications table?
+        postgres_columns = "id,user_id,workflow_id,annotations,created_at,user_ip,gold_standard,workflow_version, classification_subjects.subject_id,metadata"
+        select = "SELECT " + postgres_columns + " from " + postgres_table + " ON " + postgres_constraint
+
+        # actually get the classifications
         cur.execute(select)
         self.postgres_session.commit()
 
-        # self.migrated_subjects = set()
-
+        # setup the insert statement for cassandra
         insert_statement = self.cassandra_session.prepare("""
-                insert into classifications (project_id, user_id, workflow_id,  created_at,annotations, updated_at, user_group_id, user_ip, completed, gold_standard, subject_id, workflow_version,metadata)
-                values (?,?,?,?,?,?,?,?,?,?,?,?,?)""")
+                insert into classifications (id, user_id, workflow_id, created_at,annotations, user_ip, gold_standard, subject_id, workflow_version,metadata)
+                values (?,?,?,?,?,?,?,?,?,?)""")
 
         statements_and_params = []
-        migrated = {}
 
-        most_recent_classification = datetime.datetime(2000,1,1)
-
+        # finally go through the annotations
         for ii,t in enumerate(cur.fetchall()):
-            if ii % 10000 == 0:
+            if (ii % 10000 == 0) and (ii > 0):
                 print ii
-            id_,project_id,user_id,workflow_id,annotations,created_at,updated_at,user_group_id,user_ip,completed,gold_standard,expert_classifier,metadata,workflow_version,subject_id = t
 
-            # if created_at < self.previous_runtime:
-            #     continue
+            id_,user_id,workflow_id,annotations,created_at,user_ip,gold_standard,workflow_version,subject_id,metadata = t
 
-            # self.new_runtime = max(self.new_runtime,created_at)
+            self.oldest_new_classification = min(self.oldest_new_classification,created_at)
 
-            most_recent_classification = max(most_recent_classification,updated_at)
-
-
+            # todo - not why exactly, but I guess gold_standard could be something other than boolean
             if gold_standard != True:
                 gold_standard = False
 
-            if not isinstance(user_group_id,int):
-                user_group_id = -1
-
+            # todo - again, not sure why exactly, but we might have something like user_id = None
             if not isinstance(user_id,int):
                 user_id = -1
             # get only the major version of the workflow
             workflow_version = int(math.floor(float(workflow_version)))
 
-            # cassandra can only handle json in str format - so convert if necessary
-            # "if necessary" - I think annotations should always start off as json format but
-            # I seem to remember sometime, somehow, that that wasn't the case - so just to be sure
-            if isinstance(annotations,dict) or isinstance(annotations,list):
-                annotations = json.dumps(annotations)
+            # cassandra can only handle json in str format
+            annotations = json.dumps(annotations)
+            metadata = json.dumps(metadata)
 
-            assert isinstance(annotations,str)
-            # print ii, project_id,workflow_id
-
-            params = (project_id, user_id, workflow_id,created_at, annotations, updated_at, user_group_id, user_ip,  completed, gold_standard,  subject_id, workflow_version,json.dumps(metadata))
+            params = (id_, user_id, workflow_id,created_at, annotations, user_ip, gold_standard,  subject_id, workflow_version,metadata)
             statements_and_params.append((insert_statement, params))
 
-            subject_listing.add((project_id,workflow_id,workflow_version,subject_id))
-
+            # to get a good read/write balance, insert at every 100 classifications
             if len(statements_and_params) == 100:
-
+                # Cassandra might have time out issues, if so, try again up to 10 times after which, raise an error
                 for i in range(10):
                     try:
                         results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
+                        assert False not in [(True,None) == r for r in results]
                         break
                     except cassandra.WriteTimeout:
                         if i == 9:
@@ -1160,27 +1153,6 @@ class AggregationAPI:
         if statements_and_params != []:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
             # print results
-
-        # now update the subject ids
-        statements_and_params = []
-        insert_statement = self.cassandra_session.prepare("""
-                insert into subjects (project_id,workflow_id,workflow_version,subject_id)
-                values (?,?,?,?)""")
-        for s in subject_listing:
-            statements_and_params.append((insert_statement, s))
-
-            if len(statements_and_params) == 100:
-                results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
-                statements_and_params = []
-        if statements_and_params != []:
-            results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
-            # print results
-
-        # code based on from http://stackoverflow.com/questions/16532566/how-to-insert-a-datetime-into-a-cassandra-1-2-timestamp-column
-        # todo - get this to work. I've tired every combination I can think of
-        # self.cassandra_session.execute("UPDATE most_recent SET classification=:ts WHERE project_id=:id;", dict(ts=most_recent_classification.isoformat(), id=self.project_id))
-
-        # print self.new_runtime
 
     def __panoptes_call__(self,query):
         """
@@ -1971,10 +1943,12 @@ if __name__ == "__main__":
         project.__setup__()
         if environment == "production":
             project.__migrate__()
-        if environment == "development":
-            project.__migrate__()
-        project.__migrate__()
-        project.__aggregate__()
+        if environment == "development": project.__migrate__()
+        print project.oldest_new_classification
 
-        with csv_output.CsvOut(project) as c:
-            c.__write_out__()
+
+
+        # project.__aggregate__()
+        #
+        # with csv_output.CsvOut(project) as c:
+        #     c.__write_out__()
