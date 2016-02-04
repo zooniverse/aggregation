@@ -225,6 +225,80 @@ class TranscriptionAPI(AggregationAPI):
         else:
             assert False
 
+    def __restructure_json__(self):
+        workflow_id = self.workflows.keys()[0]
+
+        cur = self.postgres_session.cursor()
+
+        stmt = "select subject_id,aggregation from aggregations where workflow_id = " + str(workflow_id)
+        cur.execute(stmt)
+
+        new_json = {}
+
+        for subject_id,aggregation in cur.fetchall():
+            try:
+                clusters_by_line = {}
+
+                for key,cluster in aggregation["T2"]["text clusters"].items():
+                    if key == "all_users":
+                        continue
+
+                    index = cluster["set index"]
+                    # text_y_coord.append((cluster["center"][2],cluster["center"][-1]))
+
+                    if index not in clusters_by_line:
+                        clusters_by_line[index] = [cluster]
+                    else:
+                        clusters_by_line[index].append(cluster)
+
+                cluster_set_coordinates = {}
+
+                for set_index,cluster_set in clusters_by_line.items():
+                    # clusters are based on purely horizontal lines so we don't need to take the
+                    # average or anything like that.
+                    # todo - figure out what to do with vertical lines, probably keep them completely separate
+                    cluster_set_coordinates[set_index] = cluster_set[0]["center"][2]
+
+                sorted_sets = sorted(cluster_set_coordinates.items(), key = lambda x:x[1])
+
+                text_to_read = []
+                text_in_detail = []
+                coordinates = []
+                for set_index,_ in sorted_sets:
+                    cluster_set = clusters_by_line[set_index]
+
+                    # now on the (slightly off chance) that there are multiple clusters for this line, sort them
+                    # by x coordinates
+                    line = [(cluster["center"][0],cluster["center"][-1]) for cluster in cluster_set]
+                    line.sort(key = lambda x:x[0])
+                    _,text = zip(*line)
+
+                    text = list(text)
+                    new_line = []
+                    for t in text:
+                        # think that storing in postgres converts from str to unicode
+                        # for general display, we don't need ord(24) ie skipped characters
+                        new_t = t.replace(chr(24),"")
+                        new_line.append(new_t)
+                    text_to_read.append(new_line)
+                    text_in_detail.append([cluster["cluster members"] for cluster in cluster_set])
+                    coordinates.append([cluster["center"][:-1] for cluster in cluster_set])
+
+                if text_to_read != []:
+                    new_json[subject_id] = {}
+                    new_json[subject_id]["text"] = text_to_read
+                    new_json[subject_id]["details"] = text_in_detail
+                    new_json[subject_id]["coordinate"] = coordinates
+
+                    metadata = self.__get_subject_metadata__(subject_id)["subjects"][0]["metadata"]
+                    new_json[subject_id]["metadata"] = metadata
+            except KeyError:
+                pass
+
+
+        print json.dumps(new_json, sort_keys=True,indent=4, separators=(',', ': '))
+
+
     def __summarize__(self,tar_path=None):
         num_retired = self.classification_alg.num_retired
         non_blanks_retired = self.classification_alg.non_blanks_retired
@@ -329,7 +403,8 @@ if __name__ == "__main__":
         project.__setup__()
         # print "done migrating"
         # # project.__aggregate__(subject_set = [671541,663067,664482,662859])
-        project.__aggregate__()
+        # processed_subjects = project.__aggregate__()
+        project.__restructure_json__()
         #
         # if summary:
         #     project.__add_metadata__()
