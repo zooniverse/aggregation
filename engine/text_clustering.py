@@ -3,6 +3,7 @@ import clustering
 import unicodedata
 import random
 import os
+import tempfile
 
 __author__ = 'ggdhines'
 
@@ -60,14 +61,13 @@ class TextClustering(clustering.Cluster):
         :return:
         """
 
+        aligned_text = []
+
         if len(lines) == 1:
             return lines
 
-        # todo - try to remember why I give each output file an id
-        id_ = str(random.uniform(0,1))
 
-        # with open(base_directory+"/Databases/transcribe"+id_+".fasta","wb") as f:
-        with open("/tmp/transcribe"+id_+".fasta","wb") as f:
+        with tempfile.NamedTemporaryFile(suffix=".fasta") as in_file, tempfile.NamedTemporaryFile("r") as out_file:
             for line in lines:
                 if isinstance(line,tuple):
                     # we have a list of text segments which we should join together
@@ -80,20 +80,20 @@ class TextClustering(clustering.Cluster):
                 #     fasta_line += "-"
 
                 try:
-                    f.write(">\n"+line+"\n")
+                    in_file.write(">\n"+line+"\n")
                 except UnicodeEncodeError:
                     print line
                     print unicodedata.normalize('NFKD', line).encode('ascii','ignore')
                     raise
+            in_file.flush()
 
-        # todo - play around with gap penalty --op 0.5
-        t = "mafft --op 0.2 --text /tmp/transcribe"+id_+".fasta> /tmp/transcribe"+id_+".out 2> /dev/null"
-        os.system(t)
+            # todo - play around with gap penalty --op 0.5
+            t = "mafft --op 0.2 --text " + in_file.name + " > " + out_file.name +" 2> /dev/null"
 
-        aligned_text = []
-        with open("/tmp/transcribe"+id_+".out","rb") as f:
+            os.system(t)
+
             cumulative_line = ""
-            for line in f.readlines():
+            for line in out_file.readlines():
                 if (line == ">\n"):
                     if (cumulative_line != ""):
                         aligned_text.append(cumulative_line)
@@ -106,10 +106,12 @@ class TextClustering(clustering.Cluster):
                 assert False
             aligned_text.append(cumulative_line)
 
-        os.remove("/tmp/transcribe"+id_+".fasta")
-        os.remove("/tmp/transcribe"+id_+".out")
-
-        return aligned_text
+        # no idea why mafft seems to have just including this line in the output
+        # also might just be affecting Greg's computer
+        if aligned_text[0] == '/usr/lib/mafft/lib/mafft':
+            return aligned_text[1:]
+        else:
+            return aligned_text
 
     def __accuracy__(self,s):
         assert isinstance(s,str)
