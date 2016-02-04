@@ -88,7 +88,8 @@ class TextClustering(clustering.Cluster):
             in_file.flush()
 
             # todo - play around with gap penalty --op 0.5
-            t = "mafft --op 0.2 --text " + in_file.name + " > " + out_file.name +" 2> /dev/null"
+            # t = "mafft --op 0.2 --text " + in_file.name + " > " + out_file.name +" 2> /dev/null"
+            t = "mafft --text " + in_file.name + " > " + out_file.name +" 2> /dev/null"
 
             os.system(t)
 
