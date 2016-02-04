@@ -86,28 +86,33 @@ class FolgerClustering(TextClustering):
         :return:
         """
         completed_indices = []
-        for char_index in range(len(aligned_text[0])):
-            char_set = set(text[char_index] for text in aligned_text)
-            # 25 means that user hasn't transcribed this part of the line - NOT an inserted gap
-            char_vote = {c:sum([1 for text in aligned_text if text[char_index] == c]) for c in char_set if ord(c) != 25}
 
-            if sum(char_vote.values()) >= 3:
+        for char_index in range(len(aligned_text[0])):
+            num_char = len([1 for text in aligned_text if ord(text[char_index]) != 25])
+
+            if num_char >= 3:
                 completed_indices.append(char_index)
 
-        completed_starting_point = {}
-        completed_ending_point = {}
+        starting_points = {}
+        ending_points = {}
 
         # transcription_range = {}
 
         # find consecutive blocks
         if completed_indices != []:
+            # find the contiguous blocks of completed transcriptions
             blocks = [[completed_indices[0]],]
             for i,char_index in list(enumerate(completed_indices))[1:]:
+                # do we have a jump - if so, start a new block
                 if completed_indices[i-1] != (char_index-1):
                     blocks[-1].append(completed_indices[i-1])
                     blocks.append([char_index])
 
+            # if the last character started a new block (kinda weird but happens)
+            # then we have a block only one character long - skip it
             blocks[-1].append(completed_indices[-1])
+            if blocks[-1][0] == blocks[-1][1]:
+                blocks = blocks[:-1]
 
             # technically we can have multiple transcriptions from the same user so
             # instead of user_index, I'll use transcription_index
@@ -128,23 +133,24 @@ class FolgerClustering(TextClustering):
                 # telling people to no longer transcribe that text
                 # such transcriptions may not exist - in which case we cannot really do anything
                 for b in blocks:
+                    b = tuple(b)
                     # does the start of the transcription match up with the start of the completed segment
                     if b[0] == first_char:
-                        if (first_char,last_char) in completed_starting_point:
-                            completed_starting_point[(first_char,last_char)].append((x1,y1))
+                        if b in starting_points:
+                            starting_points[b].append((x1,y1))
                         else:
-                            completed_starting_point[(first_char,last_char)] = [(x1,y1)]
+                            starting_points[b] = [(x1,y1)]
 
                     # does the end of the transcription match up with the end of the completed segment?
                     if b[1] == last_char:
-                        if (first_char,last_char) in completed_ending_point:
-                            completed_ending_point[(first_char,last_char)].append((x2,y2))
+                        if (first_char,last_char) in ending_points:
+                            ending_points[b].append((x2,y2))
                         else:
-                            completed_ending_point[(first_char,last_char)] = [(x2,y2)]
+                            ending_points[b] = [(x2,y2)]
 
-        return completed_starting_point,completed_ending_point
+        return starting_points,ending_points
 
-    def __create_clusters__(self,(completed_starting_point,completed_ending_point),aggregated_text,transcription_range,markings):
+    def __create_clusters__(self,(starting_points,ending_points),aggregated_text,transcription_range,markings):
         """
         the aggregated text, split up into completed components and make a result (aggregate) cluster for each
         of those components
@@ -157,16 +163,18 @@ class FolgerClustering(TextClustering):
         clusters = []
 
         # go through every segment that is considered done
-        for (lb,ub) in completed_starting_point:
+        for (lb,ub) in starting_points:
             # not sure how likely this is to happen, but just to be sure
             # make sure that we have both a starting and ending point
-            if (lb,ub) not in completed_ending_point:
+            if (lb,ub) not in ending_points:
                 continue
+
+            print "here"
 
             new_cluster = {}
 
-            X1,Y1 = zip(*completed_starting_point[(lb,ub)])
-            X2,Y2 = zip(*completed_ending_point[(lb,ub)])
+            X1,Y1 = zip(*starting_points[(lb,ub)])
+            X2,Y2 = zip(*ending_points[(lb,ub)])
 
             x1 = np.median(X1)
             x2 = np.median(X2)
@@ -193,6 +201,10 @@ class FolgerClustering(TextClustering):
 
             clusters.append(new_cluster)
 
+        # if len(completed_starting_point) > 1:
+        #     print clusters
+        #     assert False
+        print "num clusters " + str(len(clusters))
         return clusters
 
     def __merge_aligned_text__(self,aligned_text):

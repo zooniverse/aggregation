@@ -141,8 +141,6 @@ class Cluster:
                     for cluster_index,cluster in enumerate(cluster_results):
                         aggregation[subject_id][task_id][shape+ " clusters"][cluster_index] = cluster
 
-                    # print aggregation[subject_id][task_id][shape+ " clusters"].keys()
-                    # assert False
         # we should have some results
         # assert aggregation != {"param":"subject_id"}
 
