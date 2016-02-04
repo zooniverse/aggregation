@@ -271,7 +271,7 @@ class AggregationAPI:
 
         self.oldest_new_classification = datetime.datetime.now()
 
-    def __aggregate__(self,workflows=None,gold_standard_clusters=([],[]),expert=None,store_values=True):
+    def __aggregate__(self,workflows=None,gold_standard_clusters=([],[]),expert=None):
         """
         you can provide a list of clusters - hopefully examples of both true positives and false positives
         note this means you have already run the aggregation before and are just coming back with
@@ -345,14 +345,9 @@ class AggregationAPI:
                 aggregations = survey_alg.__aggregate__(raw_surveys)
 
             # finally, store the results
-            # if gold_standard_clusters is not None, assume that we are playing around with values
-            # and we don't want to automatically save the results
+            self.__upsert_results__(workflow_id,aggregations)
 
-            if store_values:
-                print "upserting results"
-                self.__upsert_results__(workflow_id,aggregations)
-            else:
-                return aggregations
+        return migrated_subjects
 
     def __cassandra_annotations__(self,workflow_id,subject_set):
         """
