@@ -1,33 +1,9 @@
 #!/usr/bin/env python
-# import matplotlib
-# matplotlib.use('WXAgg')
-from aggregation_api import AggregationAPI
-import helper_functions
-from classification import Classification
-import clustering
 import numpy as np
-import re
-import unicodedata
 import os
-import requests
-import rollbar
-import json
-import sys
-import yaml
-from blob_clustering import BlobClustering
-import boto3
-import pickle
-import getopt
-from dateutil import parser
-import botocore
 import matplotlib.pyplot as plt
 import math
-import tempfile
 import networkx
-import botocore.session
-import tarfile
-import datetime
-import cassandra
 from text_clustering import TextClustering
 
 __author__ = 'greg'
@@ -385,8 +361,11 @@ class FolgerClustering(TextClustering):
                 # removed_count += 1
                 continue
 
+            # plt.plot([x1,x2],[y1,y2])
+
             filtered_markings.append((x1,x2,y1,y2,processed_text))
 
+        # plt.show()
         return filtered_markings
 
     def __find_connected_transcriptions__(self,markings):
@@ -402,6 +381,7 @@ class FolgerClustering(TextClustering):
         # examine every pair - note that distance from A to B does not necessarily equal
         # the distance from B to A - so order matters
         for m_i,(x1,x2,y1,y2,t) in enumerate(markings):
+            # print (x1,x2,y1,y2)
             for m_i2,(x1_,x2_,y1_,y2_,_) in enumerate(markings):
                 # assuming two purely horizontal lines - consider the following example
                 # x1 ----------- x2
@@ -469,6 +449,8 @@ class FolgerClustering(TextClustering):
         that A overlaps C. So we'll use some graph theory instead to search for
         """
 
+        # print user_ids
+
         # image is kept mainly just for debugging
         image = None
 
@@ -478,6 +460,8 @@ class FolgerClustering(TextClustering):
 
         # cluster the filtered components
         connected_components = self.__find_connected_transcriptions__(filtered_markings)
+
+        # print connected_components
 
         clusters = []
 
