@@ -327,21 +327,18 @@ if __name__ == "__main__":
 
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
-        if environment == "production":
-            project.__migrate__()
-        # project.__migrate__()
-        print "done migrating"
-        # project.__aggregate__(subject_set = [671541,663067,664482,662859])
+        # print "done migrating"
+        # # project.__aggregate__(subject_set = [671541,663067,664482,662859])
         project.__aggregate__()
-
-        if summary:
-            project.__add_metadata__()
-
-            tar_path = "/tmp/"+str(project_id)+".tar.gz"
-            t = tarfile.open(tar_path,mode="w:gz")
-            json.dump(project.overall_aggregation,open("/tmp/"+str(project_id)+".txt","wb"))
-            t.add("/tmp/"+str(project_id)+".txt")
-            t.close()
-
-            project.__summarize__(tar_path)
-            print "hello?"
+        #
+        # if summary:
+        #     project.__add_metadata__()
+        #
+        #     tar_path = "/tmp/"+str(project_id)+".tar.gz"
+        #     t = tarfile.open(tar_path,mode="w:gz")
+        #     json.dump(project.overall_aggregation,open("/tmp/"+str(project_id)+".txt","wb"))
+        #     t.add("/tmp/"+str(project_id)+".txt")
+        #     t.close()
+        #
+        #     project.__summarize__(tar_path)
+        #     print "hello?"
