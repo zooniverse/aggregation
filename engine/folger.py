@@ -150,7 +150,7 @@ class FolgerClustering(TextClustering):
 
         return starting_points,ending_points
 
-    def __create_clusters__(self,(starting_points,ending_points),aggregated_text,transcription_range,markings):
+    def __create_clusters__(self,(starting_points,ending_points),aggregated_text,transcription_range,markings,cluster_index):
         """
         the aggregated text, split up into completed components and make a result (aggregate) cluster for each
         of those components
@@ -169,8 +169,6 @@ class FolgerClustering(TextClustering):
             if (lb,ub) not in ending_points:
                 continue
 
-            print "here"
-
             new_cluster = {}
 
             X1,Y1 = zip(*starting_points[(lb,ub)])
@@ -182,6 +180,11 @@ class FolgerClustering(TextClustering):
             y2 = np.median(Y2)
 
             completed_text = self.__reset_tags__(aggregated_text[lb:ub+1])
+            # chr(26) means not enough people have transcribed at a given position
+            # but we specifically chose this substring as a substring where all the characters have
+            # been transcribed by enough people. So sanity check
+            assert chr(26) not in completed_text
+            assert isinstance(completed_text,str)
             new_cluster["center"] = (x1,x2,y1,y2,completed_text)
 
             new_cluster["cluster members"] = []
@@ -198,12 +201,10 @@ class FolgerClustering(TextClustering):
                     new_cluster["cluster members"].append(new_marking)
 
             new_cluster["num users"] = len(new_cluster["cluster members"])
+            new_cluster["set index"] = cluster_index
 
             clusters.append(new_cluster)
 
-        # if len(completed_starting_point) > 1:
-        #     print clusters
-        #     assert False
         print "num clusters " + str(len(clusters))
         return clusters
 
@@ -259,8 +260,7 @@ class FolgerClustering(TextClustering):
                     # gave " " which we'll assume means a double space so skip
                     if (ord(sorted_keys[0]) == 24) and (sorted_keys[1] == " "):
                         # but only skip it if at least two person gave 24
-                        raw_counts = {c:sum([1 for text in aligned_text if text[char_index] == c]) for c in char_set}
-                        if raw_counts[chr(24)] >= 2:
+                        if char_vote[chr(24)] >= 2:
                             aggregate_text += chr(24)
                         else:
                             # 27 => disagreement
@@ -477,7 +477,7 @@ class FolgerClustering(TextClustering):
 
         clusters = []
 
-        for c in connected_components:
+        for ii,c in enumerate(connected_components):
             if len(c) <= 2:
                 continue
 
@@ -507,7 +507,7 @@ class FolgerClustering(TextClustering):
             completed_components = self.__find_completed_components__(aligned_text,coordinates)
             # (completed_starting_point,completed_ending_point),aggregated_text,transcription_range,markings
             markings_in_cluster = [filtered_markings[i] for i in c]
-            clusters.extend(self.__create_clusters__(completed_components,aggregate_text,transcription_range,markings_in_cluster))
+            clusters.extend(self.__create_clusters__(completed_components,aggregate_text,transcription_range,markings_in_cluster,ii))
 
         print "number of completed components: " + str(len(clusters))
         return clusters,0
