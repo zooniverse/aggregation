@@ -96,9 +96,15 @@ class Cluster:
                 if shape != self.shape:
                     continue
 
-                for subject_count,subject_id in list(enumerate(raw_markings[task_id][shape])):
+                if self.project.environment == "development":
+                    limit = 100
+                else:
+                    limit = -1
+
+                for subject_count,subject_id in list(enumerate(raw_markings[task_id][shape]))[:limit]:
                     print subject_id
                     assert raw_markings[task_id][shape][subject_id] != []
+
 
                     # remove any "markings" which correspond to the user not making a marking
                     # these are still useful for noting that the user saw that image
@@ -106,12 +112,15 @@ class Cluster:
                     all_users,t1,t2 = zip(*raw_markings[task_id][shape][subject_id])
                     all_users = list(set(all_users))
 
+
+
                     # empty image
                     if pruned_markings == []:
                         # no centers, no points, no users per cluster
                         cluster_results = []
                     else:
                         users,markings,tools = zip(*pruned_markings)
+                        print users
 
                         reduced_markings = self.dim_reduction_alg(markings)
 
@@ -131,6 +140,7 @@ class Cluster:
                     # assert cluster_results == []
                     for cluster_index,cluster in enumerate(cluster_results):
                         aggregation[subject_id][task_id][shape+ " clusters"][cluster_index] = cluster
+
                     # print aggregation[subject_id][task_id][shape+ " clusters"].keys()
                     # assert False
         # we should have some results
