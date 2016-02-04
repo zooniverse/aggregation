@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 # from setuptools import setup, find_packages
+import matplotlib
+matplotlib.use('WXAgg')
 import os
 import yaml
 import urllib2
@@ -269,7 +271,7 @@ class AggregationAPI:
 
         self.oldest_new_classification = datetime.datetime.now()
 
-    def __aggregate__(self,workflows=None,subject_set=None,gold_standard_clusters=([],[]),expert=None,store_values=True,only_retired_subjects=None):
+    def __aggregate__(self,workflows=None,gold_standard_clusters=([],[]),expert=None,store_values=True):
         """
         you can provide a list of clusters - hopefully examples of both true positives and false positives
         note this means you have already run the aggregation before and are just coming back with
@@ -281,20 +283,25 @@ class AggregationAPI:
         :param gold_standard_clusters:
         :return:
         """
+        # start by migrating any new classifications (since previous run) from postgres into cassandra
+        # this will also give us a list of the migrated subjects, which is the list of subjects we want to run
+        # aggregation on (if a subject has no new classifications, why bother rerunning aggregation)
+        # this is actually just for projects like annotate and folger where we run aggregation on subjects that
+        # have not be retired. If we want subjects that have been specifically retired, we'll make a separate call
+        # for that
+        migrated_subjects = self.__migrate__()
+
         # todo - set things up so that you don't have to redo all of the aggregations just to rerun ibcc
         if workflows is None:
             workflows = self.workflows
 
-        given_subject_set = (subject_set != None)
-
-        if only_retired_subjects is None:
-            only_retired_subjects = self.only_retired_subjects
-        assert isinstance(only_retired_subjects,bool)
-
         for workflow_id in workflows:
-            if subject_set is None:
-                subject_set = self.__get_subjects__(workflow_id,only_retired_subjects)
-                # subject_set = self.__load_subjects__(workflow_id)
+            # if we want only newly retired subjects, make a special call
+            # otherwise, use the migrated list of subjects
+            if self.only_retired_subjects:
+                subject_set = self.__get_newly_retired_subjects__(workflow_id)
+            else:
+                subject_set = list(migrated_subjects[workflow_id])
 
             if subject_set == []:
                 print "skipping workflow " + str(workflow_id) + " due to an empty subject set"
@@ -337,10 +344,6 @@ class AggregationAPI:
                     survey_alg = survey_aggregation.Survey()
                 aggregations = survey_alg.__aggregate__(raw_surveys)
 
-            # unless we are provided with specific subjects, reset for the extra workflow
-            if not given_subject_set:
-                subject_set = None
-
             # finally, store the results
             # if gold_standard_clusters is not None, assume that we are playing around with values
             # and we don't want to automatically save the results
@@ -374,15 +377,15 @@ class AggregationAPI:
             statements_and_params = []
 
             if self.ignore_versions:
-                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ?")
+                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where subject_id = ? and workflow_id = ?")
             else:
-                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where project_id = ? and subject_id = ? and workflow_id = ? and workflow_version = ?")
+                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where subject_id = ? and workflow_id = ? and workflow_version = ?")
 
             for subject_id in s:
                 if self.ignore_versions:
-                    params = (int(self.project_id),subject_id,int(workflow_id))
+                    params = (subject_id,int(workflow_id))
                 else:
-                    params = (int(self.project_id),subject_id,int(workflow_id),version)
+                    params = (subject_id,int(workflow_id),version)
 
                 statements_and_params.append((select_statement, params))
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
@@ -695,7 +698,7 @@ class AggregationAPI:
             raise
         # return None
 
-    def __get_subjects__(self,workflow_id,only_retired_subjects=False):#,only_recent_subjects=True):
+    def __get_newly_retired_subjects__(self,workflow_id):#,only_retired_subjects=False):#,only_recent_subjects=True):
         """
         gets the subjects to aggregate
         if we need retired subjects, query against the production postgresDB
@@ -712,7 +715,7 @@ class AggregationAPI:
         # but for printing out the json blobs, then we want only retired subjects - which
         # is where we set only_retired_subjects=True
 
-        if self.__is_project_live__() and (self.only_retired_subjects or only_retired_subjects):
+        if True:#self.__is_project_live__() and (self.only_retired_subjects or only_retired_subjects):
             print "selecting only subjects retired since last run"
             stmt = """ SELECT * FROM "subjects"
                     INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."subject_id" = "subjects"."id"
@@ -730,23 +733,14 @@ class AggregationAPI:
             # for discussion about acceptable cassandra time stamp formats
             # why is this not a problem in migration? who knows :(
             t = self.__get_most_recent__()
+            workflow_v = int(self.versions[workflow_id])
 
-            stmt = "SELECT subject_id,workflow_version FROM classifications WHERE workflow_id = " + str(workflow_id) + " and id >= " + str(t)
+            stmt = "SELECT subject_id FROM classifications WHERE workflow_id = " + str(workflow_id) + " and workflow_version = " + str(workflow_v) + " and id >= " + str(t) + ";"
+            print stmt
             print "selecting all subjects - including those not retired"
             # assert False
-            # filter for subjects which have the correct major version number
-            if not self.ignore_versions:
-                print "filtering based on workflow version"
-                workflow_v = int(self.versions[workflow_id])
 
-                subjects = [r.subject_id for r in self.cassandra_session.execute(stmt) if int(r.workflow_version) == workflow_v]
-
-                if subjects == set():
-                    print "no subjects found - maybe remove version filter"
-                    print "current workflow version " + str(int(self.versions[workflow_id]))
-                    print "workflow versions with classifications " + str(set([r.workflow_version for r in self.cassandra_session.execute(stmt)]))
-            else:
-                subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt)])
+            subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt)])
 
         return list(subjects)
 
@@ -1050,33 +1044,30 @@ class AggregationAPI:
 
         # uncomment this code if this is the first time you've run migration on whatever machine
         # will create the necessary cassandra tables for you - also useful if you need to reset
-        # try:
-        #     self.cassandra_session.execute("drop table classifications")
-        #     self.cassandra_session.execute("drop table most_recent")
-        #     print "tables dropped"
-        # except cassandra.InvalidRequest:
-        #     pass
+        try:
+            self.cassandra_session.execute("drop table classifications")
+            self.cassandra_session.execute("drop table most_recent")
+            print "tables dropped"
+        except cassandra.InvalidRequest:
+            pass
 
         # for cassandra
         # metadata is needed to possibly get image dimensions which are used to make sure that a marking is valid
         # and not off the screen (problem sometimes with smart phones etc.)
         columns = "id int, user_id int, workflow_id int, created_at timestamp,annotations text, user_ip inet, gold_standard boolean, subject_id int, workflow_version int,metadata text"
-        primary_key = "workflow_id,id"
-        ordering = "id ASC"
+        # user_id and user_ip are used so that each user's classifications are stored for a given
+        # workflow/subject. Otherwise we can only store at most one classification per workflow/subject
+        # realized this the part way (sigh). User_ip ensures that non logged in users will be stored correctly
+        # so although we will never (for now) search based on user_id or user_ip, still REALLY important
+        primary_key = "workflow_id,subject_id,workflow_version,user_id,user_ip"
+        ordering = "subject_id ASC,workflow_version ASC"
 
+        # we only want to run aggregation on subjects that have had new annotations since we last ran aggregation
+        # we store the "timestamp" of the last aggregation run by the
         try:
             self.cassandra_session.execute("CREATE TABLE classifications(" + columns + ", PRIMARY KEY( " + primary_key + ")) WITH CLUSTERING ORDER BY ( " + ordering + ");")
         except cassandra.AlreadyExists:
-            # if table already exists, that's fine :)
-            pass
-
-        # self.cassandra_session.execute("create index table1_valuea on classifications (workflow_id);")
-        # self.cassandra_session.execute("create index table1_valueb on classifications (created_at);")
-
-        # try:
-        #     self.cassandra_session.execute("CREATE TABLE subjects (project_id int, workflow_id int, workflow_version int, subject_id int, PRIMARY KEY(project_id,workflow_id,subject_id,workflow_version));")
-        # except cassandra.AlreadyExists:
-        #     pass
+            print "classification table already exists"
 
         # what is the most recent classification we read in
         most_recent = self.__get_most_recent__()
@@ -1084,7 +1075,7 @@ class AggregationAPI:
         subject_listing = set()
 
         # some useful postgres bits of code
-        postgres_constraint = "classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id) + " and id > " + str(most_recent)
+        postgres_constraint = "classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)# + " and id > " + str(most_recent)
         postgres_table = "classifications INNER JOIN classification_subjects"
 
         # how many classifications are we going to migrate
@@ -1109,6 +1100,10 @@ class AggregationAPI:
 
         statements_and_params = []
 
+        subjects_migrated = dict()
+
+        subject_count = {}
+
         # finally go through the annotations
         for ii,t in enumerate(cur.fetchall()):
             if (ii % 10000 == 0) and (ii > 0):
@@ -1116,7 +1111,18 @@ class AggregationAPI:
 
             id_,user_id,workflow_id,annotations,created_at,user_ip,gold_standard,workflow_version,subject_id,metadata = t
 
+            # store migrated subjects by workflow_id
+            if workflow_id not in subjects_migrated:
+                subjects_migrated[workflow_id] = {subject_id}
+            else:
+                subjects_migrated[workflow_id].add(subject_id)
+
             self.oldest_new_classification = min(self.oldest_new_classification,created_at)
+
+            if subject_id not in subject_count:
+                subject_count[subject_id] = 1
+            else:
+                subject_count[subject_id] += 1
 
             # todo - not why exactly, but I guess gold_standard could be something other than boolean
             if gold_standard != True:
@@ -1153,6 +1159,9 @@ class AggregationAPI:
         if statements_and_params != []:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
             # print results
+
+
+        return subjects_migrated
 
     def __panoptes_call__(self,query):
         """
@@ -1747,6 +1756,7 @@ class AggregationAPI:
             # annotations = json.loads(record.annotations)
             annotation = json.loads(annotation)
 
+
             # go through each annotation and get the associated task
             for task in annotation:
                 try:
@@ -1758,6 +1768,7 @@ class AggregationAPI:
                 # see https://github.com/zooniverse/Panoptes-Front-End/issues/2155 for why this is needed
                 if self.project_id in self.survey_projects:
                     task_id = survey_tasks.keys()[0]
+
 
                 # is this a marking task?
                 if task_id in marking_tasks:
@@ -1941,14 +1952,10 @@ if __name__ == "__main__":
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
         project.__setup__()
-        if environment == "production":
-            project.__migrate__()
-        if environment == "development": project.__migrate__()
+
         print project.oldest_new_classification
 
-
-
-        # project.__aggregate__()
+        project.__aggregate__()
         #
         # with csv_output.CsvOut(project) as c:
         #     c.__write_out__()
