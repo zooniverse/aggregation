@@ -97,12 +97,13 @@ class Cluster:
                     continue
 
                 if self.project.environment == "development":
-                    limit = 100
+                    limit = -1
                 else:
                     limit = -1
 
                 for subject_count,subject_id in list(enumerate(raw_markings[task_id][shape]))[:limit]:
-                    print subject_id
+
+                    print subject_count,subject_id
                     assert raw_markings[task_id][shape][subject_id] != []
 
 
@@ -120,7 +121,6 @@ class Cluster:
                         cluster_results = []
                     else:
                         users,markings,tools = zip(*pruned_markings)
-                        print users
 
                         reduced_markings = self.dim_reduction_alg(markings)
 
