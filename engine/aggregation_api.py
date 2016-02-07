@@ -1,8 +1,10 @@
 #!/usr/bin/env python
 # from setuptools import setup, find_packages
-import matplotlib
-matplotlib.use('WXAgg')
 import os
+if os.path.exists("/home/ggdhines"):
+    import matplotlib
+    matplotlib.use('WXAgg')
+
 import yaml
 import urllib2
 import cookielib
@@ -29,13 +31,6 @@ from cassandra.concurrent import execute_concurrent
 import psycopg2
 import rollbar
 import helper_functions
-
-
-
-if os.path.exists("/home/ggdhines"):
-    base_directory = "/home/ggdhines"
-else:
-    base_directory = "/home/greg"
 
 # see below for a discussion of inserting date times into casssandra - code is taken from there
 # http://stackoverflow.com/questions/16532566/how-to-insert-a-datetime-into-a-cassandra-1-2-timestamp-column
@@ -1951,6 +1946,6 @@ if __name__ == "__main__":
         print project.oldest_new_classification
 
         project.__aggregate__()
-        #
-        # with csv_output.CsvOut(project) as c:
-        #     c.__write_out__()
+
+        with csv_output.CsvOut(project) as c:
+            c.__write_out__()
