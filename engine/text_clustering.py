@@ -88,8 +88,8 @@ class TextClustering(clustering.Cluster):
             in_file.flush()
 
             # todo - play around with gap penalty --op 0.5
-            # t = "mafft --op 0.2 --text " + in_file.name + " > " + out_file.name +" 2> /dev/null"
-            t = "mafft --text " + in_file.name + " > " + out_file.name +" 2> /dev/null"
+            t = "mafft --op 0.85 --text " + in_file.name + " > " + out_file.name +" 2> /dev/null"
+            # t = "mafft --text " + in_file.name + " > " + out_file.name +" 2> /dev/null"
 
             os.system(t)
 
@@ -223,7 +223,6 @@ class TextClustering(clustering.Cluster):
                 sorted_keys = [c for c in sorted(char_vote.keys())]
                 # 24 means a gap
                 if (ord(sorted_keys[0]) == 24) and (sorted_keys[1] == " "):
-                    # print most_likely_char,vote_percentage
                     raw_counts = {c:sum([1 for text in aligned_text if text[char_index] == c]) for c in char_set}
                     if raw_counts[chr(24)] >= 2:
                         # if at least two people said there was no space, we will assume that this space is actually
