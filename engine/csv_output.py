@@ -52,10 +52,13 @@ class CsvOut:
         # start with the summary file
         id_ = (workflow_id,task_id,shape_id,followup_id,"summary")
 
-        self.__add_summary_row__(id_,subject_id,aggregations,answer_dict)
+        try:
+            self.__add_summary_row__(id_,subject_id,aggregations,answer_dict)
 
-        id_ = (workflow_id,task_id,shape_id,followup_id,"detailed")
-        self.__add_detailed_row__(id_,subject_id,aggregations,answer_dict)
+            id_ = (workflow_id,task_id,shape_id,followup_id,"detailed")
+            self.__add_detailed_row__(id_,subject_id,aggregations,answer_dict)
+        except ValueError:
+            print "empty aggregations for workflow id " + str(workflow_id) + " task id " + str(task_id) + " and subject id" + str(subject_id) + " -- skipping"
 
     def __add_detailed_row__(self,id_,subject_id,results,answer_dict):
         """
@@ -83,7 +86,6 @@ class CsvOut:
 
             results_file.write(","+str(num_users)+"\n")
 
-
     def __add_summary_row__(self,id_,subject_id,results,answer_dict):
         """
         given a result for a specific subject (and possibily a specific cluster within that specific subject)
@@ -99,7 +101,11 @@ class CsvOut:
         votes,num_users = results
 
         # get the top choice
-        most_likely,top_probability = max(votes.items(), key = lambda x:x[1])
+        try:
+            most_likely,top_probability = max(votes.items(), key = lambda x:x[1])
+        except ValueError:
+            print results
+            raise
 
         # extract the text corresponding to the most likely answer
         most_likely_label = answer_dict[int(most_likely)]
