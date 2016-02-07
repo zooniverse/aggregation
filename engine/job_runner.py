@@ -2,7 +2,6 @@ import os
 from redis import Redis
 from rq import Worker, Queue, Connection
 from load_redis import configure_redis
-from aggregation_api import base_directory
 import yaml
 import rollbar
 from rollbar.contrib.rq import exception_handler
@@ -10,10 +9,7 @@ from rollbar.contrib.rq import exception_handler
 listen = ['high', 'default', 'low']
 env = os.getenv('FLASK_ENV', 'production')
 
-try:
-    panoptes_file = open("config/aggregation.yml","rb")
-except IOError:
-    panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
+panoptes_file = open("config/aggregation.yml","rb")
 
 api_details = yaml.load(panoptes_file)
 rollbar_token = api_details[env]["rollbar"]
