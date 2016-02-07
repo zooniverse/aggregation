@@ -1,12 +1,12 @@
 import os
 import requests
 import json
-from aggregation_api import base_directory,AggregationAPI
 from csv_output import CsvOut
-import yaml
-import traceback
+
 
 def aggregate(project_id, token, href, metadata, environment):
+    from aggregation_api import AggregationAPI
+
     with AggregationAPI(project_id, environment=environment) as project:
         project.__setup__()
         project.__migrate__()
