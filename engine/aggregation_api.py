@@ -24,7 +24,7 @@ import csv_output
 import time
 import survey_aggregation
 from dateutil import parser
-import setproctitle
+# import setproctitle
 import cassandra
 from cassandra.cluster import Cluster
 from cassandra.concurrent import execute_concurrent
@@ -123,7 +123,7 @@ class AggregationAPI:
         self.previous_runtime = datetime.datetime(2000,1,1)
 
         # so ps will show us which projects are actually aggregating and for now long
-        setproctitle.setproctitle("aggregation project " + str(project_id))
+        # setproctitle.setproctitle("aggregation project " + str(project_id))
 
         # some survey projects have incorrectly labelled task ids (the id given is task type)
         # so for these projects we will have individually correct the ids
