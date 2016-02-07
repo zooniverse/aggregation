@@ -15,7 +15,7 @@ import getopt
 import sys
 import folger
 import annotate
-import tarfile
+import numpy as np
 
 __author__ = 'ggdhines'
 
@@ -235,7 +235,14 @@ class TranscriptionAPI(AggregationAPI):
 
         new_json = {}
 
-        for subject_id,aggregation in cur.fetchall():
+        subjects_with_results = 0
+
+        for ii,(subject_id,aggregation) in enumerate(cur.fetchall()):
+            print ii
+            #
+            if subject_id not in self.classification_alg.to_retire:
+                continue
+
             try:
                 clusters_by_line = {}
 
@@ -274,29 +281,67 @@ class TranscriptionAPI(AggregationAPI):
                     _,text = zip(*line)
 
                     text = list(text)
-                    new_line = []
+                    # for combining the possible multiple clusters for this line into one
+                    merged_line = ""
                     for t in text:
                         # think that storing in postgres converts from str to unicode
                         # for general display, we don't need ord(24) ie skipped characters
                         new_t = t.replace(chr(24),"")
-                        new_line.append(new_t)
-                    text_to_read.append(new_line)
-                    text_in_detail.append([cluster["cluster members"] for cluster in cluster_set])
-                    coordinates.append([cluster["center"][:-1] for cluster in cluster_set])
+                        merged_line += new_t
 
-                if text_to_read != []:
-                    new_json[subject_id] = {}
-                    new_json[subject_id]["text"] = text_to_read
-                    new_json[subject_id]["details"] = text_in_detail
-                    new_json[subject_id]["coordinate"] = coordinates
+                    # we seem to occasionally get lines that are just skipped characters (i.e. the string
+                    # if just chr(24)) - don't report these lines
+                    if merged_line != "":
+                        # is this the first line we've encountered for this subject?
+                        if subject_id not in new_json:
+                            new_json[subject_id] = {"text":[],"individual transcriptions":[], "accuracy":[], "coordinates" : []}
 
-                    metadata = self.__get_subject_metadata__(subject_id)["subjects"][0]["metadata"]
-                    new_json[subject_id]["metadata"] = metadata
+                            # add in the metadata
+                            metadata = self.__get_subject_metadata__(subject_id)["subjects"][0]["metadata"]
+                            new_json[subject_id]["metadata"] = metadata
+
+                            new_json[subject_id]["zooniverse subject id"] = subject_id
+
+                        # add in the line of text
+                        new_json[subject_id]["text"].append(merged_line)
+
+                        # now add in the aligned individual transcriptions
+                        # use the first cluster we found for this line as a "representative cluster"
+                        rep_cluster = cluster_set[0]
+
+                        new_json[subject_id]["individual transcriptions"].append(rep_cluster["aligned_text"])
+
+                        # what was the accuracy for this line?
+                        accuracy = len([c for c in merged_line if ord(c) != 27])/float(len(merged_line))
+                        new_json[subject_id]["accuracy"].append(accuracy)
+
+
+
+                        # add in the coordinates
+                        # this is only going to work with horizontal lines
+                        line_segments = [cluster["center"][:-1] for cluster in cluster_set]
+                        x1,x2,y1,y2 = zip(*line_segments)
+
+                        # find the line segments which define the start and end of the line overall
+                        x_start = min(x1)
+                        x_end = max(x2)
+
+                        start_index = np.argmin(x1)
+                        end_index = np.argmax(x2)
+
+                        y_start = y1[start_index]
+                        y_end = y1[end_index]
+
+                        new_json[subject_id]["coordinates"].append([x_start,x_end,y_start,y_end])
+
+                # count once per subject
+                subjects_with_results += 1
             except KeyError:
                 pass
 
-
-        print json.dumps(new_json, sort_keys=True,indent=4, separators=(',', ': '))
+        json.dump(new_json,open("/tmp/folger.json","wb"))
+        print "we have (at least partial) results for " + str(subjects_with_results) + " subjects"
+        # print json.dumps(new_json, sort_keys=True,indent=4, separators=(',', ': '))
 
 
     def __summarize__(self,tar_path=None):
@@ -403,7 +448,7 @@ if __name__ == "__main__":
         project.__setup__()
         # print "done migrating"
         # # project.__aggregate__(subject_set = [671541,663067,664482,662859])
-        # processed_subjects = project.__aggregate__()
+        processed_subjects = project.__aggregate__()
         project.__restructure_json__()
         #
         # if summary:
