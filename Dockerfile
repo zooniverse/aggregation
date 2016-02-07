@@ -7,7 +7,7 @@ RUN apt-get -y upgrade
 RUN apt-get install -y python python-dev python-setuptools python-pip \
     python-numpy python-scipy python-pymongo python-networkx python-yaml \
     python-psycopg2 python-matplotlib python-shapely python-pandas supervisor \
-    mafft vim
+    mafft vim python-wxgtk2.8
 
 WORKDIR /app/
 
