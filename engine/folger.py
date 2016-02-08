@@ -150,7 +150,7 @@ class FolgerClustering(TextClustering):
 
         return starting_points,ending_points
 
-    def __create_clusters__(self,(starting_points,ending_points),aggregated_text,transcription_range,markings,cluster_index):
+    def __create_clusters__(self,(starting_points,ending_points),aggregated_text,transcription_range,markings,cluster_index,aligned_text):
         """
         the aggregated text, split up into completed components and make a result (aggregate) cluster for each
         of those components
@@ -185,27 +185,38 @@ class FolgerClustering(TextClustering):
             # been transcribed by enough people. So sanity check
             assert chr(26) not in completed_text
             assert isinstance(completed_text,str)
+
             new_cluster["center"] = (x1,x2,y1,y2,completed_text)
 
             new_cluster["cluster members"] = []
 
-            # which transcriptions contributed to this piece of text being considered done?
-            # note that we are not looking for (lb_j,ub_j) to completely contain the completed segment
-            # (although I think most of the time that will be the case) - any overlap will count
-            # this will be needed if people want to go back and look at the raw data
-            for j,(lb_j,ub_j) in enumerate(transcription_range):
-
-                if (lb_j <= lb <= ub_j) or (lb_j <= ub <= ub_j):
-                    (x1,x2,y1,y2,transcription) = markings[j]
-                    new_marking = (x1,x2,y1,y2,self.__reset_tags__(transcription))
-                    new_cluster["cluster members"].append(new_marking)
+            # # which transcriptions contributed to this piece of text being considered done?
+            # # note that we are not looking for (lb_j,ub_j) to completely contain the completed segment
+            # # (although I think most of the time that will be the case) - any overlap will count
+            # # this will be needed if people want to go back and look at the raw data
+            # for j,(lb_j,ub_j) in enumerate(transcription_range):
+            #
+            #     if (lb_j <= lb <= ub_j) or (lb_j <= ub <= ub_j):
+            #         (x1,x2,y1,y2,transcription) = markings[j]
+            #         new_marking = (x1,x2,y1,y2,self.__reset_tags__(transcription))
+            #         new_cluster["cluster members"].append(new_marking)
 
             new_cluster["num users"] = len(new_cluster["cluster members"])
             new_cluster["set index"] = cluster_index
 
+            new_aligned = []
+
+            for t in aligned_text:
+                assert isinstance(t,str)
+                # put tags back into multicharacter format
+                t = self.__reset_tags__(t)
+                # instead of chr(24), use "\u0018" - postgres prefers that
+                new_aligned.append(t.replace(chr(24),unicode("\u0018")))
+
+            new_cluster["aligned_text"] = new_aligned
+
             clusters.append(new_cluster)
 
-        print "num clusters " + str(len(clusters))
         return clusters
 
     def __merge_aligned_text__(self,aligned_text):
@@ -283,10 +294,6 @@ class FolgerClustering(TextClustering):
                 # not enough people have transcribed this character
                 aggregate_text += chr(26)
                 uncompleted_characters += 1
-
-                # for a in aligned_text:
-                #     print a + "|"
-                # assert False
 
         if uncompleted_characters == 0:
             self.stats["retired lines"] += 1
@@ -393,7 +400,6 @@ class FolgerClustering(TextClustering):
         # examine every pair - note that distance from A to B does not necessarily equal
         # the distance from B to A - so order matters
         for m_i,(x1,x2,y1,y2,t) in enumerate(markings):
-            # print (x1,x2,y1,y2)
             for m_i2,(x1_,x2_,y1_,y2_,_) in enumerate(markings):
                 # assuming two purely horizontal lines - consider the following example
                 # x1 ----------- x2
@@ -461,8 +467,6 @@ class FolgerClustering(TextClustering):
         that A overlaps C. So we'll use some graph theory instead to search for
         """
 
-        # print user_ids
-
         # image is kept mainly just for debugging
         image = None
 
@@ -472,8 +476,6 @@ class FolgerClustering(TextClustering):
 
         # cluster the filtered components
         connected_components = self.__find_connected_transcriptions__(filtered_markings)
-
-        # print connected_components
 
         clusters = []
 
@@ -507,7 +509,7 @@ class FolgerClustering(TextClustering):
             completed_components = self.__find_completed_components__(aligned_text,coordinates)
             # (completed_starting_point,completed_ending_point),aggregated_text,transcription_range,markings
             markings_in_cluster = [filtered_markings[i] for i in c]
-            clusters.extend(self.__create_clusters__(completed_components,aggregate_text,transcription_range,markings_in_cluster,ii))
+            clusters.extend(self.__create_clusters__(completed_components,aggregate_text,transcription_range,markings_in_cluster,ii,aligned_text))
 
         print "number of completed components: " + str(len(clusters))
         return clusters,0
