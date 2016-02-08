@@ -146,16 +146,29 @@ def align(img_fname1,img_fname2):
     return len(matches),im1_aligned
 
 if __name__ == "__main__":
-    to_be_aligned = sys.argv[1]
-    template = sys.argv[2]
+    directory = sys.argv[1]
+    to_be_aligned = sys.argv[2]
+    template = sys.argv[3]
+    ship = sys.argv[4]
+    year = sys.argv[5]
 
-    assert isinstance(to_be_aligned,str)
-    slash_index = to_be_aligned.rfind("/")
-    fname = to_be_aligned[slash_index+1:]
+    try:
+        to_be_aligned = directory + to_be_aligned
+        template = directory + template
 
-    num_matches,image = align(to_be_aligned,template)
+        assert isinstance(to_be_aligned,str)
+        slash_index = to_be_aligned.rfind("/")
+        fname = to_be_aligned[slash_index+1:]
 
-    if num_matches < 70000:
-        print "bad match"
-    else:
-        cv2.imwrite("/home/ggdhines/Databases/old_weather/aligned_images/"+fname,image)
+        num_matches,image = align(to_be_aligned,template)
+
+        if num_matches < 70000:
+            print "bad match"
+            with open("/home/ggdhines/Databases/old_weather/aligned_images/"+ship+"/"+year+"/no_alignment.txt","a") as f:
+                f.write(fname+"\n")
+        else:
+            cv2.imwrite("/home/ggdhines/Databases/old_weather/aligned_images/"+ship+"/"+year+"/"+fname,image)
+    except np.linalg.linalg.LinAlgError:
+        print "linear algebra problem"
+        with open("/home/ggdhines/Databases/old_weather/aligned_images/"+ship+"/"+year+"/algebra_problem.txt","a") as f:
+                f.write(to_be_aligned+"\n")
