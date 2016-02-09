@@ -1,10 +1,12 @@
 __author__ = 'ggdhines'
+import matplotlib
+matplotlib.use('WXAgg')
 import numpy as np
 import os
 import cv2
 from copy import deepcopy
-
-
+import matplotlib.pyplot as plt
+import matplotlib.cbook as cbook
 
 ship = "Bear"
 year = "1940"
@@ -112,32 +114,146 @@ for f_name in aligned_images:
         if percent < 0.2:
             bad_matches.append(f_name)
         print f_name + "\t" + str(percent)
-assert False
+
 updated_template = blend_images(aligned_images,bad_matches)
 cv2.imwrite("/home/ggdhines/updated_template.jpeg",updated_template)
-assert False
 
-_,contour, hier = cv2.findContours(thresh1,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+_,contour, hier = cv2.findContours(updated_template.copy(),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
 
-mask = np.zeros((image_so_far.shape),np.uint8)
+shape = updated_template.shape
+contours = np.zeros((shape[0],shape[1],3),np.uint8)
+small_contours = np.zeros((shape[0],shape[1],3),np.uint8)
 
 for cnt in contour:
-    # x,y,w,h = cv2.boundingRect(cnt)
+    x,y,w,h = cv2.boundingRect(cnt)
     area = cv2.contourArea(cnt)
 
-    if area < 1000:
+    vertical = (h/w) > 5
+    horizontal = (w/h) > 5
 
-        cv2.drawContours(thresh1,[cnt],0,0,2)
+    if (area > 3000) or vertical or horizontal:
+        cv2.drawContours(contours,[cnt],0,(0,0,255),2)
     else:
-        print area
-        cv2.drawContours(thresh1,[cnt],0,255,2)
+        cv2.drawContours(updated_template,[cnt],0,(0,0,255),cv2.FILLED)
+        # cv2.fillPoly(updated_template, pts =[cnt], color=(255,0,0))
+        # cv2.drawContours(updated_template,[cnt],0,(0,0,255),cv2.FILLED)
 
-cv2.imwrite("/home/ggdhines/cleaned.jpeg",thresh1)
-
+cv2.imwrite("/home/ggdhines/cleaned.jpeg",updated_template)
 
 kernelx = cv2.getStructuringElement(cv2.MORPH_RECT,(2,10))
-closing = cv2.morphologyEx(thresh1, cv2.MORPH_CLOSE, kernelx)
-cv2.imwrite("/home/ggdhines/kerneled.jpeg",closing)
+dx = cv2.Sobel(updated_template,cv2.CV_16S,1,0)
+dx = cv2.convertScaleAbs(dx)
+cv2.normalize(dx,dx,0,255,cv2.NORM_MINMAX)
+ret,close = cv2.threshold(dx,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+close = cv2.morphologyEx(close,cv2.MORPH_DILATE,kernelx,iterations = 1)
+
+_,contour, hier = cv2.findContours(close.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+# vertical_lines = np.zeros((shape[0],shape[1]),np.uint8)
+vertical_lines = np.zeros((shape[0],shape[1],3),np.uint8)
+
+for cnt in contour:
+    x,y,w,h = cv2.boundingRect(cnt)
+    if h/w > 5:
+        cv2.drawContours(vertical_lines,[cnt],0,(0,0,255),-1)
+    else:
+        cv2.drawContours(vertical_lines,[cnt],0,(0,0,255),-1)
+
+
+cv2.imwrite("/home/ggdhines/vertical.jpeg",vertical_lines)
+
+# kernely = cv2.getStructuringElement(cv2.MORPH_RECT,(10,2))
+# dx = cv2.Sobel(updated_template,cv2.CV_16S,0,1)
+# dx = cv2.convertScaleAbs(dx)
+# cv2.normalize(dx,dx,0,255,cv2.NORM_MINMAX)
+# ret,close = cv2.threshold(dx,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+# close = cv2.morphologyEx(close,cv2.MORPH_DILATE,kernelx,iterations = 1)
+#
+# _,contour, hier = cv2.findContours(close.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+# horizontal_lines = np.zeros((shape[0],shape[1]),np.uint8)
+#
+# for cnt in contour:
+#     x,y,w,h = cv2.boundingRect(cnt)
+#     if  w/h> 5:
+#         cv2.drawContours(horizontal_lines,[cnt],0,255,-1)
+
+sobely = cv2.Sobel(updated_template,cv2.CV_64F,0,1,ksize=5)
+sobely = sobely.astype(np.uint8)
+cv2.imwrite("/home/ggdhines/sobel.jpeg",sobely)
+
+
+# kernel = np.ones((3,7),np.uint8)
+# sobely = cv2.morphologyEx(sobely, cv2.MORPH_CLOSE, kernel)
+
+_,contour, hier = cv2.findContours(sobely.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+horizontal_lines = np.zeros((shape[0],shape[1],3),np.uint8)
+
+horizontal_pts = []
+
+for cnt in contour:
+    x,y,w,h = cv2.boundingRect(cnt)
+    if w/h > 5:
+        shape = cnt.shape
+        pts = cnt.reshape((shape[0],shape[2]))
+        pts = pts.astype(np.float)
+        pts /= (100.,1.)
+        horizontal_pts.extend(pts.tolist())
+        perimeter = cv2.arcLength(cnt,True)
+        # cv2.drawContours(horizontal_lines,[cnt],0,255,-1)
+        cv2.drawContours(horizontal_lines,[cnt],0,(0,0,255),-1)
+    else:
+        cv2.drawContours(horizontal_lines,[cnt],0,(0,255,0),-1)
+
+
+cv2.imwrite("/home/ggdhines/horizontal.jpeg",horizontal_lines)
+
+# cv2.imwrite("/home/ggdhines/horizontal.jpeg",sobely)
+#
+
+# y,x = zip(*horizontal_pts)
+# print x
+# x = list(x)
+# x = x/ 100.
+
+image_file = cbook.get_sample_data("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0572.JPG")
+image = plt.imread(image_file)
+
+fig = plt.figure(figsize=(5,10))
+ax0 = plt.subplot()
+# fig, ax1 = plt.subplots(1, 1)
+ax0.imshow(image)
+
+from sklearn.cluster import DBSCAN
+# pts = np.transpose(horizontal_pts)
+
+pts = np.asarray(horizontal_pts)
+print pts
+
+# print pts.shape
+
+db = DBSCAN(eps=2, min_samples=3).fit(pts)
+
+labels = db.labels_
+
+unique_labels = set(labels)
+colors = plt.cm.Spectral(np.linspace(0, 1, len(unique_labels)))
+for k, col in zip(unique_labels, colors):
+    if k == -1:
+        # Black used for noise.
+        col = 'k'
+
+    class_member_mask = (labels == k)
+
+    xy = pts[class_member_mask ]
+    plt.plot(xy[:, 0]*100, xy[:, 1], '.')
+
+plt.show()
+# # cv2.imwrite("/home/ggdhines/small.jpeg",small_contours)
+# # cv2.imwrite("/home/ggdhines/contours.jpeg",contours)
+assert False
+
+# kernelx = cv2.getStructuringElement(cv2.MORPH_RECT,(2,10))
+# closing = cv2.morphologyEx(thresh1, cv2.MORPH_CLOSE, kernelx)
+# cv2.imwrite("/home/ggdhines/kerneled.jpeg",closing)
 
 # cv2.imwrite("/home/ggdhines/average_image.jpeg",image_so_far)
 #
