@@ -2,8 +2,9 @@ __author__ = 'ggdhines'
 import numpy as np
 import os
 import cv2
+from copy import deepcopy
 
-image_so_far = None
+
 
 ship = "Bear"
 year = "1940"
@@ -13,41 +14,107 @@ aligned_images_dir = "/home/ggdhines/Databases/old_weather/aligned_images/"+ship
 aligned_images = list(os.listdir(aligned_images_dir))
 
 
-# go through at most 100 images in the given directory
-image_count = 0
-for f_name in aligned_images[:5]:
-    if f_name.endswith(".JPG"):
-        if f_name in ["Bear-AG-29-1940-0022.JPG","Bear-AG-29-1940-0342.JPG"]:
+def blend_images(images,to_exclude = []):
+    # go through at most 100 images in the given directory
+    image_count = 0
+    image_so_far = None
+    for f_name in images:
+        if f_name in to_exclude:
             continue
-        image = cv2.imread(aligned_images_dir+f_name,0)
-        _,image = cv2.threshold(image,205,255,cv2.THRESH_BINARY)
-        image = 255-image
 
-        if image_so_far is None:
-            image_so_far = image
+        if f_name.endswith(".JPG"):
+            # if f_name in ["Bear-AG-29-1940-0022.JPG","Bear-AG-29-1940-0342.JPG"]:
+            #     continue
+            image = cv2.imread(aligned_images_dir+f_name,0)
+            # _,image = cv2.threshold(image,205,255,cv2.THRESH_BINARY)
+            # image = 255-image
+
+            if image_so_far is None:
+                image_so_far = image
 
 
-            image_count += 1
+                image_count += 1
 
-        else:
-            image_count += 1
-            beta = 1/float(image_count)
-            alpha = 1. - beta
+            else:
+                image_count += 1
+                beta = 1/float(image_count)
+                alpha = 1. - beta
 
-            # image_so_far = cv2.addWeighted(image_so_far,alpha,image,beta,0)
-            # image_so_far = np.asarray([image_so_far, image]).max(0)
-            image_so_far = image_so_far & image
+                image_so_far = cv2.addWeighted(image_so_far,alpha,image,beta,0)
+                # image_so_far = np.asarray([image_so_far, image]).max(0)
+                # image_so_far = image_so_far & image
 
-# kernel = np.ones((3,3),np.uint8)
-# closing = cv2.morphologyEx(, cv2.MORPH_CLOSE, kernel)
+    # kernel = np.ones((3,3),np.uint8)
+    # closing = cv2.morphologyEx(, cv2.MORPH_CLOSE, kernel)
 
-# ret,thresh1 = cv2.threshold(image_so_far,180,255,cv2.THRESH_BINARY)
-#
+    ret,thresh1 = cv2.threshold(image_so_far,180,255,cv2.THRESH_BINARY)
+    thresh1 = 255-thresh1
+
+    return thresh1
+
+starting_template = blend_images(aligned_images)
+
 # thresh1 = 255 - image_so_far
+# thresh = cv2.adaptiveThreshold(image_so_far,255,cv2.ADAPTIVE_THRESH_MEAN_C,cv2.THRESH_BINARY,5,0)
+cv2.imwrite("/home/ggdhines/starting_template.jpeg",starting_template)
 
-cv2.imwrite("/home/ggdhines/invert_reference.jpeg",image_so_far)
+im2, contours, hierarchy = cv2.findContours(starting_template.copy(),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+#cv2.drawContours(thresh1, contours, -1, (0,255,0), 3)
+# cv2.drawContours(thresh1, contours, -1, (0,255,0), 3)
+
+template = np.zeros((starting_template.shape[0],starting_template.shape[1],3))
+
+hierarchy = hierarchy.reshape((hierarchy.shape[1],hierarchy.shape[2]))
+mask = np.zeros((starting_template.shape),np.uint8)
+
+for cnt,h in zip(contours,hierarchy):
+    next_,prev_,child_,parent_ = h
+    if parent_ == 0:
+        cv2.drawContours(template, [cnt], -1, (0, 255, 0), 2)
+        cv2.drawContours(mask,[cnt],0,255,-1)
+        cv2.drawContours(mask,[cnt],0,0,2)
 
 
+constrained_template = cv2.bitwise_and(starting_template,mask)
+cv2.imwrite("/home/ggdhines/with_contours.jpeg",template)
+cv2.imwrite("/home/ggdhines/mask.jpeg",mask)
+cv2.imwrite("/home/ggdhines/constrained_template.jpeg",constrained_template)
+
+t = constrained_template > 0
+total = len(np.where(t)[0])
+
+bad_matches = []
+
+for f_name in aligned_images:
+    if f_name.endswith(".JPG"):
+
+        image = cv2.imread(aligned_images_dir+f_name,0)
+        ret,image = cv2.threshold(image,190,255,cv2.THRESH_BINARY)
+        # image = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_MEAN_C,cv2.THRESH_BINARY,11,2)
+
+        image = 255 - image
+
+        overlap = constrained_template & image
+        overlap_count = len(np.where(overlap>0)[0])
+
+        # cv2.namedWindow("image",cv2.WINDOW_NORMAL)
+        # cv2.imshow('image',image)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+        #
+        # cv2.namedWindow("image2",cv2.WINDOW_NORMAL)
+        # cv2.imshow('image2',overlap)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+        percent = overlap_count/float(total)
+
+        if percent < 0.2:
+            bad_matches.append(f_name)
+        print f_name + "\t" + str(percent)
+assert False
+updated_template = blend_images(aligned_images,bad_matches)
+cv2.imwrite("/home/ggdhines/updated_template.jpeg",updated_template)
 assert False
 
 _,contour, hier = cv2.findContours(thresh1,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
