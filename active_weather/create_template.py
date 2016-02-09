@@ -15,12 +15,16 @@ aligned_images = list(os.listdir(aligned_images_dir))
 
 # go through at most 100 images in the given directory
 image_count = 0
-for f_name in aligned_images:
+for f_name in aligned_images[:5]:
     if f_name.endswith(".JPG"):
         if f_name in ["Bear-AG-29-1940-0022.JPG","Bear-AG-29-1940-0342.JPG"]:
             continue
+        image = cv2.imread(aligned_images_dir+f_name,0)
+        _,image = cv2.threshold(image,205,255,cv2.THRESH_BINARY)
+        image = 255-image
+
         if image_so_far is None:
-            image_so_far = cv2.imread(aligned_images_dir+f_name,0)
+            image_so_far = image
 
 
             image_count += 1
@@ -29,17 +33,22 @@ for f_name in aligned_images:
             image_count += 1
             beta = 1/float(image_count)
             alpha = 1. - beta
-            new_image = cv2.imread(aligned_images_dir+f_name,0)
-            image_so_far = cv2.addWeighted(image_so_far,alpha,new_image,beta,0)
+
+            # image_so_far = cv2.addWeighted(image_so_far,alpha,image,beta,0)
+            # image_so_far = np.asarray([image_so_far, image]).max(0)
+            image_so_far = image_so_far & image
 
 # kernel = np.ones((3,3),np.uint8)
 # closing = cv2.morphologyEx(, cv2.MORPH_CLOSE, kernel)
 
-ret,thresh1 = cv2.threshold(image_so_far,190,255,cv2.THRESH_BINARY)
+# ret,thresh1 = cv2.threshold(image_so_far,180,255,cv2.THRESH_BINARY)
+#
+# thresh1 = 255 - image_so_far
 
-thresh1 = 255 - thresh1
+cv2.imwrite("/home/ggdhines/invert_reference.jpeg",image_so_far)
 
-cv2.imwrite("/home/ggdhines/invert_reference.jpeg",thresh1)
+
+assert False
 
 _,contour, hier = cv2.findContours(thresh1,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
 
@@ -49,16 +58,17 @@ for cnt in contour:
     # x,y,w,h = cv2.boundingRect(cnt)
     area = cv2.contourArea(cnt)
 
-    if area < 500:
-        print area
+    if area < 1000:
+
         cv2.drawContours(thresh1,[cnt],0,0,2)
     else:
+        print area
         cv2.drawContours(thresh1,[cnt],0,255,2)
 
 cv2.imwrite("/home/ggdhines/cleaned.jpeg",thresh1)
 
 
-kernelx = cv2.getStructuringElement(cv2.MORPH_RECT,(1,5))
+kernelx = cv2.getStructuringElement(cv2.MORPH_RECT,(2,10))
 closing = cv2.morphologyEx(thresh1, cv2.MORPH_CLOSE, kernelx)
 cv2.imwrite("/home/ggdhines/kerneled.jpeg",closing)
 
