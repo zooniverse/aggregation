@@ -4,10 +4,16 @@ import glob
 import matplotlib
 matplotlib.use('WXAgg')
 import matplotlib.pyplot as plt
+import pytesseract
+import Image
 
 horizontal = []
 
+reference_image = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0019.JPG")
+refer_shape = reference_image.shape
+
 def __get_lines__(horizontal):
+    # todo - swap
     lined_images = []
 
     for f in glob.glob("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/*.JPG")[:5]:
@@ -53,20 +59,70 @@ def __get_lines__(horizontal):
 
     return average_image,contours_to_return
 
-def __get_masks__():
+
+def __get_grid__():
 
     horizontal_image,horizontal_contours = __get_lines__(True)
     cv2.imwrite("/home/ggdhines/horizontal.jpg",horizontal_image)
 
+    horizontal_lines = []
+    vertical_lines = []
+
+    a = np.zeros(refer_shape,np.uint8)
+    delta = 50
+
+    for cnt in horizontal_contours:
+        shape = cnt.shape
+        t = cnt.reshape((shape[0],shape[2]))
+        max_x,max_y = np.max(t,axis=0)
+        min_x,min_y = np.min(t,axis=0)
+
+        if (min_y>=1276-delta) and (max_y<=2097+delta):
+            perimeter = cv2.arcLength(cnt,True)
+
+            if perimeter > 100:
+                cv2.drawContours(a,[cnt],0,255,3)
+                horizontal_lines.append(cnt)
+
+    horizontal_lines.sort(key = lambda l:l[0][0][1])
+
     vertical_image,vertical_contours = __get_lines__(False)
-    cv2.imwrite("/home/ggdhines/vertical.jpg",vertical_image)
 
-    grid = np.max([horizontal_image,vertical_image],axis=0)
-    cv2.imwrite("/home/ggdhines/grid.jpg",grid)
+    delta = 400
+    for cnt in vertical_contours:
+        shape = cnt.shape
+        t = cnt.reshape((shape[0],shape[2]))
+        max_x,max_y = np.max(t,axis=0)
+        min_x,min_y = np.min(t,axis=0)
 
-    _,contours, hier = cv2.findContours(grid,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+        if (min_x >= 563-100) and (max_x <= 3282+100)and(min_y>=1276-delta) and (max_y<=2097+delta):
 
-    cv2.drawContours(grid, contours, -1, 255, 3)
+            perimeter = cv2.arcLength(cnt,True)
+            if perimeter > 1000:
+                print min_y,max_y
+                # cv2.drawContours(masks,[cnt],0,255,3)
+                vertical_lines.append(cnt)
+                cv2.drawContours(a,[cnt],0,255,3)
+
+    vertical_lines.sort(key = lambda l:l[0][0][0])
+
+    # todo - deal with lines that go all the way through the window
+    # cv2.imwrite("/home/ggdhines/testtest.jpg",a)
+    # cv2.namedWindow('image', cv2.WINDOW_NORMAL)
+    # cv2.imshow('image',a)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+
+    return horizontal_lines,vertical_lines
+
+    # cv2.imwrite("/home/ggdhines/vertical.jpg",vertical_image)
+
+    # grid = np.max([horizontal_image,vertical_image],axis=0)
+    # cv2.imwrite("/home/ggdhines/grid.jpg",grid)
+    #
+    # _,contours, hier = cv2.findContours(grid,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+    #
+    # cv2.drawContours(grid, contours, -1, 255, 3)
 
     # _,contours, hier = cv2.findContours(grid,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
     # print hier
@@ -78,71 +134,130 @@ def __get_masks__():
     #
     # for cnt in contour:
     #     cv2.drawContours(masks,[cnt],0,255,1)
-
-
-
-
-    masks = np.zeros(grid.shape,np.uint8)
-
-    for cnt in horizontal_contours:
-        shape = cnt.shape
-        t = cnt.reshape((shape[0],shape[2]))
-        max_x,max_y = np.max(t,axis=0)
-        min_x,min_y = np.min(t,axis=0)
-
-        if (min_x >= 563) and (max_x <= 3282) and (min_y>=3541) and (max_y<=4346):
-            perimeter = cv2.arcLength(cnt,True)
-            if perimeter > 1000:
-                cv2.drawContours(masks,[cnt],0,255,3)
-
-    for cnt in vertical_contours:
-        shape = cnt.shape
-        t = cnt.reshape((shape[0],shape[2]))
-
-        max_x,max_y = np.max(t,axis=0)
-        min_x,min_y = np.min(t,axis=0)
-
-        if (min_x >= 563) and (max_x <= 3282) and (max_y>=3541) and (min_y<=4346):
-            perimeter = cv2.arcLength(cnt,True)
-            if perimeter > 1000:
-                cv2.drawContours(masks,[cnt],0,255,3)
-
-    _,contours, hier = cv2.findContours(masks.copy(),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-    masks2 = np.zeros(grid.shape,np.uint8)
-
-    for cnt,h in zip(contours,hier[0]):
-        if h[-1] == -1:
-            continue
-        x,y,w,h = cv2.boundingRect(cnt)
-        if min(h,w) > 30:
-            print cv2.arcLength(cnt,True)
-            cv2.drawContours(masks2,[cnt],0,255,-1)
-    cv2.imwrite("/home/ggdhines/masks.jpg",masks2)
-
-
-
-    from sklearn.cluster import DBSCAN
-
-    # X = np.asarray(zip(pts[0],pts[1]))
     #
-    # print np.where(X[:,]>= 563)
-    # print np.where(X[:,] <= 3282)
+    #
+    #
+    #
+    # masks = np.zeros(grid.shape,np.uint8)
+    #
+    #
+    #
+    # for cnt in vertical_contours:
+    #     shape = cnt.shape
+    #     t = cnt.reshape((shape[0],shape[2]))
+    #
+    #     max_x,max_y = np.max(t,axis=0)
+    #     min_x,min_y = np.min(t,axis=0)
+    #
+    #     if (min_x >= 563) and (max_x <= 3282) and (max_y>=3541) and (min_y<=4346):
+    #         perimeter = cv2.arcLength(cnt,True)
+    #         if perimeter > 1000:
+    #             cv2.drawContours(masks,[cnt],0,255,3)
+    #
+    # _,contours, hier = cv2.findContours(masks.copy(),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+    # masks2 = np.zeros(grid.shape,np.uint8)
+    #
+    # masks_to_return = []
+    #
+    # for cnt,h in zip(contours,hier[0]):
+    #     if h[-1] == -1:
+    #         continue
+    #     x,y,w,h = cv2.boundingRect(cnt)
+    #     if min(h,w) > 30:
+    #         # print cv2.arcLength(cnt,True)
+    #         cv2.drawContours(masks2,[cnt],0,255,-1)
+    #
+    #         masks_to_return.append(cnt)
+    # return masks_to_return
+
+horizontal_grid,vertical_grid = __get_grid__()
+
+image = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0720.JPG",0)
+# image = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,11,2)
+
+print len(horizontal_grid)
+print len(vertical_grid)
+
+for h_index in range(len(horizontal_grid)-1):
+    # todo - resizing might be not be necessary
+    # todo - DEFINITELY precalculate these
+    shape = horizontal_grid[h_index].shape
+    t = horizontal_grid[h_index].reshape((shape[0],shape[2]))
+    _,min_y = np.max(t,axis=0)
+
+    shape = horizontal_grid[h_index+1].shape
+    t = horizontal_grid[h_index+1].reshape((shape[0],shape[2]))
+    _,max_y = np.min(t,axis=0)
+
+    for v_index in range(len(vertical_grid)-1):
+        shape = vertical_grid[v_index].shape
+        t = vertical_grid[v_index].reshape((shape[0],shape[2]))
+        min_x,_ = np.max(t,axis=0)
+
+        shape = vertical_grid[v_index+1].shape
+        t = vertical_grid[v_index+1].reshape((shape[0],shape[2]))
+        max_x,_ = np.min(t,axis=0)
 
 
-    # db = DBSCAN(eps=2, min_samples=3).fit(X)
-    # labels = db.labels_
-    #
-    # unique_labels = set(labels)
-    # colors = plt.cm.Spectral(np.linspace(0, 1, len(unique_labels)))
-    #
-    # for k, col in zip(unique_labels, colors):
-    #     if k == -1:
-    #         # Black used for noise.
-    #         col = 'k'
-    #
-    #     class_member_mask = (labels == k)
-    #
-    #     xy = X[class_member_mask]
-    #     plt.plot(xy[:, 0], xy[:, 1], '.')
-    #
-    # plt.show()
+        mask = np.zeros((refer_shape[0],refer_shape[1]),np.uint8)
+        cv2.drawContours(mask,horizontal_grid,h_index,255,-1)
+        cv2.drawContours(mask,horizontal_grid,h_index+1,255,-1)
+        cv2.drawContours(mask,vertical_grid,v_index,255,-1)
+        cv2.drawContours(mask,vertical_grid,v_index+1,255,-1)
+
+        _,contours, hier = cv2.findContours(mask.copy(),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+
+        # contours are probably in sorted order but just to be sure
+        for c,h in zip(contours,hier[0]):
+            if h[-1] != -1:
+                continue
+
+            cv2.drawContours(mask,[c],0,255,-1)
+
+        res = cv2.bitwise_and(mask,image)
+
+        cv2.imwrite("/home/ggdhines/intersection.jpg",res)
+
+        # now go back over and draw in contours in white - any black inside the cell that is on a grid
+        # line is mostly likely grid, not ink
+        # most of the time this wouldn't make a difference - but be sure
+        # todo - double check
+        cv2.drawContours(res,horizontal_grid,h_index,255,-1)
+        cv2.drawContours(res,horizontal_grid,h_index+1,255,-1)
+        cv2.drawContours(res,vertical_grid,v_index,255,-1)
+        cv2.drawContours(res,vertical_grid,v_index+1,255,-1)
+
+        print min_x,max_x
+        print min_y,max_y
+
+        res2 = res[min_y:max_y+1,min_x:max_x+1]
+
+        cv2.imwrite("/home/ggdhines/cell.jpg",res2)
+
+        assert False
+
+
+
+_,image = cv2.threshold(image,160,255,cv2.THRESH_BINARY)
+
+for m in masks:
+
+    shape = m.shape
+    t = m.reshape((shape[0],shape[2]))
+    max_x,max_y = np.max(t,axis=0)
+    min_x,min_y = np.min(t,axis=0)
+
+    template = np.zeros(image.shape,np.uint8)
+    cv2.drawContours(template,[m],0,255,-1)
+
+    res = cv2.bitwise_and(template,image)
+
+    cv2.imwrite("/home/ggdhines/results.jpg",res)
+
+    res2 = res[min_y:max_y+1,min_x:max_x+1]
+    cv2.imwrite("/home/ggdhines/results2.png",res2)
+
+    print pytesseract.image_to_string(Image.open("/home/ggdhines/results2.png"))
+    break
+
+
