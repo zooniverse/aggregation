@@ -4,9 +4,10 @@ import glob
 import matplotlib
 matplotlib.use('WXAgg')
 import matplotlib.pyplot as plt
-import pytesseract
-import Image
 import tesserpy
+import extract_digits
+from scipy import stats
+
 tess = tesserpy.Tesseract("/home/ggdhines/github/tessdata/", language="eng")
 tess.tessedit_char_whitelist = """'"!@#$%^&*()_+-=[]{};,.<>/?`~abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"""
 
@@ -176,10 +177,15 @@ for h_index in range(len(horizontal_grid)-1):
         # line is mostly likely grid, not ink
         # most of the time this wouldn't make a difference - but be sure
         # todo - double check
-        cv2.drawContours(res,horizontal_grid,h_index,255,-1)
-        cv2.drawContours(res,horizontal_grid,h_index+1,255,-1)
-        cv2.drawContours(res,vertical_grid,v_index,255,-1)
-        cv2.drawContours(res,vertical_grid,v_index+1,255,-1)
+        temp_res = res[min_y:max_y+1,min_x:max_x+1]
+        most_common_pigment = int(stats.mode(temp_res,axis=None)[0][0])
+        # print most_common_pigment
+        # print type(most_common_pigment)
+
+        cv2.drawContours(res,horizontal_grid,h_index,most_common_pigment,-1)
+        cv2.drawContours(res,horizontal_grid,h_index+1,most_common_pigment,-1)
+        cv2.drawContours(res,vertical_grid,v_index,most_common_pigment,-1)
+        cv2.drawContours(res,vertical_grid,v_index+1,most_common_pigment,-1)
 
         res2 = res[min_y:max_y+1,min_x:max_x+1]
 
@@ -190,14 +196,10 @@ for h_index in range(len(horizontal_grid)-1):
         res3[:,:,1] = res2[:,:]
         res3[:,:,2] = res2[:,:]
 
-        # print res2.shape
-        # print res2
-        image_ = cv2.imread("/home/ggdhines/cell.jpg")
-        # print image_.shape
-        # print image_
         tess.set_image(res3)
         tess.get_utf8_text()
-        found = False
+
+        digits,confidence = extract_digits.extract(res2)
 
         words = list(tess.words())
         words_in_cell = [w.text for w in words if w.text is not None]
@@ -205,17 +207,31 @@ for h_index in range(len(horizontal_grid)-1):
 
         word = "".join(words_in_cell)
 
-        if word == "":
+        # if word == "":
+        #     print "%8s" % "",
+        # else:
+        #     overall_confidence = np.mean(conf_in_cell)
+        #     total += 1
+        #
+        #     if overall_confidence >= 80:
+        #         print "%8s" % word,
+        #         confident += 1
+        #     else:
+        #         print "%8s" % "",
+
+        if digits == []:
             print "%8s" % "",
         else:
-            overall_confidence = np.mean(conf_in_cell)
-            total += 1
+            overall_confidence = min(confidence)
 
-            if overall_confidence >= 80:
+            if overall_confidence >= 0.65:
+                word = "".join(digits)
+                assert word != "6"
                 print "%8s" % word,
             else:
                 print "%8s" % "",
-                confident += 1
+
+
 
 
 
