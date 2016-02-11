@@ -98,7 +98,10 @@ def __get_grid__():
         max_x,max_y = np.max(t,axis=0)
         min_x,min_y = np.min(t,axis=0)
 
-        if (min_x >= 563-100) and (max_x <= 3282+100)and(min_y>=1276-delta) and (max_y<=2097+delta):
+        interior_line = (min_x >= 563-100) and (max_x <= 3282+100)and(min_y>=1276-delta) and (max_y<=2097+delta)
+        through_line = (min_x >= 563-100) and (max_x <= 3282+100) and (min_y < 1276) and(max_y > 2097)
+
+        if interior_line or through_line:
 
             perimeter = cv2.arcLength(cnt,True)
             if perimeter > 1000:
@@ -118,61 +121,6 @@ def __get_grid__():
 
     return horizontal_lines,vertical_lines
 
-    # cv2.imwrite("/home/ggdhines/vertical.jpg",vertical_image)
-
-    # grid = np.max([horizontal_image,vertical_image],axis=0)
-    # cv2.imwrite("/home/ggdhines/grid.jpg",grid)
-    #
-    # _,contours, hier = cv2.findContours(grid,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-    #
-    # cv2.drawContours(grid, contours, -1, 255, 3)
-
-    # _,contours, hier = cv2.findContours(grid,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-    # print hier
-    # masks = np.zeros(grid.shape,np.uint8)
-
-    # cv2.drawContours(masks, contours, -1, 0, 3)
-    #
-    # print hier
-    #
-    # for cnt in contour:
-    #     cv2.drawContours(masks,[cnt],0,255,1)
-    #
-    #
-    #
-    #
-    # masks = np.zeros(grid.shape,np.uint8)
-    #
-    #
-    #
-    # for cnt in vertical_contours:
-    #     shape = cnt.shape
-    #     t = cnt.reshape((shape[0],shape[2]))
-    #
-    #     max_x,max_y = np.max(t,axis=0)
-    #     min_x,min_y = np.min(t,axis=0)
-    #
-    #     if (min_x >= 563) and (max_x <= 3282) and (max_y>=3541) and (min_y<=4346):
-    #         perimeter = cv2.arcLength(cnt,True)
-    #         if perimeter > 1000:
-    #             cv2.drawContours(masks,[cnt],0,255,3)
-    #
-    # _,contours, hier = cv2.findContours(masks.copy(),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-    # masks2 = np.zeros(grid.shape,np.uint8)
-    #
-    # masks_to_return = []
-    #
-    # for cnt,h in zip(contours,hier[0]):
-    #     if h[-1] == -1:
-    #         continue
-    #     x,y,w,h = cv2.boundingRect(cnt)
-    #     if min(h,w) > 30:
-    #         # print cv2.arcLength(cnt,True)
-    #         cv2.drawContours(masks2,[cnt],0,255,-1)
-    #
-    #         masks_to_return.append(cnt)
-    # return masks_to_return
-
 horizontal_grid,vertical_grid = __get_grid__()
 
 image = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0720.JPG",0)
@@ -180,6 +128,9 @@ image = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear/194
 
 print len(horizontal_grid)
 print len(vertical_grid)
+
+total = 0.
+confident = 0
 
 for h_index in range(len(horizontal_grid)-1):
     # todo - resizing might be not be necessary
@@ -246,21 +197,57 @@ for h_index in range(len(horizontal_grid)-1):
         # print image_
         tess.set_image(res3)
         tess.get_utf8_text()
-        for word in tess.words():
-            t = word.text
-            conf = word.confidence
+        found = False
 
-            if (t is None) or (conf < 0.8):
-                # continue
-                print " \t",
+        words = list(tess.words())
+        words_in_cell = [w.text for w in words if w.text is not None]
+        conf_in_cell = [w.confidence for w in words if w.text is not None]
+
+        word = "".join(words_in_cell)
+
+        if word == "":
+            print "%8s" % "",
+        else:
+            overall_confidence = np.mean(conf_in_cell)
+            total += 1
+
+            if overall_confidence >= 80:
+                print "%8s" % word,
             else:
-                print t + "\t",
+                print "%8s" % "",
+                confident += 1
+
+
+
+        # for word in tess.words():
+        #     t = word.text
+        #
+        #     conf = word.confidence
+        #
+        #
+        #
+        #     if (t is None) or (conf < 80):
+        #         # continue
+        #         print '%8s' % ""
+        #         break
+        #
+        #     else:
+        #         t = t.strip()
+        #         print '%8s' % t
+        #
+        #         if t == "":
+        #             continue
+        #
+        #         print t,
+        #         for _ in range(7-len(t)):
+        #             print " ",
+            # print "|"
                 # print t,word.confidence
                 # raw_input("enter something and check file")
             # print word.confidence
     print
     # assert False
-
+print confident, total
 assert False
 
 
