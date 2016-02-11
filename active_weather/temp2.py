@@ -6,6 +6,9 @@ matplotlib.use('WXAgg')
 import matplotlib.pyplot as plt
 import pytesseract
 import Image
+import tesserpy
+tess = tesserpy.Tesseract("/home/ggdhines/github/tessdata/", language="eng")
+tess.tessedit_char_whitelist = """'"!@#$%^&*()_+-=[]{};,.<>/?`~abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"""
 
 horizontal = []
 
@@ -227,37 +230,60 @@ for h_index in range(len(horizontal_grid)-1):
         cv2.drawContours(res,vertical_grid,v_index,255,-1)
         cv2.drawContours(res,vertical_grid,v_index+1,255,-1)
 
-        print min_x,max_x
-        print min_y,max_y
-
         res2 = res[min_y:max_y+1,min_x:max_x+1]
 
         cv2.imwrite("/home/ggdhines/cell.jpg",res2)
 
-        assert False
+        res3 = np.zeros((res2.shape[0],res2.shape[1],3),np.uint8)
+        res3[:,:,0] = res2[:,:]
+        res3[:,:,1] = res2[:,:]
+        res3[:,:,2] = res2[:,:]
+
+        # print res2.shape
+        # print res2
+        image_ = cv2.imread("/home/ggdhines/cell.jpg")
+        # print image_.shape
+        # print image_
+        tess.set_image(res3)
+        tess.get_utf8_text()
+        for word in tess.words():
+            t = word.text
+            conf = word.confidence
+
+            if (t is None) or (conf < 0.8):
+                # continue
+                print " \t",
+            else:
+                print t + "\t",
+                # print t,word.confidence
+                # raw_input("enter something and check file")
+            # print word.confidence
+    print
+    # assert False
+
+assert False
 
 
-
-_,image = cv2.threshold(image,160,255,cv2.THRESH_BINARY)
-
-for m in masks:
-
-    shape = m.shape
-    t = m.reshape((shape[0],shape[2]))
-    max_x,max_y = np.max(t,axis=0)
-    min_x,min_y = np.min(t,axis=0)
-
-    template = np.zeros(image.shape,np.uint8)
-    cv2.drawContours(template,[m],0,255,-1)
-
-    res = cv2.bitwise_and(template,image)
-
-    cv2.imwrite("/home/ggdhines/results.jpg",res)
-
-    res2 = res[min_y:max_y+1,min_x:max_x+1]
-    cv2.imwrite("/home/ggdhines/results2.png",res2)
-
-    print pytesseract.image_to_string(Image.open("/home/ggdhines/results2.png"))
-    break
+# _,image = cv2.threshold(image,160,255,cv2.THRESH_BINARY)
+#
+# for m in masks:
+#
+#     shape = m.shape
+#     t = m.reshape((shape[0],shape[2]))
+#     max_x,max_y = np.max(t,axis=0)
+#     min_x,min_y = np.min(t,axis=0)
+#
+#     template = np.zeros(image.shape,np.uint8)
+#     cv2.drawContours(template,[m],0,255,-1)
+#
+#     res = cv2.bitwise_and(template,image)
+#
+#     cv2.imwrite("/home/ggdhines/results.jpg",res)
+#
+#     res2 = res[min_y:max_y+1,min_x:max_x+1]
+#     cv2.imwrite("/home/ggdhines/results2.png",res2)
+#
+#     print pytesseract.image_to_string(Image.open("/home/ggdhines/results2.png"))
+#     break
 
 
