@@ -2,6 +2,10 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN
+import os
+from subprocess import call
+
+# call(["convert","weather.basic.exp0.pdf","/home/ggdhines/tessdata/active.basic.exp0.tiff"])
 
 characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890."
 characters = [c for c in characters]
@@ -79,7 +83,7 @@ print template_image
 print template_image.shape
 height_offset = 0
 
-with open("/home/ggdhines/active.basic.box","w") as f:
+with open("/home/ggdhines/tessdata/active_weather.lobster.exp0.box","w") as f:
     for i,c in enumerate(characters[:-1]):
         # char_mask = np.zeros((height_list[i],width_list[i]),np.uint8)
         char_mask = np.zeros((height_list[i],width_list[i]),np.uint8)
@@ -170,4 +174,22 @@ with open("/home/ggdhines/active.basic.box","w") as f:
     f.write(" "+str(width_offset+b_e_width)+" "+str(overall_height - height_offset) + " 0\n")
 
 
-cv2.imwrite("/home/ggdhines/active.basic.exp0.tiff",template_image)
+cv2.imwrite("/home/ggdhines/tessdata/active_weather.lobster.exp0.tiff",template_image)
+
+os.chdir('/home/ggdhines/tessdata/')
+call(["tesseract", "active_weather.lobster.exp0.tiff", "active_weather.lobster.exp0", "nobatch" ,"box.train"])
+call(["unicharset_extractor", "active_weather.lobster.exp0.box"])
+
+with open("/home/ggdhines/tessdata/font_properties","w") as f:
+    f.write("lobster 0 0 0 0 0\n")
+
+os.system("shapeclustering -F font_properties -U unicharset active_weather.lobster.exp0.tr")
+# "mftraining -F font_properties -U unicharset -O active_weather.unicharset active_weather.lobster.exp0.tr"
+os.system("mftraining -F font_properties -U unicharset -O active_weather.unicharset active_weather.lobster.exp0.tr")
+os.system("cntraining active_weather.lobster.exp0.tr")
+
+os.system("mv inttemp active_weather.inttemp")
+os.system("mv normproto active_weather.normproto")
+os.system("mv pffmtable active_weather.pffmtable")
+os.system("mv shapetable active_weather.shapetable")
+os.system("combine_tessdata active_weather.")
