@@ -5,24 +5,7 @@ from scipy import spatial
 from sklearn.cluster import DBSCAN
 import Image
 import cv2
-from mnist import MNIST
-from sklearn import neighbors
-from sklearn.decomposition import PCA
 
-n_neighbors = 15
-
-mndata = MNIST('/home/ggdhines/Databases/mnist')
-training = mndata.load_training()
-
-weight = "distance"
-clf = neighbors.KNeighborsClassifier(n_neighbors, weights=weight)
-
-pca = PCA(n_components=80)
-T = pca.fit(training[0])
-reduced_training = T.transform(training[0])
-print sum(pca.explained_variance_ratio_)
-# clf.fit(training[0], training[1])
-clf.fit(reduced_training, training[1])
 
 def line_removal(pts,num_col,num_row):
     global_tree = spatial.KDTree(pts)
@@ -192,11 +175,11 @@ def extract(image):
 
         centered_array = np.asarray(centered_array)
         # print centered_array.shape
-        centered_array = T.transform(centered_array)
+        # centered_array = T.transform(centered_array)
         # print centered_array
-        probabilities = clf.predict_proba(centered_array)
-        confidence.append(np.max(probabilities))
-        digits.append(str(int(np.argmax(probabilities))))
+        # probabilities = clf.predict_proba(centered_array)
+        # confidence.append(np.max(probabilities))
+        # digits.append(str(int(np.argmax(probabilities))))
 
 
 
