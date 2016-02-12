@@ -64,8 +64,9 @@ for cluster_index,xy in enumerate(clusters):
 
 spacing = 35
 
-overall_width = 10*max(width_list) + spacing*11
-overall_height = sum(height_list) + spacing*len(characters)
+overall_width = 10*max(width_list) + spacing*11 + 150
+# height_list[-2] for book ends at the bottom
+overall_height = sum(height_list) + spacing*len(characters) + height_list[-2]
 
 print overall_height,overall_width
 
@@ -75,12 +76,11 @@ template_image.fill(255)
 # cv2.imwrite("/home/ggdhines/fonts.jpg",template_image)
 
 print template_image
-
 print template_image.shape
 height_offset = 0
 
-with open("/home/ggdhines/active.basic.exp0.box","w") as f:
-    for i,c in enumerate(characters):
+with open("/home/ggdhines/active.basic.box","w") as f:
+    for i,c in enumerate(characters[:-1]):
         # char_mask = np.zeros((height_list[i],width_list[i]),np.uint8)
         char_mask = np.zeros((height_list[i],width_list[i]),np.uint8)
         char_mask.fill(255)
@@ -105,6 +105,69 @@ with open("/home/ggdhines/active.basic.exp0.box","w") as f:
             width_offset += width + spacing
 
         height_offset += height + spacing
+
+    #
+    #
+    # # since "."s are usually discounted as noise - need to wrap something around them to get tesseract to notice
+    i = len(characters)-1
+    c = characters[-1]
+
+    b_e_height = height_list[i-1]
+    b_e_width = width_list[i-1]
+
+    book_end_mask = np.zeros((b_e_height,b_e_width),np.uint8)
+    book_end_mask.fill(255)
+
+    for x,y in clusters[i-1]:
+        book_end_mask[y,x] = 0
+
+
+
+
+    width_offset = spacing
+    template_image[height_offset:height_offset+b_e_height,width_offset:width_offset+b_e_width] = book_end_mask
+
+
+    f.write("0")
+    f.write(" "+str(width_offset)+" "+str(overall_height - height_offset - b_e_height))
+    f.write(" "+str(width_offset+b_e_width)+" "+str(overall_height - height_offset) + " 0\n")
+
+    width_offset += spacing+b_e_width
+
+    # char_mask = np.zeros((height_list[i],width_list[i]),np.uint8)
+    char_mask = np.zeros((height_list[i],width_list[i]),np.uint8)
+    char_mask.fill(255)
+
+    # todo - do this better
+    for x,y in clusters[i]:
+        char_mask[y,x] = 0
+
+    height = height_list[i]
+    width = width_list[i]
+
+    print width
+
+    extra_height = b_e_height - height
+
+    width_offset += b_e_width + spacing
+
+
+    for column2 in range(10):
+        lb_height = height_offset + extra_height
+        ub_height = lb_height + height
+        template_image[lb_height:ub_height,width_offset:width_offset+width] = char_mask
+    #
+        f.write(c)
+        f.write(" "+str(width_offset)+" "+str(overall_height - ub_height))
+        f.write(" "+str(width_offset+width)+" "+str(overall_height - lb_height) + " 0\n")
+    #
+        width_offset += width + spacing
+    #
+    template_image[height_offset:height_offset+b_e_height,width_offset:width_offset+b_e_width] = book_end_mask
+
+    f.write("0")
+    f.write(" "+str(width_offset)+" "+str(overall_height - height_offset - b_e_height))
+    f.write(" "+str(width_offset+b_e_width)+" "+str(overall_height - height_offset) + " 0\n")
 
 
 cv2.imwrite("/home/ggdhines/active.basic.exp0.tiff",template_image)
