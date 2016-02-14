@@ -16,6 +16,7 @@ import sys
 import folger
 import annotate
 import numpy as np
+import boto3
 
 __author__ = 'ggdhines'
 
@@ -347,38 +348,38 @@ class TranscriptionAPI(AggregationAPI):
     def __summarize__(self,tar_path=None):
         num_retired = self.classification_alg.num_retired
         non_blanks_retired = self.classification_alg.non_blanks_retired
-
-        stats = self.text_algorithm.stats
-
-        old_time_string = self.previous_runtime.strftime("%B %d %Y")
-        new_time_string = end_date.strftime("%B %d %Y")
-
-        accuracy =  1. - stats["errors"]/float(stats["characters"])
-
-        subject = "Aggregation summary for " + str(old_time_string) + " to " + str(new_time_string)
+        #
+        # stats = self.text_algorithm.stats
+        #
+        # old_time_string = self.previous_runtime.strftime("%B %d %Y")
+        # new_time_string = end_date.strftime("%B %d %Y")
+        #
+        # accuracy =  1. - stats["errors"]/float(stats["characters"])
+        #
+        subject = "Aggregation summary for Project " + str(self.project_id) #+ str(old_time_string) + " to " + str(new_time_string)
 
         body = "This week we have retired " + str(num_retired) + " subjects, of which " + str(non_blanks_retired) + " where not blank."
-        body += " A total of " + str(stats["retired lines"]) + " lines were retired. "
-        body += " The accuracy of these lines was " + "{:2.1f}".format(accuracy*100) + "% - defined as the percentage of characters where at least 3/4's of the users were in agreement."
+        # body += " A total of " + str(stats["retired lines"]) + " lines were retired. "
+        # body += " The accuracy of these lines was " + "{:2.1f}".format(accuracy*100) + "% - defined as the percentage of characters where at least 3/4's of the users were in agreement."
 
-        print self.__panoptes_call__("projects/"+str(self.project_id)+"/aggregations_export?admin=true")
-        assert False
-        if tar_path is not None:
-            bucket = "s3://zooniverse-static/panoptes-uploads.zooniverse.org/"+str(self.project_id)+"/"
-            s3 = boto3.resource('s3')
-            try:
-                s3.meta.client.head_bucket(Bucket=bucket)
-            except botocore.exceptions.ClientError as e:
-                # If a client error is thrown, then check that it was a 404 error.
-                # If it was a 404 error, then the bucket does not exist.
-                error_code = int(e.response['Error']['Code'])
-                if error_code == 404:
-                    s3.create_bucket(Bucket=bucket,CreateBucketConfiguration={'LocationConstraint': 'us-west-1'})
-
-            object = s3.Object('mybucket', 'hello.txt')
-            object.put(Body=open('/tmp/hello.txt', 'rb'))
-
-            url = get_signed_url(604800, bucket, object)
+        # print self.__panoptes_call__("projects/"+str(self.project_id)+"/aggregations_export?admin=true")
+        # assert False
+        # if tar_path is not None:
+        #     bucket = "s3://zooniverse-static/panoptes-uploads.zooniverse.org/"+str(self.project_id)+"/"
+        #     s3 = boto3.resource('s3')
+        #     try:
+        #         s3.meta.client.head_bucket(Bucket=bucket)
+        #     except botocore.exceptions.ClientError as e:
+        #         # If a client error is thrown, then check that it was a 404 error.
+        #         # If it was a 404 error, then the bucket does not exist.
+        #         error_code = int(e.response['Error']['Code'])
+        #         if error_code == 404:
+        #             s3.create_bucket(Bucket=bucket,CreateBucketConfiguration={'LocationConstraint': 'us-west-1'})
+        #
+        #     object = s3.Object('mybucket', 'hello.txt')
+        #     object.put(Body=open('/tmp/hello.txt', 'rb'))
+        #
+        #     url = get_signed_url(604800, bucket, object)
 
 
 
@@ -391,7 +392,7 @@ class TranscriptionAPI(AggregationAPI):
             Source='greg@zooniverse.org',
             Destination={
                 'ToAddresses': [
-                    'greg@zooniverse.org','victoria@zooniverse.org','matt@zooniverse.org'
+                    'greg@zooniverse.org'#,'victoria@zooniverse.org','matt@zooniverse.org'
                 ]#,
                 # 'CcAddresses': [
                 #     'string',
@@ -449,7 +450,8 @@ if __name__ == "__main__":
         # print "done migrating"
         # # project.__aggregate__(subject_set = [671541,663067,664482,662859])
         processed_subjects = project.__aggregate__()
-        project.__restructure_json__()
+        project.__summarize__()
+        # project.__restructure_json__()
         #
         # if summary:
         #     project.__add_metadata__()
