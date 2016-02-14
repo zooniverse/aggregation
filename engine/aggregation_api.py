@@ -1126,7 +1126,6 @@ class AggregationAPI:
 
             # cassandra can only handle json in str format
             # annotations = json.dumps(annotations)
-            print type(annotations)
             metadata = json.dumps(metadata)
 
             params = (id_, user_id, workflow_id,created_at, annotations, user_ip, gold_standard,  subject_id, workflow_version,metadata)
