@@ -1137,6 +1137,8 @@ class AggregationAPI:
                 for i in range(10):
                     try:
                         results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
+                        if False in [(True,None) == r for r in results]:
+                            print results
                         assert False not in [(True,None) == r for r in results]
                         break
                     except cassandra.WriteTimeout:
