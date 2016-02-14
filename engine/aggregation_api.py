@@ -1747,13 +1747,14 @@ class AggregationAPI:
             # annotations = json.loads(record.annotations)
             annotation = json.loads(annotation)
 
-
             # go through each annotation and get the associated task
             for task in annotation:
                 try:
                     task_id = task["task"]
-                except KeyError:
+                except (KeyError,TypeError) as e:
                     print task
+                    print e
+                    print type(task)
                     raise
 
                 # see https://github.com/zooniverse/Panoptes-Front-End/issues/2155 for why this is needed
