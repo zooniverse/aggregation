@@ -1745,12 +1745,7 @@ class AggregationAPI:
                 user_id = non_logged_in_users[subject_id]
 
             # annotations = json.loads(record.annotations)
-            print annotation
-            print type(annotation)
             annotation = json.loads(annotation)
-
-            print annotation
-            print type(annotation)
 
             # go through each annotation and get the associated task
             for task in annotation:

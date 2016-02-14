@@ -99,7 +99,7 @@ class Cluster:
                 if self.project.environment == "development":
                     limit = -1
                 else:
-                    limit = -1
+                    limit = 500
 
                 for subject_count,subject_id in list(enumerate(raw_markings[task_id][shape]))[:limit]:
 
