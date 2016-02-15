@@ -218,14 +218,41 @@ class ActiveWeather:
                 classifier.tess.set_image(cell)
                 classifier.tess.get_utf8_text()
 
-                words = [w.text for w in classifier.tess.words()]
+                words = list(classifier.tess.words())
+                words_in_cell = [w.text for w in words if w.text is not None]
+                conf_in_cell = [w.confidence for w in words if w.text is not None]
 
-                # is there something in the cell, if so extract that cell in full detail
-                if words != [None]:
-                    cell = self.__extract_cell__(image,h_index,v_index,colour=False)
-                    cell = cv2.adaptiveThreshold(cell,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,61,0)
-                    cv2.imwrite("/home/ggdhines/tt.jpg",cell)
-                    assert False
+                # todo - can we get more detail knowing that the cell is not empty?
+                # # is there something in the cell, if so extract that cell in full detail
+                #
+                # if words != [None]:
+                #     cell = self.__extract_cell__(image,h_index,v_index,colour=False)
+                #     _,cell = cv2.threshold(cell,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+
+                # tesseract might split up the word into multiple parts - usually a sign that something has
+                # gone wrong but we'll see
+                word = "".join(words_in_cell)
+                if word != "":
+                    cv2.imwrite("/home/ggdhines/cell.jpg",cell)
+                    overall_confidence = np.mean(conf_in_cell)
+                    cell_string = raw_input("Look at cell.jpg - enter its contents: ")
+
+                    # convert to grayscale - the RGB values are all the same
+                    digits,minimum_y = extract_digits.extract(cell[:,:,0])
+
+                    cell_list = [c for c in cell_string]
+
+                    print cell_list
+                    print len(digits)
+                    if len(cell_list) == len(digits):
+                        print "adding learning cases"
+                        classifier.__add_characters__(cell_list,digits,minimum_y)
+
+                        classifier.__write_out_box_file__()
+
+
+
+
 
 
 
