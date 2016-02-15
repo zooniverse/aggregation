@@ -360,7 +360,7 @@ class FolgerClustering(TextClustering):
         # todo - generalize for non-horizontal markings
         filtered_markings = []
 
-        for m_i,(x1,x2,y1,y2,t) in enumerate(markings):
+        for m_i,(x1,x2,y1,y2,t,variants) in enumerate(markings):
             # skip empty strings - but make sure when checking to first remove tags that shouldn't
             # be there in the first place
             # set_tags removes some tags (such as <br>) which we don't want at all
@@ -382,7 +382,7 @@ class FolgerClustering(TextClustering):
 
             # plt.plot([x1,x2],[y1,y2])
 
-            filtered_markings.append((x1,x2,y1,y2,processed_text))
+            filtered_markings.append((x1,x2,y1,y2,processed_text,variants))
 
         # plt.show()
         return filtered_markings
@@ -399,8 +399,8 @@ class FolgerClustering(TextClustering):
          # now look for the overlapping parts
         # examine every pair - note that distance from A to B does not necessarily equal
         # the distance from B to A - so order matters
-        for m_i,(x1,x2,y1,y2,t) in enumerate(markings):
-            for m_i2,(x1_,x2_,y1_,y2_,_) in enumerate(markings):
+        for m_i,(x1,x2,y1,y2,_,_) in enumerate(markings):
+            for m_i2,(x1_,x2_,y1_,y2_,_,_) in enumerate(markings):
                 # assuming two purely horizontal lines - consider the following example
                 # x1 ----------- x2
                 #     x1_----x2_
@@ -474,6 +474,15 @@ class FolgerClustering(TextClustering):
         # also a good place to tokenize tags
         filtered_markings = self.__filter_markings__(markings)
 
+        if filtered_markings == []:
+            return [],0
+
+        variants = zip(*filtered_markings)[-1]
+        non_empty_variants = [v for v in variants if v is not None]
+        if non_empty_variants != []:
+            print non_empty_variants
+            assert False
+
         # cluster the filtered components
         connected_components = self.__find_connected_transcriptions__(filtered_markings)
 
@@ -484,10 +493,11 @@ class FolgerClustering(TextClustering):
                 continue
 
             # extract the starting/ending x-y coordinates for each transcription in the cluster
-            coordinates = [filtered_markings[i][:-1] for i in c]
+            coordinates = [filtered_markings[i][:4] for i in c]
             # as well as the text - at the same time deal with tags (make them all 1 character long)
             # and other special characters that MAFFT can't deal with
-            tokenized_text = [filtered_markings[i][-1] for i in c]
+            # -2 since -1 is for variants
+            tokenized_text = [filtered_markings[i][4] for i in c]
 
             # tokenized_text has each tag (several characters) represented by just one (non-standard ascii) character
             # aka a token

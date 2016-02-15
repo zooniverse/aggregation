@@ -182,10 +182,15 @@ def relevant_text_params(marking,image_dimensions):
 
     text = marking["text"]
 
-    if x1 <= x2:
-        return x1,x2,y1,y2,text
+    if "variants" in text:
+        variants = text["variants"]
     else:
-        return x2,x2,y2,y1,text
+        variants = None
+
+    if x1 <= x2:
+        return x1,x2,y1,y2,text,variants
+    else:
+        return x2,x2,y2,y1,text,variants
 
 
 def text_line_reduction(line_segments):
@@ -197,7 +202,8 @@ def text_line_reduction(line_segments):
     reduced_markings = []
 
     for line_seg in line_segments:
-        x1,y1,x2,y2,text = line_seg
+        # last value is variants which is only relevant to Folger
+        x1,y1,x2,y2,text,_ = line_seg
 
         x2 += random.uniform(-0.0001,0.0001)
         x1 += random.uniform(-0.0001,0.0001)
