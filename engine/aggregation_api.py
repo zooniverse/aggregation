@@ -1124,9 +1124,10 @@ class AggregationAPI:
             # get only the major version of the workflow
             workflow_version = int(math.floor(float(workflow_version)))
 
-            # cassandra can only handle json in str format
-            # annotations = json.dumps(annotations)
-            metadata = json.dumps(metadata)
+            # for some reason on both of Greg's computers, this extra step is needed
+            if os.path.exists("/home/ggdhines"):
+                annotations = json.dumps(annotations)
+                metadata = json.dumps(metadata)
 
             params = (id_, user_id, workflow_id,created_at, annotations, user_ip, gold_standard,  subject_id, workflow_version,metadata)
             statements_and_params.append((insert_statement, params))
