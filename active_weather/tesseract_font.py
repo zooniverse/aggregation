@@ -89,15 +89,39 @@ class ActiveTess:
         cv2.imwrite("/home/ggdhines/test.jpg",self.example_page)
 
     def __write_out_box_file__(self):
+        if not os.path.exists("/tmp/tessdata"):
+            os.makedirs("/tmp/tessdata")
+
         to_save = self.example_page[0:self.max_height+spacing,0:self.max_width+spacing]
 
-        cv2.imwrite("/home/ggdhines/to_save.jpg",to_save)
+        cv2.imwrite("/tmp/tessdata/active_weather.lobster.exp0.tiff",to_save)
 
-        with open("/home/ggdhines/box_test","wb") as f:
+        with open("/tmp/tessdata/active_weather.lobster.exp0.box","wb") as f:
             for (a,b,c,d),char in self.boxes.items():
                 f.write(char + " " +str(a) + " ")
                 f.write(str(self.max_height-b+spacing) + " " + str(c) + " " + str(self.max_height-d+spacing) + " 0\n")
 
+    def __update_tesseract__(self):
+        self.__write_out_box_file__()
+
+        os.chdir('/tmp/tessdata')
+        call(["tesseract", "active_weather.lobster.exp0.tiff", "active_weather.lobster.exp0", "nobatch" ,"box.train"])
+        # call(["unicharset_extractor", "active_weather.lobster.exp0.box"])
+        call(["unicharset_extractor", "*.box"])
+
+        with open("/tmp/tessdata/font_properties","w") as f:
+            f.write("lobster 0 0 0 0 0\n")
+
+        os.system("shapeclustering -F font_properties -U unicharset active_weather.lobster.exp0.tr")
+        # "mftraining -F font_properties -U unicharset -O active_weather.unicharset active_weather.lobster.exp0.tr"
+        os.system("mftraining -F font_properties -U unicharset -O active_weather.unicharset active_weather.lobster.exp0.tr")
+        os.system("cntraining active_weather.lobster.exp0.tr")
+
+        os.system("mv inttemp active_weather.inttemp")
+        os.system("mv normproto active_weather.normproto")
+        os.system("mv pffmtable active_weather.pffmtable")
+        os.system("mv shapetable active_weather.shapetable")
+        os.system("combine_tessdata active_weather.")
 
 
 # f.write(c)
