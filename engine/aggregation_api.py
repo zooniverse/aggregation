@@ -322,7 +322,7 @@ class AggregationAPI:
 
             if survey_tasks == {}:
                 # do we have any marking tasks?
-                if False:#marking_tasks != {}:
+                if marking_tasks != {}:
                     aggregations = self.__cluster__(used_shapes,raw_markings,image_dimensions)
                     # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
 
