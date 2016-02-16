@@ -32,6 +32,8 @@ import psycopg2
 import rollbar
 import helper_functions
 
+base_directory = "/home/ggdhines/"
+
 # see below for a discussion of inserting date times into casssandra - code is taken from there
 # http://stackoverflow.com/questions/16532566/how-to-insert-a-datetime-into-a-cassandra-1-2-timestamp-column
 def unix_time(dt):
