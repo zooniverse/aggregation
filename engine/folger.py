@@ -150,7 +150,7 @@ class FolgerClustering(TextClustering):
 
         return starting_points,ending_points
 
-    def __create_clusters__(self,(starting_points,ending_points),aggregated_text,transcription_range,markings,cluster_index,aligned_text):
+    def __create_clusters__(self,(starting_points,ending_points),aggregated_text,cluster_index,aligned_text,variants):
         """
         the aggregated text, split up into completed components and make a result (aggregate) cluster for each
         of those components
@@ -190,17 +190,6 @@ class FolgerClustering(TextClustering):
 
             new_cluster["cluster members"] = []
 
-            # # which transcriptions contributed to this piece of text being considered done?
-            # # note that we are not looking for (lb_j,ub_j) to completely contain the completed segment
-            # # (although I think most of the time that will be the case) - any overlap will count
-            # # this will be needed if people want to go back and look at the raw data
-            # for j,(lb_j,ub_j) in enumerate(transcription_range):
-            #
-            #     if (lb_j <= lb <= ub_j) or (lb_j <= ub <= ub_j):
-            #         (x1,x2,y1,y2,transcription) = markings[j]
-            #         new_marking = (x1,x2,y1,y2,self.__reset_tags__(transcription))
-            #         new_cluster["cluster members"].append(new_marking)
-
             new_cluster["num users"] = len(new_cluster["cluster members"])
             new_cluster["set index"] = cluster_index
 
@@ -214,6 +203,19 @@ class FolgerClustering(TextClustering):
                 new_aligned.append(t.replace(chr(24),unicode("\u0018")))
 
             new_cluster["aligned_text"] = new_aligned
+
+            new_cluster["variants"] = []
+            # since a simple spelling mistake can count as a variant, look for cases where at least
+            # two people have given the same variant
+            variant_count = dict()
+            for variant_list in variants:
+                for v in variant_list:
+                    if v not in variant_count:
+                        variant_count[v] = 1
+                    else:
+                        variant_count[v] += 1
+                        if variant_count[v] == 2:
+                            new_cluster["variants"].append(v)
 
             clusters.append(new_cluster)
 
@@ -350,6 +352,7 @@ class FolgerClustering(TextClustering):
                     i += 1
             aligned_nf_text_list.append(aligned_nf_text)
 
+        # todo - I think transcription_range isn't necessary. I think find_completed_components does the job
         return aligned_nf_text_list,transcription_range
 
     def __filter_markings__(self,markings):
@@ -477,12 +480,6 @@ class FolgerClustering(TextClustering):
         if filtered_markings == []:
             return [],0
 
-        variants = zip(*filtered_markings)[-1]
-        non_empty_variants = [v for v in variants if v is not None]
-        if non_empty_variants != []:
-            print non_empty_variants
-            assert False
-
         # cluster the filtered components
         connected_components = self.__find_connected_transcriptions__(filtered_markings)
 
@@ -498,6 +495,8 @@ class FolgerClustering(TextClustering):
             # and other special characters that MAFFT can't deal with
             # -2 since -1 is for variants
             tokenized_text = [filtered_markings[i][4] for i in c]
+
+            variants = [filtered_markings[i][-1] for i in c]
 
             # tokenized_text has each tag (several characters) represented by just one (non-standard ascii) character
             # aka a token
@@ -519,7 +518,7 @@ class FolgerClustering(TextClustering):
             completed_components = self.__find_completed_components__(aligned_text,coordinates)
             # (completed_starting_point,completed_ending_point),aggregated_text,transcription_range,markings
             markings_in_cluster = [filtered_markings[i] for i in c]
-            clusters.extend(self.__create_clusters__(completed_components,aggregate_text,transcription_range,markings_in_cluster,ii,aligned_text))
+            clusters.extend(self.__create_clusters__(completed_components,aggregate_text,ii,aligned_text,variants))
 
         print "number of completed components: " + str(len(clusters))
         return clusters,0

@@ -182,10 +182,10 @@ def relevant_text_params(marking,image_dimensions):
 
     text = marking["text"]
 
-    if "variants" in text:
-        variants = text["variants"]
+    if "variants" in marking:
+        variants = [v for v in marking["variants"] if v != ""]
     else:
-        variants = None
+        variants = []
 
     if x1 <= x2:
         return x1,x2,y1,y2,text,variants
