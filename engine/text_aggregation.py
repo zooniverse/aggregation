@@ -387,9 +387,6 @@ class TranscriptionAPI(AggregationAPI):
 
         body += "\n Greg Hines \n Zooniverse \n \n PS This email was automatically generated."
 
-        print body
-        return
-
         client = boto3.client('ses',region_name='us-east-1')
         response = client.send_email(
             Source='greg@zooniverse.org',
