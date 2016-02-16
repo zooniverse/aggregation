@@ -1,17 +1,10 @@
 #!/usr/bin/env python
 import numpy as np
-import os
-import matplotlib.pyplot as plt
 import math
 import networkx
 from text_clustering import TextClustering
 
 __author__ = 'greg'
-
-if os.path.exists("/home/ggdhines"):
-    base_directory = "/home/ggdhines"
-else:
-    base_directory = "/home/greg"
 
 
 def longest_common_substring(s1, s2):
@@ -44,6 +37,9 @@ class FolgerClustering(TextClustering):
         # for folger the tags in the transcriptions are not actually the tags that folger wants
         for key,tag in self.tags.items():
             self.folger_safe_tags[key] = tag.replace("sw-","")
+
+        self.total = 0
+        self.error = 0
 
     def __accuracy__(self,s):
         assert isinstance(s,str)
@@ -355,13 +351,15 @@ class FolgerClustering(TextClustering):
         # todo - I think transcription_range isn't necessary. I think find_completed_components does the job
         return aligned_nf_text_list,transcription_range
 
-    def __filter_markings__(self,markings):
+    def __filter_markings__(self,markings,horizontal=True,strict=False):
         """
         filter out any markings which are not horizontal or are empty after removing bad characters
         :return:
         """
         # todo - generalize for non-horizontal markings
         filtered_markings = []
+
+        points_plotted = False
 
         for m_i,(x1,x2,y1,y2,t,variants) in enumerate(markings):
             # skip empty strings - but make sure when checking to first remove tags that shouldn't
@@ -379,16 +377,28 @@ class FolgerClustering(TextClustering):
             except ZeroDivisionError:
                 theta = math.pi/2.
 
-            if math.fabs(theta) > 0.1:
-                # removed_count += 1
-                continue
+            self.total += 1
 
-            # plt.plot([x1,x2],[y1,y2])
+            if horizontal:
+                valid = False
+                words = t.split(" ")
+                is_horizontal = math.fabs(theta) < 0.15
+                is_kinda_horizontal = math.fabs(theta) < math.pi/5.
 
-            filtered_markings.append((x1,x2,y1,y2,processed_text,variants))
+                if is_horizontal or ((not strict) and (len(words) <= 1) and is_kinda_horizontal):
+                    valid = True
+                    filtered_markings.append((x1,x2,y1,y2,processed_text,variants))
 
-        # plt.show()
-        return filtered_markings
+            else: # vertical
+                words = t.split(" ")
+                is_vertical = math.fabs(theta-math.pi/2.) < 0.15
+                is_kinda_vertical = math.fabs(theta-math.pi/2.) < math.pi/5.
+
+                if is_vertical or ((not strict) and (len(words) <= 1) and is_kinda_vertical):
+                    valid = True
+                    filtered_markings.append((x1,x2,y1,y2,processed_text,variants))
+
+        return filtered_markings,points_plotted
 
     def __find_connected_transcriptions__(self,markings):
         """
@@ -470,55 +480,67 @@ class FolgerClustering(TextClustering):
         that A overlaps C. So we'll use some graph theory instead to search for
         """
 
-        # image is kept mainly just for debugging
-        image = None
-
-        # remove any non-horizontal markings or empty transcriptions
-        # also a good place to tokenize tags
-        filtered_markings = self.__filter_markings__(markings)
-
-        if filtered_markings == []:
-            return [],0
-
-        # cluster the filtered components
-        connected_components = self.__find_connected_transcriptions__(filtered_markings)
-
         clusters = []
 
-        for ii,c in enumerate(connected_components):
-            if len(c) <= 2:
-                continue
+        # do horizontal and vertical lines separately
+        # given that we can have multiple non-overlapping lines transcribing the same line of text
+        # and people who transcribe multiple lines at once (which need to be removed), doing
+        # both vertical and horizontal lines at once isn't really feasible
+        for horizontal in [True,False]:
+            filtered_markings,_ = self.__filter_markings__(markings,horizontal)
 
-            # extract the starting/ending x-y coordinates for each transcription in the cluster
-            coordinates = [filtered_markings[i][:4] for i in c]
-            # as well as the text - at the same time deal with tags (make them all 1 character long)
-            # and other special characters that MAFFT can't deal with
-            # -2 since -1 is for variants
-            tokenized_text = [filtered_markings[i][4] for i in c]
+            if filtered_markings == []:
+                return [],0
 
-            variants = [filtered_markings[i][-1] for i in c]
+            # cluster the filtered components
+            connected_components = self.__find_connected_transcriptions__(filtered_markings)
 
-            # tokenized_text has each tag (several characters) represented by just one (non-standard ascii) character
-            # aka a token
-            # mafft_safe_text converts all upper case letters to lower case
-            # and uses upper case letters to represent things that MAFFT can't deal with (e.g. tag tokens)
-            mafft_safe_text = [self.__set_special_characters__(t) for t in tokenized_text]
+            # sanity check - adding into "kinda" vertical or "kinda" horizontal lines shouldn't change
+            # the number of connected components (since that corresponds to the number of lines transcribed)
+            # so if the number does change, we almost surely merged two distinct lines by including
+            # the kinda vertical or horizontal lines - in which case, let's be safe and ignore such lines
+            filtered_markings,_ = self.__filter_markings__(markings,horizontal,strict=True)
+            strict_connected_components = self.__find_connected_transcriptions__(filtered_markings)
 
-            # align based on the lower case items
-            aligned_mafft_text = self.__line_alignment__(mafft_safe_text)
-            # use that alignment to align the tokenized text items (which is isomorphic to the original text)
-            # also a good place where to which exactly what part of the line each transcription transcribed
-            # since there is a difference for gaps inserted before or after the transcription (which reall aren't
-            # gaps at all) and gaps inside the transcription
-            aligned_text,transcription_range = self.__add_alignment_spaces__(aligned_mafft_text,tokenized_text)
+            if len(strict_connected_components) != len(connected_components):
+                connected_components = strict_connected_components
 
-            # aggregate the individual pieces of text together
-            aggregate_text = self.__merge_aligned_text__(aligned_text)
-            # find where the text has been transcribed by at least 3 people
-            completed_components = self.__find_completed_components__(aligned_text,coordinates)
-            # (completed_starting_point,completed_ending_point),aggregated_text,transcription_range,markings
-            markings_in_cluster = [filtered_markings[i] for i in c]
-            clusters.extend(self.__create_clusters__(completed_components,aggregate_text,ii,aligned_text,variants))
+            # each connected component should correspond to a
+            for ii,c in enumerate(connected_components):
+                if len(c) <= 2:
+                    continue
 
-        print "number of completed components: " + str(len(clusters))
+                # extract the starting/ending x-y coordinates for each transcription in the cluster
+                coordinates = [filtered_markings[i][:4] for i in c]
+                # as well as the text - at the same time deal with tags (make them all 1 character long)
+                # and other special characters that MAFFT can't deal with
+                # -2 since -1 is for variants
+                tokenized_text = [filtered_markings[i][4] for i in c]
+
+                variants = [filtered_markings[i][-1] for i in c]
+
+                # tokenized_text has each tag (several characters) represented by just one
+                # (non-standard ascii) character, aka a token
+                # mafft_safe_text converts all upper case letters to lower case
+                # and uses upper case letters to represent things that MAFFT can't deal with (e.g. tag tokens)
+                mafft_safe_text = [self.__set_special_characters__(t) for t in tokenized_text]
+
+                # align based on the lower case items
+                aligned_mafft_text = self.__line_alignment__(mafft_safe_text)
+                # use that alignment to align the tokenized text items (which is isomorphic to the original text)
+                # also a good place where to figure out which parts of the line can be considered "done", i.e. have
+                # enough people transcribe them.
+                # there is a difference for gaps inserted before or after the transcription (which really aren't
+                # gaps at all) and gaps inside the transcription
+                aligned_text,transcription_range = self.__add_alignment_spaces__(aligned_mafft_text,tokenized_text)
+
+                # aggregate the individual pieces of text together
+                aggregate_text = self.__merge_aligned_text__(aligned_text)
+                # find where the text has been transcribed by at least 3 people
+                completed_components = self.__find_completed_components__(aligned_text,coordinates)
+                # (completed_starting_point,completed_ending_point),aggregated_text,transcription_range,markings
+                markings_in_cluster = [filtered_markings[i] for i in c]
+                clusters.extend(self.__create_clusters__(completed_components,aggregate_text,ii,aligned_text,variants))
+
+            print "number of completed components: " + str(len(clusters))
         return clusters,0
