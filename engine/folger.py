@@ -504,11 +504,13 @@ class FolgerClustering(TextClustering):
             # the number of connected components (since that corresponds to the number of lines transcribed)
             # so if the number does change, we almost surely merged two distinct lines by including
             # the kinda vertical or horizontal lines - in which case, let's be safe and ignore such lines
-            filtered_markings,_ = self.__filter_markings__(markings,horizontal,strict=True)
+            strict_filtered_markings,_ = self.__filter_markings__(markings,horizontal,strict=True)
             strict_connected_components = self.__find_connected_transcriptions__(filtered_markings)
 
             if len(strict_connected_components) != len(connected_components):
+                print "going with stricter definition of lines"
                 connected_components = strict_connected_components
+                filtered_markings = strict_filtered_markings
 
             # each connected component should correspond to a
             for ii,c in enumerate(connected_components):
@@ -516,7 +518,13 @@ class FolgerClustering(TextClustering):
                     continue
 
                 # extract the starting/ending x-y coordinates for each transcription in the cluster
-                coordinates = [filtered_markings[i][:4] for i in c]
+                try:
+                    coordinates = [filtered_markings[i][:4] for i in c]
+                except IndexError:
+                    print c
+                    print filtered_markings
+                    raise
+
                 # as well as the text - at the same time deal with tags (make them all 1 character long)
                 # and other special characters that MAFFT can't deal with
                 # -2 since -1 is for variants
