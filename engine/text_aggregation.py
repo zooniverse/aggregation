@@ -10,14 +10,13 @@ import yaml
 import json
 from blob_clustering import BlobClustering
 import parser
-import json_transcription
 import getopt
 import sys
 import folger
 import annotate
 import numpy as np
 import boto3
-import botocore
+import tarfile
 
 __author__ = 'ggdhines'
 
@@ -365,9 +364,41 @@ class TranscriptionAPI(AggregationAPI):
                 pass
 
         json.dump(new_json,open("/tmp/folger.json","wb"))
-        print "we have (at least partial) results for " + str(subjects_with_results) + " subjects"
-        # print json.dumps(new_json, sort_keys=True,indent=4, separators=(',', ': '))
 
+        aws_tar = self.__get_aws_tar_name__()
+        with tarfile.open("/tmp/"+aws_tar,mode="w") as t:
+            t.add("/tmp/folger.json")
+
+    def __s3_upload__(self):
+        s3 = boto3.resource('s3')
+
+        aws_tar = self.__get_aws_tar_name__()
+
+        key = "panoptes-uploads.zooniverse.org/production/project_aggregations_export/"+aws_tar
+        print key
+
+        s3.Object("zooniverse-static",key).put(Body=open("/tmp/"+aws_tar,"rb"))
+
+    def __get_aws_tar_name__(self):
+        media = self.__panoptes_call__("projects/"+str(self.project_id)+"/aggregations_export?admin=true")["media"]
+        aggregation_export = media[0]["src"]
+        url = aggregation_export.split("?")[0]
+        fname = url.split("/")[-1]
+
+        return fname
+
+    def __get_signed_url__(self):
+        """
+        from http://stackoverflow.com/questions/33549254/how-to-generate-url-from-boto3-in-amazon-web-services
+        """
+        s3Client = boto3.client('s3')
+
+        aws_tar = self.__get_aws_tar_name__()
+        key = "panoptes-uploads.zooniverse.org/production/project_aggregations_export/"+aws_tar
+
+        url = s3Client.generate_presigned_url('get_object', Params = {'Bucket': 'zooniverse-static', 'Key': key}, ExpiresIn = 604800)
+
+        return url
 
     def __summarize__(self,tar_path=None):
         num_retired = self.classification_alg.num_retired
@@ -386,7 +417,7 @@ class TranscriptionAPI(AggregationAPI):
         # body += " A total of " + str(stats["retired lines"]) + " lines were retired. "
         # body += " The accuracy of these lines was " + "{:2.1f}".format(accuracy*100) + "% - defined as the percentage of characters where at least 3/4's of the users were in agreement."
 
-        print self.__panoptes_call__("projects/"+str(self.project_id)+"/aggregations_export?admin=true")
+        bucket = ""
         # if tar_path is not None:
         #     bucket = "s3://zooniverse-static/panoptes-uploads.zooniverse.org/"+str(self.project_id)+"/"
         #     s3 = boto3.resource('s3')
@@ -473,8 +504,12 @@ if __name__ == "__main__":
         # print "done migrating"
         # # project.__aggregate__(subject_set = [671541,663067,664482,662859])
         processed_subjects = project.__aggregate__()
-        project.__summarize__()
-        # project.__restructure_json__()
+        # project.__summarize__()
+        project.__restructure_json__()
+        project.__s3_upload__()
+
+        print project.__get_signed_url__()
+
         #
         # if summary:
         #     project.__add_metadata__()
