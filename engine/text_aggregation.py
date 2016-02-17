@@ -17,8 +17,32 @@ import folger
 import annotate
 import numpy as np
 import boto3
+import botocore
 
 __author__ = 'ggdhines'
+
+
+def get_signed_url(time, bucket, obj):
+    """
+    from https://gist.github.com/richarvey/637cd595362760858496
+    :param time:
+    :param bucket:
+    :param obj:
+    :return:
+    """
+    s3 = boto3.resource('s3')
+
+    url = s3.generate_url(
+        time,
+        'GET',
+        bucket,
+        obj,
+        response_headers={
+          'response-content-type': 'application/octet-stream'
+        }
+    )
+    return url
+
 
 
 class SubjectRetirement(Classification):
@@ -362,8 +386,7 @@ class TranscriptionAPI(AggregationAPI):
         # body += " A total of " + str(stats["retired lines"]) + " lines were retired. "
         # body += " The accuracy of these lines was " + "{:2.1f}".format(accuracy*100) + "% - defined as the percentage of characters where at least 3/4's of the users were in agreement."
 
-        # print self.__panoptes_call__("projects/"+str(self.project_id)+"/aggregations_export?admin=true")
-        # assert False
+        print self.__panoptes_call__("projects/"+str(self.project_id)+"/aggregations_export?admin=true")
         # if tar_path is not None:
         #     bucket = "s3://zooniverse-static/panoptes-uploads.zooniverse.org/"+str(self.project_id)+"/"
         #     s3 = boto3.resource('s3')
@@ -381,7 +404,7 @@ class TranscriptionAPI(AggregationAPI):
         #
         #     url = get_signed_url(604800, bucket, object)
 
-
+        return
 
 
 
