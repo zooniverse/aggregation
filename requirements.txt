@@ -11,3 +11,4 @@ shapely
 cassandra-driver
 psycopg2
 alignment
+sklearn
