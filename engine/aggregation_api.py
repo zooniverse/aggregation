@@ -1072,18 +1072,21 @@ class AggregationAPI:
 
         # how many classifications are we going to migrate
         cur = self.postgres_session.cursor()
-        select = "SELECT count(*) from " + postgres_table + " ON  " + postgres_constraint
-        cur.execute(select)
-        num_migrated = cur.fetchone()[0]
-        print "going to migrate " + str(num_migrated) + " classifications"
+        # select = "SELECT count(*) from " + postgres_table + " ON  " + postgres_constraint
+        # cur.execute(select)
+        # num_migrated = cur.fetchone()[0]
+        # print "going to migrate " + str(num_migrated) + " classifications"
 
         # what do we want from the classifications table?
         postgres_columns = "id,user_id,workflow_id,annotations,created_at,user_ip,gold_standard,workflow_version, classification_subjects.subject_id,metadata"
+        postgres_ordering = " order by id limit 12000"
         select = "SELECT " + postgres_columns + " from " + postgres_table + " ON " + postgres_constraint
+        if self.environment == "production":
+            select += postgres_ordering
 
         # actually get the classifications
+        print "about to get all the relevant classifications"
         cur.execute(select)
-        self.postgres_session.commit()
 
         # setup the insert statement for cassandra
         insert_statement = self.cassandra_session.prepare("""
