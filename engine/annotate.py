@@ -62,7 +62,6 @@ class AnnotateClustering(TextClustering):
         TextClustering.__init__(self,shape,project,param_dict)
 
     def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,subject_id):
-        print(len(markings))
         unique_users = set(user_ids)
         if len(unique_users) <= 2:
             return [],0
