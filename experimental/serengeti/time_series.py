@@ -1,6 +1,76 @@
+import matplotlib
+matplotlib.use('WXAgg')
 import numpy as np
 import cv2
 from matplotlib import pyplot as plt
+import pymongo
+import os
+import urllib
+import Image
+import ImageStat
+import glob
+import matplotlib.cbook as cbook
+
+def brightness( im_file ):
+   im = Image.open(im_file).convert('L')
+   stat = ImageStat.Stat(im)
+   return stat.mean[0]
+
+# # connect to the mongodb server
+# client = pymongo.MongoClient()
+# db = client['b']
+# subjects = db["serengeti_subjects"]
+# classifications = db["serengeti_classifications"]
+#
+#
+# base_subject = subjects.find_one({"coords":{"$ne":[]}})
+# coords = base_subject["coords"]
+#
+# for subject in subjects.find({"coords":coords}).limit(100):
+#     url = subject["location"]["standard"][0]
+#
+#     r_slash = url.rfind("/")
+#     fname = url[r_slash+1:]
+#
+#     image_path = "/home/ggdhines/Databases/images/serengeti/"+fname
+#
+#     if not(os.path.isfile(image_path)):
+#         urllib.urlretrieve(url, image_path)
+#
+#     print brightness(image_path)
+#
+# assert False
+
+image_list = []
+for fname in glob.glob("/home/ggdhines/Databases/images/time_series/*.jpg"):
+    image_list.append(cv2.imread(fname,0))
+
+base_image = np.median(image_list,axis=[0])
+base_image = base_image.astype(np.uint8)
+fig, ax1 = plt.subplots(1, 1)
+ax1.imshow(base_image)
+plt.show()
+
+for image in image_list:
+    diff = np.abs(base_image - image)
+
+    avg = np.mean(diff)
+    diff = np.abs(diff - avg)
+    diff = diff.astype(np.uint8)
+
+    ret,thresh1 = cv2.threshold(diff,127,255,cv2.THRESH_BINARY)
+
+    fig, ax1 = plt.subplots(1, 1)
+    ax1.imshow(thresh1)
+    plt.show()
+
+    kernel = np.ones((5,5),np.float32)/25
+    dst = cv2.filter2D(diff,-1,kernel)
+    plt.imshow(dst)
+    plt.show()
+
+
+assert False
 
 MIN_MATCH_COUNT = 10
 
