@@ -424,17 +424,22 @@ class FolgerClustering(TextClustering):
                 if m_i == m_i2:
                     continue
 
-                # since we threw out all non-horizontal lines (within a certain degree of error)
-                # the slope doesn't really matter - but doesn't hurt and should help when we generalize to
-                # non-horizontal lines
-                slope = (y2_-y1_)/float(x2_-x1_)
-                inter = y2_ - slope*x2_
+                # define our line according to ax+by+c=0
+                try:
+                    slope = (y2_-y1_)/float(x2_-x1_)
+                    a = -slope
+                    b = 1
+                    inter = y2_ - slope*x2_
+                    c = -inter
+                except ZeroDivisionError:
+                    # we have a vertical line
+                    a = 1
+                    b = 0
+                    c = x2
 
                 # see https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line
                 # for explanation of the below code
-                a = -slope
-                b = 1
-                c = -inter
+
                 dist_1 = math.fabs(a*x1+b*y1+c)/math.sqrt(a**2+b**2)
                 x = (b*(b*x1-a*y1)-a*c)/float(a**2+b**2)
 
