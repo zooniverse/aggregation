@@ -45,7 +45,6 @@ def get_signed_url(time, bucket, obj):
     return url
 
 
-
 class SubjectRetirement(Classification):
     def __init__(self,environment,param_dict):
         Classification.__init__(self,environment)
@@ -104,14 +103,16 @@ class SubjectRetirement(Classification):
             #
             #     if (len(recent_completely_transcribed) == 5) and (complete_count >= 0.8):
             #         to_retire.add(subject_id)
-
+        print(self.to_retire)
         # don't retire if we are in the development environment
-        if (self.to_retire != set()) and (self.environment != "development"):
+        if self.to_retire != set():
             try:
                 headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+self.token}
                 params = {"retired_subjects":list(self.to_retire)}
                 # r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
-                r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,data=json.dumps(params))
+                r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/retired_subjects",headers=headers,data=json.dumps(params))
+                print(r)
+                print(r.text)
                 # rollbar.report_message("results from trying to retire subjects","info",extra_data=r.text)
 
             except TypeError as e:
@@ -137,7 +138,71 @@ class TranscriptionAPI(AggregationAPI):
         # just to stop me from using transcription on other projects
         assert int(project_id) in [245,376]
 
-    def __cluster__(self,used_shapes,raw_markings,image_dimensions):
+    def __aggregate__(self,gold_standard_clusters=([],[]),expert=None):
+        """
+        you can provide a list of clusters - hopefully examples of both true positives and false positives
+        note this means you have already run the aggregation before and are just coming back with
+        more info
+        for now, only one expert - easily generalizable but just want to avoid the situation where
+        multiple experts have marked the same subject - need to be a bit careful there
+        :param workflows:
+        :param subject_set:
+        :param gold_standard_clusters:
+        :return:
+        """
+        # start by migrating any new classifications (since previous run) from postgres into cassandra
+        # this will also give us a list of the migrated subjects, which is the list of subjects we want to run
+        # aggregation on (if a subject has no new classifications, why bother rerunning aggregation)
+        # this is actually just for projects like annotate and folger where we run aggregation on subjects that
+        # have not be retired. If we want subjects that have been specifically retired, we'll make a separate call
+        # for that
+        for workflow_id,version in self.versions.items():
+            migrated_subjects = self.__migrate__(workflow_id,version)
+
+            # the migrated_subject can contain classifications for subjects which are not yet retired
+            # so if we want only retired subjects, make a special call
+            # otherwise, use the migrated list of subjects
+            if self.only_retired_subjects:
+                subject_set = self.__get_newly_retired_subjects__(workflow_id)
+            else:
+                subject_set = list(migrated_subjects[workflow_id])
+
+            if subject_set == []:
+                print("skipping workflow " + str(workflow_id) + " due to an empty subject set")
+                subject_set = None
+                continue
+
+            print("workflow id : " + str(workflow_id))
+            print("aggregating " + str(len(subject_set)) + " subjects")
+
+            # self.__describe__(workflow_id)
+            classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
+
+            # set up the clustering algorithms for the shapes we actually use
+            used_shapes = set()
+            for shapes in marking_tasks.values():
+                used_shapes = used_shapes.union(shapes)
+
+            aggregations = {}
+
+            # image_dimensions can be used by some clustering approaches - ie. for blob clustering
+            # to give area as percentage of the total image area
+            raw_classifications,raw_markings,raw_surveys,image_dimensions = self.__sort_annotations__(workflow_id,subject_set,expert)
+
+            # do we have any marking tasks?
+            if False:#marking_tasks != {}:
+                aggregations = self.__cluster2__(used_shapes,raw_markings,image_dimensions,raw_classifications)
+                # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
+
+            # we ALWAYS have to do classifications - even if we only have marking tasks, we need to do
+            # tool classification and existence classifications
+            print("classifying")
+            aggregations = self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],aggregations)
+
+            # finally, store the results
+            self.__upsert_results__(workflow_id,aggregations)
+
+    def __cluster2__(self,used_shapes,raw_markings,image_dimensions,raw_classifications):
         """
         run the clustering algorithm for a given workflow
         need to have already checked that the workflow requires clustering
@@ -151,7 +216,7 @@ class TranscriptionAPI(AggregationAPI):
 
         # start by clustering text
         print("clustering text")
-        cluster_aggregation = self.text_algorithm.__aggregate__(raw_markings,image_dimensions)
+        cluster_aggregation = self.text_algorithm.__aggregate__(raw_markings,image_dimensions,raw_classifications)
         print("clustering images")
         image_aggregation = self.image_algorithm.__aggregate__(raw_markings,image_dimensions)
 
@@ -492,5 +557,5 @@ if __name__ == "__main__":
         # print "done migrating"
         # # project.__aggregate__(subject_set = [671541,663067,664482,662859])
         processed_subjects = project.__aggregate__()
-        project.__summarize__()
+        # project.__summarize__()
 
