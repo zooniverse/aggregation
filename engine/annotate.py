@@ -1,53 +1,11 @@
 #!/usr/bin/env python
-from aggregation_api import AggregationAPI
-import helper_functions
-from classification import Classification
-import clustering
-import pandas as pd
 import numpy as np
-from scipy.spatial.distance import pdist,squareform
-import abc
-import re
-import random
-import unicodedata
-import os
-import requests
-import rollbar
-import json
-import sys
-import yaml
-from blob_clustering import BlobClustering
-import boto3
-import pickle
-import getopt
-from dateutil import parser
-import json_transcription
-import botocore
 from sklearn.decomposition import PCA
-import matplotlib.pyplot as plt
 from scipy.cluster import hierarchy
 from text_clustering import TextClustering
 import helper_functions
 
 __author__ = 'greg'
-
-
-# from https://gist.github.com/richarvey/637cd595362760858496
-def get_signed_url(time, bucket, obj):
-    s3 = boto3.resource('s3')
-
-    url = s3.generate_url(
-        time,
-        'GET',
-        bucket,
-        obj,
-        response_headers={
-          'response-content-type': 'application/octet-stream'
-        }
-    )
-    return url
-
-
 
 def merge_clusters_with_distinct_users(cluster1,cluster2,dist):
     """
