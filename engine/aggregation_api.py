@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 # from setuptools import setup, find_packages
+from __future__ import print_function
 import os
 if os.path.exists("/home/ggdhines"):
     import matplotlib
     matplotlib.use('WXAgg')
-
 import yaml
 import urllib2
 import cookielib
@@ -31,8 +31,11 @@ from cassandra.concurrent import execute_concurrent
 import psycopg2
 import rollbar
 import helper_functions
+from helper_functions import warning
 
 base_directory = "/home/ggdhines/"
+
+
 
 # see below for a discussion of inserting date times into casssandra - code is taken from there
 # http://stackoverflow.com/questions/16532566/how-to-insert-a-datetime-into-a-cassandra-1-2-timestamp-column
@@ -184,7 +187,7 @@ class AggregationAPI:
         # we won't be able to connect to the back end databases, so might as well exit here
         if self.public_panoptes_connection:
             # go with the very basic connection
-            print "trying public Panoptes connection - no login"
+            print("trying public Panoptes connection - no login")
             self.host = "https://panoptes.zooniverse.org/"
             self.host_api = self.host+"api/"
             self.token = None
@@ -218,7 +221,7 @@ class AggregationAPI:
         self.classification_table = "classifications"
 
         # make the actual connection to Panoptes
-        print "trying secure Panoptes connection"
+        print("trying secure Panoptes connection")
         self.__panoptes_connect__(environment_details)
 
         self.__get_project_details__()
@@ -236,12 +239,12 @@ class AggregationAPI:
         if "workflow_id" in environment_details:
             workflow_id = int(project_details["workflow_id"])
             try:
-                print "aggregating only for workflow id : " + str(workflow_id)
+                print("aggregating only for workflow id : " + str(workflow_id))
                 self.workflows = {workflow_id: self.workflows[workflow_id]}
             except KeyError:
-                print "did not have given desired workflow: " + str(workflow_id)
-                print "here's the workflows we do have"
-                print self.workflows
+                warning("did not have given desired workflow: " + str(workflow_id))
+                warning("here's the workflows we do have")
+                warning(self.workflows)
                 raise
 
         # set up the clustering algorithms
@@ -298,12 +301,12 @@ class AggregationAPI:
                 subject_set = list(migrated_subjects[workflow_id])
 
             if subject_set == []:
-                print "skipping workflow " + str(workflow_id) + " due to an empty subject set"
+                print("skipping workflow " + str(workflow_id) + " due to an empty subject set")
                 subject_set = None
                 continue
 
-            print "workflow id : " + str(workflow_id)
-            print "aggregating " + str(len(subject_set)) + " subjects"
+            print("workflow id : " + str(workflow_id))
+            print("aggregating " + str(len(subject_set)) + " subjects")
 
             # self.__describe__(workflow_id)
             classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
@@ -319,8 +322,6 @@ class AggregationAPI:
             # to give area as percentage of the total image area
             raw_classifications,raw_markings,raw_surveys,image_dimensions = self.__sort_annotations__(workflow_id,subject_set,expert)
 
-            print raw_classifications,raw_markings,raw_surveys,image_dimensions
-
             if survey_tasks == {}:
                 # do we have any marking tasks?
                 if marking_tasks != {}:
@@ -329,10 +330,10 @@ class AggregationAPI:
 
                 # we ALWAYS have to do classifications - even if we only have marking tasks, we need to do
                 # tool classification and existence classifications
-                print "classifying"
+                print("classifying")
                 aggregations = self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],aggregations)
             else:
-                print "classifying a survey"
+                print("classifying a survey")
                 if self.project_id == 593:
                     # Wildcam Gorongosa is different - because why not?
                     survey_alg = survey_aggregation.WildcamGorongosaSurvey()
@@ -363,7 +364,7 @@ class AggregationAPI:
         if subject_set is None:
             subject_set = self.__load_subjects__(workflow_id)
 
-        print "getting annotations via cassandra"
+        print("getting annotations via cassandra")
 
         # do this in bite sized pieces to avoid overwhelming DB
         for s in self.__chunks__(subject_set,15):
@@ -385,15 +386,12 @@ class AggregationAPI:
 
             for subject_id,(success,record_list) in zip(s,results):
                 if not success:
-                    print record_list
+                    warning(record_list)
                 assert success
-
-                print record_list
 
                 # seem to have the occasional "retired" subject with no classifications, not sure
                 # why this is possible but if it can happen, just make a note of the subject id and skip
                 if record_list == []:
-                    # print "warning :: subject " + str(subject_id) + " has no classifications"
                     continue
 
 
@@ -418,7 +416,7 @@ class AggregationAPI:
                                     height = dimensions["naturalHeight"]
                                     width = dimensions["naturalWidth"]
                         except TypeError:
-                            print metadata
+                            warning(metadata)
                             raise
 
                     yield int(subject_id),int(record.user_id),record.annotations,(height,width)
@@ -434,10 +432,10 @@ class AggregationAPI:
         for i in range(10):
             try:
                 if cassandra_instance == "local":
-                    print "connecting to local Cassandra instance"
+                    print("connecting to local Cassandra instance")
                     self.cluster = Cluster()
                 else:
-                    print "connecting to Cassandra: " + cassandra_instance
+                    print("connecting to Cassandra: " + cassandra_instance)
                     self.cluster = Cluster([cassandra_instance])
 
                 try:
@@ -451,7 +449,7 @@ class AggregationAPI:
             except cassandra.cluster.NoHostAvailable as err:
                 if i == 9:
                     raise err
-                print err
+                warning(err)
 
         assert False
 
@@ -460,14 +458,14 @@ class AggregationAPI:
         for i in xrange(0, len(l), n):
             yield l[i:i+n]
 
-    def __classification_json_dump__(self):
-        annotation_generator = self.__cassandra_annotations__()
-        for workflow_id in self.workflows:
-            subject_set = self.__get_subjects__(workflow_id,only_retired_subjects=False)
-
-            for subject_id,user_id,annotation,dimensions in annotation_generator(workflow_id,subject_set):
-                print annotation
-                assert False
+    # def __classification_json_dump__(self):
+    #     annotation_generator = self.__cassandra_annotations__()
+    #     for workflow_id in self.workflows:
+    #         subject_set = self.__get_subjects__(workflow_id,only_retired_subjects=False)
+    #
+    #         for subject_id,user_id,annotation,dimensions in annotation_generator(workflow_id,subject_set):
+    #             print(annotation)
+    #             assert False
 
     # def __classify__(self,raw_classifications,clustering_aggregations,workflow_id,gold_standard_classifications=None):
     #     # get the raw classifications for the given workflow
@@ -484,8 +482,7 @@ class AggregationAPI:
         """
 
         if raw_markings == {}:
-            print "warning - empty set of images"
-            # print subject_set
+            warning("warning - empty set of images")
             return {}
 
         # will store the aggregations for all clustering
@@ -493,7 +490,7 @@ class AggregationAPI:
         cluster_aggregation = {}
         for shape in used_shapes:
             # were any additional params provided?
-            print shape
+            print(shape)
             if shape in self.additional_clustering_args:
                 algorithm = self.default_clustering_algs[shape](shape,self.additional_clustering_args[shape])
             else:
@@ -510,33 +507,33 @@ class AggregationAPI:
                 assert isinstance(cluster_aggregation,dict)
 
             if (self.environment == "development") and (algorithm.stats != {}):
-                print "stats"
+                print("stats")
                 json.dump(algorithm.stats,open("/home/ggdhines/"+str(self.project_id)+".stats","wb"))
 
         return cluster_aggregation
 
-    def __count_check__(self,workflow_id,subject_id):
-        """
-        for when we want to double check the number of classifications a subject has received
-        """
-        # todo - implement correct version - subject_ids no longer exists in the postgres db
-        # todo - not sure if this function is ever called - so only fixed if it is actually called somewhere
-        # print subject_id
-        # # check to see if we have previously stored values, hopefully will task on calls to the DB
-        # if workflow_id in self.classifications_per_subject:
-        #     if subject_id in self.classifications_per_subject[workflow_id]:
-        #         return self.classifications_per_subject[workflow_id][subject_id]
-        # else:
-        #     self.classifications_per_subject[workflow_id] = {}
-        #
-        # cursor = self.postgres_session.cursor()
-        # cursor.execute("SELECT count(*) from classifications where workflow_id="+str(workflow_id) +" AND subject_ids=ARRAY["+ str(subject_id) + "]")
-        # count = int(cursor.fetchone()[0])
-        #
-        # self.classifications_per_subject[workflow_id][subject_id] = count
-        #
-        # return count
-        assert False
+    # def __count_check__(self,workflow_id,subject_id):
+    #     """
+    #     for when we want to double check the number of classifications a subject has received
+    #     """
+    #     # todo - implement correct version - subject_ids no longer exists in the postgres db
+    #     # todo - not sure if this function is ever called - so only fixed if it is actually called somewhere
+    #     # print subject_id
+    #     # # check to see if we have previously stored values, hopefully will task on calls to the DB
+    #     # if workflow_id in self.classifications_per_subject:
+    #     #     if subject_id in self.classifications_per_subject[workflow_id]:
+    #     #         return self.classifications_per_subject[workflow_id][subject_id]
+    #     # else:
+    #     #     self.classifications_per_subject[workflow_id] = {}
+    #     #
+    #     # cursor = self.postgres_session.cursor()
+    #     # cursor.execute("SELECT count(*) from classifications where workflow_id="+str(workflow_id) +" AND subject_ids=ARRAY["+ str(subject_id) + "]")
+    #     # count = int(cursor.fetchone()[0])
+    #     #
+    #     # self.classifications_per_subject[workflow_id][subject_id] = count
+    #     #
+    #     # return count
+    #     assert False
 
     def __count_subjects_classified__(self,workflow_id):
         """
@@ -650,7 +647,7 @@ class AggregationAPI:
         display_name =  data["projects"][0]["display_name"]
         ascii_name = display_name.encode('ascii', 'ignore')
 
-        print "project is " + ascii_name
+        print("project is " + ascii_name)
 
     def __get_project_id(self):
         """
@@ -674,14 +671,14 @@ class AggregationAPI:
             response = urllib2.urlopen(request)
             body = response.read()
         except urllib2.HTTPError as e:
-            print self.host_api+"projects?owner="+self.owner+"&display_name="+self.project_name
-            print 'The server couldn\'t fulfill the request.'
-            print 'Error code: ', e.code
-            print 'Error response body: ', e.read()
+            warning(self.host_api+"projects?owner="+self.owner+"&display_name="+self.project_name)
+            warning( 'The server couldn\'t fulfill the request.')
+            warning('Error code: ' + e.code)
+            warning('Error response body: '+ e.read())
             raise
         except urllib2.URLError as e:
-            print 'We failed to reach a server.'
-            print 'Reason: ', e.reason
+            warning('We failed to reach a server.')
+            warning('Reason: ', e.reason)
             raise
 
         data = json.loads(body)
@@ -689,8 +686,8 @@ class AggregationAPI:
             # put it in json structure and extract id
             return data["projects"][0]["id"]
         except IndexError:
-            print self.host_api+"projects?display_name="+urllib2.quote(self.project_name)
-            print data
+            warning(self.host_api+"projects?display_name="+urllib2.quote(self.project_name))
+            warning(data)
             raise
         # return None
 
@@ -705,14 +702,14 @@ class AggregationAPI:
         :return:
         """
         subjects = []
-        print 'finding subjects classified for workflow ' + str(workflow_id)
+        print('finding subjects classified for workflow ' + str(workflow_id))
         # for tate/folger we want to aggregate subjects while they are alive (not retired)
         # so self.only_retired_subjects would be False
         # but for printing out the json blobs, then we want only retired subjects - which
         # is where we set only_retired_subjects=True
 
         if True:#self.__is_project_live__() and (self.only_retired_subjects or only_retired_subjects):
-            print "selecting only subjects retired since last run"
+            print("selecting only subjects retired since last run")
             stmt = """ SELECT * FROM "subjects"
                     INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."subject_id" = "subjects"."id"
                     WHERE "subject_workflow_counts"."workflow_id" = """ + str(workflow_id) + """ AND "subject_workflow_counts"."retired_at" >= '""" + str(self.oldest_new_classification) + """'"""
@@ -732,8 +729,7 @@ class AggregationAPI:
             workflow_v = int(self.versions[workflow_id])
 
             stmt = "SELECT subject_id FROM classifications WHERE workflow_id = " + str(workflow_id) + " and workflow_version = " + str(workflow_v) + " and id >= " + str(t) + ";"
-            print stmt
-            print "selecting all subjects - including those not retired"
+            print("selecting all subjects - including those not retired")
             # assert False
 
             subjects = set([r.subject_id for r in self.cassandra_session.execute(stmt)])
@@ -802,14 +798,11 @@ class AggregationAPI:
                                     assert subtask["type"] == "text"
                                     instructions[task_id]["tools"][tool_index]["followup_questions"][subtask_index]["type"] = "text"
                         except KeyError:
-                            print subtask
+                            warning(subtask)
                             raise
             elif task["type"] in ["survey","flexibleSurvey"]:
                 instructions[task_id]["species"] = {}
-                # print individual_workflow["tasks"].keys()
-                # print len(data["workflows"])
-                # print task["images"]
-                # assert False
+
                 for species in task["choices"]:
                     label = task["choices"][species]["label"]
                     instructions[task_id]["species"][species] = label
@@ -817,17 +810,8 @@ class AggregationAPI:
                 instructions[task_id]["questions"] = task["questions"]
                 instructions[task_id]["questionsOrder"] = task["questionsOrder"]
 
-                    # print task["choices"][species]
-
-                # instructions[workflow_id][task_id] = task
-                # print json.dumps(instructions[workflow_id][task_id],sort_keys=True,indent=4, separators=(',', ': '))
-                # print json.dumps(task["questions"],sort_keys=True,indent=4, separators=(',', ': '))
-                # print task.keys()
-                # print task["questionsOrder"]
-                # assert False
-
             else:
-                print task["type"]
+                warning(task["type"])
                 assert False
 
         return instructions
@@ -888,7 +872,7 @@ class AggregationAPI:
         agg = postgres_cursor.fetchone()
 
         if agg is None:
-            print "returning none"
+            print("returning none")
             return {}
 
         if isinstance(agg[0],str):
@@ -904,7 +888,7 @@ class AggregationAPI:
                 continue
 
             center = tuple(cluster["center"])
-            print cluster
+            print(cluster)
             users[center] = cluster["users"]
             # # todo - should be only one way - check why both are necessary
             # if isinstance(cluster['existence'][0],dict):
@@ -997,12 +981,12 @@ class AggregationAPI:
                 try:
                     agg1[kw] = self.__merge_aggregations__(agg1[kw],agg2[kw])
                 except TypeError:
-                    print "====-----"
-                    print type(agg1)
-                    print type(agg2)
-                    print agg1
-                    print agg2
-                    print kw
+                    warning("====-----")
+                    warning(type(agg1))
+                    warning(type(agg2))
+                    warning(agg1)
+                    warning(agg2)
+                    warning(kw)
                     assert False
 
         assert isinstance(agg1,dict)
@@ -1034,17 +1018,17 @@ class AggregationAPI:
 
         try:
             self.cassandra_session.execute("drop table classifications")
-            print "classification table dropped"
+            print("classification table dropped")
         except cassandra.InvalidRequest:
-            print "classification table did not already exist"
+            print("classification table did not already exist")
 
         self.cassandra_session.execute("CREATE TABLE classifications(" + columns + ", PRIMARY KEY( " + primary_key + ")) WITH CLUSTERING ORDER BY ( " + ordering + ");")
 
         try:
             self.cassandra_session.execute("drop table most_recent")
-            print "most_recent table dropped"
+            print("most_recent table dropped")
         except cassandra.InvalidRequest:
-            print "most_recent table did not already exist"
+            print("most_recent table did not already exist")
 
         recent_table = "CREATE TABLE most_recent (project_id int, classification_id int, PRIMARY KEY(project_id))"
         self.cassandra_session.execute(recent_table)
@@ -1070,10 +1054,10 @@ class AggregationAPI:
         # how many classifications are we going to migrate
         # todo - can take a while to calculate and only useful for development leaving off for now,
         cur = self.postgres_session.cursor()
-        # select = "SELECT count(*) from " + postgres_table + " ON  " + postgres_constraint
-        # cur.execute(select)
-        # num_migrated = cur.fetchone()[0]
-        # print "going to migrate " + str(num_migrated) + " classifications"
+        select = "SELECT count(*) from " + postgres_table + " " + postgres_constraint
+        cur.execute(select)
+        num_migrated = cur.fetchone()[0]
+        print("going to migrate " + str(num_migrated) + " classifications")
 
         # what do we want from the classifications table?
         postgres_columns = "id,user_id,workflow_id,annotations,created_at,user_ip,gold_standard,workflow_version, classification_subjects.subject_id,metadata"
@@ -1084,7 +1068,7 @@ class AggregationAPI:
             select += " order by id limit 12000"
 
         # actually get the classifications
-        print "about to get all the relevant classifications"
+        print("about to get all the relevant classifications")
         cur.execute(select)
 
         # setup the insert statement for cassandra
@@ -1101,7 +1085,7 @@ class AggregationAPI:
         # finally go through the annotations
         for ii,t in enumerate(cur.fetchall()):
             if (ii % 10000 == 0) and (ii > 0):
-                print ii
+                print(ii)
 
             id_,user_id,workflow_id,annotations,created_at,user_ip,gold_standard,workflow_version,subject_id,metadata = t
 
@@ -1180,16 +1164,16 @@ class AggregationAPI:
                 data = json.loads(body)
                 break
             except urllib2.HTTPError as e:
-                print 'The server couldn\'t fulfill the request.'
-                print 'Error code: ', e.code
-                print 'Error response body: ', e.read()
+                warning('The server couldn\'t fulfill the request.')
+                warning('Error code: ' + e.code)
+                warning('Error response body: ' + e.read())
 
                 if i == 9:
                     raise
 
             except urllib2.URLError as e:
-                print 'We failed to reach a server.'
-                print 'Reason: ', e.reason
+                warning('We failed to reach a server.')
+                warning('Reason: ', e.reason)
 
                 if i == 9:
                     raise
@@ -1220,7 +1204,7 @@ class AggregationAPI:
 
         for i in range(20):
             try:
-                print "attempt: " + str(i)
+                print("attempt: " + str(i))
                 cj = cookielib.CookieJar()
                 opener = urllib2.build_opener(urllib2.HTTPCookieProcessor(cj))
 
@@ -1234,7 +1218,7 @@ class AggregationAPI:
                 try:
                     csrf_token = re.findall(".+csrf-token.\s+content=\"(.+)\"",body)[0]
                 except IndexError:
-                    print body
+                    warning(body)
                     raise
 
                 #2. use the token to get a devise session via JSON stored in a cookie
@@ -1248,14 +1232,14 @@ class AggregationAPI:
                 try:
                     response = opener.open(request)
                 except urllib2.HTTPError as e:
-                    print 'In get_bearer_token, stage 2:'
-                    print 'The server couldn\'t fulfill the request.'
-                    print 'Error code: ', e.code
-                    print 'Error response body: ', e.read()
+                    warning('In get_bearer_token, stage 2:')
+                    warning('The server couldn\'t fulfill the request.')
+                    warning('Error code: ', e.code)
+                    warning('Error response body: ', e.read())
                     raise
                 except urllib2.URLError as e:
-                    print 'We failed to reach a server.'
-                    print 'Reason: ', e.reason
+                    warning('We failed to reach a server.')
+                    warning('Reason: ', e.reason)
                     raise
                 else:
                     # everything is fine
@@ -1273,14 +1257,14 @@ class AggregationAPI:
                 try:
                     response = opener.open(request)
                 except urllib2.HTTPError as e:
-                    print 'In get_bearer_token, stage 3:'
-                    print 'The server couldn\'t fulfill the request.'
-                    print 'Error code: ', e.code
-                    print 'Error response body: ', e.read()
+                    warning('In get_bearer_token, stage 3:')
+                    warning('The server couldn\'t fulfill the request.')
+                    warning('Error code: ', e.code)
+                    warning('Error response body: ', e.read())
                     raise
                 except urllib2.URLError as e:
-                    print 'We failed to reach a server.'
-                    print 'Reason: ', e.reason
+                    warning('We failed to reach a server.')
+                    warning('Reason: ', e.reason)
                     raise
                 else:
                     # everything is fine
@@ -1293,7 +1277,7 @@ class AggregationAPI:
                 self.token = bearer_token
                 break
             except (urllib2.HTTPError,urllib2.URLError) as e:
-                print "trying to connect/init again again"
+                print("trying to connect/init again again")
                 pass
 
     # def __panoptes_aggregation__(self):
@@ -1399,7 +1383,7 @@ class AggregationAPI:
         agg = postgres_cursor.fetchone()
 
         if agg is None:
-            print "returning none"
+            print("returning none")
             return {}
 
         if isinstance(agg[0],str):
@@ -1425,7 +1409,7 @@ class AggregationAPI:
         return probabilities
 
     def __postgres_connect__(self,database_details):
-        print "connecting to postgres db: " + database_details["postgres_host"]
+        print("connecting to postgres db: " + database_details["postgres_host"])
 
         # build up the connection details
         details = ""
@@ -1442,7 +1426,7 @@ class AggregationAPI:
                 self.postgres_session.autocommit = True
                 break
             except psycopg2.OperationalError as e:
-                print e
+                warning(e)
                 pass
 
         if self.postgres_session is None:
@@ -1463,7 +1447,7 @@ class AggregationAPI:
                 details += " user = '" + database_details["postgres_username"] + "' "
                 details += " password = '"+database_details["postgres_password"]+"' "
 
-            print "the writeable postgres db is: " + database_details["writeable_postgres_host"]
+            print("the writeable postgres db is: " + database_details["writeable_postgres_host"])
 
             # print details
 
@@ -1473,7 +1457,7 @@ class AggregationAPI:
                     self.postgres_writeable_session.autocommit = True
                     break
                 except psycopg2.OperationalError as e:
-                    print e
+                    warning(e)
                     pass
 
             if self.postgres_writeable_session is None:
@@ -1544,8 +1528,8 @@ class AggregationAPI:
             elif task_type in ["survey","flexibleSurvey"]:
                 survey_tasks[task_id] = []
             else:
-                print task
-                print task["type"]
+                warning(task)
+                warning(task["type"])
                 # unknown task type
                 assert False
 
@@ -1636,8 +1620,8 @@ class AggregationAPI:
                 tool = None
                 shape = marking["type"]
             else:
-                print "skipping unknown type of marking"
-                print marking
+                print("skipping unknown type of marking")
+                print(marking)
                 continue
 
             # for development only really - if we are not interested in a certain type of marking
@@ -1646,7 +1630,7 @@ class AggregationAPI:
                 continue
 
             if shape not in self.marking_params_per_shape:
-                print "unrecognized shape: (skipping) " + shape
+                print("unrecognized shape: (skipping) " + shape)
                 continue
 
             try:
@@ -1733,7 +1717,6 @@ class AggregationAPI:
         image_dimensions = {}
 
         for subject_id,user_id,annotation,dimensions in annotation_generator(workflow_id,subject_set):
-            print subject_id
             if user_id == expert:
                 continue
 
@@ -1758,9 +1741,9 @@ class AggregationAPI:
                 try:
                     task_id = task["task"]
                 except (KeyError,TypeError) as e:
-                    print task
-                    print e
-                    print type(task)
+                    warning(task)
+                    warning(e)
+                    warning(type(task))
                     raise
 
                 # see https://github.com/zooniverse/Panoptes-Front-End/issues/2155 for why this is needed
@@ -1772,7 +1755,7 @@ class AggregationAPI:
                 if task_id in marking_tasks:
                     # skip over any improperly formed annotations - due to browser problems etc.
                     if not isinstance(task["value"],list):
-                        print "not properly formed marking - skipping"
+                        print("not properly formed marking - skipping")
                         continue
 
                     raw_markings,raw_classifications = self.__add_markings_annotations__(subject_id,workflow_id,task_id,user_id,task["value"],raw_markings,raw_classifications,marking_tasks,classification_tasks,dimensions)
@@ -1795,9 +1778,9 @@ class AggregationAPI:
                     if task["value"] != [[]]:
                         raw_surveys[task_id][subject_id].append((user_id,task["value"]))
                 else:
-                    print marking_tasks,classification_tasks,survey_tasks
-                    print task_id
-                    print task
+                    warning(marking_tasks,classification_tasks,survey_tasks)
+                    warning(task_id)
+                    warning(task)
                     assert False
 
         return raw_classifications,raw_markings,raw_surveys,image_dimensions
@@ -1853,7 +1836,7 @@ class AggregationAPI:
         except psycopg2.ProgrammingError as e:
             # todo - the table should always be deleted after its use, so this should rarely happen
             # todo - need to reset the connection
-            print "temporary table already exists - huh"
+            print("temporary table already exists - huh")
             self.postgres_session.rollback()
             postgres_cursor = self.postgres_writeable_session.cursor()
             postgres_cursor.execute("truncate table newvals")
@@ -1864,7 +1847,7 @@ class AggregationAPI:
             postgres_cursor.execute("select subject_id from aggregations where workflow_id = " + str(workflow_id))
             r = [i[0] for i in postgres_cursor.fetchall()]
         except psycopg2.ProgrammingError as e:
-            print e
+            print(e)
             self.postgres_session.rollback()
             postgres_cursor = self.postgres_writeable_session.cursor()
             # postgres_cursor.execute("create table aggregations(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation json,created_at timestamp, updated_at timestamp)")
@@ -1888,9 +1871,9 @@ class AggregationAPI:
                     update_str += ","+postgres_cursor.mogrify("(%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregations[subject_id])))
                     update_counter += 1
                 except UnicodeDecodeError:
-                    print workflow_id
-                    print subject_id
-                    print aggregations[subject_id]
+                    warning(workflow_id)
+                    warning(subject_id)
+                    warning(aggregations[subject_id])
                     raise
             else:
                 # we are inserting a brand new aggregation
@@ -1898,17 +1881,17 @@ class AggregationAPI:
                     insert_str += ","+postgres_cursor.mogrify("(%s,%s,%s,%s,%s)", (workflow_id,subject_id,json.dumps(aggregations[subject_id]),str(datetime.datetime.now()),str(datetime.datetime.now())))
                     insert_counter += 1
                 except UnicodeDecodeError:
-                    print json.dumps(aggregations[subject_id],indent=4, separators=(',', ': '))
+                    warning(json.dumps(aggregations[subject_id],indent=4, separators=(',', ': ')))
                     raise
 
         if update_str != "":
             # are there any updates to actually be done?
             # todo - the updated and created at dates are not being maintained - I'm happy with that
-            print "updating " + str(update_counter) + " subjects"
+            print("updating " + str(update_counter) + " subjects")
             postgres_cursor.execute("INSERT INTO newvals (workflow_id, subject_id, aggregation) VALUES " + update_str[1:])
             postgres_cursor.execute("UPDATE aggregations SET aggregation = newvals.aggregation FROM newvals WHERE newvals.subject_id = aggregations.subject_id and newvals.workflow_id = aggregations.workflow_id")
         if insert_str != "":
-            print "inserting " + str(insert_counter) + " subjects"
+            print("inserting " + str(insert_counter) + " subjects")
             postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
         self.postgres_writeable_session.commit()
 
@@ -1916,7 +1899,7 @@ class AggregationAPI:
         """
         generator for giving aggregation results per subject id/task
         """
-
+        assert False
         stmt = "select subject_id,aggregation,updated_at from aggregations where workflow_id = " + str(workflow_id)
         if subject_id != None:
             stmt += " and subject_id = " + str(subject_id)
@@ -1931,7 +1914,7 @@ class AggregationAPI:
             if isinstance(aggregation,str):
                 aggregation = json.loads(aggregation)
             elif not isinstance(aggregation,dict):
-                print type(aggregation)
+                warning(type(aggregation))
             assert isinstance(aggregation,dict)
 
             yield r[0],aggregation
@@ -1950,8 +1933,6 @@ if __name__ == "__main__":
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
         project.__setup__()
-
-        print project.oldest_new_classification
 
         project.__aggregate__()
 

@@ -1,5 +1,5 @@
+from __future__ import print_function
 __author__ = 'greg'
-import re
 import os
 import numpy
 import tarfile
@@ -9,6 +9,7 @@ import shapely.geometry as geometry
 import unicodedata
 import helper_functions
 import numpy as np
+from helper_functions import warning
 
 
 class CsvOut:
@@ -21,7 +22,7 @@ class CsvOut:
         self.workflow_names = project.workflow_names
         self.workflows = project.workflows
 
-        print "workflows are " + str(self.workflows)
+        print("workflows are " + str(self.workflows))
 
         self.__yield_aggregations__ = project.__yield_aggregations__
         self.__count_check__ = project.__count_check__
@@ -58,7 +59,7 @@ class CsvOut:
             id_ = (workflow_id,task_id,shape_id,followup_id,"detailed")
             self.__add_detailed_row__(id_,subject_id,aggregations,answer_dict)
         except ValueError:
-            print "empty aggregations for workflow id " + str(workflow_id) + " task id " + str(task_id) + " and subject id" + str(subject_id) + " -- skipping"
+             warning("empty aggregations for workflow id " + str(workflow_id) + " task id " + str(task_id) + " and subject id" + str(subject_id) + " -- skipping")
 
     def __add_detailed_row__(self,id_,subject_id,results,answer_dict):
         """
@@ -104,7 +105,7 @@ class CsvOut:
         try:
             most_likely,top_probability = max(votes.items(), key = lambda x:x[1])
         except ValueError:
-            print results
+            warning(results)
             raise
 
         # extract the text corresponding to the most likely answer
@@ -211,8 +212,8 @@ class CsvOut:
         try:
             workflow_name = self.workflow_names[workflow_id]
         except KeyError:
-            print self.workflows
-            print self.workflow_names
+            warning(self.workflows)
+            warning(self.workflow_names)
             raise
 
         workflow_name = helper_functions.csv_string(workflow_name)
@@ -357,13 +358,13 @@ class CsvOut:
 
                             possible_answers = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_index]["answers"]
                             if "followup_question" not in aggregations[task_id][shape + " clusters"][cluster_index]:
-                                print "missing follow up response"
+                                print("missing follow up response")
                                 continue
 
                             try:
                                 results = aggregations[task_id][shape + " clusters"][cluster_index]["followup_question"][str(followup_index)]
                             except KeyError:
-                                print aggregations[task_id][shape + " clusters"][cluster_index]
+                                warning(aggregations[task_id][shape + " clusters"][cluster_index])
                                 raise
                             id_ = task_id,tool_id,followup_index
                             if answer_type == "single":
@@ -450,9 +451,6 @@ class CsvOut:
             species_label = helper_functions.csv_string(self.instructions[workflow_id][task_id]["species"][species_id])
             row = str(subject_id) + "," + str(aggregations["num_users"]) + "," + helper_functions.csv_string(species_label)
 
-            print aggregations
-            assert False
-
             for followup_id in self.instructions[workflow_id][task_id]["questionsOrder"]:
                 followup_question = self.instructions[workflow_id][task_id]["questions"][followup_id]
 
@@ -535,10 +533,10 @@ class CsvOut:
 
         # go through each workflow indepedently
         for workflow_id in self.workflows:
-            print "writing out workflow " + str(workflow_id)
+            print("writing out workflow " + str(workflow_id))
 
             if self.__count_subjects_classified__(workflow_id) == 0:
-                print "skipping due to no subjects being classified for the given workflow"
+                print("skipping due to no subjects being classified for the given workflow")
                 continue
 
             # # create the output files for this workflow
@@ -600,8 +598,8 @@ class CsvOut:
             try:
                 tool_classification = cluster["tool_classification"][0].items()
             except KeyError:
-                print shape
-                print cluster
+                warning(shape)
+                warning(cluster)
                 raise
             most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
             tool_str = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool)]["marking tool"]

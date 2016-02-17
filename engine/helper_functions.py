@@ -2,10 +2,12 @@
 helper functions for extracting necessary parameters for different types of markings
 also for dimensionality reduction
 """
+from __future__ import print_function
 import math
 import random
 import unicodedata
 import re
+import sys
 
 class InvalidMarking(Exception):
     def __init__(self,pt):
@@ -56,12 +58,12 @@ def relevant_point_params(marking,image_dimensions):
         x = float(marking["x"])
         y = float(marking["y"])
     except ValueError:
-        print marking
+        warning(marking)
         raise
 
     if (x<0)or(y<0)or(x > image_dimensions[0]) or(y>image_dimensions[1]):
-        print "marking probably outside of image"
-        print marking
+        warning( "marking probably outside of image")
+        warning( marking)
         raise InvalidMarking(marking)
 
     return x,y
@@ -232,3 +234,6 @@ def csv_string(string):
     string = re.sub(r'\W+', '', string)
 
     return string
+
+def warning(*objs):
+    print("WARNING: ", *objs, file=sys.stderr)

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from __future__ import print_function
 from aggregation_api import AggregationAPI
 from classification import Classification
 import rollbar
@@ -17,6 +18,7 @@ import annotate
 import numpy as np
 import boto3
 import tarfile
+from helper_functions import warning
 
 __author__ = 'ggdhines'
 
@@ -113,14 +115,14 @@ class SubjectRetirement(Classification):
                 # rollbar.report_message("results from trying to retire subjects","info",extra_data=r.text)
 
             except TypeError as e:
-                print e
+                warning(e)
                 rollbar.report_exc_info()
         if self.environment == "development":
-            print "we would have retired " + str(len(self.to_retire))
-            print "with non-blanks " + str(len(self.to_retire)-blank_retirement)
+            print("we would have retired " + str(len(self.to_retire)))
+            print("with non-blanks " + str(len(self.to_retire)-blank_retirement))
             if not os.path.isfile("/home/ggdhines/"+str(self.project_id)+".retired"):
                 pickle.dump(non_blanks,open("/home/ggdhines/"+str(self.project_id)+".retired","wb"))
-            print str(len(self.to_retire)-blank_retirement)
+            print(str(len(self.to_retire)-blank_retirement))
 
         self.num_retired = len(self.to_retire)
         self.non_blanks_retired = len(self.to_retire)-blank_retirement
@@ -144,14 +146,13 @@ class TranscriptionAPI(AggregationAPI):
         """
 
         if raw_markings == {}:
-            print "warning - empty set of images"
-            # print subject_set
+            warning("warning - empty set of images")
             return {}
 
         # start by clustering text
-        print "clustering text"
+        print("clustering text")
         cluster_aggregation = self.text_algorithm.__aggregate__(raw_markings,image_dimensions)
-        print "clustering images"
+        print("clustering images")
         image_aggregation = self.image_algorithm.__aggregate__(raw_markings,image_dimensions)
 
         cluster_aggregation = self.__merge_aggregations__(cluster_aggregation,image_aggregation)
@@ -222,14 +223,14 @@ class TranscriptionAPI(AggregationAPI):
             for c in atomic_text:
                 if ord(c) == 27:
                     # no agreement was reached
-                    print chr(8) + unicode(u"\u2224"),
+                    print(chr(8) + unicode(u"\u2224"),)
                 elif ord(c) == 28:
                     # the agreement was that nothing was here
                     # technically not a space but close enough
-                    print chr(8) + " ",
+                    print(chr(8) + " ",)
                 else:
-                    print chr(8) + c,
-            print
+                    print(chr(8) + c,)
+            print()
 
     def __readin_tasks__(self,workflow_id):
         if self.project_id == 245:
@@ -243,7 +244,7 @@ class TranscriptionAPI(AggregationAPI):
             marking_tasks = {"T2":["text"]}
             classification_tasks = {"T0":True,"T3":True}
 
-            print AggregationAPI.__readin_tasks__(self,workflow_id)
+            print(AggregationAPI.__readin_tasks__(self,workflow_id))
 
             return classification_tasks,marking_tasks,{}
         else:
@@ -262,7 +263,6 @@ class TranscriptionAPI(AggregationAPI):
         subjects_with_results = 0
 
         for ii,(subject_id,aggregation) in enumerate(cur.fetchall()):
-            print ii
             #
             if subject_id not in self.classification_alg.to_retire:
                 continue
@@ -375,7 +375,6 @@ class TranscriptionAPI(AggregationAPI):
         aws_tar = self.__get_aws_tar_name__()
 
         key = "panoptes-uploads.zooniverse.org/production/project_aggregations_export/"+aws_tar
-        print key
 
         s3.Object("zooniverse-static",key).put(Body=open("/tmp/"+aws_tar,"rb"))
 
@@ -462,13 +461,13 @@ class TranscriptionAPI(AggregationAPI):
             ReturnPath='greg@zooniverse.org'
         )
 
-        print response
+        print(response)
 
 if __name__ == "__main__":
     try:
         opts, args = getopt.getopt(sys.argv[1:],"shi:e:d:",["summary","project_id=","environment=","end_date="])
     except getopt.GetoptError:
-        print 'transcription.py -i <project_id> -e: <environment> -d: <end_date>'
+        warning('transcription.py -i <project_id> -e: <environment> -d: <end_date>')
         sys.exit(2)
 
     environment = "development"
@@ -494,4 +493,4 @@ if __name__ == "__main__":
         # # project.__aggregate__(subject_set = [671541,663067,664482,662859])
         processed_subjects = project.__aggregate__()
         project.__summarize__()
-        
+
