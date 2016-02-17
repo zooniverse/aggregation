@@ -363,11 +363,11 @@ class TranscriptionAPI(AggregationAPI):
             except KeyError:
                 pass
 
-        json.dump(new_json,open("/tmp/folger.json","wb"))
+        json.dump(new_json,open("/tmp/"+str(self.project_id)+".json","wb"))
 
         aws_tar = self.__get_aws_tar_name__()
         with tarfile.open("/tmp/"+aws_tar,mode="w") as t:
-            t.add("/tmp/folger.json")
+            t.add("/tmp/"+str(self.project_id)+".json")
 
     def __s3_upload__(self):
         s3 = boto3.resource('s3')
@@ -401,6 +401,16 @@ class TranscriptionAPI(AggregationAPI):
         return url
 
     def __summarize__(self,tar_path=None):
+        # start by updating the json output
+        self.__restructure_json__()
+
+        # and then upload the files to s3
+        self.__s3_upload__()
+
+        # and then get the url to send to people
+        url = self.__get_signed_url__()
+
+        # now get some stats to include in the email
         num_retired = self.classification_alg.num_retired
         non_blanks_retired = self.classification_alg.non_blanks_retired
         #
@@ -417,30 +427,9 @@ class TranscriptionAPI(AggregationAPI):
         # body += " A total of " + str(stats["retired lines"]) + " lines were retired. "
         # body += " The accuracy of these lines was " + "{:2.1f}".format(accuracy*100) + "% - defined as the percentage of characters where at least 3/4's of the users were in agreement."
 
-        bucket = ""
-        # if tar_path is not None:
-        #     bucket = "s3://zooniverse-static/panoptes-uploads.zooniverse.org/"+str(self.project_id)+"/"
-        #     s3 = boto3.resource('s3')
-        #     try:
-        #         s3.meta.client.head_bucket(Bucket=bucket)
-        #     except botocore.exceptions.ClientError as e:
-        #         # If a client error is thrown, then check that it was a 404 error.
-        #         # If it was a 404 error, then the bucket does not exist.
-        #         error_code = int(e.response['Error']['Code'])
-        #         if error_code == 404:
-        #             s3.create_bucket(Bucket=bucket,CreateBucketConfiguration={'LocationConstraint': 'us-west-1'})
-        #
-        #     object = s3.Object('mybucket', 'hello.txt')
-        #     object.put(Body=open('/tmp/hello.txt', 'rb'))
-        #
-        #     url = get_signed_url(604800, bucket, object)
-
-        return
-
-
-
         body += "\n Greg Hines \n Zooniverse \n \n PS This email was automatically generated."
 
+        # send out the email
         client = boto3.client('ses',region_name='us-east-1')
         response = client.send_email(
             Source='greg@zooniverse.org',
@@ -504,21 +493,5 @@ if __name__ == "__main__":
         # print "done migrating"
         # # project.__aggregate__(subject_set = [671541,663067,664482,662859])
         processed_subjects = project.__aggregate__()
-        # project.__summarize__()
-        project.__restructure_json__()
-        project.__s3_upload__()
-
-        print project.__get_signed_url__()
-
-        #
-        # if summary:
-        #     project.__add_metadata__()
-        #
-        #     tar_path = "/tmp/"+str(project_id)+".tar.gz"
-        #     t = tarfile.open(tar_path,mode="w:gz")
-        #     json.dump(project.overall_aggregation,open("/tmp/"+str(project_id)+".txt","wb"))
-        #     t.add("/tmp/"+str(project_id)+".txt")
-        #     t.close()
-        #
-        #     project.__summarize__(tar_path)
-        #     print "hello?"
+        project.__summarize__()
+        
