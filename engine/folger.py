@@ -3,7 +3,6 @@ import numpy as np
 import math
 import networkx
 from text_clustering import TextClustering
-
 __author__ = 'greg'
 
 
@@ -484,6 +483,9 @@ class FolgerClustering(TextClustering):
         note that overlaping is not transitive - if A overlaps B and B overlap C, it does not follow
         that A overlaps C. So we'll use some graph theory instead to search for
         """
+
+        if len(set(user_ids)) <= 2:
+            return [],2
 
         clusters = []
 
