@@ -370,7 +370,7 @@ class AggregationAPI:
         for s in self.__chunks__(subject_set,15):
             statements_and_params = []
 
-            if True:#self.ignore_versions:
+            if self.ignore_versions:
                 select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where subject_id = ? and workflow_id = ?")
             else:
                 select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where subject_id = ? and workflow_id = ? and workflow_version = ?")
@@ -1541,35 +1541,6 @@ class AggregationAPI:
     def __set_classification_alg__(self,alg,params={}):
         self.classification_alg = alg(self.environment,params)
         assert isinstance(self.classification_alg,classification.Classification)
-
-    # def __set_date_filters__(self,param_details):
-    #     # check to see when the last time we ran the aggregation engine for this project -
-    #     # if this query fails for whatever reason fall back to 2000,1,1
-    #     self.previous_runtime = datetime.datetime(2000,1,1)
-    #
-    #     try:
-    #         r = self.cassandra_session.execute("select classification from most_recent where project_id = " + str(self.project_id))
-    #         if r != []:
-    #             print "found date from previous aggregation"
-    #             self.previous_runtime = r[0].classification
-    #     except:
-    #         print "could not find most_recent classification - falling back on default"
-    #
-    #     # check if we there is a minimum date given in the aggregation yml file
-    #     # this is for when we know that there are problems with a certain range of classifications and want
-    #     # to exclude them - not going to happen often
-    #     if (self.project_id in param_details) and ("default_date" in param_details[self.project_id]):
-    #         time_string = param_details[self.project_id]["default_date"]
-    #         # don't know if this conversion is needed, but playing it safe
-    #         minimum_time = parser.parse(time_string)
-    #         self.previous_runtime = max(self.previous_runtime,minimum_time)
-    #
-    #     # use this one for figuring out the most recent classification read in
-    #     # we need to use as our runtime value, not the clock (since classifications could still be coming in
-    #     # if we used datetime.datetime.now() we might skip some classifications)
-    #     self.previous_runtime = datetime.datetime(2000,1,1)
-    #     self.new_runtime = datetime.datetime(2000,1,1)
-
 
     def __set_survey_alg__(self,alg,params={}):
         self.survey_alg = alg(self.environment,params)
