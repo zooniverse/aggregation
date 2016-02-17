@@ -188,10 +188,10 @@ class TranscriptionAPI(AggregationAPI):
             # image_dimensions can be used by some clustering approaches - ie. for blob clustering
             # to give area as percentage of the total image area
             raw_classifications,raw_markings,raw_surveys,image_dimensions = self.__sort_annotations__(workflow_id,subject_set,expert)
-
+            print(marking_tasks)
             # do we have any marking tasks?
-            if False:#marking_tasks != {}:
-                aggregations = self.__cluster2__(used_shapes,raw_markings,image_dimensions,raw_classifications)
+            if marking_tasks != {}:
+                aggregations = self.__cluster__(used_shapes,raw_markings,image_dimensions)
                 # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
 
             # we ALWAYS have to do classifications - even if we only have marking tasks, we need to do
@@ -204,8 +204,7 @@ class TranscriptionAPI(AggregationAPI):
 
     def __cluster2__(self,used_shapes,raw_markings,image_dimensions,raw_classifications):
         """
-        run the clustering algorithm for a given workflow
-        need to have already checked that the workflow requires clustering
+        for when I want to see raw classifications in addition to markings
         :param workflow_id:
         :return:
         """
