@@ -191,7 +191,7 @@ horizontal_pts = []
 
 for cnt in contour:
     x,y,w,h = cv2.boundingRect(cnt)
-    if w/h > 5:
+    if w/h > 2:
         shape = cnt.shape
         pts = cnt.reshape((shape[0],shape[2]))
         pts = pts.astype(np.float)
