@@ -268,7 +268,7 @@ class AggregationAPI:
 
         self.oldest_new_classification = datetime.datetime.now()
 
-    def __aggregate__(self,workflows=None,gold_standard_clusters=([],[]),expert=None):
+    def __aggregate__(self,gold_standard_clusters=([],[]),expert=None):
         """
         you can provide a list of clusters - hopefully examples of both true positives and false positives
         note this means you have already run the aggregation before and are just coming back with
@@ -286,14 +286,11 @@ class AggregationAPI:
         # this is actually just for projects like annotate and folger where we run aggregation on subjects that
         # have not be retired. If we want subjects that have been specifically retired, we'll make a separate call
         # for that
-        migrated_subjects = self.__migrate__()
+        for workflow_id,version in self.versions.items():
+            migrated_subjects = self.__migrate__(workflow_id,version)
 
-        # todo - set things up so that you don't have to redo all of the aggregations just to rerun ibcc
-        if workflows is None:
-            workflows = self.workflows
-
-        for workflow_id in workflows:
-            # if we want only newly retired subjects, make a special call
+            # the migrated_subject can contain classifications for subjects which are not yet retired
+            # so if we want only retired subjects, make a special call
             # otherwise, use the migrated list of subjects
             if self.only_retired_subjects:
                 subject_set = self.__get_newly_retired_subjects__(workflow_id)
@@ -322,6 +319,8 @@ class AggregationAPI:
             # to give area as percentage of the total image area
             raw_classifications,raw_markings,raw_surveys,image_dimensions = self.__sort_annotations__(workflow_id,subject_set,expert)
 
+            print raw_classifications,raw_markings,raw_surveys,image_dimensions
+
             if survey_tasks == {}:
                 # do we have any marking tasks?
                 if marking_tasks != {}:
@@ -334,7 +333,7 @@ class AggregationAPI:
                 aggregations = self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],aggregations)
             else:
                 print "classifying a survey"
-                if self.project_id == 376:
+                if self.project_id == 593:
                     # Wildcam Gorongosa is different - because why not?
                     survey_alg = survey_aggregation.WildcamGorongosaSurvey()
                 else:
@@ -364,17 +363,19 @@ class AggregationAPI:
         if subject_set is None:
             subject_set = self.__load_subjects__(workflow_id)
 
+        print "getting annotations via cassandra"
+
         # do this in bite sized pieces to avoid overwhelming DB
         for s in self.__chunks__(subject_set,15):
             statements_and_params = []
 
-            if self.ignore_versions:
+            if True:#self.ignore_versions:
                 select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where subject_id = ? and workflow_id = ?")
             else:
                 select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where subject_id = ? and workflow_id = ? and workflow_version = ?")
 
             for subject_id in s:
-                if self.ignore_versions:
+                if True:#self.ignore_versions:
                     params = (subject_id,int(workflow_id))
                 else:
                     params = (subject_id,int(workflow_id),version)
@@ -386,6 +387,8 @@ class AggregationAPI:
                 if not success:
                     print record_list
                 assert success
+
+                print record_list
 
                 # seem to have the occasional "retired" subject with no classifications, not sure
                 # why this is possible but if it can happen, just make a note of the subject id and skip
@@ -565,6 +568,7 @@ class AggregationAPI:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
+        # todo - move this over annotate/folger
         # only report to rollbar if we are not in development
         if (exc_type is not None) and self.report_roll and (self.environment != "development"):
             # load in the yml file - again - this time to get the rollbar token
@@ -1009,15 +1013,6 @@ class AggregationAPI:
         get the id of the most recent classification that was processed
         :return:
         """
-        try:
-            # if the table doesn't already exist, return 0, i.e. start over again
-            recent_table = "CREATE TABLE most_recent (project_id int, classification_id int, PRIMARY KEY(project_id))"
-            self.cassandra_session.execute(recent_table)
-            print "most_recent table did not already exist"
-            return 0
-        except cassandra.AlreadyExists:
-            print "most_recent table already exists"
-
         results = self.cassandra_session.execute("SELECT classification_id from most_recent where project_id = " + str(self.project_id))
 
         if results == []:
@@ -1025,25 +1020,8 @@ class AggregationAPI:
         else:
             return results[0]
 
-    def __migrate__(self):
-        """
-        move data from postgres to cassandra
-        :return:
-        """
-        # no need to migrate if we are using csv input files
-        if self.csv_classification_file is not None:
-            return
-
-        # uncomment this code if this is the first time you've run migration on whatever machine
-        # will create the necessary cassandra tables for you - also useful if you need to reset
-        try:
-            self.cassandra_session.execute("drop table classifications")
-            self.cassandra_session.execute("drop table most_recent")
-            print "tables dropped"
-        except cassandra.InvalidRequest:
-            pass
-
-        # for cassandra
+    def __reset_cassandra_dbs__(self):
+        # start by specifying the needed columns for cassandra
         # metadata is needed to possibly get image dimensions which are used to make sure that a marking is valid
         # and not off the screen (problem sometimes with smart phones etc.)
         columns = "id int, user_id int, workflow_id int, created_at timestamp,annotations text, user_ip inet, gold_standard boolean, subject_id int, workflow_version int,metadata text"
@@ -1054,12 +1032,31 @@ class AggregationAPI:
         primary_key = "workflow_id,subject_id,workflow_version,user_id,user_ip"
         ordering = "subject_id ASC,workflow_version ASC"
 
-        # we only want to run aggregation on subjects that have had new annotations since we last ran aggregation
-        # we store the "timestamp" of the last aggregation run by the
         try:
-            self.cassandra_session.execute("CREATE TABLE classifications(" + columns + ", PRIMARY KEY( " + primary_key + ")) WITH CLUSTERING ORDER BY ( " + ordering + ");")
-        except cassandra.AlreadyExists:
-            print "classification table already exists"
+            self.cassandra_session.execute("drop table classifications")
+            print "classification table dropped"
+        except cassandra.InvalidRequest:
+            print "classification table did not already exist"
+
+        self.cassandra_session.execute("CREATE TABLE classifications(" + columns + ", PRIMARY KEY( " + primary_key + ")) WITH CLUSTERING ORDER BY ( " + ordering + ");")
+
+        try:
+            self.cassandra_session.execute("drop table most_recent")
+            print "most_recent table dropped"
+        except cassandra.InvalidRequest:
+            print "most_recent table did not already exist"
+
+        recent_table = "CREATE TABLE most_recent (project_id int, classification_id int, PRIMARY KEY(project_id))"
+        self.cassandra_session.execute(recent_table)
+
+    def __migrate__(self,workflow_id,version):
+        """
+        move data from postgres to cassandra
+        :return:
+        """
+        # no need to migrate if we are using csv input files
+        if self.csv_classification_file is not None:
+            return
 
         # what is the most recent classification we read in
         most_recent = self.__get_most_recent__()
@@ -1067,10 +1064,11 @@ class AggregationAPI:
         subject_listing = set()
 
         # some useful postgres bits of code
-        postgres_constraint = "classification_subjects.classification_id = classifications.id where project_id="+str(self.project_id)# + " and id > " + str(most_recent)
-        postgres_table = "classifications INNER JOIN classification_subjects"
+        postgres_constraint = "where workflow_id="+str(workflow_id) + " and workflow_version like '" + str(version) + "%'"
+        postgres_table = "classifications INNER JOIN classification_subjects on classification_subjects.classification_id = classifications.id"
 
         # how many classifications are we going to migrate
+        # todo - can take a while to calculate and only useful for development leaving off for now,
         cur = self.postgres_session.cursor()
         # select = "SELECT count(*) from " + postgres_table + " ON  " + postgres_constraint
         # cur.execute(select)
@@ -1079,10 +1077,11 @@ class AggregationAPI:
 
         # what do we want from the classifications table?
         postgres_columns = "id,user_id,workflow_id,annotations,created_at,user_ip,gold_standard,workflow_version, classification_subjects.subject_id,metadata"
-        postgres_ordering = " order by id limit 12000"
-        select = "SELECT " + postgres_columns + " from " + postgres_table + " ON " + postgres_constraint
+        select = "SELECT " + postgres_columns + " from " + postgres_table + " " + postgres_constraint
+
+        # if we are in development - we don't need all the classifications, so make life simple and just get some
         if self.environment == "development":
-            select += postgres_ordering
+            select += " order by id limit 12000"
 
         # actually get the classifications
         print "about to get all the relevant classifications"
@@ -1734,6 +1733,7 @@ class AggregationAPI:
         image_dimensions = {}
 
         for subject_id,user_id,annotation,dimensions in annotation_generator(workflow_id,subject_set):
+            print subject_id
             if user_id == expert:
                 continue
 
