@@ -1,9 +1,11 @@
+from __future__ import print_function
 import re
 import clustering
 import unicodedata
 import random
 import os
 import tempfile
+from helper_functions import warning
 
 __author__ = 'ggdhines'
 
@@ -82,8 +84,8 @@ class TextClustering(clustering.Cluster):
                 try:
                     in_file.write(">\n"+line+"\n")
                 except UnicodeEncodeError:
-                    print line
-                    print unicodedata.normalize('NFKD', line).encode('ascii','ignore')
+                    warning(line)
+                    warning(unicodedata.normalize('NFKD', line).encode('ascii','ignore'))
                     raise
             in_file.flush()
 
@@ -103,7 +105,7 @@ class TextClustering(clustering.Cluster):
                     cumulative_line += line[:-1]
 
             if cumulative_line == "":
-                print lines
+                warning(lines)
                 assert False
             aligned_text.append(cumulative_line)
 
@@ -121,7 +123,11 @@ class TextClustering(clustering.Cluster):
 
     def __set_tags__(self,text):
         # convert to ascii
-        text = text.encode('ascii','ignore')
+        try:
+            text = text.encode('ascii','ignore')
+        except AttributeError:
+            warning(text)
+            raise
 
         # good place to check if there is a newline character in the transcription
         # if so, someone tried to transcribe multiple lines at once - this is no longer allowed
