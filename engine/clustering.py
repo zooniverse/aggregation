@@ -1,10 +1,8 @@
-__author__ = 'greg'
+from __future__ import print_function
 import bisect
 import abc
-import matplotlib.pyplot as plt
 
-
-
+__author__ = 'greg'
 
 def index(a, x):
     'Locate the leftmost value exactly equal to x'
@@ -30,7 +28,7 @@ def chunk_it(seq, num):
 
 # mappings are for use in dimension reduction
 def identity_mapping(markings):
-    print "identiy mapping"
+    print("identiy mapping")
     return markings
 
 
@@ -74,7 +72,7 @@ class Cluster:
 
         return (cluster_centers , markings_per_cluster, users_per_cluster), time_to_cluster
 
-    def __aggregate__(self,raw_markings,image_dimensions):
+    def __aggregate__(self,raw_markings,image_dimensions,raw_classifications=None):
         """
         the function to call from outside to do the clustering
         override but call if you want to add additional functionality
@@ -88,7 +86,7 @@ class Cluster:
         # all_markings =  self.project_api.__get_markings__(subject_id,gold_standard)
         # print all_markings
         # self.clusterResults[subject_id] = {"param":"task_id"}
-        print "clustering " + self.shape
+        print("clustering " + self.shape)
         for task_id in raw_markings:
             # go through each marking tool - multiple tools may use the desired shape tool
             # so pay attention to only those markings
@@ -97,8 +95,7 @@ class Cluster:
                     continue
 
                 for subject_count,subject_id in list(enumerate(raw_markings[task_id][shape])):
-
-                    print subject_count,subject_id
+                    print(subject_count,subject_id)
                     assert raw_markings[task_id][shape][subject_id] != []
 
 
