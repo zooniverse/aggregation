@@ -1,10 +1,12 @@
 __author__ = 'ggdhines'
+import matplotlib
+matplotlib.use('WXAgg')
 import aggregation_api
 from matplotlib import pyplot as plt
 import matplotlib.cbook as cbook
 
-project = aggregation_api.AggregationAPI(project = 195, environment="staging",cassandra_connection=False)
-
+project = aggregation_api.AggregationAPI(project_id = 195, environment="staging")
+project.__setup__()
 cursor = project.postgres_session.cursor()
 # stmt = "select name from projects "
 # cursor.execute(stmt)
