@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from __future__ import print_function
 import numpy as np
 from sklearn.decomposition import PCA
 from scipy.cluster import hierarchy
@@ -61,6 +62,7 @@ class AnnotateClustering(TextClustering):
         TextClustering.__init__(self,shape,project,param_dict)
 
     def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,subject_id):
+        print(len(markings))
         unique_users = set(user_ids)
         if len(unique_users) <= 2:
             return [],0
@@ -75,14 +77,14 @@ class AnnotateClustering(TextClustering):
         # also check that we still have least 3 unique users after removing any problem transcriptions
         unique_users = set()
         for i,id_ in enumerate(user_ids):
-            text = markings[i][-1]
+            text = markings[i][4]
             # check to see if the text is empty
             # - either actually an empty transcription - not sure how likely that is, but better safe than sorry
             # - contains \n, in which case __set_special_characters__ returns ""
             # - is just some font tag stuff which is just ignored
             if self.__set_tags__(text) != "":
                 cluster_tree.append([(id_,i),])
-                pts.append(markings[i][:-1])
+                pts.append(markings[i][:4])
                 unique_users.add(id_)
 
         if len(unique_users) <= 2:
@@ -91,7 +93,7 @@ class AnnotateClustering(TextClustering):
         # todo - play around with n_components, if e_v_r is than 0.95, maybe increase to 3?
         pca = PCA(n_components=2)
         pca.fit(pts)
-        print "explained variance is " + str(sum(pca.explained_variance_ratio_))
+        print("explained variance is " + str(sum(pca.explained_variance_ratio_)))
         xy = pca.transform(pts)
 
         # do agglomerative clustering - right now based on ward distance
@@ -142,7 +144,7 @@ class AnnotateClustering(TextClustering):
             else:
                 clusters_retval.append(next_cluster)
 
-        print "lines retired: " + str(len(clusters_retval))
+        print("lines retired: " + str(len(clusters_retval)))
         return clusters_retval,0
 
     def __additional_clustering__(self,markings):
@@ -156,7 +158,7 @@ class AnnotateClustering(TextClustering):
         """
         # look for lines that have a really different angle
         # the ordering of the line coordinates is different for the hesse line reduction
-        x1,x2,y1,y2,_ = zip(*markings)
+        x1,x2,y1,y2,_,_ = zip(*markings)
         hesse_lines = helper_functions.hesse_line_reduction(zip(x1,y1,x2,y2))
 
         intercepts,angles = zip(*hesse_lines)
@@ -208,8 +210,8 @@ class AnnotateClustering(TextClustering):
         given a list of markings in a single cluster, actually create that cluster
         i.e. aggregate the text, and create the cluster variable and add all the necessary info
         """
-
-        x1_values,x2_values,y1_values,y2_values,transcriptions = zip(*markings_in_cluster)
+        # folger gives a variant listing which is the last element in the zip(*) command - irrelevant for annotate
+        x1_values,x2_values,y1_values,y2_values,transcriptions,_ = zip(*markings_in_cluster)
 
         # first replace every tag (multi characters) with a single character token
         transcriptions = [self.__set_tags__(t) for t in transcriptions]
