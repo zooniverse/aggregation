@@ -1081,7 +1081,7 @@ class AggregationAPI:
         postgres_columns = "id,user_id,workflow_id,annotations,created_at,user_ip,gold_standard,workflow_version, classification_subjects.subject_id,metadata"
         postgres_ordering = " order by id limit 12000"
         select = "SELECT " + postgres_columns + " from " + postgres_table + " ON " + postgres_constraint
-        if self.environment == "production":
+        if self.environment == "development":
             select += postgres_ordering
 
         # actually get the classifications
