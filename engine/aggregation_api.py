@@ -376,7 +376,7 @@ class AggregationAPI:
                 select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where subject_id = ? and workflow_id = ? and workflow_version = ?")
 
             for subject_id in s:
-                if True:#self.ignore_versions:
+                if self.ignore_versions:
                     params = (subject_id,int(workflow_id))
                 else:
                     params = (subject_id,int(workflow_id),version)
