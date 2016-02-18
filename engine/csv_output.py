@@ -25,7 +25,6 @@ class CsvOut:
         print("workflows are " + str(self.workflows))
 
         self.__yield_aggregations__ = project.__yield_aggregations__
-        self.__count_check__ = project.__count_check__
         self.retirement_thresholds = project.retirement_thresholds
         self.versions = project.versions
 
