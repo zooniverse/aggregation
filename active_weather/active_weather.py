@@ -3,9 +3,9 @@ import cv2
 import numpy as np
 import glob
 import matplotlib
-matplotlib.use('WXAgg')
-import matplotlib.pyplot as plt
-
+# matplotlib.use('WXAgg')
+# import matplotlib.pyplot as plt
+import database_connection
 import extract_digits
 from scipy import stats
 import tesseract_font
@@ -20,10 +20,13 @@ refer_shape = reference_image.shape
 
 classifier = tesseract_font.ActiveTess()
 
+cass_db = database_connection.Database()
 
 class ActiveWeather:
     def __init__(self):
         self.horizontal_grid,self.vertical_grid = self.__get_grid__()
+
+        self.region = 0
 
     def __get_lines__(self,horizontal):
         # todo - swap
@@ -206,12 +209,27 @@ class ActiveWeather:
             return res
 
     def __process_image__(self,fname):
+        subject_id = fname.split("/")[-1][:-4]
+
         image = cv2.imread(fname,0)
 
         approximate_image = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,151,0)
 
+        count = 0
+
         for h_index in range(len(self.horizontal_grid)-1):
+            if count == 5:
+                break
             for v_index in range(len(self.vertical_grid)-1):
+
+                # count += 1
+                if count == 5:
+                    break
+
+                if cass_db.__has_cell_been_transcribed__(subject_id,self.region,v_index,h_index):
+                    print "skipping"
+                    continue
+
                 # start by just checking if that cell is empty or not
                 cell = self.__extract_cell__(approximate_image,h_index,v_index)
 
@@ -245,10 +263,15 @@ class ActiveWeather:
                     print cell_list
                     print len(digits)
                     if len(cell_list) == len(digits):
-                        print "adding learning cases"
-                        classifier.__add_characters__(cell_list,digits,minimum_y)
+                        # print "adding learning cases"
+                        for index in range(len(cell_list)):
+                            top_of_row = min(minimum_y)
+                            offset = minimum_y[index] - top_of_row
+                            cass_db.__add_transcription__(subject_id,self.region,v_index,h_index,index,cell_string[index],digits[index],offset)
+                        # print "done adding"
 
-                        classifier.__update_tesseract__()
+                        # classifier.__add_characters__(cell_list,digits,minimum_y)
+                        # classifier.__update_tesseract__()
 
 project = ActiveWeather()
 project.__process_image__("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0720.JPG")
