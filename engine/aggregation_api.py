@@ -1070,7 +1070,7 @@ class AggregationAPI:
 
         # if we are in development - we don't need all the classifications, so make life simple and just get some
         if self.environment == "development":
-            select += " order by id limit 120000"
+            select += " order by id limit 12000"
 
         # actually get the classifications
         print("about to get all the relevant classifications")
@@ -1871,13 +1871,12 @@ class AggregationAPI:
             postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
         self.postgres_writeable_session.commit()
 
-    def __yield_aggregations__(self,workflow_id,subject_id=None):
+    def __yield_aggregations__(self,workflow_id,subject_set=None):
         """
         generator for giving aggregation results per subject id/task
         """
         stmt = "select subject_id,aggregation,updated_at from aggregations where workflow_id = " + str(workflow_id)
-        if subject_id != None:
-            stmt += " and subject_id = " + str(subject_id)
+
         cursor = self.postgres_session.cursor()
 
         cursor.execute(stmt)
@@ -1885,6 +1884,12 @@ class AggregationAPI:
 
         for r in cursor.fetchall():
             aggregation = r[1]
+            subject_id = r[0]
+
+            # not efficient but will only really matter in development environment
+            # todo but could probably be made more efficient
+            if (subject_set is not None) and (subject_id not in subject_set):
+                continue
 
             if isinstance(aggregation,str):
                 aggregation = json.loads(aggregation)
