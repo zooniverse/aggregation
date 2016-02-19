@@ -19,8 +19,7 @@ import math
 import sys
 import agglomerative
 import blob_clustering
-from os.path import expanduser
-import csv_output
+import gorongosa_aggregation
 import time
 import survey_aggregation
 from dateutil import parser
@@ -29,7 +28,7 @@ import cassandra
 from cassandra.cluster import Cluster
 from cassandra.concurrent import execute_concurrent
 import psycopg2
-import rollbar
+import csv_output
 import helper_functions
 from helper_functions import warning
 
@@ -301,7 +300,7 @@ class AggregationAPI:
             if self.only_retired_subjects:
                 subject_set = self.__get_newly_retired_subjects__(workflow_id)
             else:
-                subject_set = list(migrated_subjects[workflow_id])
+                subject_set = migrated_subjects
 
             if subject_set == []:
                 print("skipping workflow " + str(workflow_id) + " due to an empty subject set")
@@ -339,7 +338,7 @@ class AggregationAPI:
                 print("classifying a survey")
                 if self.project_id == 593:
                     # Wildcam Gorongosa is different - because why not?
-                    survey_alg = survey_aggregation.WildcamGorongosaSurvey()
+                    survey_alg = gorongosa_aggregation.Survey()
                 else:
                     survey_alg = survey_aggregation.Survey()
                 aggregations = survey_alg.__aggregate__(raw_surveys)
@@ -1083,7 +1082,7 @@ class AggregationAPI:
 
         statements_and_params = []
 
-        subjects_migrated = dict()
+        subjects_migrated = set()
 
         subject_count = {}
 
@@ -1095,10 +1094,7 @@ class AggregationAPI:
             id_,user_id,workflow_id,annotations,created_at,user_ip,gold_standard,workflow_version,subject_id,metadata = t
 
             # store migrated subjects by workflow_id
-            if workflow_id not in subjects_migrated:
-                subjects_migrated[workflow_id] = {subject_id}
-            else:
-                subjects_migrated[workflow_id].add(subject_id)
+            subjects_migrated.add(subject_id)
 
             self.oldest_new_classification = min(self.oldest_new_classification,created_at)
 
@@ -1146,7 +1142,7 @@ class AggregationAPI:
             # print results
 
 
-        return subjects_migrated
+        return list(subjects_migrated)
 
     def __panoptes_call__(self,query):
         """
@@ -1876,11 +1872,19 @@ class AggregationAPI:
         generator for giving aggregation results per subject id/task
         """
         stmt = "select subject_id,aggregation,updated_at from aggregations where workflow_id = " + str(workflow_id)
+        # stmt = base_stmt
+
+        # if subject_set is not None:
+        #     counter = 0
+        #     subject_set = list(subject_set)
+        #     stmt = base_stmt + " and subject_id = " + str(subject_set[counter])
+        # else:
+        #     counter = None
 
         cursor = self.postgres_session.cursor()
 
         cursor.execute(stmt)
-        self.postgres_session.commit()
+
 
         for r in cursor.fetchall():
             aggregation = r[1]
@@ -1899,6 +1903,14 @@ class AggregationAPI:
 
             yield r[0],aggregation
 
+            # if subject_set is not None:
+            #     counter += 1
+            #     print((counter,len(subject_set)))
+            #     if counter == len(subject_set):
+            #         raise StopIteration()
+            #
+            #     stmt = base_stmt + " and subject_id = " + str(subject_set[counter])
+            #     cursor.execute(stmt)
 
         raise StopIteration()
 

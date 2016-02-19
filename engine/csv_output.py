@@ -387,6 +387,7 @@ class CsvOut:
 
         for task_id in survey_tasks:
             # print aggregations
+            print("survey!!")
             self.__survey_row__(workflow_id,task_id,subject_id,aggregations)
 
     def __survey_header_setup__(self,output_directory,task_id,instructions):
@@ -443,46 +444,121 @@ class CsvOut:
         :return:
         """
 
+        # on average, how many species did people see?
+        # note - nothing here (or empty or what ever) counts as a species - we just won't give any follow up
+        # answer responses
+        num_species = int(np.median(aggregations["num species"]))
+        assert(num_species >= 1)
+        # sort the species by the number of votes
+        species_by_vote = []
         for species_id in aggregations:
-            if species_id == "num_users":
+            if species_id not in ["num users","num species"]:
+                species_by_vote.append((species_id,aggregations[species_id]["num votes"]))
+        sorted_species = sorted(species_by_vote,key = lambda x:x[1],reverse=True)
+
+        views_of_subject = aggregations["num users"]
+
+        # only go through the top X species - where X is the median number of species seen
+        for species_id,_ in sorted_species[:num_species+1]:
+            if species_id == "num users":
                 continue
 
+            # how many people voted for this species?
+            num_votes = aggregations[species_id]["num votes"]
+            percentage = num_votes/float(views_of_subject)
+
+            # extract the species name - just to be sure, make sure that the label is "csv safe"
             species_label = helper_functions.csv_string(self.instructions[workflow_id][task_id]["species"][species_id])
-            row = str(subject_id) + "," + str(aggregations["num_users"]) + "," + helper_functions.csv_string(species_label)
+            row = str(subject_id) + "," + species_label + "," + str(percentage)
+
+            # if there is nothing here - there are no follow up questions so just move on
+            # same with FR - fire
+            if species_id in ["NTHNGHR","FR"]:
+                break
+
+            # do the how many question first
+            followup_id = "HWMN"
+            followup_question = self.instructions[workflow_id][task_id]["questions"][followup_id]
+            votes = aggregations[species_id]["followup"][followup_id].items()
+            # sort by num voters
+            sorted_votes = sorted(votes,key = lambda x:x[1],reverse=True)
+            candidates,vote_counts = zip(*sorted_votes)
+            candidates = list(candidates)
+
+            # top candidate is the most common response to the question of how many animals there are in the subject
+            top_candidate = followup_question["answers"][candidates[0]]["label"]
+            percentage = vote_counts[0]/float(sum(vote_counts))
+
+            # what is the minimum/maximum number of animals of this species that people said were in the subject?
+            answer_order = followup_question["answersOrder"]
+            # resort by position in answer order
+            candidates.sort(key = lambda x:answer_order.index(x))
+            minimum_species = followup_question["answers"][candidates[0]]["label"]
+            maximum_species = followup_question["answers"][candidates[-1]]["label"]
+
+            row += "," + str(minimum_species) + "," + str(top_candidate) + "," + str(percentage) + "," + str(maximum_species)
+
+            percent = vote_counts[0]/float(sum(vote_counts))
 
             for followup_id in self.instructions[workflow_id][task_id]["questionsOrder"]:
                 followup_question = self.instructions[workflow_id][task_id]["questions"][followup_id]
 
-                # not every question is going to be asked of every species
-                if followup_id not in aggregations[species_id]:
-                    continue
-
-                if followup_question["multiple"]:
-                    votes = aggregations[species_id][followup_id]
-                    total_votes = sum(votes.values())
-                    for answer_id in self.instructions[workflow_id][task_id]["questions"][followup_id]["answersOrder"]:
-                        if answer_id in votes:
-                            row += "," + str(votes[answer_id]/float(total_votes))
-                        else:
-                            row += ",0"
+                if followup_question["label"] == "How many?":
+                    # this gets dealt with separately
+                    pass
                 else:
-                    votes = aggregations[species_id][followup_id].items()
-                    top_candidate,num_votes = sorted(votes,key = lambda x:x[1])[0]
-                    percent = num_votes/float(sum(aggregations[species_id][followup_id].values()))
-                    if followup_question["label"] == "How many?":
-                        # what is the maximum answer given - because of bucket ranges (e.g. 10+ or 10 to 15)
-                        # we can't just convert the bucket labels into numerical values
-                        # first map from labels to indices
-                        votes_indices = [followup_question["answersOrder"].index(v) for (v,c) in votes]
-                        maximum_species = followup_question["answersOrder"][max(votes_indices)]
-                        minimum_species = followup_question["answersOrder"][min(votes_indices)]
-
-                        row += "," + minimum_species + ","+str(top_candidate)+","+str(percent)+","+maximum_species
+                    if followup_id not in aggregations[species_id]["followup"]:
+                        for answer_id in self.instructions[workflow_id][task_id]["questions"][followup_id]["answersOrder"]:
+                            row += ","
                     else:
-                        # for any other follow up question (without just one answer) just give the most likely
-                        # answer and the percentage
-                        label = followup_question["answers"][top_candidate]["label"]
-                        row += "," + label + "," + str(percent)
+                        votes = aggregations[species_id]["followup"][followup_id]
+
+                        for answer_id in self.instructions[workflow_id][task_id]["questions"][followup_id]["answersOrder"]:
+                            if answer_id in votes:
+                                row += "," + str(votes[answer_id]/float(num_votes))
+                            else:
+                                row += ",0"
+
+                    # for answer in self.instructions[workflow_id][task_id]["questions"]
+
+                # # not every question is going to be asked of every species
+                # if followup_id not in aggregations[species_id]["followup"]:
+                #     continue
+                #
+                #
+                #
+                # if followup_question["multiple"]:
+                #     votes = aggregations[species_id][followup_id]
+                #     total_votes = sum(votes.values())
+                #     for answer_id in self.instructions[workflow_id][task_id]["questions"][followup_id]["answersOrder"]:
+                #         if answer_id in votes:
+                #             row += "," + str(votes[answer_id]/float(total_votes))
+                #         else:
+                #             row += ",0"
+                # else:
+                #     # if only one answer is allowed - choose the top one
+                #     votes = aggregations[species_id]["followup"][followup_id].items()
+                #     # list answer in decreasing order
+                #     sorted_votes = sorted(votes,key = lambda x:x[1],reverse=True)
+                #     candidates,vote_counts = zip(*sorted_votes)
+                #
+                #     top_candidate = candidates[0]
+                #
+                #     percent = vote_counts[0]/float(sum(vote_counts))
+                #     if followup_question["label"] == "How many?":
+                #         # what is the maximum answer given - because of bucket ranges (e.g. 10+ or 10 to 15)
+                #         # we can't just convert the bucket labels into numerical values
+                #         # first map from labels to indices
+                #         votes_indices = [followup_question["answersOrder"].index(v) for (v,c) in votes]
+                #         maximum_species = followup_question["answersOrder"][max(votes_indices)]
+                #         minimum_species = followup_question["answersOrder"][min(votes_indices)]
+                #
+                #         row += "," + minimum_species + ","+str(top_candidate)+","+str(percent)+","+maximum_species
+                #     else:
+                #         # for any other follow up question (without just one answer) just give the most likely
+                #         # answer and the percentage
+                #         label = followup_question["answers"][top_candidate]["label"]
+                #         row += "," + label + "," + str(percent)
 
             self.csv_files[task_id].write(row+"\n")
 
@@ -520,7 +596,7 @@ class CsvOut:
         the workflows are specified by self.workflows which is determined when the aggregation engine starts
         a zipped file is created in the end
         """
-        assert (subject_set is None) or isinstance(subject_set,int)
+        assert (subject_set is None) or isinstance(subject_set,set)
 
         project_prefix = str(self.project_id)
 
@@ -544,6 +620,7 @@ class CsvOut:
             # results are going to be ordered by subject id (because that's how the results are stored)
             # so we can going to be cycling through task_ids. That's why we can't loop through classification_tasks etc.
             for subject_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
+                print((subject_id,aggregations))
                 self.__subject_output__(workflow_id,subject_id,aggregations)
 
         for f in self.csv_files.values():

@@ -1,7 +1,6 @@
-import numpy as np
+from __future__ import print_function
 
-
-class WildcamGorongosaSurvey:
+class Survey:
     def __init__(self):
         pass
 
@@ -12,58 +11,50 @@ class WildcamGorongosaSurvey:
 
         aggregated_results = {}
 
-        # go through each subject
         for subject_id in raw_classifications[task_id]:
-            aggregated_results[subject_id] = {}
 
             users_and_annotations = raw_classifications[task_id][subject_id]
             users,annotations = zip(*users_and_annotations)
 
-            aggregated_results[subject_id]["num_users"] = len(users)
+            # is this the first time we've dealt with this particular subject?
+            if subject_id not in aggregated_results:
+                subject_results = {"num users":len(users),"num species":[]}
+            else:
+                subject_results = aggregated_results[subject_id]
 
-            num_species_per_user = [len(ann) for ann in annotations]
-            num_species = int(np.median(num_species_per_user))
+            # how many species did this person see in this subject?
+            num_species = len(annotations)
+            subject_results["num species"].append(num_species)
 
-            species_vote = {}
-
-            # annotations is the list of all annotations made by all users who have this subject
             for ann in annotations:
                 species = ann["choice"]
 
-                if species not in species_vote:
-                    species_vote[species] = 1
+                # is the first classification we've encountered for this species?
+                if species not in subject_results:
+                    subject_results[species] = {"num votes": 1,"followup":{}}
+
                 else:
-                    species_vote[species] += 1
+                    subject_results[species]["num votes"] += 1
 
-            # what are the most likely species?
-            sorted_species = sorted(species_vote.items(),key = lambda x:x[1],reverse=True)
-            top_votes = sorted_species[:num_species]
-            if top_votes == []:
-                continue
-            top_species,count = zip(*top_votes)
+                for question,answer in ann["answers"].items():
+                    if question not in subject_results[species]["followup"]:
+                        subject_results[species]["followup"][question] = {}
 
-            for species in top_species:
-                followup_answers = {}
-                for ann in annotations:
-                    if ann["choice"] == species:
-
-                        for question,answer in ann["answers"].items():
-
-                            if question not in followup_answers:
-                                followup_answers[question] = {}
-
-                            if isinstance(answer,list):
-                                for ans in answer:
-                                    if ans not in followup_answers[question]:
-                                        followup_answers[question][ans] = 1
-                                    else:
-                                        followup_answers[question][ans] += 1
+                    if isinstance(answer,list):
+                        for ans in answer:
+                            if ans not in subject_results[species]["followup"]:
+                                subject_results[species]["followup"][question][ans] = 1
                             else:
-                                if answer not in followup_answers[question]:
-                                    followup_answers[question][answer] = 1
-                                else:
-                                    followup_answers[question][answer] += 1
+                                subject_results[species]["followup"][question][ans] += 1
+                    else:
+                        if answer not in subject_results[species]["followup"]:
+                            subject_results[species]["followup"][question][answer] = 1
+                        else:
+                            subject_results[species]["followup"][question][answer] += 1
 
-                aggregated_results[subject_id][species] = followup_answers
+                if species not in ["NTHNGHR","FR"]:
+                    assert "HWMN" in subject_results[species]["followup"]
+
+            aggregated_results[subject_id] = subject_results
 
         return aggregated_results
