@@ -283,6 +283,7 @@ class AggregationAPI:
         :param gold_standard_clusters:
         :return:
         """
+        aggregated_subjects = set()
         # start by migrating any new classifications (since previous run) from postgres into cassandra
         # this will also give us a list of the migrated subjects, which is the list of subjects we want to run
         # aggregation on (if a subject has no new classifications, why bother rerunning aggregation)
@@ -291,6 +292,8 @@ class AggregationAPI:
         # for that
         for workflow_id,version in self.versions.items():
             migrated_subjects = self.__migrate__(workflow_id,version)
+
+            aggregated_subjects.update(migrated_subjects)
 
             # the migrated_subject can contain classifications for subjects which are not yet retired
             # so if we want only retired subjects, make a special call
@@ -344,8 +347,10 @@ class AggregationAPI:
             # finally, store the results
             self.__upsert_results__(workflow_id,aggregations)
 
-        return migrated_subjects
-
+        if self.environment == "development":
+            return aggregated_subjects
+        else:
+            return None
     def __cassandra_annotations__(self,workflow_id,subject_set):
         """
         use inner function so param can be set
@@ -1065,7 +1070,7 @@ class AggregationAPI:
 
         # if we are in development - we don't need all the classifications, so make life simple and just get some
         if self.environment == "development":
-            select += " order by id limit 12000"
+            select += " order by id limit 120000"
 
         # actually get the classifications
         print("about to get all the relevant classifications")
@@ -1904,7 +1909,7 @@ if __name__ == "__main__":
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
         project.__setup__()
 
-        project.__aggregate__()
+        aggregated_subjects = project.__aggregate__()
 
         with csv_output.CsvOut(project) as c:
-            c.__write_out__()
+            c.__write_out__(subject_set=aggregated_subjects)
