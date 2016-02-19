@@ -1054,10 +1054,10 @@ class AggregationAPI:
         # how many classifications are we going to migrate
         # todo - can take a while to calculate and only useful for development leaving off for now,
         cur = self.postgres_session.cursor()
-        select = "SELECT count(*) from " + postgres_table + " " + postgres_constraint
-        cur.execute(select)
-        num_migrated = cur.fetchone()[0]
-        print("going to migrate " + str(num_migrated) + " classifications")
+        # select = "SELECT count(*) from " + postgres_table + " " + postgres_constraint
+        # cur.execute(select)
+        # num_migrated = cur.fetchone()[0]
+        # print("going to migrate " + str(num_migrated) + " classifications")
 
         # what do we want from the classifications table?
         postgres_columns = "id,user_id,workflow_id,annotations,created_at,user_ip,gold_standard,workflow_version, classification_subjects.subject_id,metadata"
@@ -1870,7 +1870,6 @@ class AggregationAPI:
         """
         generator for giving aggregation results per subject id/task
         """
-        assert False
         stmt = "select subject_id,aggregation,updated_at from aggregations where workflow_id = " + str(workflow_id)
         if subject_id != None:
             stmt += " and subject_id = " + str(subject_id)
