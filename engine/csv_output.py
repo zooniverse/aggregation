@@ -520,7 +520,7 @@ class CsvOut:
                 species_by_vote.append((species_id,aggregations[species_id]["num votes"]))
         sorted_species = sorted(species_by_vote,key = lambda x:x[1],reverse=True)
 
-        return sorted_species[:num_species+1]
+        return sorted_species[:num_species]
 
 
     def __survey_row__(self,instructions,aggregations):

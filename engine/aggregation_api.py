@@ -1476,7 +1476,6 @@ class AggregationAPI:
         classification_tasks = {}
         # which have drawings associated with them
         marking_tasks = {}
-        survey_tasks = []
 
         survey_tasks = {}
 
@@ -1688,6 +1687,7 @@ class AggregationAPI:
 
         image_dimensions = {}
 
+        # annotation is a string which we will have to load into json format
         for subject_id,user_id,annotation,dimensions in annotation_generator(workflow_id,subject_set):
             if user_id == expert:
                 continue
@@ -1722,7 +1722,6 @@ class AggregationAPI:
                 if self.project_id in self.survey_projects:
                     task_id = survey_tasks.keys()[0]
 
-
                 # is this a marking task?
                 if task_id in marking_tasks:
                     # skip over any improperly formed annotations - due to browser problems etc.
@@ -1730,6 +1729,8 @@ class AggregationAPI:
                         print("not properly formed marking - skipping")
                         continue
 
+                    # a marking task will have follow up classification tasks - even if none are explicitly asked
+                    # i.e. existence, or how many users clicked on a given "area"
                     raw_markings,raw_classifications = self.__add_markings_annotations__(subject_id,workflow_id,task_id,user_id,task["value"],raw_markings,raw_classifications,marking_tasks,classification_tasks,dimensions)
 
                 # we a have a pure classification task
@@ -1746,9 +1747,17 @@ class AggregationAPI:
                     if task_id not in raw_surveys:
                         raw_surveys[task_id] = {}
                     if subject_id not in raw_surveys[task_id]:
-                        raw_surveys[task_id][subject_id] = []
+                        raw_surveys[task_id][subject_id] = {}
+                    # todo - think the below can happen when a task is skipped, double check
+                    # note that if a user sees more than one species - they will be recorded more than once
+                    # i..e their user id will show up more than once
                     if task["value"] != [[]]:
-                        raw_surveys[task_id][subject_id].append((user_id,task["value"]))
+                        # this setup is best for dealing with when users record more than one species in an image
+                        if user_id not in raw_surveys[task_id][subject_id]:
+                            raw_surveys[task_id][subject_id][user_id] = [task["value"]]
+                        else:
+                            raw_surveys[task_id][subject_id][user_id].append(task["value"])
+
                 else:
                     warning(marking_tasks,classification_tasks,survey_tasks)
                     warning(task_id)
