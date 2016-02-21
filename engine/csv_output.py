@@ -321,7 +321,6 @@ class CsvOut:
         # finally write the stuff out to file
         self.csv_files[task_id].write(row)
 
-
     def __subject_output__(self,workflow_id,subject_id,aggregations):
         """
         add csv rows for all the output related to this particular workflow/subject_id
@@ -386,9 +385,18 @@ class CsvOut:
                         self.__shape_summary_output__(workflow_id,task_id,subject_id,aggregations,shape)
 
         for task_id in survey_tasks:
-            # print aggregations
-            print("survey!!")
-            self.__survey_row__(workflow_id,task_id,subject_id,aggregations)
+            instructions = self.instructions[workflow_id][task_id]
+
+            id_ = (task_id,"summary")
+            with open(self.file_names[id_],"a") as f:
+                summary_line = self.__survey_summary_row(aggregations)
+                f.write(str(subject_id)+summary_line)
+
+            id_ = (task_id,"detailed")
+            with open(self.file_names[id_],"a") as f:
+                detailed_lines = self.__survey_row__(instructions,aggregations)
+                for l in detailed_lines:
+                    f.write(str(subject_id)+l)
 
     def __survey_header_setup__(self,output_directory,task_id,instructions):
         """
@@ -399,14 +407,18 @@ class CsvOut:
         :param instructions:
         :return:
         """
-        fname = str(task_id) + "_survey"
-        fname += ".csv"
+        # start with the summary files
+        fname = output_directory+str(task_id) + "_survey_summary.csv"
+        self.file_names[(task_id,"summary")] = fname
+        with open(fname,"wb") as f:
+            f.write("subject_id,pielou_index\n")
 
-        self.file_names[task_id] = fname
-        self.csv_files[task_id] = open(output_directory+fname,"wb")
+        # and then the detailed files
+        fname = output_directory+str(task_id) + "_survey_detailed.csv"
+        self.file_names[(task_id,"detailed")] = fname
 
         # now write the header
-        header = "subject_id,num_classifications,species,votes_for_species"
+        header = "subject_id,num_classifications,species,percentage_of_votes_for_species"
 
         # todo - we'll assume, for now, that "how many" is always the first question
         for followup_id in instructions["questionsOrder"]:
@@ -416,7 +428,7 @@ class CsvOut:
             # the question "how many" is treated differently - we'll give the minimum, maximum and mostly likely
             if followup_id == "HWMN":
                 header += ",minimum_number_of_animals,most_likely_number_of_animals,percentage,maximum_number_of_animals"
-            elif multiple_answers:
+            else:
                 if "behavior" in label:
                     stem = "behaviour:"
                 elif "behaviour" in label:
@@ -424,16 +436,94 @@ class CsvOut:
                 else:
                     stem = helper_functions.csv_string(label)
 
+                if not multiple_answers:
+                    header += ",most_likely(" + stem + ")"
+
                 for answer_id in instructions["questions"][followup_id]["answersOrder"]:
-                    header += "," + stem + helper_functions.csv_string(instructions["questions"][followup_id]["answers"][answer_id]["label"])
+                    header += ",percentage(" + stem + helper_functions.csv_string(instructions["questions"][followup_id]["answers"][answer_id]["label"]) +")"
 
-            else:
-                # we have a followup question with just one answer allowed
-                header += ","+ helper_functions.csv_string(instructions["questions"][followup_id]["label"]) + ",percentage"
+        with open(fname,"wb") as f:
+            f.write(header+"\n")
 
-        self.csv_files[task_id].write(header+"\n")
+    def __survey_summary_row(self,aggregations):
+        """
+        return a row for survey tasks with subject id and pielou index
+        :param aggregations:
+        :return:
+        """
+        num_users = aggregations["num users"]
+        probabilities = []
+        for details in aggregations.values():
+            # list => "num species", int => "num users"
+            if type(details) in [list,int]:
+                continue
 
-    def __survey_row__(self,workflow_id,task_id,subject_id,aggregations):
+            probabilities.append(details["num votes"]/float(num_users))
+
+        num_species = len(probabilities)
+
+        if num_species == 1:
+            pielou_index = 0
+        else:
+            shannon = self.__shannon_entropy__(probabilities)
+            pielou_index = shannon/math.log(num_species)
+
+        row = "," + str(pielou_index) + "\n"
+        return row
+
+    def __survey_how_many__(self,instructions,aggregations,species_id):
+        """
+        return the columns for the question how many animals are present in an image
+        for survey tasks
+        keep in mind that counts can be buckets - i.e. 10-19
+        columns:
+        min - the minimum number of animals anyone said
+        most_likely - the bucket with the highest percentage
+        percentage - how many people said the most likely
+        max - the maximum number of animals anyone said
+        :return:
+        """
+        followup_id = "HWMN"
+        followup_question = instructions["questions"][followup_id]
+        votes = aggregations[species_id]["followup"][followup_id].items()
+        # sort by num voters
+        sorted_votes = sorted(votes,key = lambda x:x[1],reverse=True)
+        candidates,vote_counts = zip(*sorted_votes)
+        candidates = list(candidates)
+
+        # top candidate is the most common response to the question of how many animals there are in the subject
+        top_candidate = followup_question["answers"][candidates[0]]["label"]
+        percentage = vote_counts[0]/float(sum(vote_counts))
+
+        # what is the minimum/maximum number of animals of this species that people said were in the subject?
+        answer_order = followup_question["answersOrder"]
+        # resort by position in answer order
+        candidates.sort(key = lambda x:answer_order.index(x))
+        minimum_species = followup_question["answers"][candidates[0]]["label"]
+        maximum_species = followup_question["answers"][candidates[-1]]["label"]
+
+        return "," + str(minimum_species) + "," + str(top_candidate) + "," + str(percentage) + "," + str(maximum_species)
+
+    def __get_species_in_subject(self,aggregations):
+        """
+        use Ali's and Margaret's code to determine how many species are a given subject
+        and return those X top species
+        :return:
+        """
+        num_species = int(np.median(aggregations["num species"]))
+        assert(num_species >= 1)
+        # sort the species by the number of votes
+        species_by_vote = []
+
+        for species_id in aggregations:
+            if species_id not in ["num users","num species"]:
+                species_by_vote.append((species_id,aggregations[species_id]["num votes"]))
+        sorted_species = sorted(species_by_vote,key = lambda x:x[1],reverse=True)
+
+        return sorted_species[:num_species+1]
+
+
+    def __survey_row__(self,instructions,aggregations):
         """
         for a given workflow, task and subject print one row of aggregations per species found to a csv file
         where the task correspond to a survey task
@@ -443,23 +533,18 @@ class CsvOut:
         :param aggregations:
         :return:
         """
+        # what we are returning (to be printed out to file elsewhere)
+        rows = []
 
         # on average, how many species did people see?
         # note - nothing here (or empty or what ever) counts as a species - we just won't give any follow up
         # answer responses
-        num_species = int(np.median(aggregations["num species"]))
-        assert(num_species >= 1)
-        # sort the species by the number of votes
-        species_by_vote = []
-        for species_id in aggregations:
-            if species_id not in ["num users","num species"]:
-                species_by_vote.append((species_id,aggregations[species_id]["num votes"]))
-        sorted_species = sorted(species_by_vote,key = lambda x:x[1],reverse=True)
+        species_in_subject = self.__get_species_in_subject(aggregations)
 
         views_of_subject = aggregations["num users"]
 
         # only go through the top X species - where X is the median number of species seen
-        for species_id,_ in sorted_species[:num_species+1]:
+        for species_id,_ in species_in_subject:
             if species_id == "num users":
                 continue
 
@@ -468,8 +553,8 @@ class CsvOut:
             percentage = num_votes/float(views_of_subject)
 
             # extract the species name - just to be sure, make sure that the label is "csv safe"
-            species_label = helper_functions.csv_string(self.instructions[workflow_id][task_id]["species"][species_id])
-            row = str(subject_id) + "," + species_label + "," + str(percentage)
+            species_label = helper_functions.csv_string(instructions["species"][species_id])
+            row = "," + str(views_of_subject) + "," + species_label + "," + str(percentage)
 
             # if there is nothing here - there are no follow up questions so just move on
             # same with FR - fire
@@ -477,92 +562,58 @@ class CsvOut:
                 break
 
             # do the how many question first
-            followup_id = "HWMN"
-            followup_question = self.instructions[workflow_id][task_id]["questions"][followup_id]
-            votes = aggregations[species_id]["followup"][followup_id].items()
-            # sort by num voters
-            sorted_votes = sorted(votes,key = lambda x:x[1],reverse=True)
-            candidates,vote_counts = zip(*sorted_votes)
-            candidates = list(candidates)
+            row += self.__survey_how_many__(instructions,aggregations,species_id)
 
-            # top candidate is the most common response to the question of how many animals there are in the subject
-            top_candidate = followup_question["answers"][candidates[0]]["label"]
-            percentage = vote_counts[0]/float(sum(vote_counts))
-
-            # what is the minimum/maximum number of animals of this species that people said were in the subject?
-            answer_order = followup_question["answersOrder"]
-            # resort by position in answer order
-            candidates.sort(key = lambda x:answer_order.index(x))
-            minimum_species = followup_question["answers"][candidates[0]]["label"]
-            maximum_species = followup_question["answers"][candidates[-1]]["label"]
-
-            row += "," + str(minimum_species) + "," + str(top_candidate) + "," + str(percentage) + "," + str(maximum_species)
-
-            percent = vote_counts[0]/float(sum(vote_counts))
-
-            for followup_id in self.instructions[workflow_id][task_id]["questionsOrder"]:
-                followup_question = self.instructions[workflow_id][task_id]["questions"][followup_id]
+            # now go through each of the other follow up questions
+            for followup_id in instructions["questionsOrder"]:
+                followup_question = instructions["questions"][followup_id]
 
                 if followup_question["label"] == "How many?":
                     # this gets dealt with separately
-                    pass
+                    continue
+
+                # this follow up question might not be relevant to the particular species
+                if followup_id not in aggregations[species_id]["followup"]:
+                    for answer_id in instructions["questions"][followup_id]["answersOrder"]:
+                        row += ","
                 else:
-                    if followup_id not in aggregations[species_id]["followup"]:
-                        for answer_id in self.instructions[workflow_id][task_id]["questions"][followup_id]["answersOrder"]:
-                            row += ","
-                    else:
-                        votes = aggregations[species_id]["followup"][followup_id]
+                    votes = aggregations[species_id]["followup"][followup_id]
 
-                        for answer_id in self.instructions[workflow_id][task_id]["questions"][followup_id]["answersOrder"]:
-                            if answer_id in votes:
-                                row += "," + str(votes[answer_id]/float(num_votes))
-                            else:
-                                row += ",0"
+                    # if users are only allowed to pick a single answer - return the most likely answer
+                    # but still give the individual break downs
+                    multiple_answers = instructions["questions"][followup_id]["multiple"]
+                    if not multiple_answers:
+                        votes = aggregations[species_id]["followup"][followup_id].items()
+                        answers =(instructions["questions"][followup_id]["answers"])
+                        top_candidate,percent = self.__get_top_survey_followup__(votes,answers)
 
-                    # for answer in self.instructions[workflow_id][task_id]["questions"]
+                        row += "," + str(top_candidate) + "," + str(percent)
 
-                # # not every question is going to be asked of every species
-                # if followup_id not in aggregations[species_id]["followup"]:
-                #     continue
-                #
-                #
-                #
-                # if followup_question["multiple"]:
-                #     votes = aggregations[species_id][followup_id]
-                #     total_votes = sum(votes.values())
-                #     for answer_id in self.instructions[workflow_id][task_id]["questions"][followup_id]["answersOrder"]:
-                #         if answer_id in votes:
-                #             row += "," + str(votes[answer_id]/float(total_votes))
-                #         else:
-                #             row += ",0"
-                # else:
-                #     # if only one answer is allowed - choose the top one
-                #     votes = aggregations[species_id]["followup"][followup_id].items()
-                #     # list answer in decreasing order
-                #     sorted_votes = sorted(votes,key = lambda x:x[1],reverse=True)
-                #     candidates,vote_counts = zip(*sorted_votes)
-                #
-                #     top_candidate = candidates[0]
-                #
-                #     percent = vote_counts[0]/float(sum(vote_counts))
-                #     if followup_question["label"] == "How many?":
-                #         # what is the maximum answer given - because of bucket ranges (e.g. 10+ or 10 to 15)
-                #         # we can't just convert the bucket labels into numerical values
-                #         # first map from labels to indices
-                #         votes_indices = [followup_question["answersOrder"].index(v) for (v,c) in votes]
-                #         maximum_species = followup_question["answersOrder"][max(votes_indices)]
-                #         minimum_species = followup_question["answersOrder"][min(votes_indices)]
-                #
-                #         row += "," + minimum_species + ","+str(top_candidate)+","+str(percent)+","+maximum_species
-                #     else:
-                #         # for any other follow up question (without just one answer) just give the most likely
-                #         # answer and the percentage
-                #         label = followup_question["answers"][top_candidate]["label"]
-                #         row += "," + label + "," + str(percent)
+                    for answer_id in instructions["questions"][followup_id]["answersOrder"]:
+                        if answer_id in votes:
+                            row += "," + str(votes[answer_id]/float(num_votes))
+                        else:
+                            row += ",0"
 
-            self.csv_files[task_id].write(row+"\n")
+            rows.append(row+"\n")
 
+        return rows
 
+    def __get_top_survey_followup__(self,votes,answers):
+        """
+        for a particular follow up classification question in a survey task where only one answer is allowed
+        return the top/most likely classification and its associated probability
+        :param aggregations:
+        :return:
+        """
+        # list answer in decreasing order
+        sorted_votes = sorted(votes,key = lambda x:x[1],reverse=True)
+        candidates,vote_counts = zip(*sorted_votes)
+
+        top_candidate = candidates[0]
+        percent = vote_counts[0]/float(sum(vote_counts))
+
+        return answers[top_candidate]["label"],percent
 
     def __polygon_row__(self,workflow_id,task_id,subject_id,aggregations):
         id_ = task_id,"polygon","detailed"
@@ -620,7 +671,6 @@ class CsvOut:
             # results are going to be ordered by subject id (because that's how the results are stored)
             # so we can going to be cycling through task_ids. That's why we can't loop through classification_tasks etc.
             for subject_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
-                print((subject_id,aggregations))
                 self.__subject_output__(workflow_id,subject_id,aggregations)
 
         for f in self.csv_files.values():
