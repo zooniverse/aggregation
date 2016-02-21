@@ -121,7 +121,6 @@ class AggregationAPI:
         self.marking_params_per_shape = dict()
 
         # default filters for which subjects we look at
-        self.ignore_versions = False
         self.only_retired_subjects = False
 
         self.previous_runtime = datetime.datetime(2000,1,1)
@@ -251,12 +250,10 @@ class AggregationAPI:
         # load the default classification algorithm
         self.__set_classification_alg__(classification.VoteCount)
 
-
         # a bit of a sanity check in case I forget to change back up before uploading
         # production and staging should ALWAYS pay attention to the version and only
         # aggregate retired subjects
         if self.environment in ["production","staging"]:
-            self.ignore_versions = False
             self.only_retired_subjects = True
 
         # bit of a stop gap measure - stores how many people have classified a given subject
@@ -374,16 +371,10 @@ class AggregationAPI:
         for s in self.__chunks__(subject_set,15):
             statements_and_params = []
 
-            if self.ignore_versions:
-                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where subject_id = ? and workflow_id = ?")
-            else:
-                select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where subject_id = ? and workflow_id = ? and workflow_version = ?")
+            select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where subject_id = ? and workflow_id = ? and workflow_version = ?")
 
             for subject_id in s:
-                if self.ignore_versions:
-                    params = (subject_id,int(workflow_id))
-                else:
-                    params = (subject_id,int(workflow_id),version)
+                params = (subject_id,int(workflow_id),version)
 
                 statements_and_params.append((select_statement, params))
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
