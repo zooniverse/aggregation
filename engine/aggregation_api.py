@@ -453,20 +453,19 @@ class AggregationAPI:
         for i in xrange(0, len(l), n):
             yield l[i:i+n]
 
-    # def __classification_json_dump__(self):
-    #     annotation_generator = self.__cassandra_annotations__()
-    #     for workflow_id in self.workflows:
-    #         subject_set = self.__get_subjects__(workflow_id,only_retired_subjects=False)
-    #
-    #         for subject_id,user_id,annotation,dimensions in annotation_generator(workflow_id,subject_set):
-    #             print(annotation)
-    #             assert False
+    def __get_login_name__(self,id):
+        cur = self.postgres_session.cursor()
 
-    # def __classify__(self,raw_classifications,clustering_aggregations,workflow_id,gold_standard_classifications=None):
-    #     # get the raw classifications for the given workflow
-    #     # raw_classifications = self.__sort_classifications__(workflow_id,subject_set)
-    #     # assert False
-    #     return self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],clustering_aggregations,gold_standard_classifications)
+        cur.execute("select login from users where id = " + str(id))
+
+        login_name = cur.fetchone()
+
+        # since login_name is a tuple
+        if login_name is not None:
+            return login_name[0]
+        else:
+            return None
+
 
     def __cluster__(self,used_shapes,raw_markings,image_dimensions):
         """
@@ -1060,7 +1059,7 @@ class AggregationAPI:
 
         # if we are in development - we don't need all the classifications, so make life simple and just get some
         if self.environment == "development":
-            select += " order by id limit 12000"
+            select += " order by id limit 1200"
 
         # actually get the classifications
         print("about to get all the relevant classifications")
@@ -1131,7 +1130,6 @@ class AggregationAPI:
         if statements_and_params != []:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
             # print results
-
 
         return list(subjects_migrated)
 

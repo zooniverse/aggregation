@@ -325,12 +325,15 @@ class TranscriptionAPI(AggregationAPI):
             #
             if subject_id not in self.classification_alg.to_retire:
                 continue
-
             try:
                 clusters_by_line = {}
 
                 for key,cluster in aggregation["T2"]["text clusters"].items():
                     if key == "all_users":
+                        continue
+
+                    # for dev only since we may not have updated every transcription
+                    if cluster["cluster members"] == []:
                         continue
 
                     index = cluster["set index"]
@@ -351,9 +354,6 @@ class TranscriptionAPI(AggregationAPI):
 
                 sorted_sets = sorted(cluster_set_coordinates.items(), key = lambda x:x[1])
 
-                text_to_read = []
-                text_in_detail = []
-                coordinates = []
                 for set_index,_ in sorted_sets:
                     cluster_set = clusters_by_line[set_index]
 
@@ -377,7 +377,7 @@ class TranscriptionAPI(AggregationAPI):
                     if merged_line != "":
                         # is this the first line we've encountered for this subject?
                         if subject_id not in new_json:
-                            new_json[subject_id] = {"text":[],"individual transcriptions":[], "accuracy":[], "coordinates" : []}
+                            new_json[subject_id] = {"text":[],"individual transcriptions":[], "accuracy":[], "coordinates" : [],"users_per_line":[]}
 
                             # add in the metadata
                             metadata = self.__get_subject_metadata__(subject_id)["subjects"][0]["metadata"]
@@ -392,13 +392,20 @@ class TranscriptionAPI(AggregationAPI):
                         # use the first cluster we found for this line as a "representative cluster"
                         rep_cluster = cluster_set[0]
 
+                        for user_id in rep_cluster["cluster members"]:
+                            zooniverse_login_name = self.__get_login_name__(user_id)
+
+                            # todo - not sure why None can be returned but does seem to happen
+                            if zooniverse_login_name is not None:
+                                new_json[subject_id]["users_per_line"].append(zooniverse_login_name)
+
+                        # todo - if a line is transcribed completely but in distinct separate parts
+                        # todo - this may cause trouble
                         new_json[subject_id]["individual transcriptions"].append(rep_cluster["aligned_text"])
 
                         # what was the accuracy for this line?
                         accuracy = len([c for c in merged_line if ord(c) != 27])/float(len(merged_line))
                         new_json[subject_id]["accuracy"].append(accuracy)
-
-
 
                         # add in the coordinates
                         # this is only going to work with horizontal lines
@@ -432,10 +439,17 @@ class TranscriptionAPI(AggregationAPI):
         s3 = boto3.resource('s3')
 
         aws_tar = self.__get_aws_tar_name__()
+        print("uploading")
+        print(aws_tar)
 
         key = "panoptes-uploads.zooniverse.org/production/project_aggregations_export/"+aws_tar
+        print(key)
 
-        s3.Object("zooniverse-static",key).put(Body=open("/tmp/"+aws_tar,"rb"))
+        print(s3.Object("zooniverse-static",key).put(Body=open("/tmp/"+aws_tar,"rb")))
+
+        key = "panoptes-uploads.zooniverse.org/production/project_aggregations_export/test.txt"
+        print(key)
+        s3.Object("zooniverse-static",key).put(Body=open("/home/ggdhines/test.txt","rb"))
 
     def __get_aws_tar_name__(self):
         media = self.__panoptes_call__("projects/"+str(self.project_id)+"/aggregations_export?admin=true")["media"]
@@ -481,11 +495,11 @@ class TranscriptionAPI(AggregationAPI):
         #
         subject = "Aggregation summary for Project " + str(self.project_id) #+ str(old_time_string) + " to " + str(new_time_string)
 
-        body = "This week we have retired " + str(num_retired) + " subjects, of which " + str(non_blanks_retired) + " where not blank."
+        body = "The link to the json aggregation results for all retired subjects is " + url
         # body += " A total of " + str(stats["retired lines"]) + " lines were retired. "
         # body += " The accuracy of these lines was " + "{:2.1f}".format(accuracy*100) + "% - defined as the percentage of characters where at least 3/4's of the users were in agreement."
 
-        body += "\n Greg Hines \n Zooniverse \n \n PS This email was automatically generated."
+        body += "\n\n Greg Hines \n Zooniverse \n \n PS This email was automatically generated."
 
         # send out the email
         client = boto3.client('ses',region_name='us-east-1')
@@ -552,5 +566,5 @@ if __name__ == "__main__":
         # print "done migrating"
         # # project.__aggregate__(subject_set = [671541,663067,664482,662859])
         processed_subjects = project.__aggregate__()
-        # project.__summarize__()
+        project.__summarize__()
 

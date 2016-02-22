@@ -105,8 +105,6 @@ class Cluster:
                     all_users,t1,t2 = zip(*raw_markings[task_id][shape][subject_id])
                     all_users = list(set(all_users))
 
-
-
                     # empty image
                     if pruned_markings == []:
                         # no centers, no points, no users per cluster
@@ -118,6 +116,7 @@ class Cluster:
 
                         # do the actual clustering
                         cluster_results,time_to_cluster = self.__cluster__(markings,users,tools,reduced_markings,image_dimensions[subject_id],subject_id)
+
 
                     # store the results - note we need to store even for empty images
                     if subject_id not in aggregation:

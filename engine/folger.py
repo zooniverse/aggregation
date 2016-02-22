@@ -145,7 +145,7 @@ class FolgerClustering(TextClustering):
 
         return starting_points,ending_points
 
-    def __create_clusters__(self,(starting_points,ending_points),aggregated_text,cluster_index,aligned_text,variants):
+    def __create_clusters__(self,(starting_points,ending_points),aggregated_text,cluster_index,aligned_text,variants,user_ids):
         """
         the aggregated text, split up into completed components and make a result (aggregate) cluster for each
         of those components
@@ -182,8 +182,10 @@ class FolgerClustering(TextClustering):
             assert isinstance(completed_text,str)
 
             new_cluster["center"] = (x1,x2,y1,y2,completed_text)
+            assert "115" not in completed_text
 
-            new_cluster["cluster members"] = []
+            new_cluster["cluster members"] = list(user_ids)
+            print(new_cluster["cluster members"])
 
             new_cluster["num users"] = len(new_cluster["cluster members"])
             new_cluster["set index"] = cluster_index
@@ -350,17 +352,18 @@ class FolgerClustering(TextClustering):
         # todo - I think transcription_range isn't necessary. I think find_completed_components does the job
         return aligned_nf_text_list,transcription_range
 
-    def __filter_markings__(self,markings,horizontal=True,strict=False):
+    def __filter_markings__(self,markings,user_ids,horizontal=True,strict=False):
         """
         filter out any markings which are not horizontal or are empty after removing bad characters
         :return:
         """
+        assert len(markings) == len(user_ids)
         # todo - generalize for non-horizontal markings
         filtered_markings = []
 
         points_plotted = False
 
-        for m_i,(x1,x2,y1,y2,t,variants) in enumerate(markings):
+        for m_i,((x1,x2,y1,y2,t,variants),id_) in enumerate(zip(markings,user_ids)):
             # skip empty strings - but make sure when checking to first remove tags that shouldn't
             # be there in the first place
             # set_tags removes some tags (such as <br>) which we don't want at all
@@ -386,7 +389,7 @@ class FolgerClustering(TextClustering):
 
                 if is_horizontal or ((not strict) and (len(words) <= 1) and is_kinda_horizontal):
                     valid = True
-                    filtered_markings.append((x1,x2,y1,y2,processed_text,variants))
+                    filtered_markings.append((x1,x2,y1,y2,processed_text,variants,id_))
 
             else: # vertical
                 words = t.split(" ")
@@ -395,7 +398,7 @@ class FolgerClustering(TextClustering):
 
                 if is_vertical or ((not strict) and (len(words) <= 1) and is_kinda_vertical):
                     valid = True
-                    filtered_markings.append((x1,x2,y1,y2,processed_text,variants))
+                    filtered_markings.append((x1,x2,y1,y2,processed_text,variants,id_))
 
         return filtered_markings,points_plotted
 
@@ -411,8 +414,8 @@ class FolgerClustering(TextClustering):
          # now look for the overlapping parts
         # examine every pair - note that distance from A to B does not necessarily equal
         # the distance from B to A - so order matters
-        for m_i,(x1,x2,y1,y2,_,_) in enumerate(markings):
-            for m_i2,(x1_,x2_,y1_,y2_,_,_) in enumerate(markings):
+        for m_i,(x1,x2,y1,y2,_,_,_) in enumerate(markings):
+            for m_i2,(x1_,x2_,y1_,y2_,_,_,_) in enumerate(markings):
                 # assuming two purely horizontal lines - consider the following example
                 # x1 ----------- x2
                 #     x1_----x2_
@@ -494,7 +497,7 @@ class FolgerClustering(TextClustering):
         # and people who transcribe multiple lines at once (which need to be removed), doing
         # both vertical and horizontal lines at once isn't really feasible
         for horizontal in [True,False]:
-            filtered_markings,_ = self.__filter_markings__(markings,horizontal)
+            filtered_markings,_ = self.__filter_markings__(markings,user_ids,horizontal)
 
             if filtered_markings == []:
                 return [],0
@@ -506,7 +509,7 @@ class FolgerClustering(TextClustering):
             # the number of connected components (since that corresponds to the number of lines transcribed)
             # so if the number does change, we almost surely merged two distinct lines by including
             # the kinda vertical or horizontal lines - in which case, let's be safe and ignore such lines
-            strict_filtered_markings,_ = self.__filter_markings__(markings,horizontal,strict=True)
+            strict_filtered_markings,_ = self.__filter_markings__(markings,user_ids,horizontal,strict=True)
             strict_connected_components = self.__find_connected_transcriptions__(filtered_markings)
 
             if len(strict_connected_components) != len(connected_components):
@@ -532,7 +535,9 @@ class FolgerClustering(TextClustering):
                 # -2 since -1 is for variants
                 tokenized_text = [filtered_markings[i][4] for i in c]
 
-                variants = [filtered_markings[i][-1] for i in c]
+                variants = [filtered_markings[i][5] for i in c]
+
+                users_in_line = set([filtered_markings[i][6] for i in c])
 
                 # tokenized_text has each tag (several characters) represented by just one
                 # (non-standard ascii) character, aka a token
@@ -555,7 +560,7 @@ class FolgerClustering(TextClustering):
                 completed_components = self.__find_completed_components__(aligned_text,coordinates)
                 # (completed_starting_point,completed_ending_point),aggregated_text,transcription_range,markings
                 markings_in_cluster = [filtered_markings[i] for i in c]
-                clusters.extend(self.__create_clusters__(completed_components,aggregate_text,ii,aligned_text,variants))
+                clusters.extend(self.__create_clusters__(completed_components,aggregate_text,ii,aligned_text,variants,users_in_line))
 
             print "number of completed components: " + str(len(clusters))
         return clusters,0
