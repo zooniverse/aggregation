@@ -72,7 +72,7 @@ class Cluster:
 
         return (cluster_centers , markings_per_cluster, users_per_cluster), time_to_cluster
 
-    def __aggregate__(self,raw_markings,image_dimensions,raw_classifications=None):
+    def __aggregate__(self,raw_markings,image_dimensions):
         """
         the function to call from outside to do the clustering
         override but call if you want to add additional functionality

@@ -159,13 +159,7 @@ class TranscriptionAPI(AggregationAPI):
         for workflow_id,version in self.versions.items():
             migrated_subjects = self.__migrate__(workflow_id,version)
 
-            # the migrated_subject can contain classifications for subjects which are not yet retired
-            # so if we want only retired subjects, make a special call
-            # otherwise, use the migrated list of subjects
-            if self.only_retired_subjects:
-                subject_set = self.__get_newly_retired_subjects__(workflow_id)
-            else:
-                subject_set = list(migrated_subjects[workflow_id])
+            subject_set = list(migrated_subjects)
 
             if subject_set == []:
                 print("skipping workflow " + str(workflow_id) + " due to an empty subject set")
@@ -189,6 +183,7 @@ class TranscriptionAPI(AggregationAPI):
             # to give area as percentage of the total image area
             raw_classifications,raw_markings,raw_surveys,image_dimensions = self.__sort_annotations__(workflow_id,subject_set,expert)
             print(marking_tasks)
+
             # do we have any marking tasks?
             if marking_tasks != {}:
                 aggregations = self.__cluster__(used_shapes,raw_markings,image_dimensions)
@@ -202,7 +197,7 @@ class TranscriptionAPI(AggregationAPI):
             # finally, store the results
             self.__upsert_results__(workflow_id,aggregations)
 
-    def __cluster2__(self,used_shapes,raw_markings,image_dimensions,raw_classifications):
+    def __cluster__(self,used_shapes,raw_markings,image_dimensions):
         """
         for when I want to see raw classifications in addition to markings
         :param workflow_id:
@@ -215,7 +210,7 @@ class TranscriptionAPI(AggregationAPI):
 
         # start by clustering text
         print("clustering text")
-        cluster_aggregation = self.text_algorithm.__aggregate__(raw_markings,image_dimensions,raw_classifications)
+        cluster_aggregation = self.text_algorithm.__aggregate__(raw_markings,image_dimensions)
         print("clustering images")
         image_aggregation = self.image_algorithm.__aggregate__(raw_markings,image_dimensions)
 
