@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from __future__ import print_function
 import cv2
 import numpy as np
 import glob
@@ -15,18 +16,21 @@ import tesseract_font
 horizontal = []
 
 # just for size reference
-reference_image = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0019.JPG")
+reference_subject = "Bear-AG-29-1940-0019"
+reference_image = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/"+reference_subject+".JPG")
 refer_shape = reference_image.shape
-
-classifier = tesseract_font.ActiveTess()
-
-cass_db = database_connection.Database()
 
 class ActiveWeather:
     def __init__(self):
+        self.cass_db = database_connection.Database()
+        print("connected to the db")
         self.horizontal_grid,self.vertical_grid = self.__get_grid__()
 
         self.region = 0
+
+        self.classifier = tesseract_font.ActiveTess()
+
+
 
     def __get_lines__(self,horizontal):
         # todo - swap
@@ -118,7 +122,6 @@ class ActiveWeather:
 
                 perimeter = cv2.arcLength(cnt,True)
                 if perimeter > 1000:
-                    print min_y,max_y
                     # cv2.drawContours(masks,[cnt],0,255,3)
                     vertical_lines.append(cnt)
                     cv2.drawContours(template_image,[cnt],0,255,3)
@@ -131,6 +134,9 @@ class ActiveWeather:
         # cv2.imshow('image',a)
         # cv2.waitKey(0)
         # cv2.destroyAllWindows()
+        self.cass_db.__add_horizontal_lines__(reference_subject,0,horizontal_lines)
+        print(horizontal_lines[0].shape)
+        assert False
 
         return horizontal_lines,vertical_lines
 
@@ -198,15 +204,17 @@ class ActiveWeather:
 
         # tesseract needs things in colour, so convert
 
+        boundary = [min_y,max_y+1,min_x,max_x+1]
+
         if colour:
             colour_res = np.zeros((res.shape[0],res.shape[1],3),np.uint8)
             colour_res[:,:,0] = res[:,:]
             colour_res[:,:,1] = res[:,:]
             colour_res[:,:,2] = res[:,:]
 
-            return colour_res
+            return colour_res,boundary
         else:
-            return res
+            return res,boundary
 
     def __process_image__(self,fname):
         subject_id = fname.split("/")[-1][:-4]
@@ -215,28 +223,19 @@ class ActiveWeather:
 
         approximate_image = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,151,0)
 
-        count = 0
-
         for h_index in range(len(self.horizontal_grid)-1):
-            if count == 5:
-                break
             for v_index in range(len(self.vertical_grid)-1):
-
-                # count += 1
-                if count == 5:
-                    break
-
-                if cass_db.__has_cell_been_transcribed__(subject_id,self.region,v_index,h_index):
-                    print "skipping"
+                if self.cass_db.__has_cell_been_transcribed__(subject_id,self.region,v_index,h_index):
+                    print("skipping")
                     continue
 
                 # start by just checking if that cell is empty or not
-                cell = self.__extract_cell__(approximate_image,h_index,v_index)
+                cell,[lb_y,ub_y,lb_x,ub_x] = self.__extract_cell__(approximate_image,h_index,v_index)
 
-                classifier.tess.set_image(cell)
-                classifier.tess.get_utf8_text()
+                self.classifier.tess.set_image(cell)
+                self.classifier.tess.get_utf8_text()
 
-                words = list(classifier.tess.words())
+                words = list(self.classifier.tess.words())
                 words_in_cell = [w.text for w in words if w.text is not None]
                 conf_in_cell = [w.confidence for w in words if w.text is not None]
 
@@ -251,7 +250,9 @@ class ActiveWeather:
                 # gone wrong but we'll see
                 word = "".join(words_in_cell)
                 if word != "":
-                    cv2.imwrite("/home/ggdhines/cell.jpg",cell)
+                    context = 50
+                    cell_with_context = image[lb_y-context:ub_y+context,lb_x-context:ub_x+context]
+                    cv2.imwrite("/home/ggdhines/cell.jpg",cell_with_context)
                     overall_confidence = np.mean(conf_in_cell)
                     cell_string = raw_input("Look at cell.jpg - enter its contents: ")
 
@@ -260,18 +261,18 @@ class ActiveWeather:
 
                     cell_list = [c for c in cell_string]
 
-                    print cell_list
-                    print len(digits)
+                    self.cass_db.__add_gold_standard__(subject_id,self.region,v_index,h_index,cell_string)
                     if len(cell_list) == len(digits):
-                        # print "adding learning cases"
+                        print("adding learning cases")
                         for index in range(len(cell_list)):
                             top_of_row = min(minimum_y)
                             offset = minimum_y[index] - top_of_row
-                            cass_db.__add_transcription__(subject_id,self.region,v_index,h_index,index,cell_string[index],digits[index],offset)
+                            self.cass_db.__add_character__(subject_id,self.region,v_index,h_index,index,cell_string[index],digits[index],offset)
                         # print "done adding"
 
                         # classifier.__add_characters__(cell_list,digits,minimum_y)
                         # classifier.__update_tesseract__()
 
-project = ActiveWeather()
-project.__process_image__("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0720.JPG")
+if __name__ == "__main__":
+    project = ActiveWeather()
+    project.__process_image__("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0720.JPG")
