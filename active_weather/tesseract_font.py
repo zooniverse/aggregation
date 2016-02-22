@@ -43,8 +43,9 @@ class ActiveTess:
 
         self.__create_blank_page__()
 
-        self.tess = tesserpy.Tesseract("/home/ggdhines/PycharmProjects/reduction/active_weather/tessdata/", language="active_weather")
-        self.tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890."
+        # self.tess = tesserpy.Tesseract("/home/ggdhines/PycharmProjects/reduction/active_weather/tessdata/", language="active_weather")
+        self.tess = tesserpy.Tesseract("/home/ggdhines/github/tessdata/", language="eng")
+        self.tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.abcdefghijklmnopqrstuvwxyz"
 
         self.boxes = dict()
 

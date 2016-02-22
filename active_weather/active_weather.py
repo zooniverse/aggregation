@@ -24,7 +24,10 @@ class ActiveWeather:
     def __init__(self):
         self.cass_db = database_connection.Database()
         print("connected to the db")
-        self.horizontal_grid,self.vertical_grid = self.__get_grid__()
+        # self.__get_grid__()
+        self.horizontal_grid = self.cass_db.__get_horizontal_lines__(reference_subject,0)
+        self.vertical_grid = self.cass_db.__get_vertical_lines__(reference_subject,0)
+        # self.horizontal_grid,self.vertical_grid = self.__get_grid__()
 
         self.region = 0
 
@@ -135,8 +138,8 @@ class ActiveWeather:
         # cv2.waitKey(0)
         # cv2.destroyAllWindows()
         self.cass_db.__add_horizontal_lines__(reference_subject,0,horizontal_lines)
-        print(horizontal_lines[0].shape)
-        assert False
+        self.cass_db.__add_vertical_lines__(reference_subject,0,vertical_lines)
+
 
         return horizontal_lines,vertical_lines
 
@@ -149,23 +152,22 @@ class ActiveWeather:
         :param v_index:
         :return:
         """
-        # todo - resizing might be not be necessary
         # todo - DEFINITELY precalculate these
-        shape = self.horizontal_grid[h_index].shape
-        t = self.horizontal_grid[h_index].reshape((shape[0],shape[2]))
+        # shape = self.horizontal_grid[h_index].shape
+        t = self.horizontal_grid[h_index]#.reshape((shape[0],shape[2]))
         _,min_y = np.max(t,axis=0)
 
         shape = self.horizontal_grid[h_index+1].shape
-        t = self.horizontal_grid[h_index+1].reshape((shape[0],shape[2]))
+        t = self.horizontal_grid[h_index+1]#.reshape((shape[0],shape[2]))
         _,max_y = np.min(t,axis=0)
 
         # repeat for vertical grid lines
-        shape = self.vertical_grid[v_index].shape
-        t = self.vertical_grid[v_index].reshape((shape[0],shape[2]))
+        # shape = self.vertical_grid[v_index].shape
+        t = self.vertical_grid[v_index]#.reshape((shape[0],shape[2]))
         min_x,_ = np.max(t,axis=0)
 
-        shape = self.vertical_grid[v_index+1].shape
-        t = self.vertical_grid[v_index+1].reshape((shape[0],shape[2]))
+        # shape = self.vertical_grid[v_index+1].shape
+        t = self.vertical_grid[v_index+1]#.reshape((shape[0],shape[2]))
         max_x,_ = np.min(t,axis=0)
 
         mask = np.zeros((refer_shape[0],refer_shape[1]),np.uint8)
@@ -225,7 +227,7 @@ class ActiveWeather:
 
         for h_index in range(len(self.horizontal_grid)-1):
             for v_index in range(len(self.vertical_grid)-1):
-                if self.cass_db.__has_cell_been_transcribed__(subject_id,self.region,v_index,h_index):
+                if self.cass_db.__has_cell_been_transcribed__(subject_id,self.region,h_index,v_index):
                     print("skipping")
                     continue
 
@@ -261,13 +263,13 @@ class ActiveWeather:
 
                     cell_list = [c for c in cell_string]
 
-                    self.cass_db.__add_gold_standard__(subject_id,self.region,v_index,h_index,cell_string)
+                    self.cass_db.__add_gold_standard__(subject_id,self.region,h_index,v_index,cell_string)
                     if len(cell_list) == len(digits):
                         print("adding learning cases")
                         for index in range(len(cell_list)):
                             top_of_row = min(minimum_y)
                             offset = minimum_y[index] - top_of_row
-                            self.cass_db.__add_character__(subject_id,self.region,v_index,h_index,index,cell_string[index],digits[index],offset)
+                            self.cass_db.__add_character__(subject_id,self.region,h_index,v_index,index,cell_string[index],digits[index],offset)
                         # print "done adding"
 
                         # classifier.__add_characters__(cell_list,digits,minimum_y)
