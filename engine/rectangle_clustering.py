@@ -44,28 +44,14 @@ class RectangleClustering(clustering.Cluster):
 
                 # we know that these rectangles overlap
                 g.add_edge(i,j)
-        # networkx.draw(g)
+
+        # each clique is a group of markings which all refer to the same region on the page
         cliques = list(networkx.find_cliques(g))
 
-        found = False
-
-        # image_fname = self.project.__image_setup__(subject_id)
-        #
-        # image_file = cbook.get_sample_data(image_fname[0])
-        # image = plt.imread(image_file)
-        # fig, ax = plt.subplots()
-        # im = ax.imshow(image)
+        results = []
 
         for c in cliques:
             if len(c) < 3:
-                for i in c:
-                    a,b = markings[i][0]
-                    c,d = markings[i][2]
-
-                    x = [a,c,c,a,a]
-                    y = [b,b,d,d,b]
-
-                    plt.plot(x,y,color="red")
                 continue
             # found = True
             # don't assume that all rectangles will be in the same order
@@ -75,26 +61,22 @@ class RectangleClustering(clustering.Cluster):
             maximum_y = [max(markings[i][0][1],markings[i][2][1]) for i in c]
             minimum_y = [min(markings[i][0][1],markings[i][2][1]) for i in c]
 
-            for i in c:
-                a,b = markings[i][0]
-                c,d = markings[i][2]
-
-                x = [a,c,c,a,a]
-                y = [b,b,d,d,b]
-
-                plt.plot(x,y,color="green")
-
             x_top = np.median(maximum_x)
             x_bot = np.median(minimum_x)
             y_top = np.median(maximum_y)
             y_bot = np.median(minimum_y)
 
-            # x_values = [x_top,x_bot,x_bot,x_top,x_top]
-            # y_values = [y_top,y_top,y_bot,y_bot,y_top]
-            # plt.plot(x_values,y_values,color="blue")
+            new_cluster = dict()
+            new_cluster["center"] = [(x_top,y_top),(x_bot,y_bot)]
 
-        # if found:
-        #     plt.show()
-        # else:
-        #     plt.close()
-        return [],0
+            new_cluster["cluster members"] = [markings[i] for i in c]
+            new_cluster["users"] = [user_ids[i] for i in c]
+            # todo - implement
+            new_cluster["tools"] = None
+            # todo - implement this - maybe based on voting weighted by fraction of rectangle inside aggregate?
+            new_cluster["tool_classification"] = None
+            new_cluster["image area"] = None
+
+            results.append(new_cluster)
+
+        return results,0

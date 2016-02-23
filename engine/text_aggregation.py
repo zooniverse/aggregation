@@ -10,6 +10,7 @@ import helper_functions
 import yaml
 import json
 from blob_clustering import BlobClustering
+from rectangle_clustering import RectangleClustering
 import parser
 import getopt
 import sys
@@ -250,7 +251,7 @@ class TranscriptionAPI(AggregationAPI):
         else:
             assert False
 
-        self.image_algorithm = BlobClustering("image",None,{})
+        self.image_algorithm = RectangleClustering("image",None,{})
 
         self.only_retired_subjects = False
         self.only_recent_subjects = True
