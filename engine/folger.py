@@ -182,10 +182,8 @@ class FolgerClustering(TextClustering):
             assert isinstance(completed_text,str)
 
             new_cluster["center"] = (x1,x2,y1,y2,completed_text)
-            assert "115" not in completed_text
 
             new_cluster["cluster members"] = list(user_ids)
-            print(new_cluster["cluster members"])
 
             new_cluster["num users"] = len(new_cluster["cluster members"])
             new_cluster["set index"] = cluster_index
