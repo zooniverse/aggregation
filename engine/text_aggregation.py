@@ -251,7 +251,8 @@ class TranscriptionAPI(AggregationAPI):
         else:
             assert False
 
-        self.image_algorithm = RectangleClustering("image",None,{})
+        self.image_algorithm = RectangleClustering("image",self,{})
+
 
         self.only_retired_subjects = False
         self.only_recent_subjects = True
@@ -393,16 +394,21 @@ class TranscriptionAPI(AggregationAPI):
                         # use the first cluster we found for this line as a "representative cluster"
                         rep_cluster = cluster_set[0]
 
+                        zooniverse_ids = []
                         for user_id in rep_cluster["cluster members"]:
                             zooniverse_login_name = self.__get_login_name__(user_id)
 
                             # todo - not sure why None can be returned but does seem to happen
                             if zooniverse_login_name is not None:
-                                new_json[subject_id]["users_per_line"].append(zooniverse_login_name)
+                                # new_json[subject_id]["users_per_line"].append(zooniverse_login_name)
+                                zooniverse_ids.append(zooniverse_login_name)
+                            else:
+                                zooniverse_ids.append("None")
 
                         # todo - if a line is transcribed completely but in distinct separate parts
                         # todo - this may cause trouble
                         new_json[subject_id]["individual transcriptions"].append(rep_cluster["aligned_text"])
+                        new_json[subject_id]["users_per_line"].append(zooniverse_ids)
 
                         # what was the accuracy for this line?
                         accuracy = len([c for c in merged_line if ord(c) != 27])/float(len(merged_line))
