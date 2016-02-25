@@ -535,7 +535,8 @@ class FolgerClustering(TextClustering):
 
                 variants = [filtered_markings[i][5] for i in c]
 
-                users_in_line = set([filtered_markings[i][6] for i in c])
+                # users_in_line = set([filtered_markings[i][6] for i in c])
+                users_in_line = [filtered_markings[i][6] for i in c]
 
                 # tokenized_text has each tag (several characters) represented by just one
                 # (non-standard ascii) character, aka a token
