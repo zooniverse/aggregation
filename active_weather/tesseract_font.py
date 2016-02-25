@@ -6,8 +6,6 @@ import os
 from subprocess import call
 import tesserpy
 
-
-
 # call(["convert","weather.basic.exp0.pdf","/home/ggdhines/tessdata/active.basic.exp0.tiff"])
 
 spacing = 35
@@ -33,9 +31,7 @@ def create_blank_sheet_(character_dict):
     needed_width = [n*w+spacing*n for (n,w) in zip(num_samples,width_list)]
     overall_width = max(needed_width)
 
-
     overall_height = sum(height_list) + spacing*len(characters)
-
 
 class ActiveTess:
     def __init__(self):
@@ -44,8 +40,9 @@ class ActiveTess:
         self.__create_blank_page__()
 
         # self.tess = tesserpy.Tesseract("/home/ggdhines/PycharmProjects/reduction/active_weather/tessdata/", language="active_weather")
-        self.tess = tesserpy.Tesseract("/home/ggdhines/github/tessdata/", language="eng")
-        self.tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.abcdefghijklmnopqrstuvwxyz"
+        self.tess = tesserpy.Tesseract("/home/ggdhines/github/tessdata/",language="eng")
+        self.tess.tessedit_pageseg_mode = tesserpy.PSM_SINGLE_LINE
+        self.tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890."
 
         self.boxes = dict()
 
