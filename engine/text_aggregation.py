@@ -104,7 +104,7 @@ class SubjectRetirement(Classification):
             #
             #     if (len(recent_completely_transcribed) == 5) and (complete_count >= 0.8):
             #         to_retire.add(subject_id)
-        print(self.to_retire)
+        # print(self.to_retire)
         # don't retire if we are in the development environment
         if self.to_retire != set():
             try:
@@ -112,6 +112,7 @@ class SubjectRetirement(Classification):
                 params = {"retired_subjects":list(self.to_retire)}
                 # r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
                 r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/retired_subjects",headers=headers,data=json.dumps(params))
+                print("results from trying to retire subjects")
                 print(r)
                 print(r.text)
                 # rollbar.report_message("results from trying to retire subjects","info",extra_data=r.text)
@@ -540,7 +541,7 @@ class TranscriptionAPI(AggregationAPI):
             ],
             ReturnPath='greg@zooniverse.org'
         )
-
+        print("response from emailing results")
         print(response)
 
 if __name__ == "__main__":
