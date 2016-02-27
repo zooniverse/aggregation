@@ -1155,15 +1155,15 @@ class AggregationAPI:
                 break
             except urllib2.HTTPError as e:
                 warning('The server couldn\'t fulfill the request.')
-                warning('Error code: ' + e.code)
-                warning('Error response body: ' + e.read())
+                warning('Error code: ' + str(e.code))
+                warning('Error response body: ' + str(e.read()))
 
                 if i == 9:
                     raise
 
             except urllib2.URLError as e:
                 warning('We failed to reach a server.')
-                warning('Reason: ', e.reason)
+                warning('Reason: ' + str(e.reason))
 
                 if i == 9:
                     raise
