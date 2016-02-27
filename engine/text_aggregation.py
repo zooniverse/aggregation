@@ -109,6 +109,7 @@ class SubjectRetirement(Classification):
         if self.to_retire != set():
             try:
                 headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+self.token}
+                print(self.token)
                 params = {"retired_subjects":list(self.to_retire)}
                 # r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
                 r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/retired_subjects",headers=headers,data=json.dumps(params))
@@ -332,6 +333,10 @@ class TranscriptionAPI(AggregationAPI):
                 continue
             try:
                 clusters_by_line = {}
+
+                if isinstance(aggregation,str):
+                    print("converting aggregation to string")
+                    aggregation = json.loads(aggregation)
 
                 for key,cluster in aggregation["T2"]["text clusters"].items():
                     if key == "all_users":
