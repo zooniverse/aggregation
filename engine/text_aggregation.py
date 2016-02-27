@@ -120,6 +120,7 @@ class SubjectRetirement(Classification):
             except TypeError as e:
                 warning(e)
                 rollbar.report_exc_info()
+        print("done that")
         if self.environment == "development":
             print("we would have retired " + str(len(self.to_retire)))
             print("with non-blanks " + str(len(self.to_retire)-blank_retirement))
@@ -313,6 +314,7 @@ class TranscriptionAPI(AggregationAPI):
             assert False
 
     def __restructure_json__(self):
+        print("restructing json results")
         workflow_id = self.workflows.keys()[0]
 
         cur = self.postgres_session.cursor()
@@ -440,6 +442,7 @@ class TranscriptionAPI(AggregationAPI):
         json.dump(new_json,open("/tmp/"+str(self.project_id)+".json","wb"))
 
         aws_tar = self.__get_aws_tar_name__()
+        print("saving json results")
         with tarfile.open("/tmp/"+aws_tar,mode="w") as t:
             t.add("/tmp/"+str(self.project_id)+".json")
 
@@ -573,6 +576,8 @@ if __name__ == "__main__":
         project.__reset_cassandra_dbs__()
         # print "done migrating"
         # # project.__aggregate__(subject_set = [671541,663067,664482,662859])
+
         processed_subjects = project.__aggregate__()
+        print("about to send off email")
         project.__summarize__()
 
