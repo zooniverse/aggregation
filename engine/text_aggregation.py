@@ -47,31 +47,15 @@ def get_signed_url(time, bucket, obj):
 
 
 class SubjectRetirement(Classification):
-    def __init__(self,environment,param_dict):
+    def __init__(self,environment,project):
         Classification.__init__(self,environment)
-        assert isinstance(param_dict,dict)
 
-        # to retire subjects, we need a connection to the host api, which hopefully is provided
-        self.host_api = None
-        self.project_id = None
-        self.token = None
-        self.workflow_id = None
-        for key,value in param_dict.items():
-            if key == "host":
-                self.host_api = value
-            elif key == "project_id":
-                self.project_id = value
-            elif key == "token":
-                self.token = value
-            elif key == "workflow_id":
-                self.workflow_id = value
+        self.project = project
 
         self.num_retired = None
         self.non_blanks_retired = None
 
         self.to_retire = None
-
-        assert (self.host_api is not None) and (self.project_id is not None) and (self.token is not None) and (self.workflow_id is not None)
 
     def __aggregate__(self,raw_classifications,workflow,aggregations):
         # start by looking for empty subjects
@@ -97,22 +81,17 @@ class SubjectRetirement(Classification):
                 self.to_retire.add(subject_id)
                 non_blanks.append(subject_id)
 
-            # # have at least 4/5 of the last 5 people said the subject has been completely transcribed?
-            # recent_completely_transcribed = completely_transcribed[-5:]
-            # if recent_completely_transcribed != []:
-            #     complete_count = sum([1 for i in recent_completely_transcribed if i == True])/float(len(recent_completely_transcribed))
-            #
-            #     if (len(recent_completely_transcribed) == 5) and (complete_count >= 0.8):
-            #         to_retire.add(subject_id)
-        # print(self.to_retire)
-        # don't retire if we are in the development environment
+        # get an updated token
+        assert isinstance(self.project,AggregationAPI)
+        self.project.__panoptes_connect__()
+        token = self.project.token
+        
         if self.to_retire != set():
             try:
-                headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+self.token}
-                print(self.token)
+                headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+token}
                 params = {"retired_subjects":list(self.to_retire)}
                 # r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
-                r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/retired_subjects",headers=headers,data=json.dumps(params))
+                r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.project.workflow_id)+"/retired_subjects",headers=headers,data=json.dumps(params))
                 print("results from trying to retire subjects")
                 print(r)
                 print(r.text)
@@ -121,13 +100,10 @@ class SubjectRetirement(Classification):
             except TypeError as e:
                 warning(e)
                 rollbar.report_exc_info()
-        print("done that")
-        if self.environment == "development":
-            print("we would have retired " + str(len(self.to_retire)))
-            print("with non-blanks " + str(len(self.to_retire)-blank_retirement))
-            if not os.path.isfile("/home/ggdhines/"+str(self.project_id)+".retired"):
-                pickle.dump(non_blanks,open("/home/ggdhines/"+str(self.project_id)+".retired","wb"))
-            print(str(len(self.to_retire)-blank_retirement))
+
+        print("we would have retired " + str(len(self.to_retire)))
+        print("with non-blanks " + str(len(self.to_retire)-blank_retirement))
+        print(str(len(self.to_retire)-blank_retirement))
 
         self.num_retired = len(self.to_retire)
         self.non_blanks_retired = len(self.to_retire)-blank_retirement
@@ -228,8 +204,7 @@ class TranscriptionAPI(AggregationAPI):
         workflow_id = self.workflows.keys()[0]
 
         # set the classification algorithm which will retire the subjects
-        classification_params = {"host":self.host_api,"project_id":self.project_id,"token":self.token,"workflow_id":workflow_id}
-        self.__set_classification_alg__(SubjectRetirement,classification_params)
+        self.__set_classification_alg__(SubjectRetirement,self)
 
         self.instructions[workflow_id] = {}
 

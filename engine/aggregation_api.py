@@ -1173,7 +1173,7 @@ class AggregationAPI:
         assert data is not None
         return data
 
-    def __panoptes_connect__(self,api_details):
+    def __panoptes_connect__(self,api_details=None):
         """
         make the main connection to Panoptes - through http
         the below code is based heavily on code originally by Margaret Kosmala
@@ -1181,9 +1181,10 @@ class AggregationAPI:
         :return:
         """
         # details for connecting to Panoptes
-        self.host = api_details["panoptes"]
-        self.host_api = self.host+"api/"
-        self.app_client_id = api_details["app_client_id"]
+        if api_details is not None:
+            self.host = api_details["panoptes"]
+            self.host_api = self.host+"api/"
+            self.app_client_id = api_details["app_client_id"]
         self.token = None
 
         # the http api for connecting to Panoptes
@@ -1246,6 +1247,7 @@ class AggregationAPI:
 
                 try:
                     response = opener.open(request)
+                    print(response)
                 except urllib2.HTTPError as e:
                     warning('In get_bearer_token, stage 3:')
                     warning('The server couldn\'t fulfill the request.')
