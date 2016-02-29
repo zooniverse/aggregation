@@ -299,6 +299,8 @@ class AggregationAPI:
             else:
                 subject_set = migrated_subjects
 
+
+
             if subject_set == []:
                 print("skipping workflow " + str(workflow_id) + " due to an empty subject set")
                 subject_set = None
@@ -810,7 +812,6 @@ class AggregationAPI:
 
         return instructions
 
-
     def __get_workflow_details__(self,given_workflow_id=None):
         """
         get everything about the workflows - if no id is provided, go with everything
@@ -1059,7 +1060,7 @@ class AggregationAPI:
 
         # if we are in development - we don't need all the classifications, so make life simple and just get some
         if self.environment == "development":
-            select += " order by id limit 1200"
+            select += " order by id limit 120000"
 
         # actually get the classifications
         print("about to get all the relevant classifications")
@@ -1185,13 +1186,11 @@ class AggregationAPI:
             self.host = api_details["panoptes"]
             self.host_api = self.host+"api/"
             self.app_client_id = api_details["app_client_id"]
+
+            self.user_name = api_details["panoptes_username"]
+            self.password = api_details["panoptes_password"]
+
         self.token = None
-
-        # the http api for connecting to Panoptes
-        self.http_api = None
-
-        user_name = api_details["panoptes_username"]
-        password = api_details["panoptes_password"]
 
         for i in range(20):
             try:
@@ -1213,7 +1212,7 @@ class AggregationAPI:
                     raise
 
                 #2. use the token to get a devise session via JSON stored in a cookie
-                devise_login_data=("{\"user\": {\"login\":\""+user_name+"\",\"password\":\""+password+
+                devise_login_data=("{\"user\": {\"login\":\""+self.user_name+"\",\"password\":\""+self.password+
                                    "\"}, \"authenticity_token\": \""+csrf_token+"\"}")
 
                 request = urllib2.Request(self.host+"users/sign_in",data=devise_login_data)
@@ -1272,36 +1271,6 @@ class AggregationAPI:
                 print("trying to connect/init again again")
                 pass
 
-    # def __panoptes_aggregation__(self):
-    #
-    #     # request = urllib2.Request(self.host_api+"aggregations?workflow_id="+str(2)+"&subject_id="+str(458021)+"&admin=true")
-    #     request = urllib2.Request(self.host_api+"aggregations?workflow_id="+str(2)+"&admin=true")
-    #     print self.host_api+"aggregations?workflow_id="+str(2)+",subject_id="+str(458021)
-    #     # request = urllib2.Request(self.host_api+"workflows/project_id="+str(self.project_id))
-    #     request.add_header("Accept","application/vnd.api+json; version=1")
-    #     request.add_header("Authorization","Bearer "+self.token)
-    #
-    #     # request
-    #     try:
-    #         response = urllib2.urlopen(request)
-    #     except urllib2.HTTPError as e:
-    #         sys.stderr.write('The server couldn\'t fulfill the request.\n')
-    #         sys.stderr.write('Error code: ' + str(e.code) + "\n")
-    #         sys.stderr.write('Error response body: ' + str(e.read()) + "\n")
-    #         raise
-    #     except urllib2.URLError as e:
-    #         sys.stderr.write('We failed to reach a server.\n')
-    #         sys.stderr.write('Reason: ' + str(e.reason) + "\n")
-    #         raise
-    #     else:
-    #         # everything is fine
-    #         body = response.read()
-    #
-    #     # put it in json structure and extract id
-    #     data = json.loads(body)
-    #
-    #     # print data
-
 
     def __plot_image__(self,subject_id,axes):
         # todo - still learning about Matplotlib and axes
@@ -1325,35 +1294,6 @@ class AggregationAPI:
 
         assert False
 
-    # def __plot_individual_points__(self,subject_id,task_id,shape):
-    #     for cluster in self.cluster_alg.clusterResults[task_id][shape][subject_id]:
-    #         for pt in cluster["points"]:
-    #             if shape == "line":
-    #                 plt.plot([pt[0],pt[1]],[pt[2],pt[3]],color="red")
-    #             elif shape == "point":
-    #                 plt.plot([pt[0]],[pt[1]],".",color="red")
-    #             elif shape == "circle":
-    #                 print (pt[0],pt[1]),pt[2]
-    #                 e = Ellipse((pt[0],pt[1]),width = pt[2],height=pt[2],fill=False,color="red")
-    #                 # circle = plt.Circle((pt[0],pt[1]),pt[2],color=cnames.values()[users.index(user_id)])
-    #                 plt.gca().add_patch(e)
-    #                 # ax.add_artist(e)
-    #                 # e.set_alpha(0)
-    #             elif shape == "ellipse":
-    #                 # ("angle","rx","ry","x","y")
-    #                 e = Ellipse((pt[3],pt[4]),width = pt[2],height=pt[1],fill=False,angle=pt[0],color="red")
-    #             elif shape == "rectangle":
-    #                 plt.plot([pt[0],pt[0]+pt[2]],[pt[1],pt[1]],color="red")
-    #                 plt.plot([pt[0],pt[0]],[pt[1],pt[1]+pt[3]],color="red")
-    #                 plt.plot([pt[0]+pt[2],pt[0]+pt[2]],[pt[1],pt[1]+pt[3]],color="red")
-    #                 plt.plot([pt[0],pt[0]+pt[2]],[pt[1]+pt[3],pt[1]+pt[3]],color="red")
-    #             else:
-    #                 print shape
-    #                 assert False
-    #
-    #     plt.axis('scaled')
-
-    # def __get_cluster_markings__(self,workflow_id,subject_id,task_id,shape,axes,percentile_threshold=None,correct_pts=None,incorrect_pts=None):
     def __get_cluster_markings__(self,workflow_id,subject_id,task_id,shape):
         """
         return the center of each cluster - for plotting - and associated probability of existing
