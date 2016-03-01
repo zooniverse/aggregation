@@ -439,10 +439,6 @@ class TranscriptionAPI(AggregationAPI):
 
         print(s3.Object("zooniverse-static",key).put(Body=open("/tmp/"+aws_tar,"rb")))
 
-        key = "panoptes-uploads.zooniverse.org/production/project_aggregations_export/test.txt"
-        print(key)
-        s3.Object("zooniverse-static",key).put(Body=open("/home/ggdhines/test.txt","rb"))
-
     def __get_aws_tar_name__(self):
         media = self.__panoptes_call__("projects/"+str(self.project_id)+"/aggregations_export?admin=true")["media"]
         aggregation_export = media[0]["src"]
