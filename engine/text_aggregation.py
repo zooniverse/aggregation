@@ -86,15 +86,12 @@ class SubjectRetirement(Classification):
         self.project.__panoptes_connect__()
         token = self.project.token
 
-        if self.to_retire != set():
+        for retired_subject in self.to_retire:
             try:
                 headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+token}
-                params = {"retired_subjects":list(self.to_retire)}
-                # r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
+                params = {"retired_subject":retired_subject}
                 r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(workflow_id)+"/retired_subjects",headers=headers,data=json.dumps(params))
-                print("results from trying to retire subjects")
                 print(r)
-                print(r.text)
                 # rollbar.report_message("results from trying to retire subjects","info",extra_data=r.text)
 
             except TypeError as e:
