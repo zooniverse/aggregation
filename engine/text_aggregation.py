@@ -57,7 +57,7 @@ class SubjectRetirement(Classification):
 
         self.to_retire = None
 
-    def __aggregate__(self,raw_classifications,workflow,aggregations):
+    def __aggregate__(self,raw_classifications,workflow_id,aggregations):
         # start by looking for empty subjects
 
         self.to_retire = set()
@@ -85,13 +85,13 @@ class SubjectRetirement(Classification):
         assert isinstance(self.project,AggregationAPI)
         self.project.__panoptes_connect__()
         token = self.project.token
-        
+
         if self.to_retire != set():
             try:
                 headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+token}
                 params = {"retired_subjects":list(self.to_retire)}
                 # r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.workflow_id)+"/links/retired_subjects",headers=headers,json=params)
-                r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(self.project.workflow_id)+"/retired_subjects",headers=headers,data=json.dumps(params))
+                r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(workflow_id)+"/retired_subjects",headers=headers,data=json.dumps(params))
                 print("results from trying to retire subjects")
                 print(r)
                 print(r.text)
@@ -146,6 +146,8 @@ class TranscriptionAPI(AggregationAPI):
                 subject_set = None
                 continue
 
+            subject_set = self.__get_newly_retired_subjects__(workflow_id)
+
             print("workflow id : " + str(workflow_id))
             print("aggregating " + str(len(subject_set)) + " subjects")
 
@@ -162,7 +164,6 @@ class TranscriptionAPI(AggregationAPI):
             # image_dimensions can be used by some clustering approaches - ie. for blob clustering
             # to give area as percentage of the total image area
             raw_classifications,raw_markings,raw_surveys,image_dimensions = self.__sort_annotations__(workflow_id,subject_set,expert)
-            print(marking_tasks)
 
             # do we have any marking tasks?
             if marking_tasks != {}:
@@ -172,7 +173,7 @@ class TranscriptionAPI(AggregationAPI):
             # we ALWAYS have to do classifications - even if we only have marking tasks, we need to do
             # tool classification and existence classifications
             print("classifying")
-            aggregations = self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],aggregations)
+            aggregations = self.classification_alg.__aggregate__(raw_classifications,workflow_id,aggregations)
 
             # finally, store the results
             self.__upsert_results__(workflow_id,aggregations)
