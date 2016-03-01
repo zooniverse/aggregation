@@ -89,9 +89,8 @@ class SubjectRetirement(Classification):
         for retired_subject in self.to_retire:
             try:
                 headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+token}
-                params = {"retired_subject":retired_subject}
+                params = {"subject_id":retired_subject}
                 r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(workflow_id)+"/retired_subjects",headers=headers,data=json.dumps(params))
-                print(r)
                 # rollbar.report_message("results from trying to retire subjects","info",extra_data=r.text)
 
             except TypeError as e:
