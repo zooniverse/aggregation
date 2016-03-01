@@ -143,8 +143,6 @@ class TranscriptionAPI(AggregationAPI):
                 subject_set = None
                 continue
 
-            subject_set = self.__get_newly_retired_subjects__(workflow_id)
-
             print("workflow id : " + str(workflow_id))
             print("aggregating " + str(len(subject_set)) + " subjects")
 
