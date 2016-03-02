@@ -3,17 +3,13 @@ from __future__ import print_function
 import cv2
 import numpy as np
 import glob
-import matplotlib
-# matplotlib.use('WXAgg')
 import matplotlib.pyplot as plt
 import database_connection
 from scipy import stats
 import tesseract_font
-horizontal = []
 import cassandra
 import csv
-
-
+from shutil import copyfile
 
 class ActiveWeather:
     def __init__(self):
@@ -60,18 +56,37 @@ class ActiveWeather:
             # self.cass_db.__add_horizontal_lines__(reference_subject,0,horizontal_lines)
             # self.cass_db.__add_vertical_lines__(reference_subject,0,vertical_lines)
 
-        reference_image = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0019.JPG",0)
-        mask = np.zeros(reference_image.shape,dtype=np.uint8)
-        mask.fill(255)
-        cv2.drawContours(mask,vertical_grid,0,0,-1)
-        cv2.drawContours(mask,vertical_grid,1,0,-1)
-        cv2.imwrite("/home/ggdhines/grrr.jpg",mask)
-
+        # reference_image = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0019.JPG",0)
+        # mask = np.zeros(reference_image.shape,dtype=np.uint8)
+        # mask.fill(255)
+        # cv2.drawContours(mask,vertical_grid,0,0,-1)
+        # cv2.drawContours(mask,vertical_grid,1,0,-1)
+        # cv2.imwrite("/home/ggdhines/grrr.jpg",mask)
 
         # todo - generalize to more than one region
-        for fname in glob.glob(directory+"*.JPG"):
-            self.__process_region__(fname,region_bounds,horizontal_gid,vertical_grid)
-            break
+        confidence_over_all_cells = []
+        bad_count = 0
+        for fname in glob.glob(directory+"*.JPG")[:30]:
+            first_files, second_files = self.__process_region__(fname,region_bounds,horizontal_gid,vertical_grid)
+
+            for fname1,fname2 in zip(first_files,second_files):
+                is_blank = self.classifier.__is_blank__(fname1)
+                if not is_blank:
+                    text,confidence = self.classifier.__process_column__(fname2)
+                    confidence_over_all_cells.extend(confidence)
+
+                    if min(confidence) < 50:
+                        f = fname2.split("/")
+                        cv2.imwrite(fname2)
+
+        print(confidence_over_all_cells)
+        n, bins, patches = plt.hist(confidence_over_all_cells, 80, normed=1,
+                        histtype='step', cumulative=True)
+
+        plt.show()
+
+
+
 
     def __sobel_image__(self,image,horizontal):
         """
@@ -256,17 +271,25 @@ class ActiveWeather:
         return mask2
 
     def __process_region__(self,fname,region_bounds,horizontal_grid,vertical_grid):
+        first_files = []
+        second_files = []
         first_pass,second_pass = self.__extract_region__(fname,region_bounds,horizontal_grid,vertical_grid)
 
         # first
         for column_index in range(len(vertical_grid)-1):
             column = self.__extract_column__(first_pass,column_index,vertical_grid,region_bounds)
-            cv2.imwrite("/home/ggdhines/first"+str(column_index)+".jpg",column)
+            fname = "/home/ggdhines/first_"+str(column_index)+".jpg"
+            cv2.imwrite(fname,column)
+            first_files.append(fname)
 
         # first
         for column_index in range(len(vertical_grid)-1):
             column = self.__extract_column__(second_pass,column_index,vertical_grid,region_bounds)
-            cv2.imwrite("/home/ggdhines/second"+str(column_index)+".jpg",column)
+            fname = "/home/ggdhines/second_"+str(column_index)+".jpg"
+            cv2.imwrite(fname,column)
+            second_files.append(fname)
+
+        return first_files,second_files
 
     def __extract_region__(self,fname,region_bounds,horizontal_grid,vertical_grid):
         """
