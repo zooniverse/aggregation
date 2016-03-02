@@ -5,96 +5,155 @@ import numpy as np
 import glob
 import matplotlib
 # matplotlib.use('WXAgg')
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import database_connection
-import extract_digits
 from scipy import stats
 import tesseract_font
-from subprocess import call
-import Image
-import pytesseract
-import os
 horizontal = []
-import hocr
-import tesserpy
+import cassandra
+import csv
 
-# just for size reference
-reference_subject = "Bear-AG-29-1940-0019"
-reference_image = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/"+reference_subject+".JPG")
-refer_shape = reference_image.shape
+
 
 class ActiveWeather:
     def __init__(self):
-        self.cass_db = database_connection.Database()
-        print("connected to the db")
-        # self.__get_grid__()
-        self.horizontal_grid = self.cass_db.__get_horizontal_lines__(reference_subject,0)
-        self.vertical_grid = self.cass_db.__get_vertical_lines__(reference_subject,0)
-        # self.horizontal_grid,self.vertical_grid = self.__get_grid__()
+        try:
+            self.cass_db = database_connection.Database()
+            print("connected to the db")
+        except cassandra.cluster.NoHostAvailable:
+            print("could not connect to the db - will recalculate all values from scratch")
+            self.cass_db = None
+
+        # just for size reference
+        # self.reference_subject = "Bear-AG-29-1940-0019"
+        # self.reference_image = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/"+self.reference_subject+".JPG")
+        # self.refer_shape = self.reference_image.shape
+        #
+        # self.horizontal_grid = self.cass_db.__get_horizontal_lines__(self.reference_subject,0)
+        # self.vertical_grid = self.cass_db.__get_vertical_lines__(self.reference_subject,0)
+        # # self.horizontal_grid,self.vertical_grid = self.__get_grid__()
 
         self.region = 0
 
         self.classifier = tesseract_font.ActiveTess()
 
+    def __directory_to_subjects__(self,directory):
+        """
+        take  directory of aligned images and convert them into column based subjects for upload to Panoptes
+        :param directory:
+        :return:
+        """
+        if directory[-1] != "/":
+            directory += "/"
+
+        if self.cass_db is None:
+            # we don't have a connection the db - so going to recalulate everything from scratch
+            horizontal_gid,vertical_grid = self.__get_grid_for_table__(directory)
+        else:
+            # todo - read in from db
+            horizontal_gid,vertical_grid = self.__get_grid_for_table__(directory)
+            # self.horizontal_grid = self.cass_db.__get_horizontal_lines__(self.reference_subject,0)
+            # self.vertical_grid = self.cass_db.__get_vertical_lines__(self.reference_subject,0)
+            # todo - put this code inside the db call
+            # uncomment - if you want to save the results to the cassandra db
+            # self.cass_db.__add_horizontal_lines__(reference_subject,0,horizontal_lines)
+            # self.cass_db.__add_vertical_lines__(reference_subject,0,vertical_lines)
+
+        for f in glob.glob(directory+"*.JPG"):
+            pass
 
 
-    def __get_lines__(self,horizontal):
-        # todo - swap
-        lined_images = []
+    def __sobel_image__(self,image,horizontal):
+        """
+        apply the sobel operator to a given image on either the vertical or horizontal axis
+        basically copied from
+        http://stackoverflow.com/questions/10196198/how-to-remove-convexity-defects-in-a-sudoku-square
+        :param horizontal:
+        :return:
+        """
+        if horizontal:
+            dy = cv2.Sobel(image,cv2.CV_16S,0,2)
+            dy = cv2.convertScaleAbs(dy)
+            cv2.normalize(dy,dy,0,255,cv2.NORM_MINMAX)
+            ret,close = cv2.threshold(dy,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 
-        for f in glob.glob("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/*.JPG")[:5]:
-            img = cv2.imread(f,0)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(10,2))
+        else:
+            dx = cv2.Sobel(image,cv2.CV_16S,2,0)
+            dx = cv2.convertScaleAbs(dx)
+            cv2.normalize(dx,dx,0,255,cv2.NORM_MINMAX)
+            ret,close = cv2.threshold(dx,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 
-            if horizontal:
-                dy = cv2.Sobel(img,cv2.CV_16S,0,2)
-                dy = cv2.convertScaleAbs(dy)
-                cv2.normalize(dy,dy,0,255,cv2.NORM_MINMAX)
-                ret,close = cv2.threshold(dy,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(2,10))
 
-                kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(10,2))
-            else:
-                dx = cv2.Sobel(img,cv2.CV_16S,2,0)
-                dx = cv2.convertScaleAbs(dx)
-                cv2.normalize(dx,dx,0,255,cv2.NORM_MINMAX)
-                ret,close = cv2.threshold(dx,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        close = cv2.morphologyEx(close,cv2.MORPH_CLOSE,kernel)
 
-                kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(2,10))
+        return close
 
-            close = cv2.morphologyEx(close,cv2.MORPH_CLOSE,kernel)
-
-            lined_images.append(close)
-
-        average_image = np.percentile(lined_images,40,axis=0)
-
-        average_image = average_image.astype(np.uint8)
-
-        cv2.imwrite("/home/ggdhines/results.jpg",average_image)
-
+    def __contour_extraction__(self,image,horizontal):
+        """
+        extract all the horizontal or vertical contours from an image
+        strongly inspired by
+        http://stackoverflow.com/questions/10196198/how-to-remove-convexity-defects-in-a-sudoku-square
+        :param image:
+        :param horizontal:
+        :return:
+        """
         contours_to_return = []
-
-        _,contour, hier = cv2.findContours(average_image,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+        _,contour, hier = cv2.findContours(image.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
         for cnt in contour:
             x,y,w,h = cv2.boundingRect(cnt)
             if (horizontal and w/h > 5) or ((not horizontal) and h/w > 5):
-                cv2.drawContours(average_image,[cnt],0,255,-1)
                 contours_to_return.append(cnt)
-            else:
-                cv2.drawContours(average_image,[cnt],0,0,-1)
 
-        average_image = cv2.morphologyEx(average_image,cv2.MORPH_DILATE,None,iterations = 2)
+        return contours_to_return
 
-        return average_image,contours_to_return
+    def __get_contour_lines_over_image__(self,directory,horizontal):
+        """
+        return the contours lines for a subject set of already aligned subjects
+        if horizontal, return only the horizontal contours. Otherwise, return the vertical contours
+        returns the contours over all the image - we still have to trim to the specific region
+        :param horizontal:
+        :return:
+        """
+        # todo - currently hard coded to work with only Bear 1940
+        # lined_images is the set of every aligned image after we have applied the sobel operator to it
+        # i.e. extracted either the vertical or horizontal lines
+        lined_images = []
 
+        # use only the first 5 images - should be enough but we can change that if need be
+        for f in glob.glob(directory+"*.JPG")[:5]:
+            image = cv2.imread(f,0)
+            lined_images.append(self.__sobel_image__(image,horizontal))
 
-    def __get_grid__(self):
-        # extract all horizontal lines
-        _,horizontal_contours = self.__get_lines__(True)
+        # the average image is the 40th percentile
+        average_image = np.percentile(lined_images,40,axis=0)
+        # convert back to np.uint8 so we have a proper image
+        average_image = average_image.astype(np.uint8)
 
+        if horizontal:
+            cv2.imwrite("/home/ggdhines/horizontal_average.jpg",average_image)
+        else:
+            cv2.imwrite("/home/ggdhines/vertical_image.jpg",average_image)
+
+        contours_to_return = self.__contour_extraction__(average_image,horizontal)
+
+        return contours_to_return
+
+    def __get_grid_for_table__(self,directory):
+        """
+        directory - contains a set of aligned images
+        extract the grid for a given region/table
+        :return:
+        """
+        # todo - refactor!!
         horizontal_lines = []
         vertical_lines = []
+        # extract all horizontal lines
+        horizontal_contours = self.__get_contour_lines_over_image__(directory,True)
 
         # useful for when you want to draw out the image - just for debugging
-        template_image = np.zeros(refer_shape,np.uint8)
+
         delta = 50
 
         for cnt in horizontal_contours:
@@ -104,15 +163,15 @@ class ActiveWeather:
             min_x,min_y = np.min(t,axis=0)
 
             if (min_y>=1276-delta) and (max_y<=2097+delta):
+                # sanity check - if this an actual grid line - or just a blip?
                 perimeter = cv2.arcLength(cnt,True)
 
                 if perimeter > 100:
-                    cv2.drawContours(template_image,[cnt],0,255,3)
                     horizontal_lines.append(cnt)
 
         horizontal_lines.sort(key = lambda l:l[0][0][1])
 
-        _,vertical_contours = self.__get_lines__(False)
+        vertical_contours = self.__get_contour_lines_over_image__(directory,False)
 
         delta = 400
         for cnt in vertical_contours:
@@ -130,148 +189,225 @@ class ActiveWeather:
                 if perimeter > 1000:
                     # cv2.drawContours(masks,[cnt],0,255,3)
                     vertical_lines.append(cnt)
-                    cv2.drawContours(template_image,[cnt],0,255,3)
+
 
         vertical_lines.sort(key = lambda l:l[0][0][0])
 
-        # todo - deal with lines that go all the way through the window
-        # cv2.imwrite("/home/ggdhines/testtest.jpg",a)
-        # cv2.namedWindow('image', cv2.WINDOW_NORMAL)
-        # cv2.imshow('image',a)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
-        self.cass_db.__add_horizontal_lines__(reference_subject,0,horizontal_lines)
-        self.cass_db.__add_vertical_lines__(reference_subject,0,vertical_lines)
-
         return horizontal_lines,vertical_lines
 
+    def __extract_column__(self,column_index):
+        image = cv2.imread("/home/ggdhines/gaussian.jpg",0)
 
+        # get the region coordinates - so we can convert global grid line coordinates to
+        # local ones (relative to just the grid line)
+        _,_,region_x,_,_ = self.__region_mask__()
+        t = self.vertical_grid[column_index]
+        min_x,_ = np.min(t,axis=0)
+        t = self.vertical_grid[column_index+1]
+        max_x,_ = np.max(t,axis=0)
 
-    def __process_row__(self,fname,row_index):
-        image = cv2.imread(fname,0)
-        # most_common_pigment = int(stats.median(image,axis=None)[0][0])
-        most_common_pigment = np.median(image)
-        print(most_common_pigment)
-        min_x,max_x,min_y,max_y,mask1,mask2 = self.__create_masks__(row_index)
+        # print(image[:,5:7])
+        column = image[:,(min_x-region_x):(max_x-region_x+1)]
 
-        row_contents = cv2.bitwise_and(image,mask1)
-        background = np.where(mask2>0)
-        row_contents[background] = most_common_pigment
-
-        # remove the vertical rows
-        for v in self.vertical_grid:
-            cv2.drawContours(row_contents,[v],0,255,-1)
-
-        row = row_contents[min_y:max_y+1,min_x:max_x+1]
-
-        ret2,th2 = cv2.threshold(row,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-
-        cv2.imwrite("/home/ggdhines/row.jpg",th2)
-
-
-        # # row_ = cv2.adaptiveThreshold(row,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,201,2)
-        # ret,row_ = cv2.threshold(row,most_common_pigment+5,255,cv2.THRESH_BINARY)
-        # cv2.imwrite("/home/ggdhines/row_.jpg",row_)
-
-        _,contour, hier = cv2.findContours(th2.copy(),cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
-        for cnt,h_ in zip(contour,hier[0]):
-
+        # gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        # remove any "blips"
+        _,contour, hier = cv2.findContours(image.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+        for cnt in contour:
             x,y,w,h = cv2.boundingRect(cnt)
 
-            # print(h)
-            # print(w/h)
-            # print("")
-            if (h < 10):
-                print(h)
-                cv2.drawContours(th2,[cnt],0,255,-1)
+            print((h,w))
+            if (h <5) or (w < 5):
+                cv2.drawContours(column,[cnt],0,255,-1)
 
+        cv2.imwrite("/home/ggdhines/column"+str(column_index)+".jpg",column)
 
-        cv2.imwrite("/home/ggdhines/row2.jpg",th2)
+    # def __process_row__(self,row_index):
+    #     min_y,max_y,min_x,max_x ,mask = self.__region_mask__()
+    #     image = cv2.imread("/home/ggdhines/gaussian.jpg",0)
+    #     print(image.shape)
+    #     # most_common_pigment = int(stats.median(image,axis=None)[0][0])
+    #
+    #     region_y,_,_,_,_ = self.__region_mask__()
+    #
+    #     t = self.horizontal_grid[row_index]#.reshape((shape[0],shape[2]))
+    #     _,min_y = np.min(t,axis=0)
+    #
+    #     t = self.horizontal_grid[row_index+1]#.reshape((shape[0],shape[2]))
+    #     _,max_y = np.max(t,axis=0)
+    #
+    #     row = image[(min_y-region_y):(max_y-region_y+1),:]
+    #
+    #     # wedge masks
+    #     big_mask = np.zeros(row.shape,np.uint8)
+    #     big_mask.fill(255)
+    #
+    #     t = self.horizontal_grid[row_index]#.reshape((shape[0],shape[2]))
+    #     _,min_y = np.max(t,axis=0)
+    #
+    #     t = self.horizontal_grid[row_index+1]#.reshape((shape[0],shape[2]))
+    #     _,max_y = np.min(t,axis=0)
+    #
+    #
+    #
+    #     # mask3[min_y:max_y+1,min_x:max_x+1] = 255
+    #     # mask4 = cv2.bitwise_xor(mask3,mask)
+    #
+    #     cv2.imwrite("/home/ggdhines/row"+str(row_index)+".jpg",row)
+    #
+    #
+    #
+    #     # row_contents = cv2.bitwise_and(image,mask1)
+    #     # background = np.where(mask2>0)
+    #     # row_contents[background] = most_common_pigment
+    #     #
+    #     # # remove the vertical rows
+    #     # for v in self.vertical_grid:
+    #     #     cv2.drawContours(row_contents,[v],0,255,-1)
+    #     #
+    #     # row = row_contents[min_y:max_y+1,min_x:max_x+1]
+    #     #
+    #     # ret2,th2 = cv2.threshold(row,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    #     #
+    #     # cv2.imwrite("/home/ggdhines/row.jpg",th2)
+    #     #
+    #     #
+    #     # # # row_ = cv2.adaptiveThreshold(row,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,201,2)
+    #     # # ret,row_ = cv2.threshold(row,most_common_pigment+5,255,cv2.THRESH_BINARY)
+    #     # # cv2.imwrite("/home/ggdhines/row_.jpg",row_)
+    #     #
+    #     # _,contour, hier = cv2.findContours(th2.copy(),cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
+    #     # for cnt,h_ in zip(contour,hier[0]):
+    #     #
+    #     #     x,y,w,h = cv2.boundingRect(cnt)
+    #     #
+    #     #     # print(h)
+    #     #     # print(w/h)
+    #     #     # print("")
+    #     #     if (h < 10):
+    #     #         print(h)
+    #     #         cv2.drawContours(th2,[cnt],0,255,-1)
+    #     #
+    #     #
+    #     # cv2.imwrite("/home/ggdhines/row2.jpg",th2)
+    #     #
+    #     #
+    #     # row_colour = np.zeros((th2.shape[0],th2.shape[1],3),np.uint8)
+    #     # row_colour[:,:,0] = th2
+    #     # row_colour[:,:,1] = th2
+    #     # row_colour[:,:,2] = th2
+    #     #
+    #     # tess = tesserpy.Tesseract("/home/ggdhines/github/tessdata/",language="eng")
+    #     # tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890."
+    #     # tess.set_image(row_colour)
+    #     # tess.get_utf8_text()
+    #     # words = list(tess.words())
+    #     # words_in_cell = [w.text for w in words if w.text is not None]
+    #     # print(words_in_cell)
+    #     # conf_in_cell = [w.confidence for w in words if w.text is not None]
+    #     # print(conf_in_cell)
+    #     #
+    #     # # words,confidence = hocr.scan()
+    #     # # for w,c in zip(words,confidence):
+    #     # #     print((w,c))
+    #     # raw_input("check row.jpg")
 
+    # def __region_mask__(self,reference_image,horizontal_grid,vertical_grid):
+    #     """
+    #
+    #     :return:
+    #     """
+    #     reference_shape = reference_image.shape
+    #     # [:2] in case we read in the image in colour format - doesn't seem necessary to throw an error
+    #     mask = np.zeros(reference_shape[:2],np.uint8)
+    #     cv2.drawContours(mask,self.horizontal_grid,0,255,-1)
+    #     cv2.drawContours(mask,self.horizontal_grid,len(self.horizontal_grid)-2,255,-1)
+    #     cv2.drawContours(mask,self.vertical_grid,0,255,-1)
+    #     cv2.drawContours(mask,self.vertical_grid,len(self.vertical_grid)-1,255,-1)
+    #
+    #     _,contours, hier = cv2.findContours(mask.copy(),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+    #
+    #     mask2 = np.zeros((refer_shape[0],refer_shape[1]),np.uint8)
+    #
+    #     for c,h in zip(contours,hier[0]):
+    #         if h[-1] == -1:
+    #             continue
+    #
+    #         cv2.drawContours(mask2,[c],0,255,-1)
+    #
+    #     t = self.horizontal_grid[0]#.reshape((shape[0],shape[2]))
+    #     _,min_y = np.min(t,axis=0)
+    #
+    #     t = self.horizontal_grid[-2]#.reshape((shape[0],shape[2]))
+    #     _,max_y = np.max(t,axis=0)
+    #
+    #     # repeat for vertical grid lines
+    #     # shape = self.vertical_grid[v_index].shape
+    #     t = self.vertical_grid[0]#.reshape((shape[0],shape[2]))
+    #     min_x,_ = np.min(t,axis=0)
+    #
+    #     t = self.vertical_grid[-1]#.reshape((shape[0],shape[2]))
+    #     max_x,_ = np.max(t,axis=0)
+    #     return min_y,max_y,min_x,max_x ,mask2
 
-        row_colour = np.zeros((th2.shape[0],th2.shape[1],3),np.uint8)
-        row_colour[:,:,0] = th2
-        row_colour[:,:,1] = th2
-        row_colour[:,:,2] = th2
-
-        tess = tesserpy.Tesseract("/home/ggdhines/github/tessdata/",language="eng")
-        tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890."
-        tess.set_image(row_colour)
-        tess.get_utf8_text()
-        words = list(tess.words())
-        words_in_cell = [w.text for w in words if w.text is not None]
-        print(words_in_cell)
-        conf_in_cell = [w.confidence for w in words if w.text is not None]
-        print(conf_in_cell)
-
-        # words,confidence = hocr.scan()
-        # for w,c in zip(words,confidence):
-        #     print((w,c))
-        raw_input("check row.jpg")
-
-    def __region_mask__(self):
-        mask = np.zeros((refer_shape[0],refer_shape[1]),np.uint8)
-        cv2.drawContours(mask,self.horizontal_grid,0,255,-1)
-        cv2.drawContours(mask,self.horizontal_grid,len(self.horizontal_grid)-2,255,-1)
-        cv2.drawContours(mask,self.vertical_grid,0,255,-1)
-        cv2.drawContours(mask,self.vertical_grid,len(self.vertical_grid)-1,255,-1)
-
-        _,contours, hier = cv2.findContours(mask.copy(),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-
-        mask2 = np.zeros((refer_shape[0],refer_shape[1]),np.uint8)
-
-        for c,h in zip(contours,hier[0]):
-            if h[-1] == -1:
-                continue
-
-            cv2.drawContours(mask2,[c],0,255,-1)
-
-
-        cv2.imwrite("/home/ggdhines/mask.jpg",mask)
-        return mask2
+    def __remove_grid__(self,image,replacement_colour):
+        """
+        replace all of the grid with either the desired colour - probably either white
+        of the most common colour (assuming that corresponds to background colour)
+        :param image:
+        :param replacement_colour:
+        :return:
+        """
+        cv2.drawContours(image,self.horizontal_grid,-1,replacement_colour,-1)
+        cv2.drawContours(image,self.vertical_grid,-1,replacement_colour,-1)
 
     def __process_region__(self,fname):
         image = cv2.imread(fname,0)
-        mask = self.__region_mask__()
+        min_y,max_y,min_x,max_x ,mask = self.__region_mask__()
 
         masked_image = cv2.bitwise_and(image,mask)
         most_common_pigment = np.median(image)
         # cv2.drawContours(masked_image,self.horizontal_grid,-1,most_common_pigment,-1)
         # cv2.drawContours(masked_image,self.vertical_grid,-1,most_common_pigment,-1)
 
-        cv2.drawContours(masked_image,self.horizontal_grid,-1,most_common_pigment,-1)
-        cv2.drawContours(masked_image,self.vertical_grid,-1,most_common_pigment,-1)
-
-        t = self.horizontal_grid[0]#.reshape((shape[0],shape[2]))
-        _,min_y = np.min(t,axis=0)
-
-        t = self.horizontal_grid[-2]#.reshape((shape[0],shape[2]))
-        _,max_y = np.max(t,axis=0)
-
-        # repeat for vertical grid lines
-        # shape = self.vertical_grid[v_index].shape
-        t = self.vertical_grid[0]#.reshape((shape[0],shape[2]))
-        min_x,_ = np.max(t,axis=0)
-
-        t = self.vertical_grid[-1]#.reshape((shape[0],shape[2]))
-        max_x,_ = np.min(t,axis=0)
+        # cv2.drawContours(masked_image,self.horizontal_grid,-1,most_common_pigment,-1)
+        # cv2.drawContours(masked_image,self.vertical_grid,-1,most_common_pigment,-1)
 
         region = masked_image[min_y:max_y+1,min_x:max_x+1]
         # ret2,th2 = cv2.threshold(region,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
         # th2 = cv2.adaptiveThreshold(region,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,401,2)
-        cv2.imwrite("/home/ggdhines/step1.jpg",region)
+        # cv2.imwrite("/home/ggdhines/step1.jpg",region)
 
-        mask3 = np.zeros(image.shape,np.uint8)
-        mask3[min_y:max_y+1,min_x:max_x+1] = 255
-        mask4 = cv2.bitwise_xor(mask3,mask)
+        # mask3 = np.zeros(image.shape,np.uint8)
+        # mask3[min_y:max_y+1,min_x:max_x+1] = 255
+        # mask4 = cv2.bitwise_xor(mask3,mask)
 
-        mask4_t = np.where(mask4>0)
-        masked_image[mask4_t] = most_common_pigment
-        region = masked_image[min_y:max_y+1,min_x:max_x+1]
-        cv2.imwrite("/home/ggdhines/step2.jpg",region)
+        # mask4_t = np.where(mask4>0)
+        # masked_image[mask4_t] = most_common_pigment
+        # region = masked_image[min_y:max_y+1,min_x:max_x+1]
+        # cv2.imwrite("/home/ggdhines/step2.jpg",region)
 
-        ret,thresh1 = cv2.threshold(region,190,255,cv2.THRESH_BINARY)
+        # ret,thresh1 = cv2.threshold(region,190,255,cv2.THRESH_BINARY)
+        ret2,thresh1 = cv2.threshold(region,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
         cv2.imwrite("/home/ggdhines/step3.jpg",thresh1)
+
+        cv2.drawContours(image,self.horizontal_grid,-1,255,-1)
+        cv2.drawContours(image,self.vertical_grid,-1,255,-1)
+        gaussian_image = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,201,2)
+
+        gaussian_region = gaussian_image[min_y:max_y+1,min_x:max_x+1]
+
+        _,contours, hier = cv2.findContours(gaussian_region.copy(),cv2.RETR_CCOMP,cv2.CHAIN_APPROX_SIMPLE)
+
+        # contours are probably in sorted order but just to be sure
+        for cnt in contours:
+            x,y,w,h = cv2.boundingRect(cnt)
+            perimeter = cv2.arcLength(cnt,True)
+            print(h)
+            if h <= 10:
+                cv2.drawContours(gaussian_region,[cnt],0,255,-1)
+        cv2.imwrite("/home/ggdhines/gaussian.jpg",gaussian_region)
+
+
 
         _,contours, hier = cv2.findContours(thresh1.copy(),cv2.RETR_CCOMP,cv2.CHAIN_APPROX_SIMPLE)
 
@@ -284,6 +420,17 @@ class ActiveWeather:
                 cv2.drawContours(thresh1,[cnt],0,255,-1)
 
         cv2.imwrite("/home/ggdhines/step4.jpg",thresh1)
+
+    def __read_box__(self):
+        image = cv2.imread("/home/ggdhines/step4.jpg")
+        s = image.shape
+        with open("/home/ggdhines/boxout","r") as csvfile:
+            spamreader = csv.reader(csvfile, delimiter=' ')
+            for row in spamreader:
+                _,x1,y1,x2,y2,_ = row
+                cv2.rectangle(image,(int(x1),s[0]-int(y1)),(int(x2),s[0]-int(y2)),(255,0,0),2)
+
+        image = cv2.imwrite("/home/ggdhines/step5.jpg",image)
 
 
     def __row_mask__(self,row_index):
@@ -358,9 +505,7 @@ class ActiveWeather:
         # words,confidence = hocr.scan()
         # print(words)
 
-
-
-    def __extract_cell__(self,image,h_index,v_index,colour=True):
+    def __extract_cell__(self,h_index,v_index,colour=True):
         """
         :param image: can use an approximate image which is based on a threshold using more global values
         better for determining whether or a cell is empty. If we know that a cell is not empty, we can do thresholding
@@ -374,7 +519,7 @@ class ActiveWeather:
         t = self.horizontal_grid[h_index]#.reshape((shape[0],shape[2]))
         _,min_y = np.max(t,axis=0)
 
-        shape = self.horizontal_grid[h_index+1].shape
+        # shape = self.horizontal_grid[h_index+1].shape
         t = self.horizontal_grid[h_index+1]#.reshape((shape[0],shape[2]))
         _,max_y = np.min(t,axis=0)
 
@@ -387,53 +532,111 @@ class ActiveWeather:
         t = self.vertical_grid[v_index+1]#.reshape((shape[0],shape[2]))
         max_x,_ = np.min(t,axis=0)
 
-        mask = np.zeros((refer_shape[0],refer_shape[1]),np.uint8)
-        cv2.drawContours(mask,self.horizontal_grid,h_index,255,-1)
-        cv2.drawContours(mask,self.horizontal_grid,h_index+1,255,-1)
-        cv2.drawContours(mask,self.vertical_grid,v_index,255,-1)
-        cv2.drawContours(mask,self.vertical_grid,v_index+1,255,-1)
-
-        _,contours, hier = cv2.findContours(mask.copy(),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-
-        # contours are probably in sorted order but just to be sure
-        for c,h in zip(contours,hier[0]):
-            if h[-1] != -1:
-                continue
-
-            cv2.drawContours(mask,[c],0,255,-1)
-
-        res = cv2.bitwise_and(mask,image)
-
-        # now go back over and draw in contours in white - any black inside the cell that is on a grid
-        # line is mostly likely grid, not ink
-        # most of the time this wouldn't make a difference - but be sure
-        # todo - double check
-        temp_res = res[min_y:max_y+1,min_x:max_x+1]
-        most_common_pigment = int(stats.mode(temp_res,axis=None)[0][0])
-        # print most_common_pigment
-        # print type(most_common_pigment)
-
-        cv2.drawContours(res,self.horizontal_grid,h_index,most_common_pigment,-1)
-        cv2.drawContours(res,self.horizontal_grid,h_index+1,most_common_pigment,-1)
-        cv2.drawContours(res,self.vertical_grid,v_index,most_common_pigment,-1)
-        cv2.drawContours(res,self.vertical_grid,v_index+1,most_common_pigment,-1)
+        # mask = np.zeros((refer_shape[0],refer_shape[1]),np.uint8)
+        # cv2.drawContours(mask,self.horizontal_grid,h_index,255,-1)
+        # cv2.drawContours(mask,self.horizontal_grid,h_index+1,255,-1)
+        # cv2.drawContours(mask,self.vertical_grid,v_index,255,-1)
+        # cv2.drawContours(mask,self.vertical_grid,v_index+1,255,-1)
+        #
+        # _,contours, hier = cv2.findContours(mask.copy(),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+        #
+        # # contours are probably in sorted order but just to be sure
+        # for c,h in zip(contours,hier[0]):
+        #     if h[-1] != -1:
+        #         continue
+        #
+        #     cv2.drawContours(mask,[c],0,255,-1)
+        #
+        # res = cv2.bitwise_and(mask,image)
+        #
+        # # now go back over and draw in contours in white - any black inside the cell that is on a grid
+        # # line is mostly likely grid, not ink
+        # # most of the time this wouldn't make a difference - but be sure
+        # # todo - double check
+        # temp_res = res[min_y:max_y+1,min_x:max_x+1]
+        # most_common_pigment = int(stats.mode(temp_res,axis=None)[0][0])
+        # # print most_common_pigment
+        # # print type(most_common_pigment)
+        #
+        # cv2.drawContours(res,self.horizontal_grid,h_index,most_common_pigment,-1)
+        # cv2.drawContours(res,self.horizontal_grid,h_index+1,most_common_pigment,-1)
+        # cv2.drawContours(res,self.vertical_grid,v_index,most_common_pigment,-1)
+        # cv2.drawContours(res,self.vertical_grid,v_index+1,most_common_pigment,-1)
 
         # now that we have cleaned up this cell, actually zoom into it
-        res = res[min_y:max_y+1,min_x:max_x+1]
+        image = cv2.imread("/home/ggdhines/gaussian.jpg",0)
+        min_y -= 1276
+        max_y  -= 1276
+        min_x -= 572
+        max_x -= 572
+        # print(image)
+        # print(image.shape)
+        cell = image[min_y:max_y+1,min_x:max_x+1]
+        cell = image[min_y:max_y+1,:]
+        # print((min_y,max_y,min_x,max_x))
+        # print(cell)
+        cv2.imwrite("/home/ggdhines/cell_"+str(h_index)+ "_" + str(v_index) + ".jpg",cell)
+        # plt.imshow(cell)
+        # plt.show()
 
-        # tesseract needs things in colour, so convert
+        # # tesseract needs things in colour, so convert
+        #
+        # boundary = [min_y,max_y+1,min_x,max_x+1]
+        #
+        # if colour:
+        #     colour_res = np.zeros((res.shape[0],res.shape[1],3),np.uint8)
+        #     colour_res[:,:,0] = res[:,:]
+        #     colour_res[:,:,1] = res[:,:]
+        #     colour_res[:,:,2] = res[:,:]
+        #
+        #     return colour_res,boundary
+        # else:
+        #     return res,boundary
 
-        boundary = [min_y,max_y+1,min_x,max_x+1]
+    def __extract_table__(self,fname):
+        """
+        extract and save the whole table (for a given region) from an image
+        if a box file exists, plot the bounding boxes
+        :param fname:
+        :return:
+        """
+        t = self.horizontal_grid[0]#.reshape((shape[0],shape[2]))
+        _,min_y = np.max(t,axis=0)
 
-        if colour:
-            colour_res = np.zeros((res.shape[0],res.shape[1],3),np.uint8)
-            colour_res[:,:,0] = res[:,:]
-            colour_res[:,:,1] = res[:,:]
-            colour_res[:,:,2] = res[:,:]
+        # shape = self.horizontal_grid[h_index+1].shape
+        t = self.horizontal_grid[-1]#.reshape((shape[0],shape[2]))
+        _,max_y = np.min(t,axis=0)
 
-            return colour_res,boundary
-        else:
-            return res,boundary
+        # repeat for vertical grid lines
+        # shape = self.vertical_grid[v_index].shape
+        t = self.vertical_grid[0]#.reshape((shape[0],shape[2]))
+        min_x,_ = np.max(t,axis=0)
+
+        # shape = self.vertical_grid[v_index+1].shape
+        t = self.vertical_grid[-1]#.reshape((shape[0],shape[2]))
+        max_x,_ = np.min(t,axis=0)
+
+        image = cv2.imread(fname)
+
+        region = image[min_y:max_y+1,min_x:max_x+1]
+        cv2.imwrite("/home/ggdhines/region.jpg",region)
+        s = region.shape
+
+        with open("/home/ggdhines/region.box","r") as csvfile:
+            reader = csv.reader(csvfile, delimiter=' ')
+
+            for row in reader:
+                _,x1,y1,x2,y2,_ = row
+                print(((int(x1),s[0]-int(y1)),(int(x2),s[0]-int(y2))))
+                region = cv2.rectangle(region,(int(x1),s[0]-int(y1)),(int(x2),s[0]-int(y2)),(255,0,0),2)
+
+        cv2.imwrite("/home/ggdhines/region_with_boxes.jpg",region)
+
+    def __image_threshold__(self,fname):
+        image = cv2.imread(fname,0)
+        gaussian_image = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,101,2)
+
+        cv2.imwrite("/home/ggdhines/gaussian.jpg",gaussian_image)
 
     def __process_image__(self,fname):
         self.__process_region__(fname)
@@ -532,5 +735,13 @@ class ActiveWeather:
 
 if __name__ == "__main__":
     project = ActiveWeather()
-    project.__process_image__("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0720.JPG")
-    # project.__remove_template__("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0720.JPG")
+    project.__directory_to_subjects__("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/")
+    # project.__image_threshold__("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0720.JPG")
+    # project.__extract_table__("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0720.JPG")
+    # project.__extract_column__(8)
+    # project.__process_image__("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0720.JPG")
+    # for i in range(10):
+    #     project.__process_row__(i)
+    # project.__process_image__("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0720.JPG")
+    # project.__remove_template__("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0720.JPG")\
+    # project.__read_box__()
