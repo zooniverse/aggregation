@@ -41,13 +41,37 @@ class ActiveTess:
 
         # self.tess = tesserpy.Tesseract("/home/ggdhines/PycharmProjects/reduction/active_weather/tessdata/", language="active_weather")
         self.tess = tesserpy.Tesseract("/home/ggdhines/github/tessdata/",language="eng")
-        self.tess.tessedit_pageseg_mode = tesserpy.PSM_SINGLE_LINE
-        self.tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890."
+        self.tess.tessedit_pageseg_mode = tesserpy.PSM_SINGLE_BLOCK
+        self.tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.abcdefghijklmnopqrstuvwxyz"
 
         self.boxes = dict()
 
         self.max_height = 0
         self.max_width = 0
+
+    def __is_blank__(self,fname):
+        image = cv2.imread(fname)
+        self.tess.set_image(image)
+
+        self.tess.get_utf8_text()
+        words = [w.text for w in self.tess.words()]
+        return words == [None]
+
+    def __process_column__(self,fname):
+        image = cv2.imread(fname)
+        self.tess.set_image(image)
+
+        self.tess.get_utf8_text()
+
+        text = []
+        confidences = []
+        for word in self.tess.words():
+            # bb = word.bounding_box
+            # print("{}\t{}\tt:{}; l:{}; r:{}; b:{}".format(word.text, word.confidence, bb.top, bb.left, bb.right, bb.bottom))
+            confidences.append(word.confidence)
+            text.append(word.text)
+
+        return text,confidences
 
     def __create_blank_page__(self):
         self.example_page = np.zeros((2480,2508),dtype=np.uint8)
