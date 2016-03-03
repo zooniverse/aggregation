@@ -67,81 +67,107 @@ class ActiveWeather:
         # todo - generalize to more than one region
         confidence_over_all_cells = []
         bad_count = 0
-        for fname in glob.glob(directory+"*.JPG")[:30]:
-            first_pass_columns, second_pass_columns, original_columns = self.__process_region__(fname,region_bounds,horizontal_grid,vertical_grid)
+        for fname in glob.glob(directory+"*.JPG")[:15]:
+            print(fname)
+            # first_pass_columns, second_pass_columns, original_columns = self.__process_region__(fname,region_bounds,horizontal_grid,vertical_grid)
 
-            for column_index,(fname1,fname2,fname3) in enumerate(zip(first_pass_columns,second_pass_columns,original_columns)):
-                is_blank = self.classifier.__is_blank__(fname1)
+            for column_index,column_file in enumerate(self.__process_region__(fname,region_bounds,horizontal_grid,vertical_grid)):
+                is_blank = self.classifier.__is_blank__(column_file)
                 if not is_blank:
-                    text,column_confidence = self.classifier.__process_column__(fname2)
+                    text,column_confidence = self.classifier.__process_column__(column_file)
                     confidence_over_all_cells.extend(column_confidence)
 
                     for row_index,confidence in enumerate(column_confidence):
-                        if confidence < 50:
-                            border = self.__extract_cell_borders__(horizontal_grid,vertical_grid,row_index,column_index,ref_shape)
-                            column = cv2.imread(fname3)
+                        try:
 
-                            # # todo - refactor and figure out why the heck column[border] doesn't work
-                            # for (x,y) in border:
-                            #     column[x,y,0] = 0
-                            #     column[x,y,1] = 0
-                            #     column[x,y,2] = 255
+                            if 50 < confidence < 70:
+                                print((bad_count,zip(text,column_confidence)))
+                                border = self.__extract_cell_borders__(horizontal_grid,vertical_grid,row_index,column_index,ref_shape)
+                                column = cv2.imread(column_file)
 
-                            cv2.imwrite("/home/ggdhines/subject_"+str(bad_count)+".jpg",column)
-                            shape = column.shape
-                            s = column.reshape((shape[0]*shape[1],3)).astype(np.float)
-                            pca = PCA(n_components=1)
-                            print(s)
-                            X_r = pca.fit_transform(s)
-                            X_negative = X_r<0
-                            X_r[X_negative] = 0
-                            print(shape)
-                            print(X_r)
-                            print(X_r.shape)
-                            redone_column = X_r.reshape(shape[:2])
-                            plt.imshow(redone_column)
-                            plt.show()
-                            # # n, bins, patches = plt.hist(s, 50, normed=1, facecolor='green', alpha=0.5)
-                            # m = np.median(s)
-                            # column = column.astype(np.float)
-                            # column -= m
-                            # plt.imshow(column)
-                            # plt.show()
-                            #
-                            #
-                            # column = np.abs(column)
-                            # background = column<60
-                            # column[background] = 255
-                            # cv2.normalize(column,column,0,255,cv2.NORM_MINMAX)
-                            # cv2.imwrite("/home/ggdhines/testing.jpg",column)
-                            # plt.imshow(column,cmap="gray")
-                            # plt.show()
+                                # # todo - refactor and figure out why the heck column[border] doesn't work
+                                for (x,y) in border:
+                                    column[x,y,0] = 0
+                                    column[x,y,1] = 0
+                                    column[x,y,2] = 255
 
+                                cv2.imwrite("/home/ggdhines/bad_"+str(bad_count)+".jpg",column)
+                                bad_count += 1
+                        except cv2.error:
+                            print("error - skipping")
 
-
-
-                            column = cv2.imread(fname2)
-                            for (x,y) in border:
-                                column[x,y,0] = 0
-                                column[x,y,1] = 0
-                                column[x,y,2] = 255
-
-                            cv2.imwrite("/home/ggdhines/thresholded_subject_"+str(bad_count)+".jpg",column)
-
-                            column = cv2.imread(fname1)
-                            for (x,y) in border:
-                                column[x,y,0] = 0
-                                column[x,y,1] = 0
-                                column[x,y,2] = 255
-
-                            cv2.imwrite("/home/ggdhines/thresholded1_subject_"+str(bad_count)+".jpg",column)
-                            bad_count += 1
-
-                            text,column_confidence = self.classifier.__process_column__(fname1)
-                            print(zip(text,column_confidence)[row_index])
-                            text,column_confidence = self.classifier.__process_column__(fname2)
-                            print(zip(text,column_confidence)[row_index])
-                            assert False
+            # for column_index,(fname1,fname2,fname3) in enumerate(zip(first_pass_columns,second_pass_columns,original_columns)):
+            #     is_blank = self.classifier.__is_blank__(fname1)
+            #     if not is_blank:
+            #         text,column_confidence = self.classifier.__process_column__(fname2)
+            #         confidence_over_all_cells.extend(column_confidence)
+            #
+            #         for row_index,confidence in enumerate(column_confidence):
+            #             if confidence < 50:
+            #                 border = self.__extract_cell_borders__(horizontal_grid,vertical_grid,row_index,column_index,ref_shape)
+            #                 column = cv2.imread(fname3)
+            #
+            #                 # # todo - refactor and figure out why the heck column[border] doesn't work
+            #                 # for (x,y) in border:
+            #                 #     column[x,y,0] = 0
+            #                 #     column[x,y,1] = 0
+            #                 #     column[x,y,2] = 255
+            #
+            #                 cv2.imwrite("/home/ggdhines/subject_"+str(bad_count)+".jpg",column)
+            #                 shape = column.shape
+            #                 s = column.reshape((shape[0]*shape[1],3)).astype(np.float)
+            #                 pca = PCA(n_components=1)
+            #                 print(s)
+            #                 X_r = pca.fit_transform(s)
+            #                 X_negative = X_r<0
+            #                 X_r[X_negative] = 0
+            #                 print(shape)
+            #                 print(X_r)
+            #                 print(X_r.shape)
+            #                 redone_column = X_r.reshape(shape[:2])
+            #                 plt.imshow(redone_column)
+            #                 plt.show()
+            #                 # # n, bins, patches = plt.hist(s, 50, normed=1, facecolor='green', alpha=0.5)
+            #                 # m = np.median(s)
+            #                 # column = column.astype(np.float)
+            #                 # column -= m
+            #                 # plt.imshow(column)
+            #                 # plt.show()
+            #                 #
+            #                 #
+            #                 # column = np.abs(column)
+            #                 # background = column<60
+            #                 # column[background] = 255
+            #                 # cv2.normalize(column,column,0,255,cv2.NORM_MINMAX)
+            #                 # cv2.imwrite("/home/ggdhines/testing.jpg",column)
+            #                 # plt.imshow(column,cmap="gray")
+            #                 # plt.show()
+            #
+            #
+            #
+            #
+            #                 column = cv2.imread(fname2)
+            #                 for (x,y) in border:
+            #                     column[x,y,0] = 0
+            #                     column[x,y,1] = 0
+            #                     column[x,y,2] = 255
+            #
+            #                 cv2.imwrite("/home/ggdhines/thresholded_subject_"+str(bad_count)+".jpg",column)
+            #
+            #                 column = cv2.imread(fname1)
+            #                 for (x,y) in border:
+            #                     column[x,y,0] = 0
+            #                     column[x,y,1] = 0
+            #                     column[x,y,2] = 255
+            #
+            #                 cv2.imwrite("/home/ggdhines/thresholded1_subject_"+str(bad_count)+".jpg",column)
+            #                 bad_count += 1
+            #
+            #                 text,column_confidence = self.classifier.__process_column__(fname1)
+            #                 print(zip(text,column_confidence)[row_index])
+            #                 text,column_confidence = self.classifier.__process_column__(fname2)
+            #                 print(zip(text,column_confidence)[row_index])
+            #                 assert False
 
         # print(confidence_over_all_cells)
         n, bins, patches = plt.hist(confidence_over_all_cells, 80, normed=1,
@@ -373,39 +399,66 @@ class ActiveWeather:
         return mask2
 
     def __process_region__(self,fname,region_bounds,horizontal_grid,vertical_grid):
-        first_files = []
-        second_files = []
-        original_files= []
-        first_pass,second_pass,original = self.__extract_region__(fname,region_bounds,horizontal_grid,vertical_grid)
-
-        # first
+        files = []
+        threshed_image = self.__pca_thresholding__(fname,region_bounds,horizontal_grid,vertical_grid)
         for column_index in range(len(vertical_grid)-1):
-            column = self.__extract_column__(first_pass,column_index,vertical_grid,region_bounds)
+            column = self.__extract_column__(threshed_image,column_index,vertical_grid,region_bounds)
             fname = "/home/ggdhines/first_"+str(column_index)+".jpg"
             cv2.imwrite(fname,column)
-            first_files.append(fname)
+            files.append(fname)
 
-        # first
-        for column_index in range(len(vertical_grid)-1):
-            column = self.__extract_column__(second_pass,column_index,vertical_grid,region_bounds)
-            fname = "/home/ggdhines/second_"+str(column_index)+".jpg"
-            cv2.imwrite(fname,column)
-            second_files.append(fname)
+        return files
 
-        for column_index in range(len(vertical_grid)-1):
-            column = self.__extract_column__(original,column_index,vertical_grid,region_bounds)
-            fname = "/home/ggdhines/original_"+str(column_index)+".jpg"
-            cv2.imwrite(fname,column)
-            original_files.append(fname)
-
-        return first_files,second_files,original_files
+        # assert False
+        # first_files = []
+        # second_files = []
+        # original_files= []
+        # first_pass,second_pass = self.__extract_region__(fname,region_bounds,horizontal_grid,vertical_grid)
+        #
+        # # first
+        # for column_index in range(len(vertical_grid)-1):
+        #     column = self.__extract_column__(first_pass,column_index,vertical_grid,region_bounds)
+        #     fname = "/home/ggdhines/first_"+str(column_index)+".jpg"
+        #     cv2.imwrite(fname,column)
+        #     first_files.append(fname)
+        #
+        # # first
+        # for column_index in range(len(vertical_grid)-1):
+        #     column = self.__extract_column__(second_pass,column_index,vertical_grid,region_bounds)
+        #     fname = "/home/ggdhines/second_"+str(column_index)+".jpg"
+        #     cv2.imwrite(fname,column)
+        #     second_files.append(fname)
+        #
+        # for column_index in range(len(vertical_grid)-1):
+        #     column = self.__extract_column__(original,column_index,vertical_grid,region_bounds)
+        #     fname = "/home/ggdhines/original_"+str(column_index)+".jpg"
+        #     cv2.imwrite(fname,column)
+        #     original_files.append(fname)
+        #
+        # return first_files,second_files,original_files
 
     def __pca_thresholding__(self,fname,region_bounds,horizontal_grid,vertical_grid):
+        # image = cv2.imread(fname,0)
+        # second_pass = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,301,2)
+        # cv2.drawContours(second_pass,horizontal_grid,-1,255,-1)
+        # cv2.drawContours(second_pass,vertical_grid,-1,255,-1)
+        # second_pass = self.__image_clean__(second_pass)
+        # # zoom in
+        # second_pass = second_pass[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
+        # plt.imshow(second_pass,cmap="gray")
+        # plt.show()
+
         image = cv2.imread(fname)
         image_shape = image.shape
         # cv2.drawContours(image,horizontal_grid,-1,255,-1)
         # cv2.drawContours(image,vertical_grid,-1,255,-1)
         original = image[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
+
+        # temp = cv2.imread(fname,0)
+        # temp = temp[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
+        # plt.imshow(temp)
+        # plt.show()
+
         s = original.shape
         flat_image = original.reshape((s[0]*s[1],3))
         pca = PCA(n_components=1)
@@ -423,6 +476,7 @@ class ActiveWeather:
 
         y_pts,x_pts = np.where(zoomed_image>0)
         X = np.asarray(zip(x_pts,y_pts))
+        print("doing dbscan: " + str(X.shape))
         db = DBSCAN(eps=1, min_samples=5).fit(X)
 
         labels = db.labels_
@@ -430,31 +484,33 @@ class ActiveWeather:
         unique_labels = set(labels)
         colors = plt.cm.Spectral(np.linspace(0, 1, len(unique_labels)))
 
-        
+        return_image = np.zeros(zoomed_image.shape,np.uint8)
+        return_image.fill(255)
 
+        print("going through dbscan results")
         for k, col in zip(unique_labels, colors):
             if k == -1:
                 # Black used for noise.
                 continue
 
             class_member_mask = (labels == k)
-            temp = np.zeros(X.shape)
+            # temp = np.zeros(X.shape)
 
             xy = X[class_member_mask]
 
             max_value = zoomed_image[xy[:, 1], xy[:, 0]].max()
 
             if max_value >= 110:
-                print(max_value)
-                plt.plot(xy[:, 0], xy[:, 1], '.', markerfacecolor=col,
-                         markeredgecolor='k')
+                # print(max_value)
+                # plt.plot(xy[:, 0], xy[:, 1], '.', markerfacecolor=col,
+                #          markeredgecolor='k')
+                return_image[xy[:, 1], xy[:, 0]] = zoomed_image[xy[:, 1], xy[:, 0]]
 
+        # print(np.max(return_image))
+        # plt.imshow(return_image,cmap="gray")
+        # plt.show()
 
-
-        # plt.imshow(zoomed_image)
-        plt.show()
-
-        assert False
+        return return_image
 
     def __extract_region__(self,fname,region_bounds,horizontal_grid,vertical_grid):
         """
@@ -485,7 +541,7 @@ class ActiveWeather:
 
 
 
-        return first_pass,second_pass,original
+        return first_pass,second_pass
 
 
     def __image_clean__(self,image):
