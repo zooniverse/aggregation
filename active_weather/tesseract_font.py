@@ -1,3 +1,4 @@
+from __future__ import print_function
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
@@ -51,6 +52,7 @@ class ActiveTess:
 
     def __is_blank__(self,fname):
         image = cv2.imread(fname)
+        assert image is not None
         self.tess.set_image(image)
 
         self.tess.get_utf8_text()
@@ -153,7 +155,7 @@ class ActiveTess:
 if __name__ == "__main__":
     characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890."
     characters = [c for c in characters]
-    print characters
+    print(characters)
 
     image = cv2.imread("weather.basic.exp0.tif")
 
@@ -177,7 +179,7 @@ if __name__ == "__main__":
     height_list = []
     width_list = []
 
-    print n_clusters_
+    print(n_clusters_)
     unique_labels = set(labels)
     colors = plt.cm.Spectral(np.linspace(0, 1, len(unique_labels)))
 
@@ -200,7 +202,7 @@ if __name__ == "__main__":
         height = max_y-min_y+1
         width = max_x-min_x +1
 
-        print min_x,min_y,height,width
+        print(min_x,min_y,height,width)
 
         height_list.append(height)
         width_list.append(width)
@@ -216,15 +218,15 @@ if __name__ == "__main__":
     # height_list[-2] for book ends at the bottom
     overall_height = sum(height_list) + spacing*len(characters) + height_list[-2]
 
-    print overall_height,overall_width
+    print(overall_height,overall_width)
 
     template_image = np.zeros((overall_height,overall_width),np.uint8)
     template_image.fill(255)
 
     # cv2.imwrite("/home/ggdhines/fonts.jpg",template_image)
 
-    print template_image
-    print template_image.shape
+    print(template_image)
+    print(template_image.shape)
     height_offset = 0
 
     with open("/home/ggdhines/tessdata/active_weather.lobster.exp0.box","w") as f:
@@ -240,7 +242,7 @@ if __name__ == "__main__":
             height = height_list[i]
             width = width_list[i]
 
-            print char_mask.shape
+            print(char_mask.shape)
 
             width_offset = spacing
             for column in range(10):
@@ -293,7 +295,7 @@ if __name__ == "__main__":
         height = height_list[i]
         width = width_list[i]
 
-        print width
+        print(width)
 
         extra_height = b_e_height - height
 
