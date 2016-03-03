@@ -45,10 +45,10 @@ class ActiveWeather:
         region_bounds = (561,3282,1276,2097)
         if self.cass_db is None:
             # we don't have a connection the db - so going to recalulate everything from scratch
-            horizontal_gid,vertical_grid = self.__get_grid_for_table__(directory,region_bounds)
+            horizontal_grid,vertical_grid = self.__get_grid_for_table__(directory,region_bounds)
         else:
             # todo - read in from db
-            horizontal_gid,vertical_grid = self.__get_grid_for_table__(directory,region_bounds)
+            horizontal_grid,vertical_grid = self.__get_grid_for_table__(directory,region_bounds)
             # self.horizontal_grid = self.cass_db.__get_horizontal_lines__(self.reference_subject,0)
             # self.vertical_grid = self.cass_db.__get_vertical_lines__(self.reference_subject,0)
             # todo - put this code inside the db call
@@ -56,28 +56,31 @@ class ActiveWeather:
             # self.cass_db.__add_horizontal_lines__(reference_subject,0,horizontal_lines)
             # self.cass_db.__add_vertical_lines__(reference_subject,0,vertical_lines)
 
-        # reference_image = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0019.JPG",0)
-        # mask = np.zeros(reference_image.shape,dtype=np.uint8)
-        # mask.fill(255)
-        # cv2.drawContours(mask,vertical_grid,0,0,-1)
-        # cv2.drawContours(mask,vertical_grid,1,0,-1)
-        # cv2.imwrite("/home/ggdhines/grrr.jpg",mask)
+        reference_image = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0019.JPG")
+        ref_shape = reference_image.shape[:2]
 
         # todo - generalize to more than one region
         confidence_over_all_cells = []
         bad_count = 0
         for fname in glob.glob(directory+"*.JPG")[:30]:
-            first_files, second_files = self.__process_region__(fname,region_bounds,horizontal_gid,vertical_grid)
+            first_pass_columns, second_pass_columns = self.__process_region__(fname,region_bounds,horizontal_grid,vertical_grid)
 
-            for fname1,fname2 in zip(first_files,second_files):
+            for column_index,(fname1,fname2) in enumerate(zip(first_pass_columns,second_pass_columns)):
                 is_blank = self.classifier.__is_blank__(fname1)
                 if not is_blank:
-                    text,confidence = self.classifier.__process_column__(fname2)
-                    confidence_over_all_cells.extend(confidence)
+                    text,column_confidence = self.classifier.__process_column__(fname2)
+                    confidence_over_all_cells.extend(column_confidence)
 
-                    if min(confidence) < 50:
-                        f = fname2.split("/")
-                        cv2.imwrite(fname2)
+                    for row_index,confidence in enumerate(column_confidence):
+                        if confidence < 50:
+                            border = self.__extract_cell_borders__(horizontal_grid,vertical_grid,row_index,column_index,ref_shape,reference_image)
+                            column = cv2.imread(fname2)
+                            print(column.shape)
+                            print(np.min(border,axis=0))
+                            print(np.max(border,axis=0))
+                            column[border] = (0,255,0)
+                            cv2.imwrite("/home/ggdhines/might_work.jpg",column)
+                            assert False
 
         print(confidence_over_all_cells)
         n, bins, patches = plt.hist(confidence_over_all_cells, 80, normed=1,
@@ -85,8 +88,51 @@ class ActiveWeather:
 
         plt.show()
 
+    def __extract_cell_borders__(self,horizontal_grid,vertical_grid,row_index,column_index,reference_shape,image=None):
+        """
+        :param image: can use an approximate image which is based on a threshold using more global values
+        better for determining whether or a cell is empty. If we know that a cell is not empty, we can do thresholding
+        based on more local values
+        :param h_index:
+        :param v_index:
+        :return:
+        """
 
+        mask = np.zeros(reference_shape,np.uint8)
+        mask2 = np.zeros(reference_shape,np.uint8)
+        cv2.drawContours(mask,horizontal_grid,row_index,255,-1)
+        cv2.drawContours(mask,horizontal_grid,row_index+1,255,-1)
+        cv2.drawContours(mask,vertical_grid,column_index,255,-1)
+        cv2.drawContours(mask,vertical_grid,column_index+1,255,-1)
 
+        _,contours, hier = cv2.findContours(mask.copy(),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+
+        # contours are probably in sorted order but just to be sure
+        # looking for the one interior contour
+        for c,h in zip(contours,hier[0]):
+            if h[-1] == -1:
+                continue
+
+            cv2.drawContours(mask2,[c],0,255,1)
+
+        border_y,border_x = np.where(mask2>0)
+        if image is not None:
+            plt.imshow(image)
+            plt.plot(border_x,border_y,".",color="red")
+            plt.show()
+
+        # now we need to normalize these values - relative to the region we are extracting them from
+        t = horizontal_grid[0]
+        _,min_y = np.min(t,axis=0)
+
+        border_y -= min_y
+
+        # now make the x values relative to the column we are extracting them from
+        t = vertical_grid[column_index]
+        min_x,_ = np.min(t,axis=0)
+        print(np.min(t,axis=0))
+        border_x -= min_x
+        return zip(border_x,border_y)
 
     def __sobel_image__(self,image,horizontal):
         """
@@ -200,9 +246,6 @@ class ActiveWeather:
         horizontal_lines.sort(key = lambda l:l[0][1])
 
         vertical_contours = self.__get_contour_lines_over_image__(directory,False)
-
-
-
 
         delta = 400
         for cnt in vertical_contours:
