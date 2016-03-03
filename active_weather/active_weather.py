@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function
+import matplotlib
+matplotlib.use('WXAgg')
 import cv2
 import numpy as np
 import glob
@@ -9,12 +11,14 @@ from scipy import stats
 import tesseract_font
 import cassandra
 import csv
-from shutil import copyfile
+from sklearn.decomposition import PCA
+from sklearn.cluster import DBSCAN
 
 class ActiveWeather:
     def __init__(self):
         try:
-            self.cass_db = database_connection.Database()
+            self.cass_db = None
+            # self.cass_db = database_connection.Database()
             print("connected to the db")
         except cassandra.cluster.NoHostAvailable:
             print("could not connect to the db - will recalculate all values from scratch")
@@ -42,7 +46,8 @@ class ActiveWeather:
         if directory[-1] != "/":
             directory += "/"
 
-        region_bounds = (561,3282,1276,2097)
+        # todo - make this more robust
+        region_bounds = (559,3282,1276,2097)
         if self.cass_db is None:
             # we don't have a connection the db - so going to recalulate everything from scratch
             horizontal_grid,vertical_grid = self.__get_grid_for_table__(directory,region_bounds)
@@ -63,9 +68,9 @@ class ActiveWeather:
         confidence_over_all_cells = []
         bad_count = 0
         for fname in glob.glob(directory+"*.JPG")[:30]:
-            first_pass_columns, second_pass_columns = self.__process_region__(fname,region_bounds,horizontal_grid,vertical_grid)
+            first_pass_columns, second_pass_columns, original_columns = self.__process_region__(fname,region_bounds,horizontal_grid,vertical_grid)
 
-            for column_index,(fname1,fname2) in enumerate(zip(first_pass_columns,second_pass_columns)):
+            for column_index,(fname1,fname2,fname3) in enumerate(zip(first_pass_columns,second_pass_columns,original_columns)):
                 is_blank = self.classifier.__is_blank__(fname1)
                 if not is_blank:
                     text,column_confidence = self.classifier.__process_column__(fname2)
@@ -73,27 +78,80 @@ class ActiveWeather:
 
                     for row_index,confidence in enumerate(column_confidence):
                         if confidence < 50:
-                            border = self.__extract_cell_borders__(horizontal_grid,vertical_grid,row_index,column_index,ref_shape,reference_image)
+                            border = self.__extract_cell_borders__(horizontal_grid,vertical_grid,row_index,column_index,ref_shape)
+                            column = cv2.imread(fname3)
+
+                            # # todo - refactor and figure out why the heck column[border] doesn't work
+                            # for (x,y) in border:
+                            #     column[x,y,0] = 0
+                            #     column[x,y,1] = 0
+                            #     column[x,y,2] = 255
+
+                            cv2.imwrite("/home/ggdhines/subject_"+str(bad_count)+".jpg",column)
+                            shape = column.shape
+                            s = column.reshape((shape[0]*shape[1],3)).astype(np.float)
+                            pca = PCA(n_components=1)
+                            print(s)
+                            X_r = pca.fit_transform(s)
+                            X_negative = X_r<0
+                            X_r[X_negative] = 0
+                            print(shape)
+                            print(X_r)
+                            print(X_r.shape)
+                            redone_column = X_r.reshape(shape[:2])
+                            plt.imshow(redone_column)
+                            plt.show()
+                            # # n, bins, patches = plt.hist(s, 50, normed=1, facecolor='green', alpha=0.5)
+                            # m = np.median(s)
+                            # column = column.astype(np.float)
+                            # column -= m
+                            # plt.imshow(column)
+                            # plt.show()
+                            #
+                            #
+                            # column = np.abs(column)
+                            # background = column<60
+                            # column[background] = 255
+                            # cv2.normalize(column,column,0,255,cv2.NORM_MINMAX)
+                            # cv2.imwrite("/home/ggdhines/testing.jpg",column)
+                            # plt.imshow(column,cmap="gray")
+                            # plt.show()
+
+
+
+
                             column = cv2.imread(fname2)
-                            print(column.shape)
-                            print(np.min(border,axis=0))
-                            print(np.max(border,axis=0))
-                            column[border] = (0,255,0)
-                            cv2.imwrite("/home/ggdhines/might_work.jpg",column)
+                            for (x,y) in border:
+                                column[x,y,0] = 0
+                                column[x,y,1] = 0
+                                column[x,y,2] = 255
+
+                            cv2.imwrite("/home/ggdhines/thresholded_subject_"+str(bad_count)+".jpg",column)
+
+                            column = cv2.imread(fname1)
+                            for (x,y) in border:
+                                column[x,y,0] = 0
+                                column[x,y,1] = 0
+                                column[x,y,2] = 255
+
+                            cv2.imwrite("/home/ggdhines/thresholded1_subject_"+str(bad_count)+".jpg",column)
+                            bad_count += 1
+
+                            text,column_confidence = self.classifier.__process_column__(fname1)
+                            print(zip(text,column_confidence)[row_index])
+                            text,column_confidence = self.classifier.__process_column__(fname2)
+                            print(zip(text,column_confidence)[row_index])
                             assert False
 
-        print(confidence_over_all_cells)
+        # print(confidence_over_all_cells)
         n, bins, patches = plt.hist(confidence_over_all_cells, 80, normed=1,
                         histtype='step', cumulative=True)
 
         plt.show()
 
-    def __extract_cell_borders__(self,horizontal_grid,vertical_grid,row_index,column_index,reference_shape,image=None):
+    def __extract_cell_borders__(self,horizontal_grid,vertical_grid,row_index,column_index,reference_shape,fname=None):
         """
-        :param image: can use an approximate image which is based on a threshold using more global values
-        better for determining whether or a cell is empty. If we know that a cell is not empty, we can do thresholding
-        based on more local values
-        :param h_index:
+        :param image:
         :param v_index:
         :return:
         """
@@ -116,10 +174,7 @@ class ActiveWeather:
             cv2.drawContours(mask2,[c],0,255,1)
 
         border_y,border_x = np.where(mask2>0)
-        if image is not None:
-            plt.imshow(image)
-            plt.plot(border_x,border_y,".",color="red")
-            plt.show()
+
 
         # now we need to normalize these values - relative to the region we are extracting them from
         t = horizontal_grid[0]
@@ -130,9 +185,10 @@ class ActiveWeather:
         # now make the x values relative to the column we are extracting them from
         t = vertical_grid[column_index]
         min_x,_ = np.min(t,axis=0)
-        print(np.min(t,axis=0))
+
         border_x -= min_x
-        return zip(border_x,border_y)
+
+        return zip(border_y,border_x)
 
     def __sobel_image__(self,image,horizontal):
         """
@@ -227,7 +283,7 @@ class ActiveWeather:
         horizontal_contours = self.__get_contour_lines_over_image__(directory,True)
 
         # useful for when you want to draw out the image - just for debugging
-
+        mask = np.zeros((3744,5616),dtype=np.uint8)
         delta = 50
 
         for cnt in horizontal_contours:
@@ -242,6 +298,7 @@ class ActiveWeather:
 
                 if perimeter > 100:
                     horizontal_lines.append(cnt)
+                    # cv2.drawContours(mask,[cnt],0,255,1)
 
         horizontal_lines.sort(key = lambda l:l[0][1])
 
@@ -261,11 +318,12 @@ class ActiveWeather:
 
                 perimeter = cv2.arcLength(cnt,True)
                 if perimeter > 1000:
-                    # cv2.drawContours(mask,[cnt],0,255,1)
+
                     vertical_lines.append(cnt)
 
         vertical_lines.sort(key = lambda l:l[0][0])
-
+        cv2.drawContours(mask,vertical_lines,0,255,-1)
+        cv2.drawContours(mask,vertical_lines,1,255,-1)
         return horizontal_lines,vertical_lines
 
     def __extract_column__(self,image,column_index,vertical_grid,region_bounds):
@@ -278,7 +336,8 @@ class ActiveWeather:
         t = vertical_grid[column_index+1]
         # t = t.reshape((t.shape[0],t.shape[2]))
         max_x,_ = np.max(t,axis=0)
-        print(((min_x,max_x,region_bounds[0])))
+
+        # print(((min_x,max_x,region_bounds[0])))
 
         column = image[:,(min_x-region_bounds[0]):(max_x-region_bounds[0]+1)]
 
@@ -316,7 +375,8 @@ class ActiveWeather:
     def __process_region__(self,fname,region_bounds,horizontal_grid,vertical_grid):
         first_files = []
         second_files = []
-        first_pass,second_pass = self.__extract_region__(fname,region_bounds,horizontal_grid,vertical_grid)
+        original_files= []
+        first_pass,second_pass,original = self.__extract_region__(fname,region_bounds,horizontal_grid,vertical_grid)
 
         # first
         for column_index in range(len(vertical_grid)-1):
@@ -332,7 +392,69 @@ class ActiveWeather:
             cv2.imwrite(fname,column)
             second_files.append(fname)
 
-        return first_files,second_files
+        for column_index in range(len(vertical_grid)-1):
+            column = self.__extract_column__(original,column_index,vertical_grid,region_bounds)
+            fname = "/home/ggdhines/original_"+str(column_index)+".jpg"
+            cv2.imwrite(fname,column)
+            original_files.append(fname)
+
+        return first_files,second_files,original_files
+
+    def __pca_thresholding__(self,fname,region_bounds,horizontal_grid,vertical_grid):
+        image = cv2.imread(fname)
+        image_shape = image.shape
+        # cv2.drawContours(image,horizontal_grid,-1,255,-1)
+        # cv2.drawContours(image,vertical_grid,-1,255,-1)
+        original = image[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
+        s = original.shape
+        flat_image = original.reshape((s[0]*s[1],3))
+        pca = PCA(n_components=1)
+
+        X_r = pca.fit_transform(flat_image)
+        X_negative = X_r<0
+        X_r[X_negative] = 0
+        image = X_r.reshape((s[0],s[1]))
+
+        template = np.zeros(image_shape[:2],np.uint8)
+        template[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1] = image
+        cv2.drawContours(template,horizontal_grid,-1,0,-1)
+        cv2.drawContours(template,vertical_grid,-1,0,-1)
+        zoomed_image = template[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
+
+        y_pts,x_pts = np.where(zoomed_image>0)
+        X = np.asarray(zip(x_pts,y_pts))
+        db = DBSCAN(eps=1, min_samples=5).fit(X)
+
+        labels = db.labels_
+        n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
+        unique_labels = set(labels)
+        colors = plt.cm.Spectral(np.linspace(0, 1, len(unique_labels)))
+
+        
+
+        for k, col in zip(unique_labels, colors):
+            if k == -1:
+                # Black used for noise.
+                continue
+
+            class_member_mask = (labels == k)
+            temp = np.zeros(X.shape)
+
+            xy = X[class_member_mask]
+
+            max_value = zoomed_image[xy[:, 1], xy[:, 0]].max()
+
+            if max_value >= 110:
+                print(max_value)
+                plt.plot(xy[:, 0], xy[:, 1], '.', markerfacecolor=col,
+                         markeredgecolor='k')
+
+
+
+        # plt.imshow(zoomed_image)
+        plt.show()
+
+        assert False
 
     def __extract_region__(self,fname,region_bounds,horizontal_grid,vertical_grid):
         """
@@ -354,14 +476,16 @@ class ActiveWeather:
         # zoom in
         first_pass = first_pass[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
 
-        second_pass = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_MEAN_C,cv2.THRESH_BINARY,301,2)
+        second_pass = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,301,2)
         cv2.drawContours(second_pass,horizontal_grid,-1,255,-1)
         cv2.drawContours(second_pass,vertical_grid,-1,255,-1)
         second_pass = self.__image_clean__(second_pass)
         # zoom in
         second_pass = second_pass[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
 
-        return first_pass,second_pass
+
+
+        return first_pass,second_pass,original
 
 
     def __image_clean__(self,image):
@@ -375,7 +499,6 @@ class ActiveWeather:
         for cnt in contours:
             x,y,w,h = cv2.boundingRect(cnt)
             perimeter = cv2.arcLength(cnt,True)
-            print((h,w,perimeter))
             if (h <= 7) or (w <= 7) or (perimeter <= 30):
                 cv2.drawContours(image,[cnt],0,255,-1)
 
