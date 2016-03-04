@@ -146,7 +146,7 @@ class FolgerClustering(TextClustering):
 
         return starting_points,ending_points
 
-    def __create_clusters__(self,(starting_points,ending_points),aggregated_text,cluster_index,aligned_text,variants,user_ids):
+    def __create_clusters__(self,(starting_points,ending_points),aggregated_text,cluster_index,aligned_text,variants,user_ids,text_coordinates):
         """
         the aggregated text, split up into completed components and make a result (aggregate) cluster for each
         of those components
@@ -183,8 +183,8 @@ class FolgerClustering(TextClustering):
             assert isinstance(completed_text,str)
 
             new_cluster["center"] = (x1,x2,y1,y2,completed_text)
-
-            new_cluster["cluster members"] = list(user_ids)
+            #
+            # new_cluster["cluster members"] = list(user_ids)
             new_cluster["individual points"] = zip(X1,Y1,X2,Y2)
             # print(new_cluster["individual points"])
             # assert False
@@ -201,7 +201,32 @@ class FolgerClustering(TextClustering):
                 # instead of chr(24), use "\u0018" - postgres prefers that
                 new_aligned.append(t.replace(chr(24),unicode("\u0018")))
 
-            new_cluster["aligned_text"] = new_aligned
+            # if the text is horizontal - i.e. the angle of the center is less than 45 degrees
+            # sort the aligned text by x coordinates - otherwise sort by DECREASING y coordinates
+            # (since 0,0 is at the top left)
+            try:
+                tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
+                theta = math.atan(tan_theta)
+            except ZeroDivisionError:
+                theta = math.pi/2.
+
+            # horizontal
+            # pretty sure that X1 < X2 but don't want to make an assumption
+            if math.fabs(theta) <= math.pi/4.:
+                starting_coordinates = [min(x1,x2) for x1,x2,_,_ in text_coordinates]
+            # vertical text
+            # pretty not sure about whether Y1<Y2 so playing it safe
+            else:
+                starting_coordinates = [-max(y1,y2) for _,_,y1,y2 in text_coordinates]
+            text_and_ids_with_coordinates = zip(starting_coordinates,new_aligned,user_ids)
+            # sort
+            text_and_ids_with_coordinates.sort(key = lambda x:x[0])
+            _,aligned_text,user_id = zip(*text_and_ids_with_coordinates)
+
+
+            new_cluster["aligned_text"] = aligned_text
+            new_cluster["cluster members"] = user_ids
+
 
             new_cluster["variants"] = []
             # since a simple spelling mistake can count as a variant, look for cases where at least
@@ -562,8 +587,8 @@ class FolgerClustering(TextClustering):
                 # find where the text has been transcribed by at least 3 people
                 completed_components = self.__find_completed_components__(aligned_text,coordinates)
                 # (completed_starting_point,completed_ending_point),aggregated_text,transcription_range,markings
-                markings_in_cluster = [filtered_markings[i] for i in c]
-                clusters.extend(self.__create_clusters__(completed_components,aggregate_text,ii,aligned_text,variants,users_in_line))
+                text_coordinates = [filtered_markings[i][:4] for i in c]
+                clusters.extend(self.__create_clusters__(completed_components,aggregate_text,ii,aligned_text,variants,users_in_line,text_coordinates))
 
             # print clusters
             # fname = self.project.__image_setup__(subject_id)[0]
