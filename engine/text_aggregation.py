@@ -311,10 +311,18 @@ class TranscriptionAPI(AggregationAPI):
                 for key,cluster in aggregation["T2"]["text clusters"].items():
                     if key == "all_users":
                         continue
+                    if isinstance(cluster,str):
+                        warning("cluster is in string format for some reason")
+                        cluster = json.loads(cluster)
 
-                    # for dev only since we may not have updated every transcription
-                    if cluster["cluster members"] == []:
-                        continue
+                    try:
+                        # for dev only since we may not have updated every transcription
+                        if cluster["cluster members"] == []:
+                            continue
+                    except TypeError:
+                        warning(cluster)
+                        warning()
+                        raise
 
                     index = cluster["set index"]
                     # text_y_coord.append((cluster["center"][2],cluster["center"][-1]))
