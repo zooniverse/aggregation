@@ -738,11 +738,21 @@ class AggregationAPI:
         request.add_header("Accept","application/vnd.api+json; version=1")
         request.add_header("Authorization","Bearer "+self.token)
         # print self.host_api+"subjects/"+str(subject_id)+"?"
-        response = urllib2.urlopen(request)
-        body = response.read()
 
-        data = json.loads(body)
-        return data
+        for i in range(20):
+            try:
+                response = urllib2.urlopen(request)
+                body = response.read()
+                data = json.loads(body)
+                return data
+
+            except urllib2.HTTPError as e:
+                warning(e)
+                warning("trouble connecting to Panoptes - trying again")
+
+        assert False
+
+
 
     def __get_workflow_instructions__(self,task_dict):
         # read in the instructions associated with the workflow
