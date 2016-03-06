@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function
 import matplotlib
-matplotlib.use('WXAgg')
+# matplotlib.use('WXAgg')
 import cv2
 import numpy as np
 import glob
@@ -71,19 +71,27 @@ class ActiveWeather:
             print(fname)
             # first_pass_columns, second_pass_columns, original_columns = self.__process_region__(fname,region_bounds,horizontal_grid,vertical_grid)
 
-            for column_index,column_file in enumerate(self.__process_region__(fname,region_bounds,horizontal_grid,vertical_grid)):
-                is_blank = self.classifier.__is_blank__(column_file)
+            files = self.__process_region__(fname,region_bounds,horizontal_grid,vertical_grid)
+
+            for column_index,(init_threshold,pca_threshold) in enumerate(files):
+                is_blank = self.classifier.__is_blank__(init_threshold)
+                print(init_threshold)
+                print(pca_threshold)
                 if not is_blank:
-                    text,column_confidence = self.classifier.__process_column__(column_file)
+                    text,column_confidence,bb_boxes = self.classifier.__process_column__(pca_threshold)
                     confidence_over_all_cells.extend(column_confidence)
+                    print("==---")
+                    print(text)
+                    print(column_confidence)
+                    text,column_confidence = self.__put_transcriptions_in_cells__(text,column_confidence,bb_boxes,horizontal_grid,vertical_grid,column_index,ref_shape)
 
                     for row_index,confidence in enumerate(column_confidence):
                         try:
 
-                            if 50 < confidence < 70:
-                                print((bad_count,zip(text,column_confidence)))
+                            if (confidence is not None) and (confidence < 80):
+                                # print((bad_count,zip(text,column_confidence)))
                                 border = self.__extract_cell_borders__(horizontal_grid,vertical_grid,row_index,column_index,ref_shape)
-                                column = cv2.imread(column_file)
+                                column = cv2.imread(pca_threshold)
 
                                 # # todo - refactor and figure out why the heck column[border] doesn't work
                                 for (x,y) in border:
@@ -91,10 +99,49 @@ class ActiveWeather:
                                     column[x,y,1] = 0
                                     column[x,y,2] = 255
 
-                                cv2.imwrite("/home/ggdhines/bad_"+str(bad_count)+".jpg",column)
+                                cv2.imwrite("/home/ggdhines/bad/bad_"+str(bad_count)+".jpg",column)
+
+                                print((bad_count,confidence,text[row_index]))
                                 bad_count += 1
+                                raw_input("enter something")
                         except cv2.error:
                             print("error - skipping")
+
+        # print(confidence_over_all_cells)
+        n, bins, patches = plt.hist(confidence_over_all_cells, 80, normed=1,
+                        histtype='step', cumulative=True)
+
+        plt.show()
+
+    def __put_transcriptions_in_cells__(self,text,confidence,bb_boxes,horizontal_grid,vertical_grid,column_index,reference_shape):
+        column_confidence = []
+        column_text = []
+
+        for row_index in range(12):
+            current_text = None
+            current_confidence = None
+            cell = self.__extract_cell_borders__(horizontal_grid,vertical_grid,row_index,column_index,reference_shape)
+            cell_y,_ = zip(*cell)
+
+            cell_top = min(cell_y)
+            cell_bottom = max(cell_y)
+
+
+            for index,(top,bottom) in enumerate(bb_boxes):
+
+                in_cell = ((cell_bottom >= bottom) and (cell_top <= top)) or ((cell_bottom < bottom) and (cell_top > bottom))
+
+                if in_cell and current_text is None:
+                    current_text = text[index]
+                    current_confidence = confidence[index]
+                elif in_cell:
+                    current_text += text[index]
+                    current_confidence = min(current_confidence,confidence[index])
+
+            column_confidence.append(current_confidence)
+            column_text.append(current_text)
+
+        return column_text,column_confidence
 
             # for column_index,(fname1,fname2,fname3) in enumerate(zip(first_pass_columns,second_pass_columns,original_columns)):
             #     is_blank = self.classifier.__is_blank__(fname1)
@@ -169,11 +216,7 @@ class ActiveWeather:
             #                 print(zip(text,column_confidence)[row_index])
             #                 assert False
 
-        # print(confidence_over_all_cells)
-        n, bins, patches = plt.hist(confidence_over_all_cells, 80, normed=1,
-                        histtype='step', cumulative=True)
 
-        plt.show()
 
     def __extract_cell_borders__(self,horizontal_grid,vertical_grid,row_index,column_index,reference_shape,fname=None):
         """
@@ -400,12 +443,18 @@ class ActiveWeather:
 
     def __process_region__(self,fname,region_bounds,horizontal_grid,vertical_grid):
         files = []
+        initial_threshed_image = self.__initial_threshold__(fname,region_bounds,horizontal_grid,vertical_grid)
         threshed_image = self.__pca_thresholding__(fname,region_bounds,horizontal_grid,vertical_grid)
+
         for column_index in range(len(vertical_grid)-1):
+            init_column = self.__extract_column__(initial_threshed_image,column_index,vertical_grid,region_bounds)
+            fname1 = "/home/ggdhines/active/init_"+str(column_index)+".jpg"
+            cv2.imwrite(fname1,init_column)
+
             column = self.__extract_column__(threshed_image,column_index,vertical_grid,region_bounds)
-            fname = "/home/ggdhines/first_"+str(column_index)+".jpg"
+            fname = "/home/ggdhines/active/pca_"+str(column_index)+".jpg"
             cv2.imwrite(fname,column)
-            files.append(fname)
+            files.append((fname1,fname))
 
         return files
 
@@ -454,6 +503,9 @@ class ActiveWeather:
         # cv2.drawContours(image,vertical_grid,-1,255,-1)
         original = image[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
 
+        gray_image = cv2.imread(fname,0)
+        zoomed_gray = gray_image[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
+
         # temp = cv2.imread(fname,0)
         # temp = temp[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
         # plt.imshow(temp)
@@ -464,6 +516,7 @@ class ActiveWeather:
         pca = PCA(n_components=1)
 
         X_r = pca.fit_transform(flat_image)
+        print('explained variance ratio: %s' % str(pca.explained_variance_ratio_))
         X_negative = X_r<0
         X_r[X_negative] = 0
         image = X_r.reshape((s[0],s[1]))
@@ -504,15 +557,15 @@ class ActiveWeather:
                 # print(max_value)
                 # plt.plot(xy[:, 0], xy[:, 1], '.', markerfacecolor=col,
                 #          markeredgecolor='k')
-                return_image[xy[:, 1], xy[:, 0]] = zoomed_image[xy[:, 1], xy[:, 0]]
+                return_image[xy[:, 1], xy[:, 0]] = zoomed_gray[xy[:, 1], xy[:, 0]]
 
-        # print(np.max(return_image))
-        # plt.imshow(return_image,cmap="gray")
-        # plt.show()
+        print(np.max(return_image))
+        cv2.imwrite("/home/ggdhines/testing.jpg",return_image)
+        raw_input("hell world")
 
         return return_image
 
-    def __extract_region__(self,fname,region_bounds,horizontal_grid,vertical_grid):
+    def __initial_threshold__(self,fname,region_bounds,horizontal_grid,vertical_grid):
         """
         open fname, "zoom in" on the desired region, apply thresholding to "clean it up"
         region_bounds = min_x,max_x,min_y,max_y
@@ -532,16 +585,16 @@ class ActiveWeather:
         # zoom in
         first_pass = first_pass[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
 
-        second_pass = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,301,2)
-        cv2.drawContours(second_pass,horizontal_grid,-1,255,-1)
-        cv2.drawContours(second_pass,vertical_grid,-1,255,-1)
-        second_pass = self.__image_clean__(second_pass)
-        # zoom in
-        second_pass = second_pass[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
+        # second_pass = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,301,2)
+        # cv2.drawContours(second_pass,horizontal_grid,-1,255,-1)
+        # cv2.drawContours(second_pass,vertical_grid,-1,255,-1)
+        # second_pass = self.__image_clean__(second_pass)
+        # # zoom in
+        # second_pass = second_pass[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
 
 
 
-        return first_pass,second_pass
+        return first_pass
 
 
     def __image_clean__(self,image):
