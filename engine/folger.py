@@ -3,6 +3,7 @@ import numpy as np
 import math
 import networkx
 from text_clustering import TextClustering
+from helper_functions import warning
 __author__ = 'greg'
 
 
@@ -53,7 +54,7 @@ class FolgerClustering(TextClustering):
         :param text:
         :return:
         """
-        assert isinstance(text,str)
+        assert type(text) in [str,unicode]
 
         # reverse_map = {v: k for k, v in self.tags.items()}
         # also go with something different for "not sure"
@@ -194,7 +195,10 @@ class FolgerClustering(TextClustering):
             new_aligned = []
 
             for t in aligned_text:
-                assert isinstance(t,str)
+                # todo - figure out if this is necessary or useful
+                if t is None:
+                    warning("text was none - really not sure why but skipping")
+                    continue
                 # put tags back into multicharacter format
                 t = self.__reset_tags__(t)
                 # instead of chr(24), use "\u0018" - postgres prefers that
