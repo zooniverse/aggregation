@@ -71,7 +71,6 @@ class FolgerClustering(TextClustering):
             else:
                 ret_text += c
 
-        assert isinstance(text,str)
         return ret_text
 
     def __find_completed_components__(self,aligned_text,coordinates):
