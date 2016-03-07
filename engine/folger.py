@@ -188,7 +188,7 @@ class FolgerClustering(TextClustering):
             # print(new_cluster["individual points"])
             # assert False
 
-            new_cluster["num users"] = len(new_cluster["cluster members"])
+
             new_cluster["set index"] = cluster_index
 
             new_aligned = []
@@ -225,6 +225,8 @@ class FolgerClustering(TextClustering):
 
             new_cluster["aligned_text"] = aligned_text
             new_cluster["cluster members"] = user_ids
+
+            new_cluster["num users"] = len(new_cluster["cluster members"])
 
 
             new_cluster["variants"] = []
