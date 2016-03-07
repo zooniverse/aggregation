@@ -3,7 +3,6 @@ import numpy as np
 import math
 import networkx
 from text_clustering import TextClustering
-import cv2
 __author__ = 'greg'
 
 
