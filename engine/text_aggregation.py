@@ -14,8 +14,8 @@ from rectangle_clustering import RectangleClustering
 import parser
 import getopt
 import sys
-import folger
-import annotate
+# import folger
+# import annotate
 import numpy as np
 import boto3
 import tarfile
@@ -218,8 +218,10 @@ class TranscriptionAPI(AggregationAPI):
         # now that we have the additional text arguments, convert text_algorithm from a class
         # to an actual instance
         if self.project_id == 245:
+            import annotate
             self.text_algorithm = annotate.AnnotateClustering("text",self,additional_text_args)
         elif self.project_id == 376:
+            import folger
             self.text_algorithm = folger.FolgerClustering("text",self,additional_text_args)
         else:
             assert False
