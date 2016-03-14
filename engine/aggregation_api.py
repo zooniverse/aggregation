@@ -267,17 +267,12 @@ class AggregationAPI:
 
         self.oldest_new_classification = datetime.datetime.now()
 
-    def __aggregate__(self,gold_standard_clusters=([],[]),expert=None):
+    def __aggregate__(self):
         """
-        you can provide a list of clusters - hopefully examples of both true positives and false positives
-        note this means you have already run the aggregation before and are just coming back with
-        more info
-        for now, only one expert - easily generalizable but just want to avoid the situation where
-        multiple experts have marked the same subject - need to be a bit careful there
-        :param workflows:
-        :param subject_set:
-        :param gold_standard_clusters:
-        :return:
+        Returns
+        -------
+        aggregated_subjects : set
+            a list of all subjects which have been aggregated - over all workflows
         """
         aggregated_subjects = set()
         # start by migrating any new classifications (since previous run) from postgres into cassandra
@@ -321,7 +316,7 @@ class AggregationAPI:
 
             # image_dimensions can be used by some clustering approaches - ie. for blob clustering
             # to give area as percentage of the total image area
-            raw_classifications,raw_markings,raw_surveys,image_dimensions = self.__sort_annotations__(workflow_id,subject_set,expert)
+            raw_classifications,raw_markings,raw_surveys,image_dimensions = self.__sort_annotations__(workflow_id,subject_set)
 
             if survey_tasks == {}:
                 # do we have any marking tasks?
@@ -345,10 +340,8 @@ class AggregationAPI:
             # finally, store the results
             self.__upsert_results__(workflow_id,aggregations)
 
-        if self.environment == "development":
-            return aggregated_subjects
-        else:
-            return None
+        return aggregated_subjects
+
     def __cassandra_annotations__(self,workflow_id,subject_set):
         """
         use inner function so param can be set

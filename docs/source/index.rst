@@ -6,6 +6,8 @@
 Welcome to Zooniverse Aggregation Engine's documentation!
 =========================================================
 
+.. include:: engine.rst
+
 Contents:
 
 .. toctree::
