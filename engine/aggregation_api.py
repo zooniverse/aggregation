@@ -462,7 +462,6 @@ class AggregationAPI:
         else:
             return None
 
-
     def __cluster__(self,used_shapes,raw_markings,image_dimensions):
         """
         Run the clustering algorithm(s).
@@ -500,10 +499,6 @@ class AggregationAPI:
                 assert isinstance(cluster_aggregation,dict)
                 cluster_aggregation = self.__merge_aggregations__(cluster_aggregation,shape_aggregation)
                 assert isinstance(cluster_aggregation,dict)
-
-            if (self.environment == "development") and (algorithm.stats != {}):
-                print("stats")
-                json.dump(algorithm.stats,open("/home/ggdhines/"+str(self.project_id)+".stats","wb"))
 
         return cluster_aggregation
 
@@ -1597,7 +1592,7 @@ class AggregationAPI:
 
         return raw_markings,raw_classifications
 
-    def __sort_annotations__(self,workflow_id,subject_set,expert=None):
+    def __sort_annotations__(self,workflow_id,subject_set):
         """
         experts is when you have experts for whom you don't want to read in there classifications
         :param workflow_id:
@@ -1629,8 +1624,6 @@ class AggregationAPI:
 
         # annotation is a string which we will have to load into json format
         for subject_id,user_id,annotation,dimensions in annotation_generator(workflow_id,subject_set):
-            if user_id == expert:
-                continue
 
             if dimensions is not None:
                 image_dimensions[subject_id] = dimensions
