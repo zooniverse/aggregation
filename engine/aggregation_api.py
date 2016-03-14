@@ -413,8 +413,12 @@ class AggregationAPI:
 
     def __cassandra_connect__(self,cassandra_instance):
         """
-        connect to the AWS instance of Cassandra - try 10 times and raise an error
-        :return:
+        Connect to the Cassandra DB - either a local one or the Zooniverse aws one. If unable to connect, re-try up to 10 times and then raise an error.
+
+        Raises
+        ------
+        cassandra.cluster.NoHostAvailable
+            If we are not able to connect to the Cassandra DB after 10 tries.
         """
         for i in range(10):
             try:
@@ -461,8 +465,13 @@ class AggregationAPI:
 
     def __cluster__(self,used_shapes,raw_markings,image_dimensions):
         """
-        run the clustering algorithm for a given workflow
-        need to have already checked that the workflow requires clustering
+        Run the clustering algorithm(s).
+
+        Run the clustering algorithm(s) on each shape used. Clustering is divided by via shapes - NOT tools.
+
+        Parameters
+        ----------
+
         :param workflow_id:
         :return:
         """

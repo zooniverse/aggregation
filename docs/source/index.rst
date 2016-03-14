@@ -6,12 +6,15 @@
 Welcome to Zooniverse Aggregation Engine's documentation!
 =========================================================
 
-.. include:: engine.rst
-
 Contents:
 
 .. toctree::
    :maxdepth: 2
+
+   getting_started.rst
+   aggregation.rst
+
+.. automodule:: engine
 
 
 
