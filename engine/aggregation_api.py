@@ -344,12 +344,9 @@ class AggregationAPI:
 
     def __cassandra_annotations__(self,workflow_id,subject_set):
         """
-        use inner function so param can be set
-        get the annotations from Cassandra
-
-        note that we may need to read in previously read classifications if there are new classifications for that
-        same subject
-        :return:
+        Yields
+        ------
+        annotations
         """
         assert subject_set != []
         # def annotation_generator(workflow_id,subject_set):
