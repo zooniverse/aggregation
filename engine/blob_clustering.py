@@ -1,11 +1,16 @@
 import clustering
 import matplotlib.pyplot as plt
-from shapely.geometry import Polygon,MultiPolygon
+# for sphinx documentation, there seems to be trouble with importing shapely
+# so for the time being, if we can't import it, since it doesn't actually matter
+# for documentation, just have all the imported things wind up being undefined
+try:
+    from shapely.geometry import Polygon,MultiPolygon
+    from shapely.validation import explain_validity
+    from shapely.ops import cascaded_union
+except OSError:
+    pass
 import itertools
 import math
-from shapely.validation import explain_validity
-import matplotlib
-from shapely.ops import cascaded_union
 import numpy
 
 def findsubsets(S,m):

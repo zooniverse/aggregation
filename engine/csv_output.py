@@ -1,15 +1,21 @@
 from __future__ import print_function
-__author__ = 'greg'
 import os
 import numpy
 import tarfile
 import math
 import sys
-import shapely.geometry as geometry
-import unicodedata
+# for sphinx documentation, there seems to be trouble with importing shapely
+# so for the time being, if we can't import it, since it doesn't actually matter
+# for documentation, just have all the imported things wind up being undefined
+try:
+    import shapely.geometry as geometry
+except OSError:
+    pass
 import helper_functions
 import numpy as np
 from helper_functions import warning
+
+__author__ = 'greg'
 
 
 class CsvOut:
