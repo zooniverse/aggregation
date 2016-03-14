@@ -13,6 +13,18 @@ import cassandra
 import csv
 from sklearn.decomposition import PCA
 from sklearn.cluster import DBSCAN
+from sklearn import datasets, linear_model
+from sklearn.svm import SVR
+from sklearn.grid_search import GridSearchCV
+from sklearn.learning_curve import learning_curve
+from sklearn.kernel_ridge import KernelRidge
+import random
+# diabetes = datasets.load_diabetes()
+# diabetes_X = diabetes.data[:, np.newaxis, 2]
+# diabetes_X_train = diabetes_X[:-20]
+# print(diabetes_X_train.shape)
+# print(type(diabetes_X_train))
+# assert False
 
 class ActiveWeather:
     def __init__(self):
@@ -36,6 +48,132 @@ class ActiveWeather:
         self.region = 0
 
         self.classifier = tesseract_font.ActiveTess()
+
+    def __cross_validate__(self,pts):
+        random.shuffle(pts)
+        step = len(pts)/10
+
+        x,y = zip(*pts)
+        plt.plot(x,[-i for i in y],"o")
+        plt.show()
+
+        overall_err = []
+        for i in range(10):
+            validate_data = pts[i*step:(i+1)*step]
+            test_data = pts[:i*step]
+            test_data.extend(pts[(i+1)*step:])
+
+            x,y = zip(*test_data)
+            num_degrees = 5
+            p = list(reversed(np.polyfit(x,y,num_degrees)))
+
+            X,Y = zip(*validate_data)
+            # predicted_y = [int(p[0]+p[1]*x+p[2]*x**2+p[3]*x**3) for x in X]
+
+            predicted_y = [int(sum([p[d]*x**d for d in range(num_degrees+1)])) for x in X]
+
+            err = sum([(p-y)**2 for (p,y) in zip(predicted_y,Y)])/float(len(Y))
+
+            overall_err.append(err)
+
+        print(np.mean(overall_err))
+
+
+
+
+
+    def __interpolation__(self,shape,grid):
+        template = np.zeros(shape,dtype=np.uint8)
+        region_bounds = (559,3282,1276,2097)
+
+        # use only the first 5 images - should be enough but we can change that if need be
+
+        image = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0019.JPG",0)
+        horizontal_image = self.__sobel_image__(image,True)
+        contours_to_return = self.__contour_extraction__(horizontal_image,True)
+
+        # x,y = zip(*grid[0])
+        cv2.drawContours(template,contours_to_return,-1,255,-1)
+
+        zoomed_image = template[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
+        contours_to_return = self.__contour_extraction__(zoomed_image,True,False)
+
+        all_x,all_y = [],[]
+
+        new_template = np.zeros((zoomed_image.shape[0],zoomed_image.shape[1],3),dtype=np.uint8)
+        for cnt in contours_to_return:
+            perimeter = cv2.arcLength(cnt,True)
+
+            if perimeter > 300:
+                temp_template = np.zeros(zoomed_image.shape,dtype=np.uint8)
+                cv2.drawContours(temp_template,[cnt],0,255,-1)
+                plt.imshow(temp_template)
+                plt.show()
+                y,x = np.where(temp_template>0)
+
+                self.__cross_validate__(zip(x,y))
+                continue
+
+                # temp_template = np.zeros(zoomed_image.shape,dtype=np.uint8)
+                cv2.drawContours(new_template,[cnt],0,(255,255,255),-1)
+                # x,y = np.where(template>0)
+                # print(len(x))
+                # plt.imshow(temp_template)
+                # plt.show()
+
+                # print(cnt)
+                # cv2.drawContours(new_template,[cnt],0,255,-1)
+                s = cnt.shape
+                cnt = np.reshape(cnt,(s[0],s[2]))
+                cnt = random.sample(cnt,1000)
+                # x,y = zip(*cnt)
+                new_x = sorted(list(set(x)))
+                new_x = np.asarray(new_x)
+                new_x = np.reshape(new_x,(new_x.shape[0],))
+
+                print(min(x),max(x))
+
+                x = np.asarray(x)
+                x = np.reshape(x,(x.shape[0],))
+                y = np.asarray(y)
+                y = np.reshape(y,(y.shape[0],))
+
+                # regr = linear_model.LinearRegression()
+                # regr.fit(x, y)
+                #
+                # print("Residual sum of squares: %.2f"
+                #   % np.median((regr.predict(x) - y) ** 2))
+                #
+                # print('Variance score: %.2f' % regr.score(x, y))
+                # print((new_x[0],new_x[-1]))
+                # print(len(new_x))
+
+                p = np.polyfit(x,y,3)
+                print(p)
+                y_t = [int(p[3]+p[2]*x+p[1]*x**2+p[0]*x**3) for x in new_x]
+                all_x.append(new_x)
+                all_y.append(y_t)
+
+                # for x in new_x:
+                #     y = int(p[2]+p[1]*x+p[0]*x**2)
+                #     print(x,y)
+                    # new_template[y,x,:] = (255,0,0)
+                # pts = np.asarray(zip(new_x,y_t))
+                # print(pts.shape)
+                # print(list(pts))
+                # cv2.drawContours(new_template,[pts],0,(255,0,0),2)
+
+                # cv2.drawContours(new_template,p,(255,0,0),1)
+                # plt.plot(new_x,y_t,color='blue',linewidth=3)
+
+        for x,y in zip(all_x,all_y):
+            # print(x)
+            # print(y)
+            plt.plot(x,y,"-")
+
+        plt.imshow(new_template)
+        plt.show()
+
 
     def __directory_to_subjects__(self,directory):
         """
@@ -61,8 +199,14 @@ class ActiveWeather:
             # self.cass_db.__add_horizontal_lines__(reference_subject,0,horizontal_lines)
             # self.cass_db.__add_vertical_lines__(reference_subject,0,vertical_lines)
 
+
+
         reference_image = cv2.imread("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0019.JPG")
         ref_shape = reference_image.shape[:2]
+
+        # print(horizontal_grid)
+        self.__interpolation__(ref_shape,horizontal_grid)
+        assert False
 
         # todo - generalize to more than one region
         confidence_over_all_cells = []
@@ -286,7 +430,7 @@ class ActiveWeather:
 
         return close
 
-    def __contour_extraction__(self,image,horizontal):
+    def __contour_extraction__(self,image,horizontal,approximation = True):
         """
         extract all the horizontal or vertical contours from an image
         strongly inspired by
@@ -296,7 +440,10 @@ class ActiveWeather:
         :return:
         """
         contours_to_return = []
-        _,contour, hier = cv2.findContours(image.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+        if approximation:
+            _,contour, hier = cv2.findContours(image.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+        else:
+            _,contour, hier = cv2.findContours(image.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
         for cnt in contour:
             x,y,w,h = cv2.boundingRect(cnt)
             if (horizontal and w/h > 5) or ((not horizontal) and h/w > 5):
