@@ -14,7 +14,7 @@
 
 import sys
 import os
-from unittest.mock import MagicMock
+from mock import Mock as MagicMock
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -23,13 +23,7 @@ sys.path.insert(0, os.path.abspath('../..'))
 
 # -- General configuration ------------------------------------------------
 
-class Mock(MagicMock):
-    @classmethod
-    def __getattr__(cls, name):
-            return Mock()
 
-MOCK_MODULES = ['shapely','pandas']
-sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
 # If your documentation needs a minimal Sphinx version, state it here.
 #needs_sphinx = '1.0'
@@ -61,7 +55,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'Zooniverse Aggregation Engine'
-copyright = u'2016, Greg Hines'
+copyright = u'2016, Zooniverse'
 author = u'Greg Hines'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -296,3 +290,11 @@ texinfo_documents = [
 
 # If true, do not generate a @detailmenu in the "Top" node's menu.
 #texinfo_no_detailmenu = False
+
+class Mock(MagicMock):
+    @classmethod
+    def __getattr__(cls, name):
+            return Mock()
+
+MOCK_MODULES = ['shapely','pandas']
+sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
