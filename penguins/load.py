@@ -24,12 +24,15 @@ with open("/home/ggdhines/github/Penguins/public/roi.tsv","rb") as roi_file:
 markings_dict = dict()
 gold_dict = dict()
 
-for c in classification_collection.find({"user_name":"caitlin.black"})[:5]:
+for c in classification_collection.find({"user_name":"caitlin.black"})[:25]:
     zooniverse_id = c["subjects"][0]["zooniverse_id"]
     print zooniverse_id
 
     subject =  subject_collection.find_one({"zooniverse_id":zooniverse_id})
-    animals_present = subject["metadata"]["counters"]["animals_present"]
+    try:
+        animals_present = subject["metadata"]["counters"]["animals_present"]
+    except KeyError:
+        continue
 
     if animals_present < 5 :
         continue
