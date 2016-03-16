@@ -365,10 +365,10 @@ class CsvOut:
         for task_id in survey_tasks:
             instructions = self.instructions[workflow_id][task_id]
 
-            id_ = (task_id,"summary")
-            with open(self.file_names[id_],"a") as f:
-                summary_line = self.__survey_summary_row(aggregations)
-                f.write(str(subject_id)+summary_line)
+            # id_ = (task_id,"summary")
+            # with open(self.file_names[id_],"a") as f:
+            #     summary_line = self.__survey_summary_row(aggregations)
+            #     f.write(str(subject_id)+summary_line)
 
             id_ = (task_id,"detailed")
             with open(self.file_names[id_],"a") as f:
@@ -385,18 +385,18 @@ class CsvOut:
         :param instructions:
         :return:
         """
-        # start with the summary files
-        fname = output_directory+str(task_id) + "_survey_summary.csv"
-        self.file_names[(task_id,"summary")] = fname
-        with open(fname,"wb") as f:
-            f.write("subject_id,pielou_index\n")
+        # # start with the summary files
+        # fname = output_directory+str(task_id) + "_survey_summary.csv"
+        # self.file_names[(task_id,"summary")] = fname
+        # with open(fname,"wb") as f:
+        #     f.write("subject_id,pielou_index\n")
 
         # and then the detailed files
         fname = output_directory+str(task_id) + "_survey_detailed.csv"
         self.file_names[(task_id,"detailed")] = fname
 
         # now write the header
-        header = "subject_id,num_classifications,species,number_of_votes_for_species"
+        header = "subject_id,num_classifications,pielou_score,species,number_of_votes_for_species"
 
         # todo - we'll assume, for now, that "how many" is always the first question
         for followup_id in instructions["questionsOrder"]:
@@ -423,7 +423,7 @@ class CsvOut:
         with open(fname,"wb") as f:
             f.write(header+"\n")
 
-    def __survey_summary_row(self,aggregations):
+    def __calc__pielou__(self,aggregations):
         """
         return a row for survey tasks with subject id and pielou index
         :param aggregations:
@@ -451,8 +451,7 @@ class CsvOut:
             shannon = self.__shannon_entropy__(probabilities)
             pielou_index = shannon/math.log(num_species)
 
-        row = "," + str(pielou_index) + "\n"
-        return row
+        return pielou_index
 
     def __survey_how_many__(self,instructions,aggregations,species_id):
         """
@@ -531,6 +530,8 @@ class CsvOut:
 
         views_of_subject = aggregations["num users"]
 
+        pielou = self.__calc__pielou__(aggregations)
+
         # only go through the top X species - where X is the median number of species seen
         for species_id,_ in species_in_subject:
             if species_id == "num users":
@@ -542,7 +543,7 @@ class CsvOut:
 
             # extract the species name - just to be sure, make sure that the label is "csv safe"
             species_label = helper_functions.csv_string(instructions["species"][species_id])
-            row = "," + str(views_of_subject) + "," + species_label + "," + str(num_votes)
+            row = "," + str(views_of_subject) + "," + str(pielou) + "," + species_label + "," + str(num_votes)
 
             # if there is nothing here - there are no follow up questions so just move on
             # same with FR - fire, NTHNG - nothing
