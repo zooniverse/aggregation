@@ -265,34 +265,6 @@ class CsvOut:
     def __shannon_entropy__(self,probabilities):
         return -sum([p*math.log(p) for p in probabilities])
 
-    # def __multi_choice_classification_row__(self,answers,task_id,subject_id,results,cluster_index=None):
-    #     votes,num_users = results
-    #     if votes == {}:
-    #         return
-    #
-    #     for candidate,percent in votes.items():
-    #         row = str(subject_id) + ","
-    #         if cluster_index is not None:
-    #             row += str(cluster_index) + ","
-    #         # todo - figure out if both choices are needed
-    #         if isinstance(answers[int(candidate)],dict):
-    #             row += helper_functions.csv_string(answers[int(candidate)]["label"]) + "," + str(percent) + "," + str(num_users) + "\n"
-    #         else:
-    #             row += helper_functions.csv_string(answers[int(candidate)]) + "," + str(percent) + "," + str(num_users) + "\n"
-    #
-    #         self.csv_files[(task_id,"detailed")].write(row)
-    #
-    #     percentages = votes.values()
-    #     mean_percent = numpy.mean(percentages)
-    #     median_percent = numpy.median(percentages)
-    #
-    #     row = str(subject_id) + ","
-    #     if cluster_index is not None:
-    #         row += str(cluster_index) + ","
-    #
-    #     row += str(mean_percent) + "," + str(median_percent) + "," + str(num_users) + "\n"
-    #     self.csv_files[(task_id,"summary")].write(row)
-
     def __single_choice_classification_row__(self,answers,task_id,subject_id,results,cluster_index=None):
         """
         output a row for a classification task which only allowed allowed one answer
@@ -424,7 +396,7 @@ class CsvOut:
         self.file_names[(task_id,"detailed")] = fname
 
         # now write the header
-        header = "subject_id,num_classifications,species,percentage_of_votes_for_species"
+        header = "subject_id,num_classifications,species,number_of_votes_for_species"
 
         # todo - we'll assume, for now, that "how many" is always the first question
         for followup_id in instructions["questionsOrder"]:
@@ -566,11 +538,11 @@ class CsvOut:
 
             # how many people voted for this species?
             num_votes = aggregations[species_id]["num votes"]
-            percentage = num_votes/float(views_of_subject)
+            # percentage = num_votes/float(views_of_subject)
 
             # extract the species name - just to be sure, make sure that the label is "csv safe"
             species_label = helper_functions.csv_string(instructions["species"][species_id])
-            row = "," + str(views_of_subject) + "," + species_label + "," + str(percentage)
+            row = "," + str(views_of_subject) + "," + species_label + "," + str(num_votes)
 
             # if there is nothing here - there are no follow up questions so just move on
             # same with FR - fire, NTHNG - nothing
