@@ -457,6 +457,11 @@ class CsvOut:
         :param aggregations:
         :return:
         """
+        # for development - a few bad aggregations have crept into the db (for small projects) so skip them
+        if max(aggregations["num species"]) == 0:
+            return ""
+
+        print(aggregations)
         num_users = aggregations["num users"]
         probabilities = []
         for details in aggregations.values():
@@ -516,6 +521,7 @@ class CsvOut:
         and return those X top species
         :return:
         """
+        print(aggregations)
         num_species = int(np.median(aggregations["num species"]))
         assert(num_species >= 1)
         # sort the species by the number of votes
@@ -542,6 +548,10 @@ class CsvOut:
         # what we are returning (to be printed out to file elsewhere)
         rows = []
 
+        # in dev - for a small project a few bad aggregations got into the system - so filer them out
+        if max(aggregations["num species"]) == 0:
+            return []
+
         # on average, how many species did people see?
         # note - nothing here (or empty or what ever) counts as a species - we just won't give any follow up
         # answer responses
@@ -563,8 +573,8 @@ class CsvOut:
             row = "," + str(views_of_subject) + "," + species_label + "," + str(percentage)
 
             # if there is nothing here - there are no follow up questions so just move on
-            # same with FR - fire
-            if species_id in ["NTHNGHR","FR"]:
+            # same with FR - fire, NTHNG - nothing
+            if species_id in ["NTHNGHR","NTHNG","FR"]:
                 break
 
             # do the how many question first

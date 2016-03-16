@@ -1,3 +1,6 @@
+from __future__ import print_function
+import numpy as np
+
 class Survey:
     def __init__(self):
         pass
@@ -15,78 +18,65 @@ class Survey:
         aggregated_results = {}
 
         for subject_id in raw_classifications[task_id]:
-            aggregated_results[subject_id] = {}
+            # just to save on some typing
+            subject_results = {"num species":[]}
+            subject_classifications = raw_classifications[task_id][subject_id]
 
-            users_and_annotations = raw_classifications[task_id][subject_id]
-            users,annotations = zip(*users_and_annotations)
+            num_users = 0
 
-            aggregated_results[subject_id]["num_users"] = len(users)
+            for user_id,annotations in subject_classifications.items():
+                # how many species did this user report?
+                num_species = len([a for a in annotations if a != []])
+                # if the user just reported nothing - skip
+                if num_species == 0:
+                    continue
 
-            num_species_per_user = [len(ann) for ann in annotations]
-            num_species = int(np.median(num_species_per_user))
+                num_users += 1
 
-            subject_results = {}
-            for ann in annotations:
-                for species_ann in ann:
-                    species = species_ann["choice"]
+                subject_results["num species"].append(num_species)
 
-                    # is the first classification we've encountered for this species?
-                    if species not in aggregated_results[subject_id]:
-                        subject_results[species] = {"num votes": 1,"followup answers":{}}
+                for ann in annotations:
+                    # not sure hy we have sometimes getting empty annotations but it happens - if so, skip
+                    if ann == []:
+                        continue
 
-                    else:
-                        subject_results[species] += 1
+                    for species_ann in ann:
+                        species = species_ann["choice"]
 
-                    for question,answer in species_ann["answers"].items():
-                        if question not in aggregated_results[subject_id][species]["followup"]:
-                            subject_results[species]["followup"][question] = {}
+                        # is the first classification we've encountered for this species?
+                        if species not in subject_results:
+                            subject_results[species] = {"num votes": 1,"followup":{}}
 
-                        if isinstance(answer,list):
-                            for ans in answer:
-                                if ans not in subject_results[species]["followup"]:
-                                    subject_results[species]["followup"][ans] = 1
-                                else:
-                                    subject_results[species]["followup"][ans] += 1
                         else:
-                            if answer not in subject_results[species]["followup"]:
-                                subject_results[species]["followup"][answer] = 1
+                            subject_results[species]["num votes"] += 1
+
+                        # go through each of the follow up questions
+                        for question,answer in species_ann["answers"].items():
+                            # is this the first time we've seen this particular followup question
+                            # should probably always happen the first time we see the species (since most, if not
+                            # all of the time, all of the follow up questions should be required)
+                            if question not in subject_results[species]["followup"]:
+                                subject_results[species]["followup"][question] = {}
+
+                            # if list - multiple answers are allowed
+                            if isinstance(answer,list):
+                                for ans in answer:
+                                    # first time we've seen this particular answer?
+                                    if ans not in subject_results[species]["followup"]:
+                                        subject_results[species]["followup"][question][ans] = 1
+                                    else:
+                                        subject_results[species]["followup"][question][ans] += 1
                             else:
-                                subject_results[species]["followup"][answer] += 1
+                                # first time we've seen this particular answer
+                                if answer not in subject_results[species]["followup"]:
+                                    subject_results[species]["followup"][question][answer] = 1
+                                else:
+                                    subject_results[species]["followup"][question][answer] += 1
 
-            aggregated_results[subject_id] = subject_results
-            print aggregated_results[subject_id]
-
-            # report all species - we'll prune later
-            # sorted_species = sorted(species_vote.items(),key = lambda x:x[1],reverse=True)
-            # top_votes = sorted_species[:num_species]
-            # if top_votes == []:
-            #     continue
-            # top_species,count = zip(*top_votes)
-
-            # for species in species_vote:
-            #     # record how many people voted for each species
-            #     followup_answers = {"num votes":species_vote[species]}
-            #     for ann in annotations:
-            #         for species_ann in ann:
-            #             if species_ann["choice"] == species:
-            #
-            #                 for question,answer in species_ann["answers"].items():
-            #
-            #                     if question not in followup_answers:
-            #                         followup_answers[question] = {}
-            #
-            #                     if isinstance(answer,list):
-            #                         for ans in answer:
-            #                             if ans not in followup_answers[question]:
-            #                                 followup_answers[question][ans] = 1
-            #                             else:
-            #                                 followup_answers[question][ans] += 1
-            #                     else:
-            #                         if answer not in followup_answers[question]:
-            #                             followup_answers[question][answer] = 1
-            #                         else:
-            #                             followup_answers[question][answer] += 1
-            #
-            #     aggregated_results[subject_id][species] = followup_answers
+            # save the results and record how many people have seen this particular subject
+            # on the off chance that all of the annotations were empty, skip it
+            if subject_results["num species"] != []:
+                aggregated_results[subject_id] = subject_results
+                aggregated_results[subject_id]["num users"] = num_users
 
         return aggregated_results
