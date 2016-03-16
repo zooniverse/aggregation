@@ -5,8 +5,6 @@ boto3
 termcolor
 PyYAML
 networkx
-scipy
-cassandra-driver
 psycopg2
 alignment
 sklearn
