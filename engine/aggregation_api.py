@@ -294,13 +294,11 @@ class AggregationAPI:
             else:
                 subject_set = migrated_subjects
 
-
-
             if subject_set == []:
                 print("skipping workflow " + str(workflow_id) + " due to an empty subject set")
                 subject_set = None
                 continue
-
+            print(self.only_retired_subjects)
             print("workflow id : " + str(workflow_id))
             print("aggregating " + str(len(subject_set)) + " subjects")
 
