@@ -47,6 +47,12 @@ class Database:
 
         return results[0].cell_contents
 
+    def __get_subjects__(self):
+        select_stmt = "select subject_id from gold_standard"
+        results = self.cassandra_session.execute(select_stmt)
+
+        print(results)
+
     def __add_horizontal_lines__(self,subject_id,region,lines):
         for h_index,individual_line in enumerate(lines):
             size = individual_line.shape

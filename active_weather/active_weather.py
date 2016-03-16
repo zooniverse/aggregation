@@ -30,7 +30,7 @@ class ActiveWeather:
     def __init__(self):
         try:
             self.cass_db = None
-            # self.cass_db = database_connection.Database()
+            self.cass_db = database_connection.Database()
             print("connected to the db")
         except cassandra.cluster.NoHostAvailable:
             print("could not connect to the db - will recalculate all values from scratch")

@@ -50,6 +50,21 @@ class ActiveTess:
         self.max_height = 0
         self.max_width = 0
 
+    def __process_image__(self,image):
+        self.tess.set_image(image)
+        self.tess.get_utf8_text()
+        text = []
+        confidences = []
+        boxes = []
+        for word in self.tess.words():
+            # bb = word.bounding_box
+            # print("{}\t{}\tt:{}; l:{}; r:{}; b:{}".format(word.text, word.confidence, bb.top, bb.left, bb.right, bb.bottom))
+            confidences.append(word.confidence)
+            text.append(word.text)
+            boxes.append(word.bounding_box)
+
+        return boxes,text
+
     def __is_blank__(self,fname):
         image = cv2.imread(fname)
         assert image is not None
