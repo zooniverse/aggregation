@@ -114,7 +114,7 @@ class TranscriptionAPI(AggregationAPI):
         # just to stop me from using transcription on other projects
         assert int(project_id) in [245,376]
 
-    def __aggregate__(self,gold_standard_clusters=([],[]),expert=None):
+    def __aggregate__(self):
         """
         you can provide a list of clusters - hopefully examples of both true positives and false positives
         note this means you have already run the aggregation before and are just coming back with
@@ -157,7 +157,7 @@ class TranscriptionAPI(AggregationAPI):
 
             # image_dimensions can be used by some clustering approaches - ie. for blob clustering
             # to give area as percentage of the total image area
-            raw_classifications,raw_markings,raw_surveys,image_dimensions = self.__sort_annotations__(workflow_id,subject_set,expert)
+            raw_classifications,raw_markings,raw_surveys,image_dimensions = self.__sort_annotations__(workflow_id,subject_set)
 
             # do we have any marking tasks?
             if marking_tasks != {}:
@@ -499,7 +499,7 @@ class TranscriptionAPI(AggregationAPI):
             Source='greg@zooniverse.org',
             Destination={
                 'ToAddresses': [
-                    'greg@zooniverse.org'#,'victoria@zooniverse.org','matt@zooniverse.org'
+                    'greg@zooniverse.org','victoria@zooniverse.org','matt@zooniverse.org'
                 ]#,
                 # 'CcAddresses': [
                 #     'string',
