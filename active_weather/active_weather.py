@@ -17,7 +17,6 @@ from sklearn import datasets, linear_model
 from sklearn.svm import SVR
 from sklearn.grid_search import GridSearchCV
 from sklearn.learning_curve import learning_curve
-from sklearn.kernel_ridge import KernelRidge
 import random
 # diabetes = datasets.load_diabetes()
 # diabetes_X = diabetes.data[:, np.newaxis, 2]
@@ -451,7 +450,7 @@ class ActiveWeather:
 
         return contours_to_return
 
-    def __get_contour_lines_over_image__(self,directory,horizontal):
+    def __get_contour_lines_over_image__(self,directory,horizontal,fname):
         """
         return the contours lines for a subject set of already aligned subjects
         if horizontal, return only the horizontal contours. Otherwise, return the vertical contours
@@ -465,7 +464,10 @@ class ActiveWeather:
         lined_images = []
 
         # use only the first 5 images - should be enough but we can change that if need be
-        for f in glob.glob(directory+"*.JPG")[:5]:
+        files = sorted(list(glob.glob(directory+"*.JPG")))
+        index = files.index(fname)
+
+        for f in files[index:index+5]:
             image = cv2.imread(f,0)
             lined_images.append(self.__sobel_image__(image,horizontal))
 
@@ -483,7 +485,7 @@ class ActiveWeather:
 
         return contours_to_return
 
-    def __get_grid_for_table__(self,directory,region):
+    def __get_grid_for_table__(self,directory,region,fname):
         """
         directory - contains a set of aligned images
         extract the grid for a given region/table
@@ -496,7 +498,7 @@ class ActiveWeather:
         horizontal_lines = []
         vertical_lines = []
         # extract all horizontal lines
-        horizontal_contours = self.__get_contour_lines_over_image__(directory,True)
+        horizontal_contours = self.__get_contour_lines_over_image__(directory,True,fname)
 
         # useful for when you want to draw out the image - just for debugging
         mask = np.zeros((3744,5616),dtype=np.uint8)
@@ -518,7 +520,7 @@ class ActiveWeather:
 
         horizontal_lines.sort(key = lambda l:l[0][1])
 
-        vertical_contours = self.__get_contour_lines_over_image__(directory,False)
+        vertical_contours = self.__get_contour_lines_over_image__(directory,False,fname)
 
         delta = 400
         for cnt in vertical_contours:

@@ -51,6 +51,7 @@ class ActiveTess:
         self.max_width = 0
 
     def __process_image__(self,image):
+        # self.tess.tessedit_pageseg_mode = tesserpy.PSM_SINGLE_CHAR
         self.tess.set_image(image)
         self.tess.get_utf8_text()
         text = []
