@@ -1092,28 +1092,33 @@ class AggregationAPI:
             params = (id_, user_id, workflow_id,created_at, annotations, user_ip, gold_standard,  subject_id, workflow_version,metadata)
             statements_and_params.append((insert_statement, params))
 
-            # to get a good read/write balance, insert at every 100 classifications
-            if len(statements_and_params) == 100:
-                # Cassandra might have time out issues, if so, try again up to 10 times after which, raise an error
-                for i in range(10):
-                    try:
-                        results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
-                        results_boolean,_ = zip(*results)
-                        assert False not in results_boolean
-                        break
-                    except cassandra.WriteTimeout:
-                        if i == 9:
-                            raise
-                # print results
+            # to get a good read/write balance, insert at every 1000 classifications
+            if len(statements_and_params) == 1000:
+                self.__cassandra_insertion__(statements_and_params)
                 statements_and_params = []
 
         # insert any "left over" classifications
         if statements_and_params != []:
-            results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
-            # print results
+            # Cassandra might have time out issues, if so, try again up to 10 times after which, raise an error
+            self.__cassandra_insertion__(statements_and_params)
 
         return max_classification_id,subjects_migrated
 
+    def __cassandra_insertion__(self,statements_and_params):
+        """
+        for inserting classifications into the cassandra db - will try a few times in case of time outs
+        :param statements_and_params:
+        :return:
+        """
+        for i in range(10):
+            try:
+                results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
+                results_boolean,_ = zip(*results)
+                assert False not in results_boolean
+                break
+            except cassandra.WriteTimeout:
+                if i == 9:
+                    raise
 
     def __migrate__(self,workflow_id,version):
         """
@@ -1155,6 +1160,8 @@ class AggregationAPI:
             lower_bound_id,subjects_migrated = self.__migrate_with_id_limits__(select,lower_bound_id)
             all_subjects_migrated.update(subjects_migrated)
             print(lower_bound_id)
+            if self.environment == "development":
+                break
 
         return list(all_subjects_migrated)
 
