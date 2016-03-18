@@ -1030,43 +1030,25 @@ class AggregationAPI:
         recent_table = "CREATE TABLE most_recent (project_id int, classification_id int, PRIMARY KEY(project_id))"
         self.cassandra_session.execute(recent_table)
 
-    def __migrate__(self,workflow_id,version):
+    def __migrate_with_id_limits__(self,select_stmt,lb_id=None):
         """
-        move data from postgres to cassandra
+        migrate from postgres to cassandra with the additional requirement that classification ids must be
+        at least a given value - trying to avoid overwhelming the postgres db by getting too many classifications
+        at once
+        :param select_stmt:
+        :param lb_id:
         :return:
         """
-        # no need to migrate if we are using csv input files
-        if self.csv_classification_file is not None:
-            return
+        step = "10000"
+        if lb_id is not None:
+            select_stmt += " and id > " + str(lb_id)
 
-        # what is the most recent classification we read in
-        most_recent = self.__get_most_recent__()
+        # only process a small number of classifications
+        select_stmt += " order by id limit " + str(step)
 
-        subject_listing = set()
-
-        # some useful postgres bits of code
-        postgres_constraint = "where workflow_id="+str(workflow_id) + " and workflow_version like '" + str(version) + "%'"
-        postgres_table = "classifications INNER JOIN classification_subjects on classification_subjects.classification_id = classifications.id"
-
-        # how many classifications are we going to migrate
-        # todo - can take a while to calculate and only useful for development leaving off for now,
+        # setup the postgres connection and make the select query
         cur = self.postgres_session.cursor()
-        # select = "SELECT count(*) from " + postgres_table + " " + postgres_constraint
-        # cur.execute(select)
-        # num_migrated = cur.fetchone()[0]
-        # print("going to migrate " + str(num_migrated) + " classifications")
-
-        # what do we want from the classifications table?
-        postgres_columns = "id,user_id,workflow_id,annotations,created_at,user_ip,gold_standard,workflow_version, classification_subjects.subject_id,metadata"
-        select = "SELECT " + postgres_columns + " from " + postgres_table + " " + postgres_constraint
-
-        # if we are in development - we don't need all the classifications, so make life simple and just get some
-        if self.environment == "development":
-            select += " order by id limit 12000"
-
-        # actually get the classifications
-        print("about to get all the relevant classifications")
-        cur.execute(select)
+        cur.execute(select_stmt)
 
         # setup the insert statement for cassandra
         insert_statement = self.cassandra_session.prepare("""
@@ -1077,7 +1059,7 @@ class AggregationAPI:
 
         subjects_migrated = set()
 
-        subject_count = {}
+        max_classification_id = -1
 
         # finally go through the annotations
         for ii,t in enumerate(cur.fetchall()):
@@ -1085,16 +1067,12 @@ class AggregationAPI:
                 print(ii)
 
             id_,user_id,workflow_id,annotations,created_at,user_ip,gold_standard,workflow_version,subject_id,metadata = t
+            max_classification_id = max(max_classification_id,id_)
 
             # store migrated subjects by workflow_id
             subjects_migrated.add(subject_id)
 
             self.oldest_new_classification = min(self.oldest_new_classification,created_at)
-
-            if subject_id not in subject_count:
-                subject_count[subject_id] = 1
-            else:
-                subject_count[subject_id] += 1
 
             # todo - not why exactly, but I guess gold_standard could be something other than boolean
             if gold_standard != True:
@@ -1134,7 +1112,51 @@ class AggregationAPI:
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
             # print results
 
-        return list(subjects_migrated)
+        return max_classification_id,subjects_migrated
+
+
+    def __migrate__(self,workflow_id,version):
+        """
+        move data from postgres to cassandra
+        set up the postgres queries and then break up the actual migrations into steps - trying to not
+        overwhelm the postgres db
+        :return:
+        """
+        # no need to migrate if we are using csv input files
+        if self.csv_classification_file is not None:
+            return
+
+        # what is the most recent classification we read in
+        most_recent = self.__get_most_recent__()
+
+        # some useful postgres bits of code
+        postgres_constraint = "where workflow_id="+str(workflow_id) + " and workflow_version like '" + str(version) + "%'"
+        # postgres_constraint += " and id > 3373491"
+        postgres_table = "classifications INNER JOIN classification_subjects on classification_subjects.classification_id = classifications.id"
+
+        # what do we want from the classifications table?
+        postgres_columns = "id,user_id,workflow_id,annotations,created_at,user_ip,gold_standard,workflow_version, classification_subjects.subject_id,metadata"
+        select = "SELECT " + postgres_columns + " from " + postgres_table + " " + postgres_constraint
+
+        # if we are in development - we don't need all the classifications, so make life simple and just get some
+        # if self.environment == "development":
+        #     select += " order by id limit 12000"
+
+        # actually get the classifications
+        print("about to get all the relevant classifications")
+
+        # all the subjects migrated over every step
+        all_subjects_migrated = set()
+        # the subjects migrated per step
+        subjects_migrated = None
+        lower_bound_id = None
+
+        while subjects_migrated != set():
+            lower_bound_id,subjects_migrated = self.__migrate_with_id_limits__(select,lower_bound_id)
+            all_subjects_migrated.update(subjects_migrated)
+            print(lower_bound_id)
+
+        return list(all_subjects_migrated)
 
     def __panoptes_call__(self,query):
         """
