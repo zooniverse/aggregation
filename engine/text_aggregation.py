@@ -114,64 +114,6 @@ class TranscriptionAPI(AggregationAPI):
         # just to stop me from using transcription on other projects
         assert int(project_id) in [245,376]
 
-    def __aggregate__(self):
-        """
-        you can provide a list of clusters - hopefully examples of both true positives and false positives
-        note this means you have already run the aggregation before and are just coming back with
-        more info
-        for now, only one expert - easily generalizable but just want to avoid the situation where
-        multiple experts have marked the same subject - need to be a bit careful there
-        :param workflows:
-        :param subject_set:
-        :param gold_standard_clusters:
-        :return:
-        """
-        # start by migrating any new classifications (since previous run) from postgres into cassandra
-        # this will also give us a list of the migrated subjects, which is the list of subjects we want to run
-        # aggregation on (if a subject has no new classifications, why bother rerunning aggregation)
-        # this is actually just for projects like annotate and folger where we run aggregation on subjects that
-        # have not be retired. If we want subjects that have been specifically retired, we'll make a separate call
-        # for that
-        for workflow_id,version in self.versions.items():
-            migrated_subjects = self.__migrate__(workflow_id,version)
-
-            subject_set = list(migrated_subjects)
-
-            if subject_set == []:
-                print("skipping workflow " + str(workflow_id) + " due to an empty subject set")
-                subject_set = None
-                continue
-
-            print("workflow id : " + str(workflow_id))
-            print("aggregating " + str(len(subject_set)) + " subjects")
-
-            # self.__describe__(workflow_id)
-            classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
-
-            # set up the clustering algorithms for the shapes we actually use
-            used_shapes = set()
-            for shapes in marking_tasks.values():
-                used_shapes = used_shapes.union(shapes)
-
-            aggregations = {}
-
-            # image_dimensions can be used by some clustering approaches - ie. for blob clustering
-            # to give area as percentage of the total image area
-            raw_classifications,raw_markings,raw_surveys,image_dimensions = self.__sort_annotations__(workflow_id,subject_set)
-
-            # do we have any marking tasks?
-            if marking_tasks != {}:
-                aggregations = self.__cluster__(used_shapes,raw_markings,image_dimensions)
-                # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
-
-            # we ALWAYS have to do classifications - even if we only have marking tasks, we need to do
-            # tool classification and existence classifications
-            print("classifying")
-            aggregations = self.classification_alg.__aggregate__(raw_classifications,workflow_id,aggregations)
-
-            # finally, store the results
-            self.__upsert_results__(workflow_id,aggregations)
-
     def __cluster__(self,used_shapes,raw_markings,image_dimensions):
         """
         for when I want to see raw classifications in addition to markings
