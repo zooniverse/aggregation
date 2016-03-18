@@ -265,6 +265,7 @@ class CsvOut:
     def __shannon_entropy__(self,probabilities):
         return -sum([p*math.log(p) for p in probabilities])
 
+
     def __single_choice_classification_row__(self,answers,task_id,subject_id,results,cluster_index=None):
         """
         output a row for a classification task which only allowed allowed one answer
@@ -423,35 +424,7 @@ class CsvOut:
         with open(fname,"wb") as f:
             f.write(header+"\n")
 
-    def __calc__pielou__(self,aggregations):
-        """
-        return a row for survey tasks with subject id and pielou index
-        :param aggregations:
-        :return:
-        """
-        # for development - a few bad aggregations have crept into the db (for small projects) so skip them
-        if max(aggregations["num species"]) == 0:
-            return ""
 
-        print(aggregations)
-        num_users = aggregations["num users"]
-        probabilities = []
-        for details in aggregations.values():
-            # list => "num species", int => "num users"
-            if type(details) in [list,int]:
-                continue
-
-            probabilities.append(details["num votes"]/float(num_users))
-
-        num_species = len(probabilities)
-
-        if num_species == 1:
-            pielou_index = 0
-        else:
-            shannon = self.__shannon_entropy__(probabilities)
-            pielou_index = shannon/math.log(num_species)
-
-        return pielou_index
 
     def __survey_how_many__(self,instructions,aggregations,species_id):
         """
@@ -486,24 +459,24 @@ class CsvOut:
 
         return "," + str(minimum_species) + "," + str(top_candidate) + "," + str(percentage) + "," + str(maximum_species)
 
-    def __get_species_in_subject(self,aggregations):
-        """
-        use Ali's and Margaret's code to determine how many species are a given subject
-        and return those X top species
-        :return:
-        """
-        print(aggregations)
-        num_species = int(np.median(aggregations["num species"]))
-        assert(num_species >= 1)
-        # sort the species by the number of votes
-        species_by_vote = []
-
-        for species_id in aggregations:
-            if species_id not in ["num users","num species"]:
-                species_by_vote.append((species_id,aggregations[species_id]["num votes"]))
-        sorted_species = sorted(species_by_vote,key = lambda x:x[1],reverse=True)
-
-        return sorted_species[:num_species]
+    # def __get_species_in_subject(self,aggregations):
+    #     """
+    #     use Ali's and Margaret's code to determine how many species are a given subject
+    #     and return those X top species
+    #     :return:
+    #     """
+    #     print(aggregations)
+    #     num_species = int(np.median(aggregations["num species"]))
+    #     assert(num_species >= 1)
+    #     # sort the species by the number of votes
+    #     species_by_vote = []
+    #
+    #     for species_id in aggregations:
+    #         if species_id not in ["num users","num species",""]:
+    #             species_by_vote.append((species_id,aggregations[species_id]["num votes"]))
+    #     sorted_species = sorted(species_by_vote,key = lambda x:x[1],reverse=True)
+    #
+    #     return sorted_species[:num_species]
 
 
     def __survey_row__(self,instructions,aggregations):
@@ -526,11 +499,11 @@ class CsvOut:
         # on average, how many species did people see?
         # note - nothing here (or empty or what ever) counts as a species - we just won't give any follow up
         # answer responses
-        species_in_subject = self.__get_species_in_subject(aggregations)
+        species_in_subject = aggregations["num species in image"]
 
         views_of_subject = aggregations["num users"]
 
-        pielou = self.__calc__pielou__(aggregations)
+        pielou = aggregations["pielou index"]
 
         # only go through the top X species - where X is the median number of species seen
         for species_id,_ in species_in_subject:
