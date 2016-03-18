@@ -1,30 +1,73 @@
-import matplotlib
-matplotlib.use('WXAgg')
-import matplotlib.pyplot as plt
+import csv
+from os import popen
+import sobel_transform
 import cv2
-import numpy as np
 
-img = cv2.imread('/home/ggdhines/1.jpg')
-gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+img = cv2.imread("/home/ggdhines/sobel_masked.jpg")
+height,width,_ = img.shape
 
-kernely = cv2.getStructuringElement(cv2.MORPH_RECT,(10,2))
-dy = cv2.Sobel(gray,cv2.CV_16S,0,2)
-dy = cv2.convertScaleAbs(dy)
-cv2.normalize(dy,dy,0,255,cv2.NORM_MINMAX)
-ret,close = cv2.threshold(dy,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-close = cv2.morphologyEx(close,cv2.MORPH_DILATE,kernely)
+stream = popen("tesseract -psm 6 /home/ggdhines/sobel_masked.jpg stdout makebox")
+box_results = csv.reader(stream, delimiter=' ')
 
-cv2.imwrite("/home/ggdhines/horizontal.jpg",close)
+transcribed_dict = {}
+gold_dict = {}
 
-t = np.zeros(close.shape,np.uint8)
-_,contour, hier = cv2.findContours(close,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-for cnt in contour:
-    x,y,w,h = cv2.boundingRect(cnt)
-    if w/h > 5:
-        cv2.drawContours(t,[cnt],0,255,1)
+rows,columns = sobel_transform.__sobel_image__()
 
-plt.imshow(t,cmap="gray")
-plt.show()
+for c,left,top,right,bottom,_ in box_results:
+    print c,left,top,right,bottom
+    mid_y = height-(int(top)+int(bottom))/2.
+    mid_x = (int(right)+int(left))/2.
 
-close = cv2.morphologyEx(close,cv2.MORPH_DILATE,None,iterations = 2)
-closey = close.copy()
+    if c == None:
+        continue
+
+    in_row = False
+
+    for row_index in range(len(rows)-1):
+        lb = rows[row_index]
+        ub = rows[row_index+1]
+
+        in_row = lb <= mid_y <= ub
+        if in_row:
+            break
+
+    if not in_row:
+        continue
+
+    in_column = False
+    for column_index in range(len(columns)-1):
+        lb = columns[column_index]
+        ub = columns[column_index+1]
+        in_column = lb <= mid_x <= ub
+        if in_column:
+            break
+
+    if not in_column:
+        continue
+
+    key = (row_index,column_index)
+    if key not in transcribed_dict:
+        transcribed_dict[key] = [(mid_x,c)]
+    else:
+        transcribed_dict[key].append((mid_x,c))
+        # transcribed_dict[key][1].append(c)
+
+# print transcribed_dict.keys()
+
+total = 0
+with open("/home/ggdhines/gold_standard.txt","rb") as f:
+    reader = csv.reader(f, delimiter=',')
+    for row,column,gold_standard in reader:
+        key = (int(row),int(column))
+        if key not in transcribed_dict:
+            print (row,column),gold_standard,None
+        else:
+            t = sorted(transcribed_dict[key],key = lambda x:x[0])
+            _,chrs = zip(*t)
+            text = "".join(chrs)
+            print (row,column),gold_standard,text,gold_standard==text
+            if gold_standard == text:
+                total += 1
+
+print total

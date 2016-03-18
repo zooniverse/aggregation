@@ -741,8 +741,6 @@ class ActiveWeather:
         # # zoom in
         # second_pass = second_pass[region_bounds[2]:region_bounds[3]+1,region_bounds[0]:region_bounds[1]+1]
 
-
-
         return first_pass
 
 

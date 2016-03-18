@@ -45,7 +45,10 @@ class Database:
 
         results = self.cassandra_session.execute(select_stmt)
 
-        return results[0].cell_contents
+        if results == []:
+            return None
+        else:
+            return results[0].cell_contents
 
     def __get_subjects__(self):
         select_stmt = "select subject_id from gold_standard"
