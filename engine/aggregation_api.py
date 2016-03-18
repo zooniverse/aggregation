@@ -330,7 +330,7 @@ class AggregationAPI:
                 print("classifying a survey")
                 if self.project_id == 593:
                     # Wildcam Gorongosa is different - because why not?
-                    survey_alg = gorongosa_aggregation.Survey()
+                    survey_alg = gorongosa_aggregation.GorongosaSurvey()
                 else:
                     survey_alg = survey_aggregation.Survey()
                 aggregations = survey_alg.__aggregate__(raw_surveys)
@@ -1062,7 +1062,7 @@ class AggregationAPI:
 
         # if we are in development - we don't need all the classifications, so make life simple and just get some
         if self.environment == "development":
-            select += " order by id limit 120000"
+            select += " order by id limit 12000"
 
         # actually get the classifications
         print("about to get all the relevant classifications")
