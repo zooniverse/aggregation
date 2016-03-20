@@ -233,6 +233,3 @@ def json_dump(project):
         tar.add("/tmp/"+project_id+".json")
 
     return tar_file_path
-
-if __name__ == "__main__":
-    json_dump([649644])

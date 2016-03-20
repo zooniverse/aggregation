@@ -56,12 +56,17 @@ for c,left,top,right,bottom,_ in box_results:
 # print transcribed_dict.keys()
 
 total = 0
+correct_empty = 0
+empty = 0
 with open("/home/ggdhines/gold_standard.txt","rb") as f:
     reader = csv.reader(f, delimiter=',')
     for row,column,gold_standard in reader:
         key = (int(row),int(column))
-        if key not in transcribed_dict:
-            print (row,column),gold_standard,None
+
+        if gold_standard == "":
+            empty += 1
+            if  key not in transcribed_dict:
+                correct_empty += 1
         else:
             t = sorted(transcribed_dict[key],key = lambda x:x[0])
             _,chrs = zip(*t)
@@ -69,5 +74,13 @@ with open("/home/ggdhines/gold_standard.txt","rb") as f:
             print (row,column),gold_standard,text,gold_standard==text
             if gold_standard == text:
                 total += 1
+            # if gold_standard == None and text == "":
+            #     correct_empty += 1
+            # if gold_standard == None:
+            #     print text
+            #     assert Fase
+            #     empty += 1
 
 print total
+print correct_empty
+print empty

@@ -1,11 +1,11 @@
 import matplotlib
-matplotlib.use('WXAgg')
+# matplotlib.use('WXAgg')
 import matplotlib.pyplot as plt
 import cv2
 import numpy as np
 from os import popen
 import csv
-from active_weather import ActiveWeather
+# from active_weather import ActiveWeather
 
 # directory = "/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/"
 
@@ -38,7 +38,7 @@ from active_weather import ActiveWeather
 #     columns.append((lb,ub))
 
 def __sobel_image__():
-    img = cv2.imread('/home/ggdhines/1.jpg')
+    img = cv2.imread('/home/ggdhines/region.jpg')
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
     height,width,_ = img.shape
     ret,thresh1 = cv2.threshold(gray,180,255,cv2.THRESH_BINARY)
