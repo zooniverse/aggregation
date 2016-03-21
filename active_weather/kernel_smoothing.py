@@ -174,11 +174,11 @@ def __pca__(img):
     # foreground = 0
 
     pca_img = np.reshape(X_r,s[:2])
+    print(pca.explained_variance_ratio_)
 
     res = np.uint8(cv2.normalize(pca_img,pca_img,0,255,cv2.NORM_MINMAX))
 
     plt.imshow(res)
-    print(res)
     plt.show()
 
     ink_pixels = np.where(res>90)
@@ -257,9 +257,11 @@ def __pca_mask__(img):
 
     # masked_image = np.max([pca_image,mask],axis=0)
 
+
     pca_image = 255 - pca_image
     plt.imshow(pca_image,cmap="gray")
     plt.show()
+
 
     # ink_pixels = np.where(masked_image>2)
     # # template = np.zeros(img.shape[:2],np.uint8)
@@ -399,7 +401,16 @@ def __place_in_cell__(transcriptions,horizontal_grid,vertical_grid,image):
                 in_row = True
                 break
 
-        assert in_row
+        if not in_row:
+            plt.imshow(image,cmap="gray")
+            # plt.plot(mid_x,mid_y,"o")
+            print(mid_x,mid_y)
+            print((t,c,top,left,right,bottom))
+            plt.show()
+            assert False
+            continue
+
+        # assert in_row
 
         in_column = False
         for column_index in range(len(vertical_grid)-1):
@@ -408,7 +419,14 @@ def __place_in_cell__(transcriptions,horizontal_grid,vertical_grid,image):
             if lb <= mid_x <= ub:
                 in_column = True
                 break
-        assert in_column
+        if not in_column:
+            plt.imshow(image,cmap="gray")
+            # plt.plot(mid_x,mid_y,"o")
+            print(mid_x,mid_y)
+            print((t,c,top,left,right,bottom))
+            plt.show()
+            assert False
+            continue
 
         # plt.imshow(image,cmap="gray")
         # plt.plot(mid_x,mid_y,"o")
@@ -492,6 +510,9 @@ def __roc_plot__(true_positives,false_positives):
     print(len(false_positives))
 
     plt.plot(roc_X,roc_Y)
+    plt.xlabel("% False Positives")
+    plt.ylabel("% True Positives")
+    plt.ylim((0,1.01))
     plt.show()
 
     fig = plt.figure(1, figsize=(5,5), dpi=90)
@@ -527,7 +548,7 @@ if __name__ == "__main__":
     # masked_image = __mask_lines__(gray)
     masked_image = __pca_mask__(img)
 
-    transcriptions = __ocr_image__(masked_image)
+    transcriptions = __ocr_image__(gray)
     transcriptions_in_cells = __place_in_cell__(transcriptions,horizontal_grid,vertical_grid,gray)
 
     true_positives,false_positives = __gold_standard_comparison__(transcriptions_in_cells)
