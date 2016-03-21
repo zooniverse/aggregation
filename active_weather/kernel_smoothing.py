@@ -1,3 +1,4 @@
+from __future__ import print_function
 import numpy as np
 import cv2
 import csv
@@ -6,7 +7,13 @@ import paper_quad
 import sobel_transform
 import math
 import tesserpy
+# from scipy.integrate import simps
+# import shapely
+from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
+from descartes import PolygonPatch
+from sklearn.cluster import DBSCAN
+from sklearn.decomposition import PCA
 __author__ = 'ggdhines'
 
 def __upper_bounds__(line):
@@ -101,6 +108,42 @@ def __median_kernel__(img,line,horizontal):
 
     return mask
 
+def __polynomial_correct__(img,line,horizontal):
+    if horizontal:
+        x,y = zip(*line)
+        domain = sorted(set(line[:,0]))
+    else:
+        y,x = zip(*line)
+        domain = sorted(set(line[:,1]))
+
+    mask2 = np.zeros(img.shape[:2],np.uint8)
+
+    degrees = 2
+    coeff = list(reversed(np.polyfit(x,y,degrees)))
+    y_bar = [sum([coeff[p]*x_**p for p in range(degrees+1)]) for x_ in x]
+
+    # degrees = 2
+    coeff = list(reversed(np.polyfit(x,y,degrees)))
+    std = math.sqrt(np.mean([(y1-y2)**2 for (y1,y2) in zip(y,y_bar)]))
+
+    def y_bar(x_,upper):
+        return int(sum([coeff[p]*x_**p for p in range(degrees+1)]) + upper*std)
+
+
+    y_vals = [y_bar(x,-1) for x in domain]
+    y_vals.extend([y_bar(x,1) for x in list(reversed(domain))])
+    x_vals = list(domain)
+    x_vals.extend(list(reversed(domain)))
+
+    if horizontal:
+        pts = np.asarray(zip(x_vals,y_vals))
+    else:
+        pts = np.asarray(zip(y_vals,x_vals))
+
+    cv2.drawContours(mask2,[pts],0,255,-1)
+
+    return mask2
+
 def __correct__(img,line,horizontal,background=0,foreground=255):
     assert len(img.shape) == 2
     mask = np.zeros(img.shape[:2],np.uint8)
@@ -119,6 +162,111 @@ def __correct__(img,line,horizontal,background=0,foreground=255):
 
     return overlap
 
+def __pca__(img):
+    pca = PCA(n_components=1)
+    s = img.shape
+    flatten_table = np.reshape(img,(s[0]*s[1],3))
+
+    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+
+    X_r = pca.fit_transform(flatten_table)
+    # background = max(X_r)[0]
+    # foreground = 0
+
+    pca_img = np.reshape(X_r,s[:2])
+
+    res = np.uint8(cv2.normalize(pca_img,pca_img,0,255,cv2.NORM_MINMAX))
+
+    plt.imshow(res)
+    print(res)
+    plt.show()
+
+    ink_pixels = np.where(res>90)
+    template = np.zeros(img.shape[:2],np.uint8)
+    # plt.plot(ink_pixels[1],-ink_pixels[0],".")
+    # plt.show()
+
+    template[ink_pixels[0],ink_pixels[1]] = gray[ink_pixels[0],ink_pixels[1]]
+    # plt.imshow(template)
+    # plt.show()
+
+    # assert False
+    return template
+
+def __dbscan_threshold__(img):
+    ink_pixels = np.where(img>0)
+    X = np.asarray(zip(ink_pixels[1],ink_pixels[0]))
+    print("doing dbscan: " + str(X.shape))
+    db = DBSCAN(eps=1, min_samples=5).fit(X)
+
+    labels = db.labels_
+    n_clusters_ = len(set(labels)) - (1 if -1 in labels else 0)
+    unique_labels = set(labels)
+    colors = plt.cm.Spectral(np.linspace(0, 1, len(unique_labels)))
+
+    return_image = np.zeros(gray.shape,np.uint8)
+    return_image.fill(255)
+
+    print("going through dbscan results")
+    for k, col in zip(unique_labels, colors):
+        if k == -1:
+            # Black used for noise.
+            continue
+
+        class_member_mask = (labels == k)
+        # temp = np.zeros(X.shape)
+
+        xy = X[class_member_mask]
+
+        max_value = gray[xy[:, 1], xy[:, 0]].max()
+        median = np.median(gray[xy[:, 1], xy[:, 0]])
+        mean = np.mean(gray[xy[:, 1], xy[:, 0]])
+        # print(max_value,median,mean)
+
+        if True:#median > 120:
+            x_max,y_max = np.max(xy,axis=0)
+            x_min,y_min = np.min(xy,axis=0)
+            if min(x_max-x_min,y_max-y_min) >= 10:
+                return_image[xy[:, 1], xy[:, 0]] = gray[xy[:, 1], xy[:, 0]]
+
+def __pca_mask__(img):
+    assert len(img.shape) ==3
+
+    pca_image = __pca__(img)
+    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+
+    horizontal_lines = paper_quad.__extract_grids__(gray,True)
+
+    mask = np.zeros(gray.shape,np.uint8)
+    for l in horizontal_lines:
+        corrected_l = __polynomial_correct__(gray,l,True)
+        corrected_l = 255 - corrected_l
+        # corrected_l = __correct__(gray,l,True)
+        pca_image = np.min([pca_image,corrected_l],axis=0)
+
+        # plt.imshow(pca_image,cmap="gray")
+        # plt.show()
+
+    vertical_lines = paper_quad.__extract_grids__(gray,False)
+    for l in vertical_lines:
+        corrected_l = __polynomial_correct__(gray,l,False)
+        corrected_l = 255 -corrected_l
+        # corrected_l = __correct__(gray,l,False)
+        pca_image = np.min([pca_image,corrected_l],axis=0)
+
+
+    # masked_image = np.max([pca_image,mask],axis=0)
+
+    pca_image = 255 - pca_image
+    plt.imshow(pca_image,cmap="gray")
+    plt.show()
+
+    # ink_pixels = np.where(masked_image>2)
+    # # template = np.zeros(img.shape[:2],np.uint8)
+    # plt.plot(ink_pixels[1],-ink_pixels[0],".")
+    # plt.show()
+    return pca_image
+
 
 def __mask_lines__(gray):
     # img = cv2.imread('/home/ggdhines/region.jpg')
@@ -128,13 +276,15 @@ def __mask_lines__(gray):
 
     mask = np.zeros(gray.shape,np.uint8)
     for l in horizontal_lines:
-        corrected_l = __correct__(gray,l,True)
+        corrected_l = __polynomial_correct__(gray,l,True)
+        # corrected_l = __correct__(gray,l,True)
         mask = np.max([mask,corrected_l],axis=0)
 
     cv2.imwrite("/home/ggdhines/testing.jpg",mask)
     vertical_lines = paper_quad.__extract_grids__(gray,False)
     for l in vertical_lines:
-        corrected_l = __correct__(gray,l,False)
+        corrected_l = __polynomial_correct__(gray,l,False)
+        # corrected_l = __correct__(gray,l,False)
         mask = np.max([mask,corrected_l],axis=0)
 
     # cv2.imshow("img",mask)
@@ -264,7 +414,7 @@ def __place_in_cell__(transcriptions,horizontal_grid,vertical_grid,image):
         # plt.plot(mid_x,mid_y,"o")
         # plt.show()
 
-        key = (column_index,row_index)
+        key = (row_index,column_index)
         if key not in cell_contents:
             cell_contents[key] = [(mid_x,t,c)]
         else:
@@ -274,120 +424,18 @@ def __place_in_cell__(transcriptions,horizontal_grid,vertical_grid,image):
         sorted_contents = sorted(cell_contents[key], key = lambda x:x[0])
         _,text,confidence = zip(*sorted_contents)
         text = "".join(text)
-        confidence = min(confidence)
+        confidence = np.min(confidence)
         cell_contents[key] = (text,confidence)
 
-    print(cell_contents)
+    return cell_contents
 
-if __name__ == "__main__":
-    img = cv2.imread('/home/ggdhines/region.jpg')
-    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-
-
-    horizontal_grid,vertical_grid = __cell_boundaries__(gray)
-    # assert False
-
-    masked_image = __mask_lines__(gray)
-
-    transcriptions = __ocr_image__(masked_image)
-    __place_in_cell__(transcriptions,horizontal_grid,vertical_grid,gray)
-
-    # for column_image in __gen_columns__(masked_image,gray):
-    #     __ocr_image__(column_image)
-    #     print
-
-    assert False
-
-
-
-    cv2.imwrite("/home/ggdhines/masked.jpg",masked_image)
-
-    #######
-    ######
-
-    stream = popen("tesseract -psm 6 /home/ggdhines/masked.jpg stdout makebox")
-    # box_results = csv.reader(stream, delimiter=' ')
-
-    transcribed = []
-
-    height,width = gray.shape
-
-    # print(box_results[0])
-
-    # for l in stream.readlines():
-    #     parsed_l = l[:-1].split(" ")
-    #     c,left,top,right,bottom,_ = parsed_l
-    #
-    #     top = height - int(top)
-    #     bottom = height - int(bottom)
-    #     # print(top,bottom)
-    #     assert top > 0
-    #     assert bottom > 0
-    #     left = int(left)
-    #     right = int(right)
-    #
-    #
-    #     if min((top-bottom),(right-left)) <= 6:
-    #         l_y = [top,top,bottom,bottom,top]
-    #         l_x = [left,right,right,left,left]
-    #         l = np.asarray(zip(l_x,l_y))
-    #         # print(l)
-    #         cv2.drawContours(masked_image,[l],0,255,-1)
-
-    cv2.imwrite("/home/ggdhines/masked2.jpg",masked_image)
-
-    stream = popen("tesseract -psm 6 /home/ggdhines/masked2.jpg stdout makebox")
-    box_results = csv.reader(stream, delimiter=' ')
-
-    transcribed_dict = {}
-    gold_dict = {}
-
-    rows,columns = sobel_transform.__sobel_image__()
-
-    for c,left,top,right,bottom,_ in box_results:
-        # print c,left,top,right,bottom
-        mid_y = height-(int(top)+int(bottom))/2.
-        mid_x = (int(right)+int(left))/2.
-
-        if c == None:
-            continue
-
-        in_row = False
-
-        for row_index in range(len(rows)-1):
-            lb = rows[row_index]
-            ub = rows[row_index+1]
-
-            in_row = lb <= mid_y <= ub
-            if in_row:
-                break
-
-        if not in_row:
-            continue
-
-        in_column = False
-        for column_index in range(len(columns)-1):
-            lb = columns[column_index]
-            ub = columns[column_index+1]
-            in_column = lb <= mid_x <= ub
-            if in_column:
-                break
-
-        if not in_column:
-            continue
-
-        key = (row_index,column_index)
-        if key not in transcribed_dict:
-            transcribed_dict[key] = [(mid_x,c)]
-        else:
-            transcribed_dict[key].append((mid_x,c))
-            # transcribed_dict[key][1].append(c)
-
-    # print transcribed_dict.keys()
-
+def __gold_standard_comparison__(transcriptions):
     total = 0
     correct_empty = 0
     empty = 0
+
+    true_positives = []
+    false_positives = []
     with open("/home/ggdhines/gold_standard.txt","rb") as f:
         reader = csv.reader(f, delimiter=',')
         for row,column,gold_standard in reader:
@@ -395,22 +443,98 @@ if __name__ == "__main__":
 
             if gold_standard == "":
                 empty += 1
-                if  key not in transcribed_dict:
+                if  key not in transcriptions:
                     correct_empty += 1
             else:
-                t = sorted(transcribed_dict[key],key = lambda x:x[0])
-                _,chrs = zip(*t)
-                text = "".join(chrs)
-                print (row,column),gold_standard,text,gold_standard==text
-                if gold_standard == text:
-                    total += 1
-                # if gold_standard == None and text == "":
-                #     correct_empty += 1
-                # if gold_standard == None:
-                #     print text
-                #     assert Fase
-                #     empty += 1
+                if key in transcriptions:
+                    t,c = transcriptions[key]
+
+                    if gold_standard == t:
+                        total += 1
+                        true_positives.append(c)
+                    else:
+                        false_positives.append(c)
 
     print(total)
     print(correct_empty)
     print(empty)
+
+    return true_positives,false_positives
+
+def __roc_plot__(true_positives,false_positives):
+    alpha_list = true_positives[:]
+    alpha_list.extend(false_positives)
+    alpha_list.sort()
+
+    roc_X = [0,1]
+    roc_Y = [0,0]
+
+    for alpha in alpha_list:
+        positive_count = sum([1 for x in true_positives if x >= alpha])
+        positive_rate = positive_count/float(len(true_positives))
+
+        negative_count = sum([1 for x in false_positives if x >= alpha])
+        negative_rate = negative_count/float(len(false_positives))
+
+        if (len(roc_X) > 0) and (positive_rate == roc_Y[-1]) and (negative_rate == roc_X[-1]):
+            continue
+
+        else:
+            roc_X.append(negative_rate)
+            roc_Y.append(positive_rate)
+
+
+    # roc_X = list(reversed(roc_X))
+    # roc_Y = list(reversed(roc_Y))
+
+    p = Polygon(zip(roc_X,roc_Y))
+    print(p.area)
+    print(len(false_positives))
+
+    plt.plot(roc_X,roc_Y)
+    plt.show()
+
+    fig = plt.figure(1, figsize=(5,5), dpi=90)
+    ax = fig.add_subplot(111)
+    ring_patch = PolygonPatch(p)
+    ax.add_patch(ring_patch)
+    plt.show()
+
+if __name__ == "__main__":
+    img = cv2.imread('/home/ggdhines/region.jpg')
+
+    # gray = __pca_mask__(img)
+    #
+    # img = cv2.GaussianBlur(img,(5,5),0)
+    # gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    # # mask = np.zeros((gray.shape),np.uint8)
+    # kernel1 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
+    #
+    # close = cv2.morphologyEx(gray,cv2.MORPH_CLOSE,kernel1)
+    # div = np.float32(gray)/(close)
+    # res = np.uint8(cv2.normalize(div,div,0,255,cv2.NORM_MINMAX))
+    # res2 = cv2.cvtColor(res,cv2.COLOR_GRAY2BGR)
+
+    # plt.imshow(res2)
+    # plt.show()
+    # assert False
+
+    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+
+    horizontal_grid,vertical_grid = __cell_boundaries__(gray)
+    # assert False
+
+    # masked_image = __mask_lines__(gray)
+    masked_image = __pca_mask__(img)
+
+    transcriptions = __ocr_image__(masked_image)
+    transcriptions_in_cells = __place_in_cell__(transcriptions,horizontal_grid,vertical_grid,gray)
+
+    true_positives,false_positives = __gold_standard_comparison__(transcriptions_in_cells)
+
+    __roc_plot__(true_positives,false_positives)
+
+
+
+
+
