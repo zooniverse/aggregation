@@ -41,4 +41,12 @@ We can express the overlap relationship between rectangles as a graph; each node
     :height: 500px
     :alt: a graph representation of the overlap between the above rectangles
 
-A set of nodes where every pair of nodes is connected is called a `clique <https://en.wikipedia.org/wiki/Clique_(graph_theory)>`_.
+A set of nodes where every pair of nodes is connected is called a `clique <https://en.wikipedia.org/wiki/Clique_(graph_theory)>`_. There are actually multiple cliques in the above graph - for example a node by itself is a trivial clique. We want maximal cliques - cliques that are not a subset of another clique. Finding all maximal cliques seems to be an
+ intractable `problem <https://en.wikipedia.org/wiki/Clique_problem#Listing_all_maximal_cliques>`_. So in the worst case, this clustering algorithm could take a long time - but in practice things should be fine.
+ (I can't imagine more than 50 rectangles per subject and the graph structure should be pretty simple. But if things ever start to run really slowly, this is a place to check.) Because Python is awesome, the code to create a graph, enter edges and enumerate the maximal cliques is just:
+
+import networkx
+g = networkx.Graph()
+g.add_nodes_from(range(len(markings)))
+g.add_edge(i,j)
+cliques = list(networkx.find_cliques(g))
