@@ -17,14 +17,14 @@ This is the file that is called by the crontab. The format for calling this file
 In text_aggregation.py, we have the class TranscriptionAPI which is a subclass of AggregationAPI (from aggregation_api.py). TranscriptionAPI has 3 main methods to call:
 
 * __setup__ - connects to the various databases (mostly just calls __setup__ in AggregationAPI but also takes care of some things that are specific to Annotate and Shakespeare's world)
-* __aggregate__ - does the actual aggregation - mostly just a slightly modified copy of AggregationAPI's __aggregate__ (some refactoring would be good)
+* __aggregate__ - does the actual aggregation (just calls AggregationAPI's __aggregate__)
 * __summarize__ - both projects want emails sent out with the aggregation results. This happens in __summarize__
 
 \__agregate__
 *************
-So what does __aggregate__ do? As with __aggregate__ in AggregationAPI, we have the following steps (seriously, I realize that refactoring would be good)
+So what does __aggregate__ do? As with __aggregate__ in AggregationAPI, we have the following steps
 
-* migrate annotations from postgres to Cassandra (unlike basically another other projects), with both Annotate and Shakespeare's world, we want to run aggregation even over subjects that haven't been retired yet
+* migrate annotations from postgres to Cassandra (unlike other projects with both Annotate and Shakespeare's world, we want to run aggregation even over subjects that haven't been retired yet)
 * we then get the raw annotations sorted by subject id
 * for both image markings and transcriptions, we run clustering algorithms
 * we then retire any subjects which enough people have said have been completely transcribed

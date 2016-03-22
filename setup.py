@@ -29,6 +29,7 @@ setup(
             "pymongo==2.7",
             "scipy==0.13.3",
             "numpy==1.8.1",
-            "pymysql==0.6.2"
+            "pymysql==0.6.2",
+            "matplotlib==1.3.1"
             ]
         )
