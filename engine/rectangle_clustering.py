@@ -1,8 +1,6 @@
 import clustering
 import networkx
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.cbook as cbook
 
 class RectangleClustering(clustering.Cluster):
     def __init__(self,shape,project,additional_params):
@@ -11,6 +9,12 @@ class RectangleClustering(clustering.Cluster):
         self.rectangle = (shape == "rectangle") or (shape == "image")
 
     def __overlap__(self,l1,l2):
+        """
+        do two lines overlap? assume horizontal lines - if vertical then you need to flip coordinates before calling
+        :param l1:
+        :param l2:
+        :return:
+        """
         (l1_a,l1_b) = l1
         (l2_a,l2_b) = l2
 
@@ -23,13 +27,17 @@ class RectangleClustering(clustering.Cluster):
         else:
             return True
 
-    def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions,subject_id):
-        if markings == []:
-            return [],0
-
+    def __overlap_graph__(self,markings):
+        """
+        given a set of rectangle markings return a graph where each node corresponds to a rectangle
+        and an edge exists iff two rectangles overlap
+        :param markings:
+        :return:
+        """
         g = networkx.Graph()
         g.add_nodes_from(range(len(markings)))
 
+        # go through each pair of rectangles and see if they overlap
         for i,((x1,y1),_,(x2,y2),_) in enumerate(markings):
             for j,((m1,n1),_,(m2,n2),_) in list(enumerate(markings))[i+1:]:
                 # do these rectangles overlap on the x axis?
@@ -45,35 +53,65 @@ class RectangleClustering(clustering.Cluster):
                 # we know that these rectangles overlap
                 g.add_edge(i,j)
 
-        # each clique is a group of markings which all refer to the same region on the page
-        cliques = list(networkx.find_cliques(g))
+        return g
+
+    def __median_rectangles__(self,markings):
+        """
+        given a set of rectangles (which should represent a clique)
+        create a "representative" rectangle based on median corners
+        :param markings:
+        :return:
+        """
+        # don't assume that all rectangles will be in the same order
+        # e.g. don't assume that the first point is the lower left hand corner
+        maximum_x = [max(m[0][0],m[2][0]) for m in markings]
+        minimum_x = [min(m[0][0],m[2][0]) for m in markings]
+
+        maximum_y = [max(m[0][1],m[2][1]) for m in markings]
+        minimum_y = [min(m[0][1],m[2][1]) for m in markings]
+
+        x_top = np.median(maximum_x)
+        x_bot = np.median(minimum_x)
+        y_top = np.median(maximum_y)
+        y_bot = np.median(minimum_y)
+
+        return (x_top,y_top),(x_bot,y_bot)
+
+    def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions,subject_id):
+        """
+        main clustering algorithm - works on a single per-subject basis
+        for rectangles, doesn't make use of reduced_markings
+        :param markings:
+        :param user_ids:
+        :param tools:
+        :param reduced_markings:
+        :param dimensions:
+        :param subject_id:
+        :return:
+        """
+        # if empty markings, just return nothing
+        if markings == []:
+            return [],0
 
         results = []
 
-        for c in cliques:
+        overlap_graph = self.__overlap_graph__(markings)
+
+        # each clique is a group of markings which all refer to the same region on the page
+        # go through each clique
+        for c in networkx.find_cliques(overlap_graph):
+            # ignore any clique with less than 3 markings in it
             if len(c) < 3:
                 continue
-            # found = True
-            # don't assume that all rectangles will be in the same order
-            maximum_x = [max(markings[i][0][0],markings[i][2][0]) for i in c]
-            minimum_x = [min(markings[i][0][0],markings[i][2][0]) for i in c]
 
-            maximum_y = [max(markings[i][0][1],markings[i][2][1]) for i in c]
-            minimum_y = [min(markings[i][0][1],markings[i][2][1]) for i in c]
+            clique = [markings[i] for i in c]
 
-            x_top = np.median(maximum_x)
-            x_bot = np.median(minimum_x)
-            y_top = np.median(maximum_y)
-            y_bot = np.median(minimum_y)
-
+            # create the new cluster based on this clique
             new_cluster = dict()
-            new_cluster["center"] = [(x_top,y_top),(x_bot,y_bot)]
-
-            new_cluster["cluster members"] = [markings[i] for i in c]
+            new_cluster["center"] = self.__median_rectangles__(clique)
+            new_cluster["cluster members"] = clique
             new_cluster["users"] = [user_ids[i] for i in c]
-            # todo - implement
             new_cluster["tools"] = None
-            # todo - implement this - maybe based on voting weighted by fraction of rectangle inside aggregate?
             new_cluster["tool_classification"] = None
             new_cluster["image area"] = None
 
