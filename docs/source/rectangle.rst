@@ -35,7 +35,7 @@ def __overlap__(self,l1,l2):
 
 We can express the overlap relationship between rectangles as a graph; each node is a rectangle and there is an edge between nodes iff the corresponding rectangles overlap. With this setup, the above rectangular markings can be represented in the below image
 
-.. image:: images/rectangle_overlap.jpg
+.. image:: images/rectangle_graph.jpg
     :width: 500px
     :align: center
     :height: 500px
