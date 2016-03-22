@@ -7,3 +7,4 @@ PyYAML
 networkx
 cassandra-driver
 psycopg2
+pandas
