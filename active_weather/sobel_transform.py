@@ -1,6 +1,6 @@
-import matplotlib
+# import matplotlib
 # matplotlib.use('WXAgg')
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import cv2
 import numpy as np
 from os import popen
