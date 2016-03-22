@@ -56,4 +56,5 @@ docs/_build/
 .idea/workspace.xml
 .idea/misc.xml
 .idea/reduction.iml
+.idea/aggregation.iml
 config/*.yml
