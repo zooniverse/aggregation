@@ -22,7 +22,7 @@ Checking for overlap on either axis is straight forward:
 
 .. code-block::
 
-def __overlap__(self,l1,l2):
+    def __overlap__(self,l1,l2):
         (l1_a,l1_b) = l1
         (l2_a,l2_b) = l2
         # l2 ends before l1 begins
@@ -37,18 +37,18 @@ def __overlap__(self,l1,l2):
 We can express the overlap relationship between rectangles as a graph; each node is a rectangle and there is an edge between nodes iff the corresponding rectangles overlap. With this setup, the above rectangular markings can be represented in the below image
 
 .. image:: images/rectangle_graph.jpg
-    :width: 500px
+    :width: 250px
     :align: center
-    :height: 500px
+    :height: 250px
     :alt: a graph representation of the overlap between the above rectangles
 
 A set of nodes where every pair of nodes is connected is called a `clique <https://en.wikipedia.org/wiki/Clique_(graph_theory)>`_. There are actually multiple cliques in the above graph - for example a node by itself is a trivial clique. We want maximal cliques - cliques that are not a subset of another clique. Finding all maximal cliques seems to be an intractable `problem <https://en.wikipedia.org/wiki/Clique_problem#Listing_all_maximal_cliques>`_. So in the worst case, this clustering algorithm could take a long time - but in practice things should be fine.
- (I can't imagine more than 50 rectangles per subject and the graph structure should be pretty simple. But if things ever start to run really slowly, this is a place to check.) Because Python is awesome, the code to create a graph, enter edges and enumerate the maximal cliques is just:
+(I can't imagine more than 50 rectangles per subject and the graph structure should be pretty simple. But if things ever start to run really slowly, this is a place to check.) Because Python is awesome, the code to create a graph, enter edges and enumerate the maximal cliques is just:
 
 .. code-block::
 
-import networkx
-g = networkx.Graph()
-g.add_nodes_from(range(len(markings)))
-g.add_edge(i,j)
-cliques = list(networkx.find_cliques(g))
+    import networkx
+    g = networkx.Graph()
+    g.add_nodes_from(range(len(markings)))
+    g.add_edge(i,j)
+    cliques = list(networkx.find_cliques(g))
