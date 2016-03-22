@@ -18,9 +18,7 @@ Checking for overlap between rectangles is easy. Two rectangles overlap if and o
 1. They overlap on the x-axis.
 2. They overlap on the y-axis.
 
-Checking for overlap on either axis is straight forward:
-
-.. code-block::
+Checking for overlap on either axis is straight forward::
 
     def __overlap__(self,l1,l2):
         (l1_a,l1_b) = l1
@@ -43,9 +41,7 @@ We can express the overlap relationship between rectangles as a graph; each node
     :alt: a graph representation of the overlap between the above rectangles
 
 A set of nodes where every pair of nodes is connected is called a `clique <https://en.wikipedia.org/wiki/Clique_(graph_theory)>`_. There are actually multiple cliques in the above graph - for example a node by itself is a trivial clique. We want maximal cliques - cliques that are not a subset of another clique. Finding all maximal cliques seems to be an intractable `problem <https://en.wikipedia.org/wiki/Clique_problem#Listing_all_maximal_cliques>`_. So in the worst case, this clustering algorithm could take a long time - but in practice things should be fine.
-(I can't imagine more than 50 rectangles per subject and the graph structure should be pretty simple. But if things ever start to run really slowly, this is a place to check.) Because Python is awesome, the code to create a graph, enter edges and enumerate the maximal cliques is just:
-
-.. code-block::
+(I can't imagine more than 50 rectangles per subject and the graph structure should be pretty simple. But if things ever start to run really slowly, this is a place to check.) Because Python is awesome, the code to create a graph, enter edges and enumerate the maximal cliques is just::
 
     import networkx
     g = networkx.Graph()
