@@ -2,7 +2,6 @@ rollbar
 matplotlib
 botocore
 boto3
-pandas
 termcolor
 PyYAML
 networkx
