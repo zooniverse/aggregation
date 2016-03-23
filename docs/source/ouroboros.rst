@@ -32,3 +32,19 @@ Connecting to the database and iterating through classifications with Python is 
 
     for c in classification_collection.find({"user_name":expert})[:25]:
 
+The classification "c" is a dictionary with a couple of important keys
+
+* annotations - the actual annotations made by their user (in the case of Penguin Watch, the markings for each of the penguins)
+* tutorial - if this annotation was made as part of a tutorial - should probably just skip those
+* subject_ids - the zooniverse ids, allows you to match annotations from different users on the same subject
+* subjects - contains metadata - most importantly file names which will make sense to the researchers (the zooniverse subject ids won't mean anything to them)
+
+Let's look at some annotations for Penguin Watch - annotations in all projects are stored in JSON format.
+
+.. code-block:: json
+
+    [
+      {u'value': u'no', u'key': u'animalsPresent'},
+      ...
+    ]
+    
