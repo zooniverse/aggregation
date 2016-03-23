@@ -19,7 +19,8 @@ Once you've copied the dump to your computer, make sure that mongo DB is running
 
 So we've restored this database. If you go to the mongo DB interface (there are probably some decent GUIs for Mongo DB but I've always used the command) via the command "mongo" (this works in Linux) and enter "show dbs", you should now see the database "penguin". (There are plenty of good online tutorials for how to explore the database via the CLI)
 
-Connecting to the database and iterating through classifications with Python is easy::
+Connecting to the database and iterating through classifications with Python is easy:
+.. code-block:: python
 
     import pymongo
 
