@@ -97,3 +97,41 @@ Nice :) To improve things, let's create an index. We'll start with adding a "zoo
       zooniverse_id = c["subjects"][0]["zooniverse_id"]
 
       classification_collection.update_one({"_id":_id},{"$set":{"zooniverse_id":zooniverse_id}})
+
+That takes a while. But now we can search for a given zooniverse_id with
+
+.. code-block:: python
+
+    for classification in collection.find({"zooniverse_id":zooniverse_id}
+
+Now to create the index
+
+.. code-block:: python
+
+    db.profiles.create_index([('zooniverse_id', pymongo.ASCENDING)],unique=False)
+
+That part is pretty quick. Searching for all classifications for a given subject still takes a little bit but seems to be better (a quantitative difference would be nice - if it is actually still really bad, we might need to move the db over to postgres or something - but only as a last resort).
+
+Now to the actual clustering - we want to use the agglomerative clustering available through panoptes. (Link to be inserted later talking about the whole theory behind that) But we don't have to create an instance of AggregationAPI (which would mean basically whole "fake" panoptes project) - we can skip all of that.
+Agglomerative clustering is available through engine/agglomerative.api. We can easily import Agglomerative (the class in agglomerative.api that can do the clustering for penguin marking).
+
+.. code-block:: python
+
+    import sys
+    sys.path.append("/home/ggdhines/github/aggregation/engine")
+    from agglomerative import Agglomerative
+
+The code above adds the directory to the Python path (make sure to change it to the correct directory for your computer). The constructor for Agglomerative takes two parameters, either of which matters for Penguin Watch so feel free to pass in some dummy variables. The method within Agglomerative that we will class to do the actual clustering is
+
+.. code-block:: python
+
+    def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,subject_id):
+
+So we have to take the annotations from mongodb and convert them into the above format. The parameters for __cluster__ are
+
+* markings - the raw x,y coordinates
+* user_ids - probably go with ip addresses - that way you guarantee that everyone has a id, even if they are not logged in
+* tools - either "adult" or "chick"
+* reduced_markings - doesn't matter for just point markings - just make it equal to the markings
+* image_dimensions - also doesn't matter for Agglomerative
+* subject_id - doesn't matter for Agglomerative (Agglomerative is a subclass of Clustering and there are other sub classes of Clustering for which image_dimensions and subject_id matter)
