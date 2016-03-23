@@ -12,6 +12,7 @@ Contents:
    :maxdepth: 2
 
    getting_started.rst
+   ouroboros.rst
    aggregation.rst
    marking.rst
    text_aggregation.rst
