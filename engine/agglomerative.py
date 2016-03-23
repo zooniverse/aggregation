@@ -49,75 +49,61 @@ class Agglomerative(clustering.Cluster):
 
         self.correction_alg = multiClickCorrect.MultiClickCorrect(overlap_threshold=1,min_cluster_size=2,dist_threshold=20)
 
-    def __add_cluster(self,cluster_centers,end_clusters,end_users,node):
-        # if len(node.pts) < 4:
-        #     cluster_centers.append(None)
-        #     end_clusters.append(None)
-        #     end_users.append(None)
-        # else:
-        cluster_centers.append([np.median(axis) for axis in zip(*node.pts)])
-        end_clusters.append(node.pts)
-        end_users.append(node.users)
-
-        return cluster_centers,end_clusters,end_users
-
-    # def __results_to_json__(self,node):
-    #     results = {}
-    #     results["center"] = [np.median(axis) for axis in zip(*node.pts)]
-    #     results["points"] = node.pts
-    #     results["users"] = node.users
-    #
-    #     return results
-
-    def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,subject_id):
+    def __agglomerative__(self,markings):
         """
-        the actual clustering algorithm
-        markings and user_ids should be the same length - a one to one mapping
+        runs an initial agglomerative clustering over the given markings
         :param markings:
-        :param user_ids:
-        :param jpeg_file:
-        :param debug:
-        :param gold_standard:
-        :param subject_id:
         :return:
         """
-        assert len(markings) == len(user_ids)
-        assert len(markings) == len(reduced_markings)
-        assert isinstance(user_ids,tuple)
-        user_ids = list(user_ids)
-        start = time.time()
-
-        if len(user_ids) == len(set(user_ids)):
-            # all of the markings are from different users => so only one cluster
-            result = {"users":user_ids,"cluster members":markings,"tools":tools,"num users":len(user_ids)}
-            result["center"] = [np.median(axis) for axis in zip(*markings)]
-            return [result],0
-
-        all_users = set()
-
-        # cluster based n the reduced markings, but list the clusters based on their original values
-
         # this converts stuff into panda format - probably a better way to do this but the labels do seem
         # necessary
-        labels = [str(i) for i in reduced_markings]
-        param_labels = [str(i) for i in range(len(reduced_markings[0]))]
+        labels = [str(i) for i in markings]
+        param_labels = [str(i) for i in range(len(markings[0]))]
 
-        df = pd.DataFrame(np.array(reduced_markings), columns=param_labels, index=labels)
+        df = pd.DataFrame(np.array(markings), columns=param_labels, index=labels)
         row_dist = pd.DataFrame(squareform(pdist(df, metric='euclidean')), columns=labels, index=labels)
         # use ward metric to do the actual clustering
         row_clusters = linkage(row_dist, method='ward')
 
-        # use the results to build a tree representation
-        # nodes = [LeafNode(pt,ii,user=user) for ii,(user,pt) in enumerate(zip(user_ids,markings))]
+        return row_clusters
 
+    def __merge_clusters__(self,cluster1,cluster2):
+        """
+        merge two clusters - which ideally should not have any users in common
+        that should already have been checked
+        :param cluster1:
+        :param cluster2:
+        :return:
+        """
+        cluster1["users"].extend(cluster2["users"])
+        cluster1["cluster members"].extend(cluster2["cluster members"])
+        cluster1["tools"].extend(cluster2["tools"])
+        cluster1["num users"] += cluster2["num users"]
 
+        return cluster1
+
+    def __tree_traverse__(self,dendrogram,markings,user_ids,tools):
+        """
+        given a list representation of a dendrogram - resulting from running agglomerative clustering
+        https://en.wikipedia.org/wiki/Dendrogram\
+        each node in the tree is a dictionary containing things like "cluster members"
+        cap subtrees - that is find subtrees that should not be merged since they contain common users
+        so if A and B are siblings in the dendrogram and have common users, the parent of A and B
+        will be set to null. Also to indicate that A and B are "final clusters"   add "center" to those values
+        finally return a list of only the final clusters
+        :param dendrogram: a list representation of the results (tree) from agglomerative clustering
+        :param markings: the raw markings
+        :param user_ids: the user ids per raw markings
+        :param tools: the tools associated with the raw markings
+        :return:
+        """
         results = [{"users":[u],"cluster members":[p],"tools":[t],"num users":1,"tool_classification":({t:1},-1)} for u,p,t in zip(user_ids,markings,tools)]
 
-        # read through the results
-        # each row gives a cluster/node to merge
-        # if one any two clusters have a user in common - don't merge them - and represent this by a None cluster
-        # if trying to merge with a None cluster - this gives a None cluster as well
-        for merge in row_clusters:
+        # cluster_mergers is a list representation of a tree
+        # let's traverse this tree looking for mergers between clusters with common users - those clusters should
+        # not be merged. (we'll call those two child clusters "capped clusters"
+        # if trying to merge with a None cluster - this gives a None cluster as well - since these are above capped clusters
+        for merge in dendrogram:
             rchild_index = int(merge[0])
             lchild_index = int(merge[1])
 
@@ -151,15 +137,8 @@ class Agglomerative(clustering.Cluster):
                     results.append(None)
                 else:
                     # else just merge
-                    merged_users = rnode["users"]
-                    merged_points = rnode["cluster members"]
-                    merged_tools = rnode["tools"]
-                    # add in the values from the second node
-                    merged_users.extend(lnode["users"])
-                    merged_points.extend(lnode["cluster members"])
-                    merged_tools.extend(lnode["tools"])
-                    num_users = rnode["num users"] + lnode["num users"]
-                    results.append({"users":merged_users,"cluster members":merged_points,"tools":merged_tools,"num users":num_users})
+                    merged_clusters = self.__merge_clusters__(rnode,lnode)
+                    results.append(enumerate)
 
         # go and remove all non terminal nodes from the results
         for i in range(len(results)-1,-1,-1):
@@ -169,6 +148,37 @@ class Agglomerative(clustering.Cluster):
             if (results[i] is None) or ("center" not in results[i]):
                 results.pop(i)
 
+        return results
+
+    def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,subject_id):
+        """
+        the actual clustering algorithm
+        markings and user_ids should be the same length - a one to one mapping
+        :param markings:
+        :param user_ids:
+        :param jpeg_file:
+        :param debug:
+        :param gold_standard:
+        :param subject_id:
+        :return:
+        """
+        assert len(markings) == len(user_ids)
+        assert len(markings) == len(reduced_markings)
+        assert isinstance(user_ids,tuple)
+        user_ids = list(user_ids)
+        start = time.time()
+
+        if len(user_ids) == len(set(user_ids)):
+            # all of the markings are from different users => so only one cluster
+            result = {"users":user_ids,"cluster members":markings,"tools":tools,"num users":len(user_ids)}
+            result["center"] = [np.median(axis) for axis in zip(*markings)]
+            return [result],0
+
+        # cluster based on the reduced markings, but list the clusters based on their original values
+        dendrogram = self.__agglomerative__(reduced_markings)
+
+        results = self.__tree_traverse__(dendrogram,markings,user_ids,tools)
+
         # todo - this is just for debugging
         for j in results:
             assert "num users" in j
@@ -177,6 +187,10 @@ class Agglomerative(clustering.Cluster):
         return results,end-start
 
     def __check__(self):
+        """
+        purely for debugging and dev - trying to understand the distribution of points in a cluster
+        :return:
+        """
         self.all_distances = [d/max(self.all_distances) for d in self.all_distances]
         mean=numpy.mean(self.all_distances)
         var=numpy.var(self.all_distances,ddof=1)
