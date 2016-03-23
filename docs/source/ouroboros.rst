@@ -36,8 +36,8 @@ The classification "c" is a dictionary with a couple of important keys
 
 * annotations - the actual annotations made by their user (in the case of Penguin Watch, the markings for each of the penguins)
 * tutorial - if this annotation was made as part of a tutorial - should probably just skip those
-* subject_ids - the zooniverse ids, allows you to match annotations from different users on the same subject
-* subjects - contains metadata - most importantly file names which will make sense to the researchers (the zooniverse subject ids won't mean anything to them)
+* subjects - contains the zooniverse ids, allows you to match annotations from different users on the same subject and the image's location on AWS (in case you want to download it)
+* user_name - for logged in users, this is their user name (so the above code searches for 25 classifications made by a given user). Field does not exist if user is not logged in
 
 Let's look at some annotations for Penguin Watch - annotations in all projects are stored in JSON format.
 
@@ -47,4 +47,53 @@ Let's look at some annotations for Penguin Watch - annotations in all projects a
       {u'value': u'no', u'key': u'animalsPresent'},
       ...
     ]
-    
+
+So this annotation is for a subject which the user has said does not contain any penguins.
+
+.. code-block:: json
+
+    [
+      {u'value': {u'1': {u'y': u'118.132', u'x': u'-60.491', u'frame': u'0', u'value': u'adult'}, u'0': {u'y': u'167.988', u'x': u'127.011', u'frame': u'0', u'value': u'adult'}}, u'key': u'animalsPresent'},
+    ]
+
+And this annotation is for an image where the user has marked two penguins. Each penguins has 3 important fields
+
+* x,y - coordinates
+* value - adult or chick
+
+In the above example, we see that for Penguin 1 there is a negative x coordinate - this is due to a problem with the UI and this marking should be ignored. Note that as always for images because computer graphics is a bit silly, 0,0 (the origin) for images is the top left hand corner.
+
+If we wanted to find all classifications for a given subject id (say zooniverse_id), we would use
+
+.. code-block:: python
+
+    for classification in collection.find({"subjects" : {"$elemMatch": {"zooniverse_id":zooniverse_id}}}):
+
+This is really not efficient code - there is no index created for zooniverse_id (I'm not sure that one can be created when "zooniverse_id" is stored in the above manner). So we will have to repeatedly search through the whole DB. We could limit our searches with
+
+.. code-block:: python
+
+    for classification in collection.find({"subjects" : {"$elemMatch": {"zooniverse_id":zooniverse_id}}}).limit(10):
+
+So this would return only 10 - still not very efficient (especially if somehow an image didn't get 10 classifications - this is especially important for something like Snapshot Serengeti where subjects may be retired with different numbers of views). To see just how bad this could be, let's figure out how many classifications we have in the database
+
+.. code-block:: console
+
+    use penguin;
+    db.penguin_classifications.count();
+
+Note that in Mongodb terms - penguin is the database (or db) and penguin_classifications is a "collection" (kinda like a table).  The above is for the Mongodb CLI. For Python use
+
+.. code-block:: python
+
+    print classification_collection.count()
+
+Nice :) To improve things, let's create an index. We'll start with adding a "zooniverse_id" field to every classification
+
+.. code-block:: python
+
+    for c in classification_collection.find():
+      _id = c["_id"]
+      zooniverse_id = c["subjects"][0]["zooniverse_id"]
+
+      classification_collection.update_one({"_id":_id},{"$set":{"zooniverse_id":zooniverse_id}})
