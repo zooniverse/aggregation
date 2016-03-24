@@ -312,7 +312,7 @@ class AggregationAPI:
             # image_dimensions can be used by some clustering approaches - ie. for blob clustering
             # to give area as percentage of the total image area
             # work subject by subject
-            for ii,raw_classifications,raw_markings,raw_surveys,image_dimensions in enumerate(self.__sort_annotations__(workflow_id,subject_set)):
+            for ii,(raw_classifications,raw_markings,raw_surveys,image_dimensions) in enumerate(self.__sort_annotations__(workflow_id,subject_set)):
                 if survey_tasks == {}:
                     # do we have any marking tasks?
                     if marking_tasks != {}:
@@ -335,12 +335,12 @@ class AggregationAPI:
                 # upsert at every 50th subject - not sure if that's actually ideal but might be a good trade off
                 if (ii > 0) and (ii % 50 == 0):
                     # finally, store the results
+                    print("upserting " + str(ii))
                     self.__upsert_results__(workflow_id,aggregations)
                     aggregations = {}
 
             # finally upsert any left over results
             if aggregations != {}:
-                print("upserting " + str(ii))
                 self.__upsert_results__(workflow_id,aggregations)
         return aggregated_subjects
 
