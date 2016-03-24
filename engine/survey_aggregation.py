@@ -59,8 +59,8 @@ class Survey:
     def __species_annotation__(self,aggregation_so_far,annotation):
         """
         for a given user's annotation - go through each species that the user marked and process that annotation
-        :param aggregation_so_far:
-        :param annotation:
+        :param aggregation_so_far: aggregations so far for a single subject
+        :param annotation: the next annotation for that subject
         :return:
         """
         for species_ann in annotation:
@@ -99,7 +99,7 @@ class Survey:
         return aggregation_so_far
 
 
-    def __aggregate__(self,raw_classifications):
+    def __aggregate__(self,raw_classifications,aggregated_results={}):
 
         # todo - figure out why this is happening
         if raw_classifications == {}:
@@ -108,8 +108,6 @@ class Survey:
         assert len(raw_classifications.keys()) == 1
 
         task_id = raw_classifications.keys()[0]
-
-        aggregated_results = {}
 
         for subject_id in raw_classifications[task_id]:
             # just to save on some typing

@@ -329,7 +329,8 @@ class AggregationAPI:
                         survey_alg = gorongosa_aggregation.GorongosaSurvey()
                     else:
                         survey_alg = survey_aggregation.Survey()
-                    aggregations = survey_alg.__aggregate__(raw_surveys)
+
+                    aggregations = survey_alg.__aggregate__(raw_surveys,aggregations)
 
                 # upsert at every 50th subject - not sure if that's actually ideal but might be a good trade off
                 if (ii > 0) and (ii % 50 == 0):
