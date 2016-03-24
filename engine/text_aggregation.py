@@ -136,6 +136,12 @@ class TranscriptionAPI(AggregationAPI):
         return cluster_aggregation
 
     def __setup__(self):
+        """
+        do setup specifically for annotate and shakespeare's world.
+        things like using a special classification algorithm (which is able to retire subject) and
+        text clustering algorithms specifically designed for annotate/shakespeare's world
+        :return:
+        """
         AggregationAPI.__setup__(self)
 
         workflow_id = self.workflows.keys()[0]
