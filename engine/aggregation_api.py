@@ -2,9 +2,6 @@
 # from setuptools import setup, find_packages
 from __future__ import print_function
 import os
-if os.path.exists("/home/ggdhines"):
-    import matplotlib
-    matplotlib.use('WXAgg')
 import yaml
 import urllib2
 import cookielib
@@ -235,7 +232,7 @@ class AggregationAPI:
         # if so, has a specific workflow id has been provided?
         # todo - this can be removed or rewritten
         if "workflow_id" in environment_details:
-            workflow_id = int(project_details["workflow_id"])
+            workflow_id = int(environment_details["workflow_id"])
             try:
                 print("aggregating only for workflow id : " + str(workflow_id))
                 self.workflows = {workflow_id: self.workflows[workflow_id]}
@@ -314,31 +311,68 @@ class AggregationAPI:
 
             # image_dimensions can be used by some clustering approaches - ie. for blob clustering
             # to give area as percentage of the total image area
-            raw_classifications,raw_markings,raw_surveys,image_dimensions = self.__sort_annotations__(workflow_id,subject_set)
+            # work subject by subject
+            for ii,raw_classifications,raw_markings,raw_surveys,image_dimensions in enumerate(self.__sort_annotations__(workflow_id,subject_set)):
+                if survey_tasks == {}:
+                    # do we have any marking tasks?
+                    if marking_tasks != {}:
+                        aggregations = self.__cluster__(used_shapes,raw_markings,image_dimensions)
+                        # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
 
-            if survey_tasks == {}:
-                # do we have any marking tasks?
-                if marking_tasks != {}:
-                    aggregations = self.__cluster__(used_shapes,raw_markings,image_dimensions)
-                    # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
-
-                # we ALWAYS have to do classifications - even if we only have marking tasks, we need to do
-                # tool classification and existence classifications
-                print("classifying")
-                aggregations = self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],aggregations)
-            else:
-                print("classifying a survey")
-                if self.project_id == 593:
-                    # Wildcam Gorongosa is different - because why not?
-                    survey_alg = gorongosa_aggregation.GorongosaSurvey()
+                    # we ALWAYS have to do classifications - even if we only have marking tasks, we need to do
+                    # tool classification and existence classifications
+                    print("classifying")
+                    aggregations = self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],aggregations)
                 else:
-                    survey_alg = survey_aggregation.Survey()
-                aggregations = survey_alg.__aggregate__(raw_surveys)
+                    print("classifying a survey")
+                    if self.project_id == 593:
+                        # Wildcam Gorongosa is different - because why not?
+                        survey_alg = gorongosa_aggregation.GorongosaSurvey()
+                    else:
+                        survey_alg = survey_aggregation.Survey()
+                    aggregations = survey_alg.__aggregate__(raw_surveys)
 
-            # finally, store the results
-            self.__upsert_results__(workflow_id,aggregations)
+                # upsert at every 50th subject - not sure if that's actually ideal but might be a good trade off
+                if (ii > 0) and (ii % 50 == 0):
+                    # finally, store the results
+                    self.__upsert_results__(workflow_id,aggregations)
+                    aggregations = {}
 
+            # finally upsert any left over results
+            if aggregations != {}:
+                self.__upsert_results__(workflow_id,aggregations)
         return aggregated_subjects
+
+    def __extract_width_height__(self,metadata):
+        """
+        given the metadata results for an annotation (probably returned from cassandra
+        see if we can extrac the image height/width - useful for some aggregation
+        if we can't get that data - just return None,None - not the end of the world
+        :param metadata:
+        :return:
+        """
+        height = None
+        width = None
+
+        if isinstance(metadata,str) or isinstance(metadata,unicode):
+            metadata = json.loads(metadata)
+
+        # todo - not sure why this second conversion is needed, but seems to be
+        if isinstance(metadata,str) or isinstance(metadata,unicode):
+            metadata = json.loads(metadata)
+
+        if "subject_dimensions" in metadata:
+            try:
+                for dimensions in metadata["subject_dimensions"]:
+                    if dimensions is not None:
+                        assert isinstance(dimensions,dict)
+                        height = dimensions["naturalHeight"]
+                        width = dimensions["naturalWidth"]
+            except TypeError:
+                warning(metadata)
+                raise
+
+        return height,width
 
     def __cassandra_annotations__(self,workflow_id,subject_set):
         """
@@ -358,18 +392,26 @@ class AggregationAPI:
         print("getting annotations via cassandra")
 
         # do this in bite sized pieces to avoid overwhelming DB
-        for s in self.__chunks__(subject_set,15):
+        for s in self.__chunks__(subject_set,50):
             statements_and_params = []
 
             select_statement = self.cassandra_session.prepare("select user_id,annotations,workflow_version,created_at,metadata from "+self.classification_table+" where subject_id = ? and workflow_id = ? and workflow_version = ?")
 
             for subject_id in s:
                 params = (subject_id,int(workflow_id),version)
-
                 statements_and_params.append((select_statement, params))
+
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
 
+            # go through each subject independently
             for subject_id,(success,record_list) in zip(s,results):
+                # these are the values that we will return for this subject
+                annotations_per_subjects = []
+                users_per_subjects = []
+                height = None
+                width = None
+
+                # if the query was not successful - print out the error message and raise an error
                 if not success:
                     warning(record_list)
                 assert success
@@ -379,35 +421,21 @@ class AggregationAPI:
                 if record_list == []:
                     continue
 
-
+                # go through every annotation for this particular subject
                 for ii,record in enumerate(record_list):
                     # check to see if the metadata contains image size
-                    metadata = record.metadata
-                    if isinstance(metadata,str) or isinstance(metadata,unicode):
-                        metadata = json.loads(metadata)
+                    if ii == 0:
+                        metadata = record.metadata
+                        height,width = self.__extract_width_height__(metadata)
 
-                    height = None
-                    width = None
+                    # the main stuff we want to return user id and their annotations
+                    users_per_subjects.append(int(record.user_id))
+                    annotations_per_subjects.append(record.annotations)
 
-                    # todo - not sure why this second conversion is needed, but seems to be
-                    if isinstance(metadata,str) or isinstance(metadata,unicode):
-                        metadata = json.loads(metadata)
-
-                    if "subject_dimensions" in metadata:
-                        try:
-                            for dimensions in metadata["subject_dimensions"]:
-                                if dimensions is not None:
-                                    assert isinstance(dimensions,dict)
-                                    height = dimensions["naturalHeight"]
-                                    width = dimensions["naturalWidth"]
-                        except TypeError:
-                            warning(metadata)
-                            raise
-
-                    yield int(subject_id),int(record.user_id),record.annotations,(height,width)
+                yield int(subject_id),users_per_subjects,annotations_per_subjects,(height,width)
 
         raise StopIteration()
-        # return annotation_generator
+
 
     def __cassandra_connect__(self,cassandra_instance):
         """
@@ -1619,6 +1647,43 @@ class AggregationAPI:
 
         return raw_markings,raw_classifications
 
+    def __add_survey_annotation__(self,subject_id,user_id,task_id,task,raw_survey_annotations):
+        """
+        add a user's survey annotations for a specific task to the overall survey annotations
+        :param subject_id:
+        :param user_id:
+        :param task:
+        :param raw_survey_annotations:
+        :return:
+        """
+
+        if task_id not in raw_survey_annotations:
+            raw_survey_annotations[task_id] = {}
+        if subject_id not in raw_survey_annotations[task_id]:
+            raw_survey_annotations[task_id][subject_id] = {}
+        # todo - think the below can happen when a task is skipped, double check
+        # note that if a user sees more than one species - they will be recorded more than once
+        # i..e their user id will show up more than once
+        if task["value"] != [[]]:
+            # this setup is best for dealing with when users record more than one species in an image
+            if user_id not in raw_survey_annotations[task_id][subject_id]:
+                raw_survey_annotations[task_id][subject_id][user_id] = [task["value"]]
+            else:
+                raw_survey_annotations[task_id][subject_id][user_id].append(task["value"])
+
+        return raw_survey_annotations
+
+    def __add_classification_annotation__(self,subject_id,user_id,task_id,task,raw_classification_annotations):
+        if task_id not in raw_classification_annotations:
+            raw_classification_annotations[task_id] = {}
+        if subject_id not in raw_classification_annotations[task_id]:
+            raw_classification_annotations[task_id][subject_id] = []
+
+        if task["value"] != [[]]:
+            raw_classification_annotations[task_id][subject_id].append((user_id,task["value"]))
+
+        return raw_classification_annotations
+
     def __sort_annotations__(self,workflow_id,subject_set):
         """
         experts is when you have experts for whom you don't want to read in there classifications
@@ -1627,104 +1692,70 @@ class AggregationAPI:
         :param experts:
         :return:
         """
-        # if we have not been provided with a csv classification file, connect to cassandra
-        if self.csv_classification_file is None:
-            annotation_generator = self.__cassandra_annotations__
-        else:
-            # todo - add support for csv annotatons
-            annotation_generator = self.__csv_annotations__
-
-        # keep track of the non-logged in users for each subject
-        non_logged_in_users = dict()
 
         # load the classification, marking and survey json dicts - helps parse annotations
         classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
 
-        # this is what we return
-        raw_classifications = {}
-        raw_markings = {}
-        raw_surveys = {}
+        # todo - add support for reading in annotation from csv - honestly not sure if we even still want that option
+        # todo - refactor since we are doing this subject by subject - don't really need to include subject_id as a subkey in the classifications/markings/surveys dictionary
+        for subject_id,user_list,annotation_list,dimensions in self.__cassandra_annotations__(workflow_id,subject_set):
+            # this is what we return
+            raw_classifications = {}
+            raw_markings = {}
+            raw_surveys = {}
+            image_dimensions = {}
 
-        users_per_marking_task = {}
+            non_logged_in_users = 0
 
-        image_dimensions = {}
-
-        # annotation is a string which we will have to load into json format
-        for subject_id,user_id,annotation,dimensions in annotation_generator(workflow_id,subject_set):
-
-            if dimensions is not None:
+            if dimensions is not (None,None):
                 image_dimensions[subject_id] = dimensions
 
-            # todo - maybe having user_id=="" would be useful for penguins
-            if (user_id == -1):
-                # if this is the first non-logged-in-user for this subject
-                if subject_id not in non_logged_in_users:
-                    non_logged_in_users[subject_id] = 0
-                else:
-                    non_logged_in_users[subject_id] += 1
-                # non_logged_in_users += -1
-                user_id = non_logged_in_users[subject_id]
+            for user_id,annotation in zip(user_list,annotation_list):
+                # if user_id == -1, that user was not logged in. We need to be able to differentiate between
+                # multiple non logged in users - so if we have a list of user ids [-1,-1,-1] we need to map
+                # each of those -1's to a different number (a lot of algorithms depend on knowing that different
+                # annotations were made by different people
+                if user_id == -1:
+                    non_logged_in_users += -1
+                    user_id = non_logged_in_users
 
-            # annotations = json.loads(record.annotations)
-            annotation = json.loads(annotation)
+                # convert to json format - from string
+                annotation = json.loads(annotation)
 
-            # go through each annotation and get the associated task
-            for task in annotation:
-                try:
+                # go through each annotation and get the associated task
+                for task in annotation:
+                    # extract the task id
                     task_id = task["task"]
-                except (KeyError,TypeError) as e:
-                    warning(task)
-                    warning(e)
-                    warning(type(task))
-                    raise
 
-                # see https://github.com/zooniverse/Panoptes-Front-End/issues/2155 for why this is needed
-                if self.project_id in self.survey_projects:
-                    task_id = survey_tasks.keys()[0]
+                    # see https://github.com/zooniverse/Panoptes-Front-End/issues/2155 for why this is needed
+                    if self.project_id in self.survey_projects:
+                        task_id = survey_tasks.keys()[0]
 
-                # is this a marking task?
-                if task_id in marking_tasks:
-                    # skip over any improperly formed annotations - due to browser problems etc.
-                    if not isinstance(task["value"],list):
-                        print("not properly formed marking - skipping")
-                        continue
+                    # is this a marking task?
+                    if task_id in marking_tasks:
+                        # skip over any improperly formed annotations - due to browser problems etc.
+                        if not isinstance(task["value"],list):
+                            print("not properly formed marking - skipping")
+                            continue
 
-                    # a marking task will have follow up classification tasks - even if none are explicitly asked
-                    # i.e. existence, or how many users clicked on a given "area"
-                    raw_markings,raw_classifications = self.__add_markings_annotations__(subject_id,workflow_id,task_id,user_id,task["value"],raw_markings,raw_classifications,marking_tasks,classification_tasks,dimensions)
+                        # a marking task will have follow up classification tasks - even if none are explicitly asked
+                        # i.e. existence, or how many users clicked on a given "area"
+                        raw_markings,raw_classifications = self.__add_markings_annotations__(subject_id,workflow_id,task_id,user_id,task["value"],raw_markings,raw_classifications,marking_tasks,classification_tasks,dimensions)
 
-                # we a have a pure classification task
-                elif task_id in classification_tasks:
-                    if task_id not in raw_classifications:
-                        raw_classifications[task_id] = {}
-                    if subject_id not in raw_classifications[task_id]:
-                        raw_classifications[task_id][subject_id] = []
+                    # we a have a pure classification task
+                    elif task_id in classification_tasks:
+                        raw_classifications = self.__add_classification_annotation__(subject_id,user_id,task_id,task,raw_classifications)
+                    elif task_id in survey_tasks:
+                        raw_surveys = self.__add_survey_annotation__(subject_id,user_id,task_id,task,raw_surveys)
+                    else:
+                        warning(marking_tasks,classification_tasks,survey_tasks)
+                        warning(task_id)
+                        warning(task)
+                        assert False
 
-                    if task["value"] != [[]]:
-                        raw_classifications[task_id][subject_id].append((user_id,task["value"]))
+            yield raw_classifications,raw_markings,raw_surveys,image_dimensions
 
-                elif task_id in survey_tasks:
-                    if task_id not in raw_surveys:
-                        raw_surveys[task_id] = {}
-                    if subject_id not in raw_surveys[task_id]:
-                        raw_surveys[task_id][subject_id] = {}
-                    # todo - think the below can happen when a task is skipped, double check
-                    # note that if a user sees more than one species - they will be recorded more than once
-                    # i..e their user id will show up more than once
-                    if task["value"] != [[]]:
-                        # this setup is best for dealing with when users record more than one species in an image
-                        if user_id not in raw_surveys[task_id][subject_id]:
-                            raw_surveys[task_id][subject_id][user_id] = [task["value"]]
-                        else:
-                            raw_surveys[task_id][subject_id][user_id].append(task["value"])
-
-                else:
-                    warning(marking_tasks,classification_tasks,survey_tasks)
-                    warning(task_id)
-                    warning(task)
-                    assert False
-
-        return raw_classifications,raw_markings,raw_surveys,image_dimensions
+        raise StopIteration()
 
     def __subject_ids_in_set__(self,set_id):
         # request = urllib2.Request(self.host_api+"aggregations?workflow_id="+str(2)+"&subject_id="+str(458021)+"&admin=true")
