@@ -31,6 +31,6 @@ setup(
             "numpy==1.8.1",
             "pymysql==0.6.2",
             "matplotlib==1.3.1",
-            "yaml==3.11"
+            "pyyaml==3.11"
             ]
         )
