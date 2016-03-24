@@ -58,4 +58,25 @@ So cluster {A} has index 0, cluster {B} has index 1, etc. With this setup, Scipy
 
     [[0,1],[2,3],[5,6],[4,7]]
 
-Each element in the list actually has has 4 values, we only care about the first two.
+Each element in the list actually has has 4 values, we only care about the first two. Given the initial list of clusters::
+
+    [[A],[B],[C],[D],[E]]
+
+Scipy is giving the indices of which clusters to merge - the resulting merged cluster is then appended to the end of the list. So after the first merger we would have::
+
+    [[A],[B],[C],[D],[E],[A,B]]
+
+Suppose the markings C and D were made by the same user, so they shouldn't be merged. We denote this with::
+
+    [[A],[B],[C],[D],[E],[A,B],None]
+
+Next we merge [A,B] and [C,D] but [C,D] doesn't actually exist (since we replaced [C,D] with None). So in general, if either child is None, the parent will be None as well ::
+
+    [[A],[B],[C],[D],[E],[A,B],None,None]
+
+After the next and final merger, we have::
+
+    [[A],[B],[C],[D],[E],[A,B],None,None,None]
+
+We now go through this list looking for the "complete clusters". For example, A and B both occur twice in this list, but we don't want [A] or [B]. Each of those elements in the list (other than None) is actually a dictionary. To denote a complete cluster, we just add the key "center" which maps to the median x,y value of all the elements in the cluster. (Median is more robust than mean against outliers, e..g is more robust against someone clicking on not the center of the penguin.)
+So then we just return all the elements in the above list which have the "center" key.
