@@ -340,6 +340,7 @@ class AggregationAPI:
 
             # finally upsert any left over results
             if aggregations != {}:
+                print("upserting " + str(ii))
                 self.__upsert_results__(workflow_id,aggregations)
         return aggregated_subjects
 
@@ -1686,10 +1687,8 @@ class AggregationAPI:
 
     def __sort_annotations__(self,workflow_id,subject_set):
         """
-        experts is when you have experts for whom you don't want to read in there classifications
         :param workflow_id:
         :param subject_set:
-        :param experts:
         :return:
         """
 
