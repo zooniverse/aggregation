@@ -1,7 +1,5 @@
 from __future__ import print_function
 from survey_aggregation import Survey
-import numpy as np
-import math
 
 class GorongosaSurvey(Survey):
     def __init__(self):

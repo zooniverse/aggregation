@@ -12,7 +12,6 @@ class Survey:
         and return those X top species
         :return:
         """
-        print(aggregations)
         num_species = int(np.median(aggregations["num species"]))
         assert(num_species >= 1)
         # sort the species by the number of votes
@@ -131,7 +130,6 @@ class Survey:
                 num_users += 1
 
                 subject_results["num species"].append(num_species)
-                print(annotations_per_user)
                 # assert False
 
                 for ann in annotations_per_user:
