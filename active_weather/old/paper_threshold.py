@@ -16,7 +16,7 @@ ret,th1 = cv2.threshold(image,180,255,cv2.THRESH_BINARY)
 th2 = cv2.adaptiveThreshold(image,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,151,2)
 # plt.imshow(th2)
 # plt.show()
-#
+cv2.imwrite("/home/ggdhines/testing1.jpg",th2)
 cv2.imwrite("/home/ggdhines/testing2.jpg",th2)
 # assert False
 
