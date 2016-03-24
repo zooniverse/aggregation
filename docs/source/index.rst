@@ -16,8 +16,8 @@ Contents:
    aggregation.rst
    marking.rst
    text_aggregation.rst
-   points_clustering.rst
-   rectangle.rst
+   point_aggregation.rst
+   rectangle_aggregation.rst
 
 .. automodule:: engine
 

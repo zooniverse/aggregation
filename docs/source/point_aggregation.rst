@@ -1,6 +1,5 @@
-**************************
 Aggregating Point Markings
-**************************
+##########################
 
 So you have a project with task where people make point markings on an image and you want to aggregate them. For example, with Penguin Watch we might have the image below where the blue dots represent each individual marking made by a user.
 
