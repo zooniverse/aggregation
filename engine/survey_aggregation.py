@@ -133,7 +133,6 @@ class Survey:
                 # assert False
 
                 for ann in annotations_per_user:
-                    print(ann)
                     # not sure why we have sometimes getting empty annotations but it happens - if so, skip
                     if ann == []:
                         continue
