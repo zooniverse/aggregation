@@ -34,9 +34,9 @@ Checking for overlap on either axis is straight forward::
 We can express the overlap relationship between rectangles as a graph; each node is a rectangle and there is an edge between nodes iff the corresponding rectangles overlap. With this setup, the above rectangular markings can be represented in the below image
 
 .. image:: images/rectangle_graph.jpg
-    :width: 250px
+    :width: 500px
     :align: center
-    :height: 250px
+    :height: 500px
     :alt: a graph representation of the overlap between the above rectangles
 
 A set of nodes where every pair of nodes is connected is called a `clique <https://en.wikipedia.org/wiki/Clique_(graph_theory)>`_. There are actually multiple cliques in the above graph - for example a node by itself is a trivial clique. We want maximal cliques - cliques that are not a subset of another clique. Finding all maximal cliques seems to be an intractable `problem <https://en.wikipedia.org/wiki/Clique_problem#Listing_all_maximal_cliques>`_. So in the worst case, this clustering algorithm could take a long time - but in practice things should be fine.
