@@ -38,3 +38,24 @@ The "grand" cluster isn't actually very meaningful. The `dendrogram <https://en.
 We'll use the very simple rule of thumb that a user will never mark the same penguin twice. This isn't always true but actually holds very well in practice. And later we'll talk about methods for dealing with exceptions.
 So if {A} and {B} have users in common, we don't merge those clusters. Another rule of thumb - with enough users, given two nearby penguins, there will be at least one user who has marked both. So if {A} and {B} don't have any users in common,
 they probably refer to the same penguin and those clusters should be merged. What are "enough users"? There has been some quantitative analysis done in the past that will be either written up in a paper and/or posted here. But for now, I'll say that if 10-15 users have seen an image, this second RoT will hold.
+
+The code for agglomerative clustering is in agglomerative.py. The file contains the class Agglomerative with a couple of key methods
+
+* __cluster__ - this is the method called by the Aggregation Engine
+* __agglomerative__ - this is the method which does the initial agglomerative clustering
+* __tree_traverse__ - this method traverses the dendrogram returned by __agglomerative__ looking for "complete clusters" - clusters which should not be merged
+
+\__agglomerative__
+******************
+
+This function basically just calls the scipy's implementation of agglomerative clustering. The function also wraps the data in a `Pandas <http://pandas.pydata.org/>`_ dataframe which seems to be necessary for scipy.
+
+\__tree_traverse__
+******************
+
+Scipy returns a dendogram which is a tree representation of the agglomerative clustering process. This dendrogram is returned in list format. Using the above image as our example, suppose we had given Scipy the list of initial singleton clusters [A,B,C,D,E,].
+So cluster {A} has index 0, cluster {B} has index 1, etc. With this setup, Scipy would have returned::
+
+    [[0,1],[2,3],[5,6],[4,7]]
+
+Each element in the list actually has has 4 values, we only care about the first two.
