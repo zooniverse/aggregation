@@ -1145,7 +1145,7 @@ class AggregationAPI:
                 results_boolean,_ = zip(*results)
                 assert False not in results_boolean
                 break
-            except cassandra.WriteTimeout:
+            except (cassandra.WriteTimeout,cassandra.InvalidRequest) as e:
                 if i == 9:
                     raise
 
