@@ -287,5 +287,102 @@ So we have some fields to look at.
 * tools - what tools (adult or chick) users have used to mark this penguin
 * users - the list of users which marked this people. We've removed the list of users since that included some ip addresses.
 
+For each cluster, we want to report three things in our csv output file.
 
+* the center
+* probability of true positive
+* probability of "adult"
 
+We can get the first field directly from the clustering results. Probability of true positive is how likely the cluster represents an actual penguin - as opposed to someone confusing some rocks and snow with a penguin. All things being equal, the markings a cluster contains, the more likely it is that that cluster is a true positive.
+So for the "probability" of being a true positive, we'll report the percentage of users who have a marking in that cluster. (Quotations around probability there since it is a slight abuse of the term.) We'll also report the raw number of people who marked a penguin - sometimes the raw number is useful in addition to the percentage. Similarly for probability of adult we'll report the percentage of people who marked a penguin as an adult (as opposed to being a chick.)
+
+Regions of Interest
+*******************
+
+To make things more interesting, with Penguin Watch, users are often asked to only mark penguins in a certain region of an image. The rest of the image is grayed out and it should, in theory, be impossible for people to not even make markings outside the region of interest (ROI).
+However, things don't always work out in practice and we can have markings outside the ROI (most likely due to browser issues). So after we've found a cluster of markings - we need to double check that the center is inside of the ROI.
+
+At the same time, we also need to convert zooniverse ids into the subject ids which the penguin watch team will understand. Each image has a "path" id which is how the researchers organized their data. To access these path ids::
+
+    path = subject_collection.find_one({"zooniverse_id":zooniverse_id})["metadata"]["path"]
+
+An example result would be - PETEa/PETEa2013b_000157.JPG. "PETEa" is the camera id which is how we can access the ROI for this image. To make things slightly more complicated, some of the path names have changed between what Zooniverse has and what the Penguin Watch researchers have. Below is the complete list of all name changes that Zooniverse is currently aware of.
+
+=============   =================
+Zooniverse ID   Pre-zooniverse ID
+-------------   -----------------
+BALIa2014a
+BOOTa2012a	PCHAa2013
+BOOTa2014a
+BOOTb2013a	PCHb2013
+BOOTb2014a
+BOOTb2014b
+BROWa2012a
+CUVEa2013a
+CUVEa2013b
+CUVEa2014a
+DAMOa2014a
+DANCa2012a	DANCa2013
+DANCb2013a
+DANCb2014a
+FORTa2011a
+GEORa2013a
+GEORa2013b
+HALFa2012a
+HALFa2013a
+HALFb2013a
+HALFc2013a
+LOCKa2012a
+LOCKa2012b
+LOCKa2013a
+LOCKb2013a
+LOCKb2013b
+MAIVb2012a	MAIVb2013
+MAIVb2013a
+MAIVb2013c
+MAIVc2013
+MAIVc2013b
+MAIVd2014a
+NEKOa2012a	NEKOa2013
+NEKOa2013a
+NEKOa2013b
+NEKOa2013c
+NEKOa2014a
+NEKOb2013
+NEKOc2013a
+NEKOc2013b
+NEKOc2013c
+NEKOc2014b
+PCHAc2013
+PETEa2012a
+PETEa2013a	PETEa2013a
+PETEa2013b	PETEa2013a
+PETEa2013c
+PETEa2014b
+PETEb2012a
+PETEb2012b	PETEb2013
+PETEb2013b
+PETEc2013a
+PETEc2013b
+PETEc2014a
+PETEc2014b
+PETEd2013a
+PETEd2013b
+PETEe2013a
+PETEe2013b
+PETEf2014a
+SALIa2012a
+SALIa2013a
+SALIa2013b
+SALIa2013c
+SALIa2013d
+SALIa2013e
+SIGNa2012a
+SIGNa2013a	SIGNa2013
+SPIGa2012a
+SPIGa2013b
+SPIGa2014a
+SPIGa2014b
+YALOa2013a
+YALOa2014c
+=============   =================
