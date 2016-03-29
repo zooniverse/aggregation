@@ -138,7 +138,7 @@ class Agglomerative(clustering.Cluster):
                 else:
                     # else just merge
                     merged_clusters = self.__merge_clusters__(rnode,lnode)
-                    results.append(enumerate)
+                    results.append(merged_clusters)
 
         # go and remove all non terminal nodes from the results
         for i in range(len(results)-1,-1,-1):
@@ -164,8 +164,10 @@ class Agglomerative(clustering.Cluster):
         """
         assert len(markings) == len(user_ids)
         assert len(markings) == len(reduced_markings)
-        assert isinstance(user_ids,tuple)
-        user_ids = list(user_ids)
+
+        if isinstance(user_ids,tuple):
+            user_ids = list(user_ids)
+        assert isinstance(user_ids,list)
         start = time.time()
 
         if len(user_ids) == len(set(user_ids)):
