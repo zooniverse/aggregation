@@ -386,3 +386,69 @@ SPIGa2014b
 YALOa2013a
 YALOa2014c
 =============   =================
+
+So the left hand side is that Zooniverse has and the right hand side gives any changes necessary for the researchers to make sense of the data. The ROIs are stored in the Penguins repo on the Zooniverse github site; under the public directory in the roi.tsv. To load the values from this file use the code::
+
+    with open("/Penguins/public/roi.tsv","rb") as roiFile:
+            roiFile.readline()
+            reader = csv.reader(roiFile,delimiter="\t")
+            for l in reader:
+                path = l[0]
+                t = [r.split(",") for r in l[1:] if r != ""]
+                roi_dict[path] = [(int(x)/1.92,int(y)/1.92) for (x,y) in t]
+
+The first readline above skips the header line. Then we read through each path one at a time. Each corner is represented by a x,y value (tab separated - so we set delimiter = "\t", see the Python csv library for more info). We scale each set of values by 1.92 which is the difference between the original image size and the size of the image shown to the users (forget which that number is documented).
+
+To check if a given marking is inside of the ROI, we use the following code (remember that origin is at the top LHS of the image) ::
+
+    def __in_roi__(self,site,marking):
+        """
+        does the actual checking
+        :param object_id:
+        :param marking:
+        :return:
+        """
+
+        if site not in roi_dict:
+            return True
+        roi = roi_dict[site]
+
+        x = float(marking["x"])
+        y = float(marking["y"])
+
+
+        X = []
+        Y = []
+
+        for segment_index in range(len(roi)-1):
+            rX1,rY1 = roi[segment_index]
+            X.append(rX1)
+            Y.append(-rY1)
+
+        # find the line segment that "surrounds" x and see if y is above that line segment (remember that
+        # images are flipped)
+        for segment_index in range(len(roi)-1):
+            if (roi[segment_index][0] <= x) and (roi[segment_index+1][0] >= x):
+                rX1,rY1 = roi[segment_index]
+                rX2,rY2 = roi[segment_index+1]
+
+                # todo - check why such cases are happening
+                if rX1 == rX2:
+                    continue
+
+                m = (rY2-rY1)/float(rX2-rX1)
+                rY = m*(x-rX1)+rY1
+
+                if y >= rY:
+                    # we have found a valid marking
+                    # create a special type of animal None that is used when the animal type is missing
+                    # thus, the marking will count towards not being noise but will not be used when determining the type
+
+                    return True
+                else:
+                    return False
+
+        # probably shouldn't happen too often but if it does, assume that we are outside of the ROI
+        return False
+
+An example of a site name is "BALIa2014a". If for whatever reason we don't have an ROI for the given site - just say yes. Don't have time right now for the full details of what's happening above. (Hopefully later.)
