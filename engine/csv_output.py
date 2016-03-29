@@ -375,6 +375,8 @@ class CsvOut:
             with open(self.file_names[id_],"a") as f:
                 detailed_lines = self.__survey_row__(instructions,aggregations)
                 for l in detailed_lines:
+                    if subject_id == 873807:
+                        print(l)
                     f.write(str(subject_id)+l)
 
     def __survey_header_setup__(self,output_directory,task_id,instructions):
@@ -512,11 +514,11 @@ class CsvOut:
 
             # how many people voted for this species?
             num_votes = aggregations[species_id]["num votes"]
-            # percentage = num_votes/float(views_of_subject)
+            percentage = num_votes/float(views_of_subject)
 
             # extract the species name - just to be sure, make sure that the label is "csv safe"
             species_label = helper_functions.csv_string(instructions["species"][species_id])
-            row = "," + str(views_of_subject) + "," + str(pielou) + "," + species_label + "," + str(num_votes)
+            row = "," + str(views_of_subject) + "," + str(pielou) + "," + species_label + "," + +str(percentage) + "," + str(num_votes)
 
             # if there is nothing here - there are no follow up questions so just move on
             # same with FR - fire, NTHNG - nothing
