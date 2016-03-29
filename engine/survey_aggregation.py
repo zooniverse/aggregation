@@ -130,6 +130,7 @@ class Survey:
                 subject_results["num species"].append(num_species)
                 # assert False
 
+                # go through each individual species annotation from user
                 for ann in annotations_per_user:
                     # not sure why we have sometimes getting empty annotations but it happens - if so, skip
                     if ann == []:
@@ -146,6 +147,8 @@ class Survey:
 
 
                 aggregated_results[subject_id] = subject_results
-
+            if subject_id == 873807:
+                print(aggregated_results[subject_id])
+                assert False
 
         return aggregated_results
