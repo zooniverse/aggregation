@@ -335,7 +335,6 @@ class AggregationAPI:
                 # upsert at every 50th subject - not sure if that's actually ideal but might be a good trade off
                 if (ii > 0) and (ii % 50 == 0):
                     # finally, store the results
-                    print("upserting " + str(ii))
                     self.__upsert_results__(workflow_id,aggregations)
                     aggregations = {}
 
@@ -1076,6 +1075,7 @@ class AggregationAPI:
             select_stmt += " and id > " + str(lb_id)
 
         # only process a small number of classifications
+        print("step size is " + str(step))
         select_stmt += " order by id limit " + str(step)
 
         # setup the postgres connection and make the select query
@@ -1191,8 +1191,8 @@ class AggregationAPI:
         while subjects_migrated != set():
             lower_bound_id,subjects_migrated = self.__migrate_with_id_limits__(select,lower_bound_id)
             all_subjects_migrated.update(subjects_migrated)
-            # if self.environment == "development":
-            break
+            if self.environment == "development":
+                break
             print(lower_bound_id)
 
         return list(all_subjects_migrated)
@@ -1808,9 +1808,7 @@ class AggregationAPI:
         try:
             postgres_cursor.execute("CREATE TEMPORARY TABLE newvals(workflow_id int, subject_id " + self.subject_id_type+ ", aggregation jsonb)")
         except psycopg2.ProgrammingError as e:
-            # todo - the table should always be deleted after its use, so this should rarely happen
-            # todo - need to reset the connection
-            print("temporary table already exists - huh")
+            # print("temporary table already exists - huh")
             self.postgres_session.rollback()
             postgres_cursor = self.postgres_writeable_session.cursor()
             postgres_cursor.execute("truncate table newvals")
