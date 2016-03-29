@@ -149,6 +149,6 @@ class Survey:
                 aggregated_results[subject_id] = subject_results
             if subject_id == 873807:
                 print(aggregated_results[subject_id])
-                assert False
+
 
         return aggregated_results

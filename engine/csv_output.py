@@ -518,7 +518,7 @@ class CsvOut:
 
             # extract the species name - just to be sure, make sure that the label is "csv safe"
             species_label = helper_functions.csv_string(instructions["species"][species_id])
-            row = "," + str(views_of_subject) + "," + str(pielou) + "," + species_label + "," + +str(percentage) + "," + str(num_votes)
+            row = "," + str(views_of_subject) + "," + str(pielou) + "," + species_label + "," +str(percentage) + "," + str(num_votes)
 
             # if there is nothing here - there are no follow up questions so just move on
             # same with FR - fire, NTHNG - nothing

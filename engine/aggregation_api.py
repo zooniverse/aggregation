@@ -659,10 +659,13 @@ class AggregationAPI:
         :return:
         """
         request = "projects/"+str(self.project_id)+"?"
-        data = self.__panoptes_call__(request)
-
-        display_name =  data["projects"][0]["display_name"]
-        ascii_name = display_name.encode('ascii', 'ignore')
+        try:
+            data = self.__panoptes_call__(request)
+            display_name = data["projects"][0]["display_name"]
+            ascii_name = display_name.encode('ascii', 'ignore')
+        except urllib2.HTTPError:
+            ascii_name = "unable to connect"
+            pass
 
         print("project is " + ascii_name)
 
@@ -1188,9 +1191,9 @@ class AggregationAPI:
         while subjects_migrated != set():
             lower_bound_id,subjects_migrated = self.__migrate_with_id_limits__(select,lower_bound_id)
             all_subjects_migrated.update(subjects_migrated)
+            # if self.environment == "development":
+            break
             print(lower_bound_id)
-            if self.environment == "development":
-                break
 
         return list(all_subjects_migrated)
 
