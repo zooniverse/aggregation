@@ -321,7 +321,6 @@ class AggregationAPI:
 
                     # we ALWAYS have to do classifications - even if we only have marking tasks, we need to do
                     # tool classification and existence classifications
-                    print("classifying")
                     aggregations = self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],aggregations)
                 else:
                     if self.project_id == 593:
@@ -510,11 +509,10 @@ class AggregationAPI:
         cluster_aggregation = {}
         for shape in used_shapes:
             # were any additional params provided?
-            print(shape)
             if shape in self.additional_clustering_args:
-                algorithm = self.default_clustering_algs[shape](shape,self.additional_clustering_args[shape])
+                algorithm = self.default_clustering_algs[shape](shape,self,self.additional_clustering_args[shape])
             else:
-                algorithm = self.default_clustering_algs[shape](shape,{})
+                algorithm = self.default_clustering_algs[shape](shape,self,{})
 
             shape_aggregation = algorithm.__aggregate__(raw_markings,image_dimensions)
 
@@ -1191,8 +1189,8 @@ class AggregationAPI:
         while subjects_migrated != set():
             lower_bound_id,subjects_migrated = self.__migrate_with_id_limits__(select,lower_bound_id)
             all_subjects_migrated.update(subjects_migrated)
-            if self.environment == "development":
-                break
+            # if self.environment == "development":
+            #     break
             print(lower_bound_id)
 
         return list(all_subjects_migrated)
