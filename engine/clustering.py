@@ -28,7 +28,6 @@ def chunk_it(seq, num):
 
 # mappings are for use in dimension reduction
 def identity_mapping(markings):
-    print("identiy mapping")
     return markings
 
 
@@ -84,9 +83,7 @@ class Cluster:
         # start by calling the api to get the annotations along with the list of who made each marking
         # so for this function, we know that annotations = markings
         # all_markings =  self.project_api.__get_markings__(subject_id,gold_standard)
-        # print all_markings
         # self.clusterResults[subject_id] = {"param":"task_id"}
-        print("clustering " + self.shape)
         for task_id in raw_markings:
             # go through each marking tool - multiple tools may use the desired shape tool
             # so pay attention to only those markings
@@ -95,7 +92,6 @@ class Cluster:
                     continue
 
                 for subject_count,subject_id in list(enumerate(raw_markings[task_id][shape])):
-                    print(subject_count,subject_id)
                     assert raw_markings[task_id][shape][subject_id] != []
 
                     # remove any "markings" which correspond to the user not making a marking
