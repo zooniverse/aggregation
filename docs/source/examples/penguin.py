@@ -6,6 +6,7 @@ sys.path.append("/home/ggdhines/github/aggregation/engine")
 sys.path.append("/home/ggdhines/Pycharm/reduction/engine")
 from agglomerative import Agglomerative
 import csv
+import os
 
 name_changes = {}
 with open("/home/ggdhines/Downloads/Nomenclature_changes.csv","rb") as f:
@@ -13,16 +14,17 @@ with open("/home/ggdhines/Downloads/Nomenclature_changes.csv","rb") as f:
     reader = csv.reader(f,delimiter=",")
 
     for zoo_id,pre_zoo_id in reader:
-        print(pre_zoo_id+"|")
-        print(pre_zoo_id[0])
+        # print(pre_zoo_id+"|")
+        # print(pre_zoo_id == "")
         if pre_zoo_id != "":
             name_changes[zoo_id] = pre_zoo_id[:-1]
 
-assert False
+# assert False
 roi_dict = {}
 
+
 # method for checking if a given marking is within the ROI
-def __in_roi__(self,site,marking):
+def __in_roi__(site,marking):
     """
     does the actual checking
     :param object_id:
@@ -34,9 +36,7 @@ def __in_roi__(self,site,marking):
         return True
     roi = roi_dict[site]
 
-    x = float(marking["x"])
-    y = float(marking["y"])
-
+    x,y = marking
 
     X = []
     Y = []
@@ -97,10 +97,10 @@ clustering_engine = Agglomerative(None,{})
 # result = db.profiles.create_index([('zooniverse_id', pymongo.ASCENDING)],unique=False)
 # print result
 
-for c in classification_collection.find().limit(1000):
+for c in classification_collection.find():
     _id = c["_id"]
     zooniverse_id = c["subjects"][0]["zooniverse_id"]
-    # print(zooniverse_id)
+    print(zooniverse_id)
 
     markings = []
     user_ids = []
@@ -111,12 +111,18 @@ for c in classification_collection.find().limit(1000):
     _,image_id = path.split("/")
 
     site_id = image_id.split("_")[0]
-    print(site_id)
+    # print(site_id)
 
-    # print(path.split("/"))
-    print(site_id in name_changes,site_id in roi_dict)
-    print(name_changes)
-    continue
+    big_path,little_path = path.split("/")
+    little_path = little_path[:-4]
+
+    d = "/tmp/penguin/"+big_path
+    if not os.path.exists(d):
+        os.makedirs(d)
+
+    # print(site_id in name_changes,site_id in roi_dict)
+    # print(name_changes)
+    # continue
 
 
     for c2 in classification_collection.find({"zooniverse_id":zooniverse_id}):
@@ -131,8 +137,21 @@ for c in classification_collection.find().limit(1000):
 
         try:
             for penguin in c2["annotations"][1]["value"].values():
-                x = float(penguin["x"])
-                y = float(penguin["y"])
+                try:
+                    x = float(penguin["x"])
+                    y = float(penguin["y"])
+                except TypeError:
+                    print(penguin)
+                    raise
+                except ValueError:
+                    print("skipping bad markings")
+                    continue
+
+                if site_id in roi_dict:
+                    if not __in_roi__(site_id,(x,y)):
+                        print("skipping due to being outside roi")
+                        continue
+
                 penguin_type = penguin["value"]
 
                 markings.append((x,y))
@@ -140,18 +159,25 @@ for c in classification_collection.find().limit(1000):
                 tools.append(penguin_type)
         except AttributeError:
             continue
+        except KeyError:
+            continue
 
-    if markings != []:
-        clustering_results = clustering_engine.__cluster__(markings,user_ids,tools,markings,None,None)
+    with open(d+"/"+little_path+".csv","w") as f:
+        if markings != []:
+            clustering_results = clustering_engine.__cluster__(markings,user_ids,tools,markings,None,None)
 
-        for penguin_index,cluster in enumerate(clustering_results[0]):
-            center = cluster["center"]
-            tools = cluster["tools"]
+            f.write("penguin_index,x_center,y_center,probability_of_adult,probability_of_true_positive,num_markings\n")
 
-            probability_adult = sum([1 for t in tools if t == "adult"])/float(len(tools))
-            probability_true_positive = len(tools)/float(num_users)
-            count_true_positive = len(tools)
+            for penguin_index,cluster in enumerate(clustering_results[0]):
+                center = cluster["center"]
+                tools = cluster["tools"]
 
-            print(penguin_index,center[0],center[1],probability_adult,probability_true_positive,count_true_positive)
-    else:
-        print(-1,-1,-1,-1,-1,-1)
+                probability_adult = sum([1 for t in tools if t == "adult"])/float(len(tools))
+                probability_true_positive = len(tools)/float(num_users)
+                count_true_positive = len(tools)
+
+                f.write(str(penguin_index)+","+str(center[0])+","+str(center[1])+","+str(probability_adult)+","+str(probability_true_positive)+","+str(count_true_positive)+"\n")
+                # print(d+"/"+little_path+".csv")
+        else:
+            f.write("-1\n")
+

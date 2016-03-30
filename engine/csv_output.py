@@ -176,10 +176,16 @@ class CsvOut:
             # now write the headers
             detailed_results.write("subject_id")
 
+            # the answer dictionary is structured differently for follow up questions markings
             if tool_id is not None:
                 detailed_results.write(",cluster_id")
 
-            answer_dict = self.instructions[workflow_id][task_id]["answers"]
+                answer_dict = dict()
+                for answer_key,answer in self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_id]["answers"].items():
+                    answer_dict[answer_key] = answer["label"]
+            else:
+                answer_dict = self.instructions[workflow_id][task_id]["answers"]
+
             for answer_key in sorted(answer_dict.keys()):
                 # break this up into multiple lines so we can be sure that the answers are sorted correctly
                 # order might not matter in the end, but just to be sure

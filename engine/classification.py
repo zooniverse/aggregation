@@ -332,18 +332,9 @@ class Classification:
                     # it does mean that the aggregation json is correctly structured
                     aggregations = self.__tool_classification__(task_id,shape,aggregations)
 
-
-                    # for subject_id in aggregations:
-                    #     for cluster_index in aggregations[subject_id][task_id][shape + " clusters"]:
-                    #         if cluster_index != "all_users":
-                    #             assert "tool_classification" in aggregations[subject_id][task_id][shape + " clusters"][cluster_index]
-
         # now go through the normal classification aggregation stuff
         # which can include follow up questions
         for task_id in classification_tasks:
-            print "classifying task " + str(task_id)
-
-            # task_results = {}
             # just a normal classification question
             if classification_tasks[task_id] in ["single","multiple"]:
                 # did anyone actually do this classification?
