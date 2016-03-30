@@ -2,9 +2,7 @@ from __future__ import print_function
 import numpy as np
 import cv2
 import csv
-from os import popen
 import paper_quad
-import sobel_transform
 import math
 import tesserpy
 # from scipy.integrate import simps
@@ -14,6 +12,9 @@ import matplotlib.pyplot as plt
 from descartes import PolygonPatch
 from sklearn.cluster import DBSCAN
 from sklearn.decomposition import PCA
+from skimage.filters import threshold_otsu, rank
+from skimage.morphology import disk
+from sklearn import mixture
 __author__ = 'ggdhines'
 
 def __upper_bounds__(line):
@@ -108,6 +109,12 @@ def __median_kernel__(img,line,horizontal):
 
     return mask
 
+def __identity__(img,line):
+    mask = np.zeros(img.shape[:2],np.uint8)
+    cv2.drawContours(mask,[line],0,255,-1)
+
+    return mask
+
 def __polynomial_correct__(img,line,horizontal):
     if horizontal:
         x,y = zip(*line)
@@ -115,6 +122,11 @@ def __polynomial_correct__(img,line,horizontal):
     else:
         y,x = zip(*line)
         domain = sorted(set(line[:,1]))
+
+    init_mask = np.zeros(img.shape[:2],np.uint8)
+    cv2.drawContours(init_mask,[line],0,255,-1)
+    # plt.imshow(init_mask)
+    # plt.show()
 
     mask2 = np.zeros(img.shape[:2],np.uint8)
 
@@ -140,9 +152,22 @@ def __polynomial_correct__(img,line,horizontal):
     else:
         pts = np.asarray(zip(y_vals,x_vals))
 
+
     cv2.drawContours(mask2,[pts],0,255,-1)
 
-    return mask2
+    # plt.imshow(mask2)
+    # plt.show()
+
+    mask3 = np.min([init_mask,mask2],axis=0)
+    # plt.imshow(mask3)
+    # plt.show()
+
+    # x,y = zip(*line)
+    # plt.plot(x,y)
+    # plt.plot(x_vals,y_vals)
+    # plt.show()
+
+    return mask3
 
 def __correct__(img,line,horizontal,background=0,foreground=255):
     assert len(img.shape) == 2
@@ -178,8 +203,8 @@ def __pca__(img):
 
     res = np.uint8(cv2.normalize(pca_img,pca_img,0,255,cv2.NORM_MINMAX))
 
-    plt.imshow(res)
-    plt.show()
+    # plt.imshow(res)
+    # plt.show()
 
     ink_pixels = np.where(res>90)
     template = np.zeros(img.shape[:2],np.uint8)
@@ -191,6 +216,7 @@ def __pca__(img):
     # plt.show()
 
     # assert False
+    template = 255 - template
     return template
 
 def __dbscan_threshold__(img):
@@ -278,14 +304,19 @@ def __mask_lines__(gray):
 
     mask = np.zeros(gray.shape,np.uint8)
     for l in horizontal_lines:
-        corrected_l = __polynomial_correct__(gray,l,True)
+        corrected_l = __identity__(gray,l)
+        # corrected_l = __polynomial_correct__(gray,l,True)
         # corrected_l = __correct__(gray,l,True)
         mask = np.max([mask,corrected_l],axis=0)
+
+    # plt.imshow(mask)
+    # plt.show()
 
     cv2.imwrite("/home/ggdhines/testing.jpg",mask)
     vertical_lines = paper_quad.__extract_grids__(gray,False)
     for l in vertical_lines:
-        corrected_l = __polynomial_correct__(gray,l,False)
+        corrected_l = __identity__(gray,l)
+        # corrected_l = __polynomial_correct__(gray,l,False)
         # corrected_l = __correct__(gray,l,False)
         mask = np.max([mask,corrected_l],axis=0)
 
@@ -293,10 +324,61 @@ def __mask_lines__(gray):
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
 
-    ret,thresh1 = cv2.threshold(gray,180,255,cv2.THRESH_BINARY)
+
+    thresh1 = __threshold_image__(gray)
     masked_image = np.max([thresh1,mask],axis=0)
 
+    plt.imshow(masked_image,cmap="gray")
+    plt.title("masked image")
+    plt.show()
+    cv2.imwrite("/home/ggdhines/2.jpg",masked_image)
+    # assert False
+
     return masked_image
+
+def __threshold_image__(img):
+    assert len(img.shape) == 2
+    # for i in img:
+    #     print(list(i))
+    ret,thresh1 = cv2.threshold(img,170,255,cv2.THRESH_BINARY)
+
+    thresh3 = cv2.adaptiveThreshold(img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,151,2)
+
+    return thresh1
+
+
+    radius = 200
+    selem = disk(radius)
+    local_otsu = rank.otsu(img, selem)
+
+    # print(img >= local_otsu)
+    thresh2 = np.zeros(img.shape[:2],np.uint8)
+    thresh2.fill(255)
+    x,y = np.where(img < local_otsu)
+    thresh2[x,y] = 0
+
+    # plt.imshow(thresh1,cmap="gray")
+    # plt.show()
+    # plt.imshow(thresh2,cmap="gray")
+    # plt.show()
+
+    threshold_global_otsu = threshold_otsu(img)
+    global_otsu = img >= threshold_global_otsu
+    # print(img)
+    # print(global_otsu)
+    # print(threshold_global_otsu)
+    thresh3 = np.zeros(img.shape[:2],np.uint8)
+    x,y = np.where(img < threshold_global_otsu)
+    thresh3.fill(255)
+    # print(np.where(img< global_otsu))
+    # for i in img:
+    #     print(min(i))
+    # plt.plot(x,y,".")
+    # plt.show()
+    thresh3[x,y] = 0
+
+    return thresh3
+
 
 def __gen_columns__(masked_image,gray):
     vertical_contours = paper_quad.__extract_grids__(gray,False)
@@ -324,7 +406,7 @@ def __ocr_image__(image):
     tess.tessedit_pageseg_mode = tesserpy.PSM_SINGLE_BLOCK
     # tess.tessedit_ocr_engine_mode = tesserpy.OEM_CUBE_ONLY
     # tess.tessedit_page_iteratorlevel = tess.RIL_SYMBOL
-    tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.abcdefghijkmnopqrstuvwxyz"
+    tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNPQRSTUVWXYZ1234567890.abcdefghijkmnpqrstuvwxyz"
 
     tess.set_image(image)
     tess.get_utf8_text()
@@ -384,11 +466,12 @@ def __cell_boundaries__(image):
 
     return horizontal_grid,vertical_grid
 
-def __place_in_cell__(transcriptions,horizontal_grid,vertical_grid,image):
+def __place_in_cell__(transcriptions,image):
+    horizontal_grid,vertical_grid = __cell_boundaries__(image)
     cell_contents = {}
 
     for (t,c,top,left,right,bottom) in transcriptions:
-        print(t,c)
+        # print(t,c)
         mid_y = (int(top)+int(bottom))/2.
         mid_x = (int(right)+int(left))/2.
 
@@ -442,9 +525,11 @@ def __place_in_cell__(transcriptions,horizontal_grid,vertical_grid,image):
         sorted_contents = sorted(cell_contents[key], key = lambda x:x[0])
         _,text,confidence = zip(*sorted_contents)
         text = "".join(text)
-        confidence = np.min(confidence)
+        # confidence = np.min(confidence)
         cell_contents[key] = (text,confidence)
 
+    for i in range(12):
+        print(cell_contents[(i,17)])
     return cell_contents
 
 def __gold_standard_comparison__(transcriptions):
@@ -473,9 +558,11 @@ def __gold_standard_comparison__(transcriptions):
                     else:
                         false_positives.append(c)
 
+    print("summary stats")
     print(total)
     print(correct_empty)
-    print(empty)
+    # print(empty)
+    print("")
 
     return true_positives,false_positives
 
@@ -515,11 +602,22 @@ def __roc_plot__(true_positives,false_positives):
     plt.ylim((0,1.01))
     plt.show()
 
-    fig = plt.figure(1, figsize=(5,5), dpi=90)
-    ax = fig.add_subplot(111)
-    ring_patch = PolygonPatch(p)
-    ax.add_patch(ring_patch)
-    plt.show()
+    # fig = plt.figure(1, figsize=(5,5), dpi=90)
+    # ax = fig.add_subplot(111)
+    # ring_patch = PolygonPatch(p)
+    # ax.add_patch(ring_patch)
+    # plt.show()
+
+def __gmm__(img):
+    x = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    x = np.reshape(x,x.shape[0]*x.shape[1])
+
+    for i in range(2,20):
+        g = mixture.GMM(n_components=i)
+
+        g.fit(x)
+
+        print(g.aic(x),g.means_,g.weights_)
 
 if __name__ == "__main__":
     img = cv2.imread('/home/ggdhines/region.jpg')
@@ -540,16 +638,29 @@ if __name__ == "__main__":
     # plt.show()
     # assert False
 
-    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    # x = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    # x = np.reshape(x,x.shape[0]*x.shape[1])
+    # n, bins, patches = plt.hist(x, 20, normed=1, facecolor='green', alpha=0.5)
+    # plt.show()
 
-    horizontal_grid,vertical_grid = __cell_boundaries__(gray)
+    # gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    # ret,thresh1 = cv2.threshold(gray,198,255,cv2.THRESH_BINARY)
+    # plt.imshow(thresh1)
+    # plt.show()
+    # __gmm__(img)
     # assert False
 
-    # masked_image = __mask_lines__(gray)
-    masked_image = __pca_mask__(img)
+    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    # gray = __pca__(img)
 
-    transcriptions = __ocr_image__(gray)
-    transcriptions_in_cells = __place_in_cell__(transcriptions,horizontal_grid,vertical_grid,gray)
+
+    # assert False
+
+    masked_image = __mask_lines__(gray)
+    # masked_image = __pca_mask__(img)
+
+    transcriptions = __ocr_image__(masked_image)
+    transcriptions_in_cells = __place_in_cell__(transcriptions,gray)
 
     true_positives,false_positives = __gold_standard_comparison__(transcriptions_in_cells)
 
