@@ -8,8 +8,8 @@ import csv
 import sobel_transform
 __author__ = 'ggdhines'
 
-img = cv2.imread('/home/ggdhines/region.jpg')
-gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+# img = cv2.imread('/home/ggdhines/region.jpg')
+# gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 
 
 def __extract_grids__(img,horizontal):
@@ -19,12 +19,12 @@ def __extract_grids__(img,horizontal):
 
     if horizontal:
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(10,2))
-        d_image = cv2.Sobel(gray,cv2.CV_16S,0,2)
+        d_image = cv2.Sobel(img,cv2.CV_16S,0,2)
 
     else:
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(2,10))
 
-        d_image = cv2.Sobel(gray,cv2.CV_16S,1,0)
+        d_image = cv2.Sobel(img,cv2.CV_16S,1,0)
 
     d_image = cv2.convertScaleAbs(d_image)
     cv2.normalize(d_image,d_image,0,255,cv2.NORM_MINMAX)
