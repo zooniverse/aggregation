@@ -1,15 +1,9 @@
-__author__ = 'greg'
-import clustering
-import os
-import re
-import matplotlib.pyplot as plt
-import networkx as nx
+from __future__ import print_function
 import itertools
 from copy import deepcopy
 import abc
-import json
-import csv
-import math
+
+__author__ = 'greg'
 
 def findsubsets(S,m):
     return set(itertools.combinations(S, m))
@@ -64,10 +58,14 @@ class Classification:
                                 continue
 
                             # what is the most likely tool for this cluster?
-                            most_likely_tool,_ = max(cluster["tool_classification"][0].items(),key = lambda x:x[1])
+                            try:
+                                most_likely_tool,_ = max(cluster["tool_classification"][0].items(),key = lambda x:x[1])
+                            except TypeError:
+                                print(cluster)
+                                raise
+
                             if int(most_likely_tool) != int(tool):
                                 continue
-
 
                             # polygons and rectangles will pass cluster membership back as indices
                             # ints => we can't case tuples
@@ -259,10 +257,10 @@ class Classification:
         :param clustering_results:
         :return:
         """
-        print "tool classification - more than one tool could create " +str(shape) + "s in task " + str(task_id)
+        print("tool classification - more than one tool could create " +str(shape) + "s in task " + str(task_id))
 
         if aggregations == {}:
-            print "warning - empty classifications"
+            print("warning - empty classifications")
             return {}
 
         # only go through the "uncertain" shapes
@@ -293,7 +291,7 @@ class Classification:
                 tool_classifications[(subject_id,cluster_index)] = ballots
 
         # classify
-        print "tool results classification"
+        print("tool results classification")
         tool_results = self.__task_aggregation__(tool_classifications,task_id,{})
         assert isinstance(tool_results,dict)
 
