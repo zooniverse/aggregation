@@ -2,6 +2,7 @@ import clustering
 import networkx
 import numpy as np
 
+
 class RectangleClustering(clustering.Cluster):
     def __init__(self,shape,project,additional_params):
         assert shape != "point"

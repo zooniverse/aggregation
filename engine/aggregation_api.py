@@ -16,6 +16,7 @@ import math
 import sys
 import agglomerative
 import blob_clustering
+import rectangle_clustering
 import gorongosa_aggregation
 import time
 import survey_aggregation
@@ -153,10 +154,10 @@ class AggregationAPI:
         self.default_clustering_algs["ellipse"] = agglomerative.Agglomerative
         self.default_clustering_algs["line"] = agglomerative.Agglomerative
         # these shapes use the blob clustering approach
-        self.default_clustering_algs["rectangle"] = blob_clustering.BlobClustering
+        self.default_clustering_algs["rectangle"] = rectangle_clustering.RectangleClustering
         self.default_clustering_algs["polygon"] = blob_clustering.BlobClustering
         self.default_clustering_algs["bezier"] = blob_clustering.BlobClustering
-        self.default_clustering_algs["image"] = blob_clustering.BlobClustering
+        self.default_clustering_algs["image"] = rectangle_clustering.RectangleClustering
         # and set any reduction algorithms - to reduce the dimensionality of markings
         self.additional_clustering_args = {"line": {"reduction":helper_functions.hesse_line_reduction}}
         # self.__set_clustering_algs__(default_clustering_algs,reduction_algs)
@@ -1864,6 +1865,8 @@ class AggregationAPI:
             print("inserting " + str(insert_counter) + " subjects")
             postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
         self.postgres_writeable_session.commit()
+
+        print("done upserting")
 
     def __yield_aggregations__(self,workflow_id,subject_set=None):
         """
