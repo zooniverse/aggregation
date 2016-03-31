@@ -16,94 +16,113 @@ class Classification:
     def __task_aggregation__(self,classifications,task_id,aggregations):
         return []
 
+    def __most_likely_tool__(self,cluster):
+        """
+        given a cluster of markings - all corresponding to the same shape, but not necessarily the same tool
+        return the most likely tool associated with this cluster
+        :param cluster:
+        :return:
+        """
+        # what is the most likely tool for this cluster?
+        try:
+            most_likely_tool,_ = max(cluster["tool_classification"][0].items(),key = lambda x:x[1])
+        except TypeError:
+            print(cluster)
+            raise
+        # rectangles return their tool_classification differently
+        # if we have an attribute error - assume we have a rectangle cluster and work with that
+        # todo - figure out how other tool types return tool_classification and refactor for a more consistent approach
+        except AttributeError:
+            tools = cluster["tool_classification"]
+            # count how many times each tool is used
+            tool_count = {t:sum([t_ for t_ in tools if (t == t_)]) for t in set(tools)}
+            # sort by how many times each tool was used
+            sorted_tools = sorted(tool_count.items(), key = lambda x:x[1])
+
+            most_likely_tool = sorted_tools[-1][0]
+
+        return most_likely_tool
+
+    def __get_relevant_identifiers__(self,most_likely_tool,cluster):
+        """
+        given a cluster of markings (each user is identified by a combination of their markings' coordinates
+        and their user ids) - return only those markings where the tool used matches the most likely tool for this
+        cluster
+        :param most_likely_tool:
+        :return:
+        """
+        relevant_identifiers = []
+
+        # rectangles and polygons seem to have different structures
+        # todo - refactor so that all shapes have the same structure - or be really sure that different shapes need different structures
+        if isinstance(cluster["cluster members"][0],int):
+            user_identifiers = zip(cluster["cluster members"],cluster["users"])
+        else:
+            user_identifiers = zip([tuple(x) for x in cluster["cluster members"]],cluster["users"])
+
+        for user_identifiers,tool_used in zip(user_identifiers,cluster["tools"]):
+            if tool_used == most_likely_tool:
+                relevant_identifiers.append(user_identifiers)
+
+        return relevant_identifiers
+
     def __subtask_classification__(self,task_id,classification_tasks,marking_tasks,raw_classifications,aggregations):
         """
         call this when at least one of the tools associated with task_id has a follow up question
         :param task_id:
         :param classification_tasks:
         :param raw_classifications:
-        :param clustering_results:
         :param aggregations:
         :return:
         """
+        # get the list of all shapes used in markings for this task
+        # we group clusters based on shape - not tool
+        shapes_in_task = marking_tasks[task_id]
+        for subject_id in aggregations:
 
-
-        # go through the tools which actually have the followup questions
-        for tool in classification_tasks[task_id]:
-
-            # now go through the individual followup questions
-            # range(len()) - since individual values will be either "single" or "multiple"
-            for followup_question_index in range(len(classification_tasks[task_id][tool])):
-                global_index = str(task_id)+"_" +str(tool)+"_"+str(followup_question_index)
-
-
-                followup_classification = {}
-                # this is used for inserting the results back into our running aggregation - which are based
-                # on shapes, not tools
-                shapes_per_cluster = {}
-
-                # go through each cluster and find the corresponding raw classifications
-                for subject_id in aggregations:
-                    if subject_id == "param":
+            # go through each shape
+            for shape in shapes_in_task:
+                # go through each cluster associated with that shape
+                for cluster_index,cluster in aggregations[subject_id][task_id][shape + " clusters"].items():
+                    # todo - pretty sure that all_users is still a key, not sure about "param"
+                    # skip keys which don't actually point to clusters (e.g. misc. extra info)
+                    if cluster_index == "all_users":
                         continue
 
-                    # has anyone done this task for this subject?
-                    if task_id in aggregations[subject_id]:
-                        # find the clusters which we have determined to be of the correct type
-                        # only consider those users who made the correct type marking
-                        # what shape did this particular tool make?
-                        shape =  marking_tasks[task_id][tool]
-                        for cluster_index,cluster in aggregations[subject_id][task_id][shape + " clusters"].items():
-                            if cluster_index in ["param","all_users"]:
-                                continue
+                    # create a new dictionary element to store the results
+                    aggregations[subject_id][task_id][shape + " clusters"] [cluster_index]["followup_question"] = {}
 
-                            # what is the most likely tool for this cluster?
-                            try:
-                                most_likely_tool,_ = max(cluster["tool_classification"][0].items(),key = lambda x:x[1])
-                            except TypeError:
-                                print(cluster)
-                                raise
+                    # what is the most likely tool associated with this marking (e.g. adult penguin vs. chick)
+                    most_likely_tool = aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["most_likely_tool"]
 
-                            if int(most_likely_tool) != int(tool):
-                                continue
+                    # get all of the relevant markings - i.e. everyone who used the correct tool
+                    relevant_identifiers = self.__get_relevant_identifiers__(most_likely_tool,cluster)
 
-                            # polygons and rectangles will pass cluster membership back as indices
-                            # ints => we can't case tuples
-                            if isinstance(cluster["cluster members"][0],int):
-                                user_identifiers = zip(cluster["cluster members"],cluster["users"])
-                            else:
-                                user_identifiers = zip([tuple(x) for x in cluster["cluster members"]],cluster["users"])
-                            ballots = []
+                    # now go through each individual follow up question that comes with this particular tool
+                    for followup_question_index in range(len(classification_tasks[task_id][most_likely_tool])):
+                        # global_index allows us to extract based on task, tool and followup question index
+                        global_index = str(task_id)+"_" +str(most_likely_tool)+"_"+str(followup_question_index)
 
-                            for user_identifiers,tool_used in zip(user_identifiers,cluster["tools"]):
-                                # did the user use the relevant tool - doesn't matter if most people
-                                # used another tool
-                                if tool_used == tool:
+                        # extract all of the answers for this particular followup question
+                        followup_answers = []
+                        for id_ in relevant_identifiers:
+                            # extract this person's follow up answers
+                            answer = raw_classifications[global_index][subject_id][id_]
+                            # id_[1] is the user id (marking coordinates are [0] and don't matter any more)
+                            u = id_[1]
+                            followup_answers.append((u,answer))
 
-                                    followup_answer = raw_classifications[global_index][subject_id][user_identifiers]
-                                    u = user_identifiers[1]
-                                    ballots.append((u,followup_answer))
+                        # task_aggregation can work over multiple subjects at once (which is what happens if we call
+                        # it for a simple classification task, i.e. one that is not a following task) so
+                        # task_aggregation is actually expecting a dictionary which maps from subject_id to individual
+                        # classifications. Hence the dummy_wrapper
+                        dummy_wrapper = {subject_id:followup_answers}
+                        followup_results = self.__task_aggregation__(dummy_wrapper,global_index,{})
 
-                            followup_classification[(subject_id,cluster_index)] = deepcopy(ballots)
-                            shapes_per_cluster[(subject_id,cluster_index)] = shape
+                        # extract the result and add it to the overall set of aggregations
+                        aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"][followup_question_index] = followup_results[subject_id][global_index]
 
-
-                followup_results = self.__task_aggregation__(followup_classification,global_index,{})
-                assert isinstance(followup_results,dict)
-
-                for subject_id,cluster_index in followup_results:
-                    shape =  shapes_per_cluster[(subject_id,cluster_index)]
-                    # keyword_list = [subject_id,task_id,shape+ " clusters",cluster_index,"followup_questions"]
-                    new_results = followup_results[(subject_id,cluster_index)]
-                    # if this is the first question - insert
-                    # otherwise append
-
-                    if followup_question_index == 0:
-                        aggregations[subject_id][task_id][shape + " clusters"] [cluster_index]["followup_question"] = {}
-
-
-                    aggregations[subject_id][task_id][shape + " clusters"] [cluster_index]["followup_question"][followup_question_index] = new_results.values()[0]
-
+        # return the updated set of aggregations
         return aggregations
 
     def __existence_classification__(self,task_id,shape,aggregations):
@@ -114,20 +133,6 @@ class Classification:
         return in json format so we can merge with other results
         :return:
         """
-
-        # aggregations = {}
-
-        # raw_classifications and clustering_results have different hierarchy orderings- raw_classifications
-        # is better for processing data and clustering_results is better for showing the end result
-        # technically we only need to look at the data from clustering_results right now but its
-        # hierarchy is really inefficient so use raw_classifications to help
-
-        # each shape is done independently
-
-        # set - so if multiple tools create the same shape - we only do that shape once
-        # for shape in set(marking_tasks[task_id]):
-
-
         # pretentious name but basically whether each person who has seen a subject thinks it is a true
         # positive or not
         existence_classification = {"param":"subject_id"}
@@ -248,28 +253,9 @@ class Classification:
 
     def __tool_classification__(self,task_id,shape,aggregations):
         """
-        if multiple tools can make the same shape - we need to decide which tool actually corresponds to this cluster
-        for example if both the adult penguin and chick penguin make a pt - then for a given point we need to decide
-        if it corresponds to an adult or chick
-        :param task_id:
-        :param classification_tasks:
-        :param raw_classifications:
-        :param clustering_results:
-        :return:
+        for a given task/shape figure out the most likely tool to have created each cluster
         """
-        print("tool classification - more than one tool could create " +str(shape) + "s in task " + str(task_id))
-
-        if aggregations == {}:
-            print("warning - empty classifications")
-            return {}
-
-        # only go through the "uncertain" shapes
-        tool_classifications = {}
-
         for subject_id in aggregations:
-            # look at the individual points in the cluster
-
-            # if no one did this task for this subject
             if task_id not in aggregations[subject_id]:
                 continue
 
@@ -279,27 +265,8 @@ class Classification:
                 if cluster_index == "all_users":
                     continue
 
-                # which users marked this cluster
-                users = cluster["users"]
-                # which tool each individual user used
-                tools = cluster["tools"]
-                assert len(tools) == len(users)
-
-                # in this case, we want to "vote" on the tools
-                ballots = zip(users,tools)
-
-                tool_classifications[(subject_id,cluster_index)] = ballots
-
-        # classify
-        print("tool results classification")
-        tool_results = self.__task_aggregation__(tool_classifications,task_id,{})
-        assert isinstance(tool_results,dict)
-
-        for subject_id,cluster_index in tool_results:
-
-            new_results = tool_results[(subject_id,cluster_index)][task_id]
-            # the clustering results already exist so we are just adding more data to it
-            aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["tool_classification"] = new_results
+                most_likely_tool = self.__most_likely_tool__(cluster)
+                aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["most_likely_tool"] = most_likely_tool
 
         return aggregations
 
@@ -321,13 +288,10 @@ class Classification:
                 # if shape not in ["polygon","text"]:
                 aggregations = self.__existence_classification__(task_id,shape,aggregations)
 
-                # tool classification for rectangles/polygon is handled by the actual clustering algorithm
-                # technically, that clustering algorithm could also take care of existence as well
-                # but that would really mess up the code
-                if shape not in ["rectangle","polygon"]:
-                    # can more than one tool create this shape?
-                    # if only one tool could create this shape, this is slightly silly to do but
-                    # it does mean that the aggregation json is correctly structured
+                # figure out the most likely tool to have created this cluster (since up until now we've only cared
+                # about shape, not tool). Polygons are handled differently - will be in the blob clustering code
+                # since polygon aggregation isn't really clustering
+                if shape != "polygon":
                     aggregations = self.__tool_classification__(task_id,shape,aggregations)
 
         # now go through the normal classification aggregation stuff
@@ -366,6 +330,7 @@ class VoteCount(Classification):
             vote_counts = {}
             if subject_id == "param":
                 continue
+
             for user,ballot in raw_classifications[subject_id]:
                 if ballot is None:
                     continue
