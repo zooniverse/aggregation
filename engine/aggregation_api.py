@@ -1873,20 +1873,13 @@ class AggregationAPI:
         generator for giving aggregation results per subject id/task
         """
         stmt = "select subject_id,aggregation,updated_at from aggregations where workflow_id = " + str(workflow_id)
-        # stmt = base_stmt
 
-        # if subject_set is not None:
-        #     counter = 0
-        #     subject_set = list(subject_set)
-        #     stmt = base_stmt + " and subject_id = " + str(subject_set[counter])
-        # else:
-        #     counter = None
-
+        # connect to the postgres db
         cursor = self.postgres_session.cursor()
 
         cursor.execute(stmt)
 
-
+        # go through each of the results
         for r in cursor.fetchall():
             aggregation = r[1]
             subject_id = r[0]
@@ -1903,15 +1896,6 @@ class AggregationAPI:
             assert isinstance(aggregation,dict)
 
             yield r[0],aggregation
-
-            # if subject_set is not None:
-            #     counter += 1
-            #     print((counter,len(subject_set)))
-            #     if counter == len(subject_set):
-            #         raise StopIteration()
-            #
-            #     stmt = base_stmt + " and subject_id = " + str(subject_set[counter])
-            #     cursor.execute(stmt)
 
         raise StopIteration()
 
