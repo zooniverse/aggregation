@@ -1,3 +1,4 @@
+from __future__ import print_function
 import clustering
 import networkx
 import numpy as np
@@ -102,20 +103,21 @@ class RectangleClustering(clustering.Cluster):
         # go through each clique
         for c in networkx.find_cliques(overlap_graph):
             # ignore any clique with less than 3 markings in it
-            if len(c) < 3:
+            if len(c) < 0:
                 continue
 
+            # get the specific markings in this clique and their corresponding tools
             clique = [markings[i] for i in c]
+            tools_in_clique = [tools[i] for i in c]
 
             # create the new cluster based on this clique
             new_cluster = dict()
             new_cluster["center"] = self.__median_rectangles__(clique)
             new_cluster["cluster members"] = clique
             new_cluster["users"] = [user_ids[i] for i in c]
-            new_cluster["tools"] = None
-            new_cluster["tool_classification"] = None
+            new_cluster["tools"] = tools_in_clique
+            new_cluster["tool_classification"] = tools_in_clique
             new_cluster["image area"] = None
 
             results.append(new_cluster)
-
         return results,0
