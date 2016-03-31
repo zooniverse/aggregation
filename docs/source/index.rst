@@ -19,6 +19,7 @@ Contents:
    point_aggregation.rst
    rectangle_aggregation.rst
    blob_aggregation.rst
+   output.rst
 
 .. automodule:: engine
 

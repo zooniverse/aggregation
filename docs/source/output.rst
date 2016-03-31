@@ -65,6 +65,12 @@ The summary csv file is created by __summary_classification_file_setup__. Each s
 * median agreement - same as above but median
 * num_users - how many people classified this task for this subject
 
+The detailed results file contains the following columns
+
+* subject_id
+* cluster_id - only if this is a follow up classification
+* p(answer) - what percentage of people chose this particular answer
+
 
 The main function for producing classification results is __classification_output__ which takes the following parameters:
 
