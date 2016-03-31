@@ -15,6 +15,16 @@ from sklearn.decomposition import PCA
 from skimage.filters import threshold_otsu, rank
 from skimage.morphology import disk
 from sklearn import mixture
+import sqlite3 as lite
+
+con = lite.connect('/home/ggdhines/active.db')
+cur = con.cursor()
+
+cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
+
+
+
+
 __author__ = 'ggdhines'
 
 def __upper_bounds__(line):
@@ -255,45 +265,45 @@ def __dbscan_threshold__(img):
             if min(x_max-x_min,y_max-y_min) >= 10:
                 return_image[xy[:, 1], xy[:, 0]] = gray[xy[:, 1], xy[:, 0]]
 
-def __pca_mask__(img):
-    assert len(img.shape) ==3
-
-    pca_image = __pca__(img)
-    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-
-    horizontal_lines = paper_quad.__extract_grids__(gray,True)
-
-    mask = np.zeros(gray.shape,np.uint8)
-    for l in horizontal_lines:
-        corrected_l = __polynomial_correct__(gray,l,True)
-        corrected_l = 255 - corrected_l
-        # corrected_l = __correct__(gray,l,True)
-        pca_image = np.min([pca_image,corrected_l],axis=0)
-
-        # plt.imshow(pca_image,cmap="gray")
-        # plt.show()
-
-    vertical_lines = paper_quad.__extract_grids__(gray,False)
-    for l in vertical_lines:
-        corrected_l = __polynomial_correct__(gray,l,False)
-        corrected_l = 255 -corrected_l
-        # corrected_l = __correct__(gray,l,False)
-        pca_image = np.min([pca_image,corrected_l],axis=0)
-
-
-    # masked_image = np.max([pca_image,mask],axis=0)
-
-
-    pca_image = 255 - pca_image
-    plt.imshow(pca_image,cmap="gray")
-    plt.show()
-
-
-    # ink_pixels = np.where(masked_image>2)
-    # # template = np.zeros(img.shape[:2],np.uint8)
-    # plt.plot(ink_pixels[1],-ink_pixels[0],".")
-    # plt.show()
-    return pca_image
+# def __pca_mask__(img):
+#     assert len(img.shape) ==3
+#
+#     pca_image = __pca__(img)
+#     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+#
+#     horizontal_lines = paper_quad.__extract_grids__(gray,True)
+#
+#     mask = np.zeros(gray.shape,np.uint8)
+#     for l in horizontal_lines:
+#         corrected_l = __polynomial_correct__(gray,l,True)
+#         # corrected_l = 255 - corrected_l
+#         # corrected_l = __correct__(gray,l,True)
+#         pca_image = np.min([pca_image,corrected_l],axis=0)
+#
+#         # plt.imshow(pca_image,cmap="gray")
+#         # plt.show()
+#
+#     vertical_lines = paper_quad.__extract_grids__(gray,False)
+#     for l in vertical_lines:
+#         corrected_l = __polynomial_correct__(gray,l,False)
+#         # corrected_l = 255 -corrected_l
+#         # corrected_l = __correct__(gray,l,False)
+#         pca_image = np.min([pca_image,corrected_l],axis=0)
+#
+#
+#     # masked_image = np.max([pca_image,mask],axis=0)
+#
+#
+#     pca_image = 255 - pca_image
+#     plt.imshow(pca_image,cmap="gray")
+#     plt.show()
+#
+#
+#     # ink_pixels = np.where(masked_image>2)
+#     # # template = np.zeros(img.shape[:2],np.uint8)
+#     # plt.plot(ink_pixels[1],-ink_pixels[0],".")
+#     # plt.show()
+#     return pca_image
 
 
 def __mask_lines__(gray):
@@ -306,18 +316,15 @@ def __mask_lines__(gray):
     for l in horizontal_lines:
         corrected_l = __identity__(gray,l)
         # corrected_l = __polynomial_correct__(gray,l,True)
-        # corrected_l = __correct__(gray,l,True)
+        corrected_l = __correct__(gray,l,True)
         mask = np.max([mask,corrected_l],axis=0)
-
-    # plt.imshow(mask)
-    # plt.show()
 
     cv2.imwrite("/home/ggdhines/testing.jpg",mask)
     vertical_lines = paper_quad.__extract_grids__(gray,False)
     for l in vertical_lines:
         corrected_l = __identity__(gray,l)
         # corrected_l = __polynomial_correct__(gray,l,False)
-        # corrected_l = __correct__(gray,l,False)
+        corrected_l = __correct__(gray,l,False)
         mask = np.max([mask,corrected_l],axis=0)
 
     # cv2.imshow("img",mask)
@@ -331,7 +338,7 @@ def __mask_lines__(gray):
     plt.imshow(masked_image,cmap="gray")
     plt.title("masked image")
     plt.show()
-    cv2.imwrite("/home/ggdhines/2.jpg",masked_image)
+    # cv2.imwrite("/home/ggdhines/2.jpg",masked_image)
     # assert False
 
     return masked_image
@@ -340,11 +347,12 @@ def __threshold_image__(img):
     assert len(img.shape) == 2
     # for i in img:
     #     print(list(i))
-    ret,thresh1 = cv2.threshold(img,170,255,cv2.THRESH_BINARY)
+    ret,thresh1 = cv2.threshold(img,190,255,cv2.THRESH_BINARY)
 
-    thresh3 = cv2.adaptiveThreshold(img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,151,2)
+    thresh3 = cv2.adaptiveThreshold(img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,251,2)
+    ret2,th2 = cv2.threshold(img,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 
-    return thresh1
+    return thresh3
 
 
     radius = 200
@@ -406,7 +414,7 @@ def __ocr_image__(image):
     tess.tessedit_pageseg_mode = tesserpy.PSM_SINGLE_BLOCK
     # tess.tessedit_ocr_engine_mode = tesserpy.OEM_CUBE_ONLY
     # tess.tessedit_page_iteratorlevel = tess.RIL_SYMBOL
-    tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNPQRSTUVWXYZ1234567890.abcdefghijkmnpqrstuvwxyz"
+    tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.abcdefghijkmnopqrstuvwxyz"
 
     tess.set_image(image)
     tess.get_utf8_text()
@@ -415,7 +423,8 @@ def __ocr_image__(image):
     # image_height,image_width = image.shape[:2]
 
     for word in tess.symbols():
-        # print(word.text,word.confidence)
+    # for word in tess.words():
+    #     print(word.text,word.confidence)
         bb = word.bounding_box
         height = abs(bb.top-bb.bottom)
         width = bb.right - bb.left
@@ -466,11 +475,14 @@ def __cell_boundaries__(image):
 
     return horizontal_grid,vertical_grid
 
-def __place_in_cell__(transcriptions,image):
+def __place_in_cell__(transcriptions,image,id_):
     horizontal_grid,vertical_grid = __cell_boundaries__(image)
     cell_contents = {}
 
     for (t,c,top,left,right,bottom) in transcriptions:
+        if t == None:
+            continue
+
         # print(t,c)
         mid_y = (int(top)+int(bottom))/2.
         mid_x = (int(right)+int(left))/2.
@@ -521,15 +533,31 @@ def __place_in_cell__(transcriptions,image):
         else:
             cell_contents[key].append((mid_x,t,c))
 
+    confidence_array = []
+
+    problems = 0
+    print("*******")
     for key in cell_contents:
         sorted_contents = sorted(cell_contents[key], key = lambda x:x[0])
         _,text,confidence = zip(*sorted_contents)
         text = "".join(text)
-        # confidence = np.min(confidence)
+        confidence = min(confidence)
         cell_contents[key] = (text,confidence)
+        confidence_array.append(confidence)
 
-    for i in range(12):
-        print(cell_contents[(i,17)])
+        stmt = "insert into transcriptions values(\""+id_+"\",0,"+str(key[1])+","+str(key[0])+",\""+text+"\","+str(confidence)+")"
+        print(stmt)
+        cur.execute(stmt)
+
+        if confidence < 80:
+            print(text)
+            problems += 1
+    print("problems " + str(problems))
+
+    plt.hist(confidence_array, bins=20, normed=1, histtype='step', cumulative=1)
+    plt.show()
+
+
     return cell_contents
 
 def __gold_standard_comparison__(transcriptions):
@@ -539,9 +567,11 @@ def __gold_standard_comparison__(transcriptions):
 
     true_positives = []
     false_positives = []
+    correct_by_column = {}
     with open("/home/ggdhines/gold_standard.txt","rb") as f:
         reader = csv.reader(f, delimiter=',')
         for row,column,gold_standard in reader:
+
             key = (int(row),int(column))
 
             if gold_standard == "":
@@ -555,6 +585,11 @@ def __gold_standard_comparison__(transcriptions):
                     if gold_standard == t:
                         total += 1
                         true_positives.append(c)
+
+                        if column not in correct_by_column:
+                            correct_by_column[column] = 1
+                        else:
+                            correct_by_column[column] += 1
                     else:
                         false_positives.append(c)
 
@@ -563,6 +598,8 @@ def __gold_standard_comparison__(transcriptions):
     print(correct_empty)
     # print(empty)
     print("")
+    print([(i,correct_by_column[i]) for i in sorted(correct_by_column.keys())])
+
 
     return true_positives,false_positives
 
@@ -670,3 +707,5 @@ if __name__ == "__main__":
 
 
 
+    con.commit()
+    con.close()
