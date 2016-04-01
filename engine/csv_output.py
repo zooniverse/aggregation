@@ -340,10 +340,9 @@ class CsvOut:
         # now set things up for the marking tasks
         self.__marking_file_setup__(output_directory,workflow_id)
 
-        # and finally the survey tasks
-        for task_id in survey_tasks:
-            instructions = self.instructions[workflow_id][task_id]
-            self.__survey_header_setup__(output_directory,task_id,instructions)
+        self.__survey_file_setup__(output_directory,workflow_id)
+
+
 
         return output_directory
 
@@ -431,7 +430,7 @@ class CsvOut:
 
                 # polygons - since they have an arbitary number of points are handled slightly differently
                 if shape == "polygon":
-
+                    self.__polygon_detailed_setup__(task_id)
                     self.__polygon_summary_setup__(workflow_id,task_id)
                 else:
                     # write the headers for the csv summary files
@@ -545,7 +544,7 @@ class CsvOut:
             # as final stats to add
             csv_file.write(",mean_probability,median_probability,mean_tool,median_tool\n")
 
-    def __polygon_detailed_setup__(self,workflow_id,task_id):
+    def __polygon_detailed_setup__(self,task_id):
         """
         write out the headers for the detailed polygon output file
         slightly silly since its only one line but keeps things as in the same format as for other shapes
@@ -815,52 +814,50 @@ class CsvOut:
 
             summary_file.write("most_likely,p(most_likely),shannon_entropy,mean_agreement,median_agreement,num_users\n")
 
-    def __survey_header_setup__(self,output_directory,task_id,instructions):
+    def __survey_file_setup__(self,output_directory,workflow_id):
         """
-        create the csv output file for a survey task
-        and give the header row
+        set up the csv files for surveys. we will just have one output file
         :param output_directory:
-        :param task_id:
-        :param instructions:
+        :param workflow_id:
         :return:
         """
-        # # start with the summary files
-        # fname = output_directory+str(task_id) + "_survey_summary.csv"
-        # self.file_names[(task_id,"summary")] = fname
-        # with open(fname,"wb") as f:
-        #     f.write("subject_id,pielou_index\n")
+        classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
 
-        # and then the detailed files
-        fname = output_directory+str(task_id) + "_survey_detailed.csv"
-        self.file_names[(task_id,"detailed")] = fname
+        for task_id in survey_tasks:
+            instructions = self.instructions[workflow_id][task_id]
 
-        # now write the header
-        header = "subject_id,num_classifications,pielou_score,species,percentage_of_votes_for_species,number_of_votes_for_species"
+            fname = output_directory+str(task_id) + ".csv"
+            self.file_names[task_id] = fname + ".csv"
 
-        # todo - we'll assume, for now, that "how many" is always the first question
-        for followup_id in instructions["questionsOrder"]:
-            multiple_answers = instructions["questions"][followup_id]["multiple"]
-            label = instructions["questions"][followup_id]["label"]
+            with open(self.file_names[task_id],"w") as csv_file:
+                # now write the header
+                header = "subject_id,num_classifications,pielou_score,species,"
+                header += "percentage_of_votes_for_species,number_of_votes_for_species"
 
-            # the question "how many" is treated differently - we'll give the minimum, maximum and mostly likely
-            if followup_id == "HWMN":
-                header += ",minimum_number_of_animals,most_likely_number_of_animals,percentage,maximum_number_of_animals"
-            else:
-                if "behavior" in label:
-                    stem = "behaviour:"
-                elif "behaviour" in label:
-                    stem = "behaviour:"
-                else:
-                    stem = helper_functions.csv_string(label)
+                # todo - we'll assume, for now, that "how many" is always the first question
+                for followup_id in instructions["questionsOrder"]:
+                    multiple_answers = instructions["questions"][followup_id]["multiple"]
+                    label = instructions["questions"][followup_id]["label"]
 
-                if not multiple_answers:
-                    header += ",most_likely(" + stem + ")"
+                    # the question "how many" is treated differently - we'll give the minimum, maximum and mostly likely
+                    if followup_id == "HWMN":
 
-                for answer_id in instructions["questions"][followup_id]["answersOrder"]:
-                    header += ",percentage(" + stem + helper_functions.csv_string(instructions["questions"][followup_id]["answers"][answer_id]["label"]) +")"
+                        header += ",minimum_number_of_animals,most_likely_number_of_animals,percentage,maximum_number_of_animals"
+                    else:
+                        if "behavior" in label:
+                            stem = "behaviour:"
+                        elif "behaviour" in label:
+                            stem = "behaviour:"
+                        else:
+                            stem = helper_functions.csv_string(label)
 
-        with open(fname,"wb") as f:
-            f.write(header+"\n")
+                        if not multiple_answers:
+                            header += ",most_likely(" + stem + ")"
+
+                        for answer_id in instructions["questions"][followup_id]["answersOrder"]:
+                            header += ",percentage(" + stem + helper_functions.csv_string(instructions["questions"][followup_id]["answers"][answer_id]["label"]) +")"
+
+                csv_file.write(header+"\n")
 
 
 
