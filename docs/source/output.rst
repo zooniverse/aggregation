@@ -59,6 +59,15 @@ And finally we have more columns which all markings have
 * p(true_positive) - what percentage of users have markings in the cluster (so how likely is the cluster to something that actually exists, as opposed to someone mistaking some snow and rocks for penguins)
 * num_users - how many users saw this subject for this particular task
 
+
+For polygons, we have the following detailed output
+
+* subject_id
+* cluster_index
+* most_likely_tool
+* area - as a percentage of the image size
+* list_of_xy_polygon_coordinates - since this is going to be a list of arbitrary size - this will be a list enclosed by quotation marks
+
 Summary Markings Output Files
 *****************************
 With the summary markings output files (again except polygons) we have the following headers
@@ -69,6 +78,11 @@ With the summary markings output files (again except polygons) we have the follo
 * median_probability - same as above but with median
 * mean_tool - how agreement there is, on average, with the most likely tool. [double check]
 * median_tool - same as above but with median
+
+For polygons we have
+
+* subject_id
+* area(tool) - for each tool, what percentage of the image is covered by that tool
 
 
 Writing Aggregation Results Per Subject
