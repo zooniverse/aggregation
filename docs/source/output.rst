@@ -37,6 +37,13 @@ The marking csv files (both detailed and summary) are created by __marking_file_
 * __marking_summary_header__ - creates the headers for all csv files except for polygon markings
 * __polygon_summary_header__ - creates the headers for polygon markings
 * __marking_detailed_header__ - creates the headers for the detailed files except for polygons
+* __polygon_detailed_header__ - you can probably guess :P
+
+The above functions have the following parameters in common
+
+* shape - if not polygon
+* workflow_id - for summary output, need to access labels so you can get understandable column names
+* task_id
 
 Detailed Markings Output Files
 ******************************
@@ -130,6 +137,45 @@ The main function for producing classification results is __classification_outpu
 * subject_id
 * aggregations,shape_id=None,followup_id=None
 
+
+Classification Summary Results
+==============================
+To add a single row of summary results for a classification task (whether simple of a followup question), we use __add_summary_row__ which takes the following parameters
+
+* workflow_id,task_id,subject_id - the usual ones for accessing the right csv output file and getting the labels for different answers
+* aggregations -
+* shape_id=None,followup_id=None - set if this is a follow up classification task
+
+This function basically looks at the aggregations and determines the most likely classification, converts it into a label (which the researchers provide) and writes that out. We also get the Shannon entropy (useful when only one answer is allowed) and mean/median percentage (useful when multiple answers are allowed)
+
+Detailed Classification Results
+===============================
+
+The detailed classification results are written out using __add_detailed_row__ which uses the same parameters as __add_summary_row__.
+
 Marking Results
 ***************
 
+Lines for summary results of markings are produced by two function
+
+* __add_marking_summary_row__
+* __add_polygon_summary_row__ - since polygons are different
+
+Results for follow up questions to markings are produced by __add_marking_followup_rows__. This function takes the usual params
+
+* workflow_id,task_id,subject_id,aggregations
+
+Detailed results - where results are given for each individual cluster - are created by __detailed_marking_row__ which takes the following parameters
+
+* workflow_id,task_id,subject_id,aggregations,shape
+
+So for a given shape, __detailed_marking_row__ will output all the clusters of that shape (for the given workflow and task and subject ids).
+
+Survey Results
+**************
+
+For survey results, we just have one csv output file. We also assume that a survey task cannot contain any marking tasks (follow up questions are fine) - a separate task in the workflow can contain a marking task so this seems like a pretty reasonable assumption.
+Since we only have one file to create, this is all done in one function __survey_file_setup__ which takes two parameters
+
+* output_directory
+* workflow_id
