@@ -19,7 +19,7 @@ The __write_out__ function goes through each workflow independently. Each workfl
 
 Creating files
 ==============
-In __make_files a bunch of things happen to setup the csv output files. We have sets of files for three kinds of output.
+In __make_files__ a bunch of things happen to setup the csv output files. We have sets of files for three kinds of output.
 
 * classification results - this is for both simple classification (whether a single answer is required or multiple ones allowed) or as a follow up to marking task
 * marking results - these are the clustering results
@@ -29,11 +29,47 @@ The function __classification_file_setup__ creates the csv output files for the 
 
 * output_directory - where to write these files
 * workflow_id - the id of the workflow. Allows us to create the file names (which are based on task labels) and use the answer labels as column headers
-* task_id - same reason as above
-* tool_id - same reason as above - but only used for followup questions to marking tasks
-* followup_id - again, same reason
 
-We'll talk about what headers are created later.
+We'll talk about what headers are created later. This function creates both the detailed csv files and the summary ones as well.
+
+The marking csv files (both detailed and summary) are created by __marking_file_setup__ with the same parameters as __classification_file_setup__. The function __marking_file_setup__ calls a couple of sub functions
+
+* __marking_summary_header__ - creates the headers for all csv files except for polygon markings
+* __polygon_summary_header__ - creates the headers for polygon markings
+* __marking_detailed_header__ - creates the headers for the detailed files except for polygons
+
+Detailed Markings Output Files
+******************************
+With the detailed markings output files, (except for polygon output - those will be explained later) we have the following headers
+
+* subject_id
+* cluster_index - there is no guaranteed ordering of the indices (such as left or right) but allows us to match up the results from follow up questions
+* most_likely_tool - what do we think the most likely tool is
+
+Then we have some columns which are dependent on the shape used
+
+* for points we have x,y
+* for rectangles we have x1,y1,x2,y2
+* for lines we have x1,y1,x2,y2
+* for ellipses we have x1,y1,r1,r2,theta
+
+And finally we have more columns which all markings have
+
+* p(most_likely_tool) - what percentage of users agreed about the tool
+* p(true_positive) - what percentage of users have markings in the cluster (so how likely is the cluster to something that actually exists, as opposed to someone mistaking some snow and rocks for penguins)
+* num_users - how many users saw this subject for this particular task
+
+Summary Markings Output Files
+*****************************
+With the summary markings output files (again except polygons) we have the following headers
+
+* subject_id
+* median(tool) - [need to double check about this]
+* mean_probability - the mean percentage of users with markings in each cluster - useful for determining how much agreement there is
+* median_probability - same as above but with median
+* mean_tool - how agreement there is, on average, with the most likely tool. [double check]
+* median_tool - same as above but with median
+
 
 Writing Aggregation Results Per Subject
 =======================================
@@ -41,8 +77,7 @@ There are different functions that produce each set of the following outputs. Th
 
 * subject_id - used in printing to the csv files (always the first column)
 * aggregations - has all of the aggregations for this subject over all tasks for the current workflow (in dictionary format)
-* task_structure - a tuple containing the classification tasks, marking tasks and survey tasks. For example, allows us to determine that task "T5" in the aggregations is a marking task. Really just self.workflows[workflow_id] - but this means we don't have to pass in workflow_id as param
-* instructions - basically just self.instructions[workflow] - allows us to get the string labels for different responses. So in the csv file, instead of saying that option 0 was the most likely, we can say that "zebra" was most likely
+* workflow_id - allows us to get the tasks for the given workflow and the instructions as well (which allow us to give proper labels for the outputs). I had thought about passing in the list of tasks and instructions - this would have meant we didn't need to pass in the workflow_id (seemed a bit cleaner) but would have meant passing in more parameters which seemed counter-productive
 
 Classification Results
 **********************
@@ -65,6 +100,8 @@ The summary csv file is created by __summary_classification_file_setup__. Each s
 * median agreement - same as above but median
 * num_users - how many people classified this task for this subject
 
+There are two functions for producing the classification output (for simple classifications) - __add_detailed_row__ and __add_summary_row__. Both are called from __subject_output__.
+
 The detailed results file contains the following columns
 
 * subject_id
@@ -74,7 +111,7 @@ The detailed results file contains the following columns
 
 The main function for producing classification results is __classification_output__ which takes the following parameters:
 
-* workflow_id - these
+* workflow_id - these first 3 parameters are used for access csv files (the csv files are stored in a dictionary where the keys are tuples containing the workflow_id
 * task_id
 * subject_id
 * aggregations,shape_id=None,followup_id=None
