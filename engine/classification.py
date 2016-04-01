@@ -23,25 +23,25 @@ class Classification:
         :param cluster:
         :return:
         """
-        # what is the most likely tool for this cluster?
-        try:
-            most_likely_tool,_ = max(cluster["tool_classification"][0].items(),key = lambda x:x[1])
-        except TypeError:
-            print(cluster)
-            raise
-        # rectangles return their tool_classification differently
-        # if we have an attribute error - assume we have a rectangle cluster and work with that
-        # todo - figure out how other tool types return tool_classification and refactor for a more consistent approach
-        except AttributeError:
-            tools = cluster["tool_classification"]
-            # count how many times each tool is used
-            tool_count = {t:sum([t_ for t_ in tools if (t == t_)]) for t in set(tools)}
-            # sort by how many times each tool was used
-            sorted_tools = sorted(tool_count.items(), key = lambda x:x[1])
+        # # what is the most likely tool for this cluster?
+        # try:
+        #     most_likely_tool,_ = max(cluster["tool_classification"][0].items(),key = lambda x:x[1])
+        # except TypeError:
+        #     print(cluster)
+        #     raise
+        # # rectangles return their tool_classification differently
+        # # if we have an attribute error - assume we have a rectangle cluster and work with that
+        # # todo - figure out how other tool types return tool_classification and refactor for a more consistent approach
+        # except AttributeError:
+        tools = cluster["tool_classification"]
+        # count how many times each tool is used
+        tool_count = {t:sum([t_ for t_ in tools if (t == t_)]) for t in set(tools)}
+        # sort by how many times each tool was used
+        sorted_tools = sorted(tool_count.items(), key = lambda x:x[1])
 
-            most_likely_tool = sorted_tools[-1][0]
+        most_likely_tool,percentage = sorted_tools[-1][0]
 
-        return most_likely_tool
+        return most_likely_tool,percentage
 
     def __get_relevant_identifiers__(self,most_likely_tool,cluster):
         """
@@ -265,8 +265,9 @@ class Classification:
                 if cluster_index == "all_users":
                     continue
 
-                most_likely_tool = self.__most_likely_tool__(cluster)
+                most_likely_tool,percentage = self.__most_likely_tool__(cluster)
                 aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["most_likely_tool"] = most_likely_tool
+                aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["percentage"] = percentage
 
         return aggregations
 
