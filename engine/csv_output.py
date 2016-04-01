@@ -62,33 +62,175 @@ class CsvOut:
     #     except ValueError:
     #          warning("empty aggregations for workflow id " + str(workflow_id) + " task id " + str(task_id) + " and subject id" + str(subject_id) + " -- skipping")
 
-    def __add_detailed_row__(self,id_,subject_id,results,answer_dict):
+    def __add_detailed_row__(self,workflow_id,task_id,subject_id,aggregations,followup_id=None,tool_id=None):
         """
         given the results for a given workflow/task and subject_id (and possibly shape and follow up id for marking)
         give a detailed results with the probabilities for each class
-        :param id_:
-        :param subject_id:
-        :param results:
-        :param answer_dict:
-        :return:
         """
-        votes,num_users = results
+        # key for accessing the csv output file
+        id_ = (task_id,tool_id,followup_id,"detailed")
 
-        with open(self.file_names[id_],"a") as results_file:
-            results_file.write(str(subject_id))
+        # get what percentage of users voted for each classification
+        print(aggregations)
+        votes,num_users = aggregations[task_id]
 
-            for answer_key in sorted(answer_dict.keys()):
+        # if a follow up question - the answers did is in a different format
+        if followup_id is not None:
+            answers_dict = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_id]["answers"]
+        else:
+            # extract the text corresponding to each answer
+            answers_dict = self.instructions[workflow_id][task_id]["answers"]
+
+        with open(self.file_names[id_],"a") as csv_file:
+            csv_file.write(str(subject_id))
+
+            # pretty sure that the answers should already be sorted by numerical key value
+            # but if someone has been messing around with their tasks that might not be the case
+            # so play it safe - extract the answer ids and sort them
+            for answer_key in sorted(answers_dict.keys()):
+                # todo - double check why the keys in "votes" are strings but in answer_key they are integers
+                # not the end of the world, but worth double checking
                 # if no one chose this particular answer, the probability was 0
                 if str(answer_key) not in votes:
                     percentage = 0
                 else:
                     percentage = votes[str(answer_key)]
 
-                results_file.write(","+str(percentage))
+                csv_file.write(","+str(percentage))
 
-            results_file.write(","+str(num_users)+"\n")
+            csv_file.write(","+str(num_users)+"\n")
 
-    def __add_summary_row__(self,workflow_id,task_id,subject_id,results,shape_id=None,followup_id=None):
+    def __add_marking_followup_rows__(self,workflow_id,task_id,subject_id,aggregations):
+        """
+        for a given task id /subject id, handle all of the marking/cluster related outputs for follow up questions
+        I had thought about this function returning the rows to add to the csv (inside of the writing happening inside
+        this function) - we wouldn't needed task_id or subject_id. But this function actually writes up to multiple
+        csv files (for different follow up questions) and can have an arbitrary number of rows produced
+        so it seems easiest if everything happens inside the function
+        :param task_id: the id of the task - used to access the relevant csv output file
+        :param subject_id: used to write out to the csv file so we know what subjects each line refers to
+        :param followup_questions: the list of follow up questions for every marking tool associated with this task
+        :return:
+        """
+        # get the marking_tasks
+        _,marking_tasks,_ = self.workflows[workflow_id]
+        # go through each tool
+
+        all_shapes = set(marking_tasks[task_id])
+
+        # go through each shape separately
+        for shape in all_shapes:
+            # go through all clusters of this particular shape
+            for cluster_index,cluster in aggregations[shape + " clusters"].items():
+                # misc. info that should be skipped
+                if cluster_index == "all_users":
+                    continue
+
+                # get the tool id for this cluster (which is the most likely tool to have created this cluster)
+                tool_id = cluster["most_likely_tool"]
+                # and get the follow up questions
+                followup_questions = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"]
+
+                # go through each of the follow up questions
+                for followup_index in followup_questions.keys():
+                    # bit of a sanity check but we may have cases where the followup questions were not done
+                    if "followup_question" not in aggregations[shape + " clusters"][cluster_index]:
+                        continue
+
+                    # extract the responses to this specific followup question
+                    followup_aggregations = aggregations[shape + " clusters"][cluster_index]["followup_question"][str(followup_index)]
+
+                    # use {task_id:followup_aggregations} to get the follow up aggregations in the format that
+                    # add_detailed_row is expecting (since they are used to simple classifications)
+                    self.__add_detailed_row__(workflow_id,task_id,subject_id,{task_id:followup_aggregations},followup_index,tool_id)
+                    # and repeat with summary row
+                    self.__add_summary_row__(workflow_id,task_id,subject_id,{task_id:followup_aggregations},followup_index,tool_id)
+
+    def __add_marking_summary_row(self,workflow_id,task_id,subject_id,aggregations,given_shape):
+        """
+        for a given shape, print out a summary of the all corresponding clusters  - one line more subject
+        each line contains a count of the the number of such clusters which at least half the people marked
+        the mean and median % of people to mark each cluster and the mean and median vote % for the
+        most likely tool for each cluster. These last 4 values will help determine which subjects are "hard"
+        :param workflow_id:
+        :param task_id:
+        :param subject_id:
+        :param aggregations:
+        :param shape:
+        :return:
+        """
+        relevant_tools = [tool_id for tool_id,tool_shape in enumerate(self.workflows[workflow_id][1][task_id]) if tool_shape == given_shape]
+        counter = {t:{} for t in relevant_tools}
+        aggreement = []
+
+        prob_true_positive = []#{t:[] for t in relevant_tools}
+
+        for cluster_index,cluster in aggregations[task_id][given_shape + " clusters"].items():
+            if cluster_index == "all_users":
+                continue
+
+            # how much agreement was their on the most likely tool?
+            tool_classification = cluster["tool_classification"][0].items()
+            most_likely_tool,tool_prob = max(tool_classification, key = lambda x:x[1])
+            aggreement.append(tool_prob)
+
+            prob_true_positive.append(cluster["existence"][0]["1"])
+
+            for u,t in zip(cluster["users"],cluster["tools"]):
+                if u in counter[t]:
+                    counter[t][u] += 1
+                else:
+                    counter[t][u] = 1
+
+        row = str(subject_id) + ","
+        for tool_id in sorted(counter.keys()):
+            tool_count = counter[tool_id].values()
+            if tool_count == []:
+                row += "0,"
+            else:
+                row += str(numpy.median(tool_count)) + ","
+
+        if prob_true_positive == []:
+            row += "NA,NA,"
+        else:
+            row += str(numpy.mean(prob_true_positive)) + "," + str(numpy.median(prob_true_positive)) + ","
+
+        if aggreement == []:
+            row += "NA,NA"
+        else:
+
+            row += str(numpy.mean(aggreement)) + "," + str(numpy.median(aggreement))
+
+        id_ = task_id,given_shape,"summary"
+        self.csv_files[id_].write(row+"\n")
+
+    def __add_polygon_summary_row__(self,workflow_id,task_id,subject_id,aggregations):
+        """
+        print out a csv summary of the polygon aggregations (so not the individual xy points)
+        need to know the workflow and task id so we can look up the instructions
+        that way we can know if there is no output for a given tool - that tool wouldn't appear
+        at all in the aggregations
+        """
+        polygon_tools = [t_index for t_index,t in enumerate(self.workflows[workflow_id][1][task_id]) if t == "polygon"]
+
+        total_area = {t:0 for t in polygon_tools}
+
+        id_ = task_id,"polygon","summary"
+        for p_index,cluster in aggregations["polygon clusters"].items():
+            if p_index == "all_users":
+                continue
+
+            tool_classification = cluster["tool_classification"][0].items()
+            most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
+            total_area[int(most_likely_tool)] += cluster["area"]
+
+        row = str(subject_id)
+        for t in sorted([int(t) for t in polygon_tools]):
+            row += ","+ str(total_area[t])
+
+        self.csv_files[id_].write(row+"\n")
+
+    def __add_summary_row__(self,workflow_id,task_id,subject_id,aggregations,followup_id=None,tool_id = None):
         """
         given a result for a specific subject (and possibily a specific cluster within that specific subject)
         add one row of results to the summary file. that row contains
@@ -101,23 +243,25 @@ class CsvOut:
         :return:
         """
         # key for accessing the csv output in the dictionary
-        id_ = (workflow_id,task_id,shape_id,followup_id,"summary")
-        votes,num_users = results
+        id_ = (task_id,tool_id,followup_id,"summary")
 
-        # get the top choice
-        try:
-            most_likely,top_probability = max(votes.items(), key = lambda x:x[1])
-        except ValueError:
-            warning(results)
-            raise
+        # get what percentage of users voted for each classification
+        votes,num_users = aggregations[task_id]
+
+        most_likely,top_probability = max(votes.items(), key = lambda x:x[1])
 
         # extract the text corresponding to the most likely answer
-        instructions = self.instructions[workflow_id][task_id]
-        print(instructions)
-        most_likely_label = answer_dict[int(most_likely)]
+        # follow up questions for markings with have a different structure
+        if tool_id is not None:
+            answers = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_id]["answers"]
+            most_likely_label = answers[int(most_likely)]["label"]
+        else:
+            most_likely_label = self.instructions[workflow_id][task_id]["answers"][int(most_likely)]
+
         # and get rid of any bad characters
         most_likely_label = helper_functions.csv_string(most_likely_label)
 
+        # calculate some summary values such as entropy and mean and median percentage of votes for each classification
         probabilities = votes.values()
         entropy = self.__shannon_entropy__(probabilities)
 
@@ -218,7 +362,6 @@ class CsvOut:
 
     def __exit__(self, exc_type, exc_value, traceback):
         pass
-
 
     def __followup_question__(self,answers,results,cluster_index=None):
         """
@@ -352,60 +495,7 @@ class CsvOut:
 
 
 
-    def __marking_followup__(self,task_id,subject_id,aggregations,marking_tasks,followup_questions,instructions):
-        """
-        for a given task id /subject id, handle all of the marking/cluster related outputs for follow up questions
-        I had thought about this function returning the rows to add to the csv (inside of the writing happening inside
-        this function) - we wouldn't needed task_id or subject_id. But this function actually writes up to multiple
-        csv files (for different follow up questions) and can have an arbitrary number of rows produced
-        so it seems easiest if everything happens inside the function
-        :param task_id: the id of the task - used to access the relevant csv output file
-        :param subject_id: used to write out to the csv file so we know what subjects each line refers to
-        :param followup_questions: the list of follow up questions for every marking tool associated with this task
-        :return:
-        """
-        # go through each tool
-        for tool_id,shape in enumerate(marking_tasks):
-            # go through all clusters of each shape
-            for cluster_index,cluster in aggregations[shape + " clusters"].items():
-                if cluster_index == "all_users":
-                    continue
 
-                # is the most likely tool to have created this cluster?
-                most_likely_tool = cluster["most_likely_tool"]
-
-                # only consider clusters which most likely correspond to the correct tool
-                if int(most_likely_tool) != int(tool_id):
-                    continue
-
-                # answer type is either "single" or "multiple"
-                for followup_index,answer_type in enumerate(followup_questions[tool_id]):
-                    # bit of a sanity check but we may have cases where the followup questions were not done
-                    if "followup_question" not in aggregations[shape + " clusters"][cluster_index]:
-                        continue
-
-                    # possible_answers give the text labels which is used for printing out to the csv
-                    possible_answers = instructions["tools"][tool_id]["followup_questions"][followup_index]["answers"]
-
-                    # get the answers specific to this follow question
-                    try:
-                        results = aggregations[shape + " clusters"][cluster_index]["followup_question"][str(followup_index)]
-                    except KeyError:
-                        warning(aggregations[shape + " clusters"][cluster_index])
-                        raise
-
-                    # id is used for accessing csv files
-                    id_ = task_id,tool_id,followup_index
-
-                    print(self.csv_files.keys())
-                    row = self.__followup_question__()
-
-                    self.csv_files[id_].write(str(subject_id)+row)
-
-                    if answer_type == "single":
-                        self.__single_choice_classification_row__(possible_answers,id_,subject_id,results,cluster_index)
-                    else:
-                        self.__multi_choice_classification_row__(possible_answers,id_,subject_id,results,cluster_index)
 
     def __marking_file_setup__(self,output_directory,workflow_id):
         """
@@ -582,31 +672,7 @@ class CsvOut:
                 row = str(subject_id) + ","+ str(p_index)+ ","+ tool + ","+ str(p.area/float(cluster["image area"])) + ",\"" +str(polygon) + "\""
                 self.csv_files[id_].write(row+"\n")
 
-    def __polygon_summary_output__(self,workflow_id,task_id,subject_id,aggregations):
-        """
-        print out a csv summary of the polygon aggregations (so not the individual xy points)
-        need to know the workflow and task id so we can look up the instructions
-        that way we can know if there is no output for a given tool - that tool wouldn't appear
-        at all in the aggregations
-        """
-        polygon_tools = [t_index for t_index,t in enumerate(self.workflows[workflow_id][1][task_id]) if t == "polygon"]
 
-        total_area = {t:0 for t in polygon_tools}
-
-        id_ = task_id,"polygon","summary"
-        for p_index,cluster in aggregations["polygon clusters"].items():
-            if p_index == "all_users":
-                continue
-
-            tool_classification = cluster["tool_classification"][0].items()
-            most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
-            total_area[int(most_likely_tool)] += cluster["area"]
-
-        row = str(subject_id)
-        for t in sorted([int(t) for t in polygon_tools]):
-            row += ","+ str(total_area[t])
-
-        self.csv_files[id_].write(row+"\n")
 
     def __polygon_summary_setup__(self,workflow_id,task_id):
         """
@@ -628,105 +694,7 @@ class CsvOut:
     def __shannon_entropy__(self,probabilities):
         return -sum([p*math.log(p) for p in probabilities])
 
-    def __shape_summary_output__(self,workflow_id,task_id,subject_id,aggregations,given_shape):
-        """
-        for a given shape, print out a summary of the all corresponding clusters  - one line more subject
-        each line contains a count of the the number of such clusters which at least half the people marked
-        the mean and median % of people to mark each cluster and the mean and median vote % for the
-        most likely tool for each cluster. These last 4 values will help determine which subjects are "hard"
-        :param workflow_id:
-        :param task_id:
-        :param subject_id:
-        :param aggregations:
-        :param shape:
-        :return:
-        """
-        relevant_tools = [tool_id for tool_id,tool_shape in enumerate(self.workflows[workflow_id][1][task_id]) if tool_shape == given_shape]
-        counter = {t:{} for t in relevant_tools}
-        aggreement = []
 
-        prob_true_positive = []#{t:[] for t in relevant_tools}
-
-        for cluster_index,cluster in aggregations[task_id][given_shape + " clusters"].items():
-            if cluster_index == "all_users":
-                continue
-
-            # how much agreement was their on the most likely tool?
-            tool_classification = cluster["tool_classification"][0].items()
-            most_likely_tool,tool_prob = max(tool_classification, key = lambda x:x[1])
-            aggreement.append(tool_prob)
-
-            prob_true_positive.append(cluster["existence"][0]["1"])
-
-            for u,t in zip(cluster["users"],cluster["tools"]):
-                if u in counter[t]:
-                    counter[t][u] += 1
-                else:
-                    counter[t][u] = 1
-
-            # print
-
-
-        # # start by figuring all the points which correspond to the desired type
-        # cluster_count = {}
-        # for tool_id in sorted(self.instructions[workflow_id][task_id]["tools"].keys()):
-        #     tool_id = int(tool_id)
-        #
-        #     assert task_id in self.workflows[workflow_id][1]
-        #     shape = self.workflows[workflow_id][1][task_id][tool_id]
-        #     if shape == given_shape:
-        #         cluster_count[tool_id] = 0
-        #
-        # # now go through the actual clusters and count all which at least half of everyone has marked
-        # # or p(existence) >= 0.5 which is basically the same thing unless you've used weighted voting, IBCC etc.
-        # for cluster_index,cluster in aggregations[task_id][given_shape + " clusters"].items():
-        #     if cluster_index == "all_users":
-        #         continue
-        #
-        #     prob_true_positive = cluster["existence"][0]["1"]
-        #     if prob_true_positive > 0.5:
-        #         tool_classification = cluster["tool_classification"][0].items()
-        #         most_likely_tool,tool_prob = max(tool_classification, key = lambda x:x[1])
-        #         all_tool_prob.append(tool_prob)
-        #         cluster_count[int(most_likely_tool)] += 1
-        #
-        #     # keep track of this no matter what the value is
-        #     all_exist_probability.append(prob_true_positive)
-
-        row = str(subject_id) + ","
-        for tool_id in sorted(counter.keys()):
-            tool_count = counter[tool_id].values()
-            if tool_count == []:
-                row += "0,"
-            else:
-                row += str(numpy.median(tool_count)) + ","
-
-        if prob_true_positive == []:
-            row += "NA,NA,"
-        else:
-            row += str(numpy.mean(prob_true_positive)) + "," + str(numpy.median(prob_true_positive)) + ","
-
-        if aggreement == []:
-            row += "NA,NA"
-        else:
-
-            row += str(numpy.mean(aggreement)) + "," + str(numpy.median(aggreement))
-
-
-
-        # # if there were no clusters found (at least which met the threshold) use empty columns
-        # if all_exist_probability == []:
-        #     row += ",,"
-        # else:
-        #     row += str(numpy.mean(all_exist_probability)) + "," + str(numpy.median(all_exist_probability)) + ","
-        #
-        # if all_tool_prob == []:
-        #     row += ","
-        # else:
-        #     row += str(numpy.mean(all_tool_prob)) + "," + str(numpy.median(all_tool_prob))
-        #
-        id_ = task_id,given_shape,"summary"
-        self.csv_files[id_].write(row+"\n")
 
 
     def __subject_output__(self,subject_id,aggregations,workflow_id):
@@ -752,17 +720,14 @@ class CsvOut:
             if task_id in marking_tasks:
                 # need the instructions for printing out labels
                 followup_questions = classification_tasks[task_id]
-                self.__marking_followup__(task_id,subject_id,aggregations[task_id],marking_tasks[task_id],followup_questions,instructions)
+                self.__add_marking_followup_rows__(workflow_id,task_id,subject_id,aggregations[task_id])
             else:
                 # we have a simple classification
                 # start by output the summary
                 self.__add_summary_row__(workflow_id,task_id,subject_id,aggregations)
 
                 id_ = (workflow_id,task_id,None,None,"detailed")
-                self.__add_detailed_row__(id_,subject_id,aggregations,answer_dict)
-
-
-        assert False
+                self.__add_detailed_row__(workflow_id,task_id,subject_id,aggregations)
 
 
         for task_id,possible_shapes in marking_tasks.items():
@@ -775,6 +740,8 @@ class CsvOut:
                     else:
                         self.__marking_row__(workflow_id,task_id,subject_id,aggregations[task_id],shape)
                         self.__shape_summary_output__(workflow_id,task_id,subject_id,aggregations,shape)
+
+        assert False
 
         for task_id in survey_tasks:
             instructions = self.instructions[workflow_id][task_id]
@@ -1028,7 +995,6 @@ class CsvOut:
             # results are going to be ordered by subject id (because that's how the results are stored)
             # so we can going to be cycling through task_ids. That's why we can't loop through classification_tasks etc.
             for subject_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
-                print(aggregations)
                 self.__subject_output__(subject_id,aggregations,workflow_id)
 
         for f in self.csv_files.values():
