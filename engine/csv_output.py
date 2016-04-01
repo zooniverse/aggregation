@@ -88,7 +88,7 @@ class CsvOut:
 
             results_file.write(","+str(num_users)+"\n")
 
-    def __add_summary_row__(self,workflow_id,task_id,subject_id,results,answer_dict,shape_id=None,followup_id=None):
+    def __add_summary_row__(self,workflow_id,task_id,subject_id,results,shape_id=None,followup_id=None):
         """
         given a result for a specific subject (and possibily a specific cluster within that specific subject)
         add one row of results to the summary file. that row contains
@@ -112,6 +112,8 @@ class CsvOut:
             raise
 
         # extract the text corresponding to the most likely answer
+        instructions = self.instructions[workflow_id][task_id]
+        print(instructions)
         most_likely_label = answer_dict[int(most_likely)]
         # and get rid of any bad characters
         most_likely_label = helper_functions.csv_string(most_likely_label)
@@ -136,7 +138,7 @@ class CsvOut:
             # finally - how many people have seen this subject for this task
             results_file.write(","+str(num_users)+"\n")
 
-    def __classification_file_setup__(self,output_directory,workflow_id,task_id,tool_id=None,followup_id=None):
+    def __classification_file_setup__(self,output_directory,workflow_id):
         """
         create headers in the csv files - for both summary file and detailed results files for a given workflow/task
         :param output_directory:
@@ -146,10 +148,23 @@ class CsvOut:
         :param followup_id: if not None - then this is a follow up question to a marking task
         :return:
         """
-        # if a follow up question - both tool_id and followup_id must be not None
-        assert (tool_id is None) or (followup_id is not None)
-        self.__detailed_classification_file_setup__(output_directory,workflow_id,task_id,tool_id,followup_id)
-        self.__summary_classification_file_setup__(output_directory,workflow_id,task_id,tool_id,followup_id)
+        classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
+
+        # go through the classification tasks - they will either be simple c. tasks (one answer allowed)
+        # multiple c. tasks (more than one answer allowed) and possibly a follow up question to a marking
+        for task_id in classification_tasks:
+            # is this task a simple classification task?
+            # don't care if the questions allows for multiple answers, or requires a single one
+            if classification_tasks[task_id] in ["single","multiple"]:
+                self.__detailed_classification_file_setup__(output_directory,workflow_id,task_id)
+                self.__summary_classification_file_setup__(output_directory,workflow_id,task_id)
+
+            else:
+                # this classification task is actually a follow up to a marking task
+                for tool_id in classification_tasks[task_id]:
+                    for followup_id,answer_type in enumerate(classification_tasks[task_id][tool_id]):
+                        self.__detailed_classification_file_setup__(output_directory,workflow_id,task_id,tool_id,followup_id)
+                        self.__summary_classification_file_setup__(output_directory,workflow_id,task_id,tool_id,followup_id)
 
     def __detailed_classification_file_setup__(self,output_directory,workflow_id,task_id,tool_id=None,followup_id=None):
         """
@@ -319,26 +334,11 @@ class CsvOut:
             os.makedirs(output_directory)
         self.workflow_directories[workflow_id] = output_directory
 
-        classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
-
-        # go through the classification tasks - they will either be simple c. tasks (one answer allowed)
-        # multiple c. tasks (more than one answer allowed) and possibly a follow up question to a marking
-        for task_id in classification_tasks:
-            # is this task a simple classification task?
-            # don't care if the questions allows for multiple answers, or requires a single one
-            if classification_tasks[task_id] in ["single","multiple"]:
-                self.__classification_header__(output_directory,workflow_id,task_id)
-
-            else:
-                # this classification task is actually a follow up to a marking task
-                for tool_id in classification_tasks[task_id]:
-                    for followup_id,answer_type in enumerate(classification_tasks[task_id][tool_id]):
-                        self.__classification_header__(output_directory,workflow_id,task_id,tool_id,followup_id)
+        # create the csv files for the classification tasks (both simple and follow up ones)
+        self.__classification_file_setup__(output_directory,workflow_id)
 
         # now set things up for the marking tasks
-        for task_id in marking_tasks:
-            shapes = set(marking_tasks[task_id])
-            self.__marking_header_setup__(workflow_id,task_id,shapes,output_directory)
+        self.__marking_file_setup__(output_directory,workflow_id)
 
         # and finally the survey tasks
         for task_id in survey_tasks:
@@ -408,7 +408,7 @@ class CsvOut:
                     else:
                         self.__multi_choice_classification_row__(possible_answers,id_,subject_id,results,cluster_index)
 
-    def __marking_header_setup__(self,workflow_id,task_id,shapes,output_directory):
+    def __marking_file_setup__(self,output_directory,workflow_id):
         """
         - create the csv output files for each workflow/task pairing where the task is a marking
         also write out the header line
@@ -416,52 +416,40 @@ class CsvOut:
         be printed out to different files - hence the multiple output files
         - we will give both a summary file and a detailed report file
         """
-        for shape in shapes:
-            fname = str(task_id) + self.instructions[workflow_id][task_id]["instruction"][:50]
-            fname = helper_functions.csv_string(fname)
-            # fname += ".csv"
+        classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
 
+        # iterate over each task and the shapes (not tools) available for each task
+        for task_id,tools in marking_tasks.items():
+            for shape in set(tools):
+                # get the file name - and remove any characters (such as spaces) which should not be in a file name
+                fname = str(task_id) + self.instructions[workflow_id][task_id]["instruction"][:50]
+                fname = helper_functions.csv_string(fname)
 
-            self.file_names[(task_id,shape,"detailed")] = fname + "_" + shape + ".csv"
-            self.file_names[(task_id,shape,"summary")] = fname + "_" + shape + "_summary.csv"
+                # create the files - both detailed and summary
+                self.file_names[(task_id,shape,"detailed")] = fname + "_" + shape + ".csv"
+                self.file_names[(task_id,shape,"summary")] = fname + "_" + shape + "_summary.csv"
 
-            # polygons - since they have an arbitary number of points are handled slightly differently
-            if shape == "polygon":
-                id_ = task_id,shape,"detailed"
-                self.csv_files[id_] = open(output_directory+fname+"_"+shape+".csv","wb")
-                self.csv_files[id_].write("subject_id,cluster_index,most_likely_tool,area,list_of_xy_polygon_coordinates\n")
+                # polygons - since they have an arbitary number of points are handled slightly differently
+                if shape == "polygon":
+                    id_ = task_id,shape,"detailed"
+                    self.csv_files[id_] = open(output_directory+fname+"_"+shape+".csv","wb")
+                    self.csv_files[id_].write("subject_id,cluster_index,most_likely_tool,area,list_of_xy_polygon_coordinates\n")
 
-                id_ = task_id,shape,"summary"
-                self.csv_files[id_] = open(output_directory+fname+"_"+shape+"_summary.csv","wb")
-                # self.csv_files[id_].write("subject_id,\n")
-                polygon_tools = [t_index for t_index,t in enumerate(self.workflows[workflow_id][1][task_id]) if t == "polygon"]
-                header = "subject_id,"
-                for tool_id in polygon_tools:
-                    tool = self.instructions[workflow_id][task_id]["tools"][tool_id]["marking tool"]
-                    tool = helper_functions.csv_string(tool)
-                    header += "area("+tool+"),"
-                self.csv_files[id_].write(header+"\n")
+                    id_ = task_id,shape,"summary"
+                    self.csv_files[id_] = open(output_directory+fname+"_"+shape+"_summary.csv","wb")
+                    # self.csv_files[id_].write("subject_id,\n")
+                    polygon_tools = [t_index for t_index,t in enumerate(self.workflows[workflow_id][1][task_id]) if t == "polygon"]
+                    header = "subject_id,"
+                    for tool_id in polygon_tools:
+                        tool = self.instructions[workflow_id][task_id]["tools"][tool_id]["marking tool"]
+                        tool = helper_functions.csv_string(tool)
+                        header += "area("+tool+"),"
+                    self.csv_files[id_].write(header+"\n")
 
-            else:
-                id_ = task_id,shape,"detailed"
-                # fname += "_"+shape+".csv"
-                self.csv_files[id_] = open(output_directory+fname+"_"+shape+".csv","wb")
+                else:
 
-                header = "subject_id,cluster_index,most_likely_tool,"
-                if shape == "point":
-                    header += "x,y,"
-                elif shape == "rectangle":
-                    # todo - fix this
-                    header += "x1,y1,x2,y2,"
-                elif shape == "line":
-                    header += "x1,y1,x2,y2,"
-                elif shape == "ellipse":
-                    header += "x1,y1,r1,r2,theta,"
-
-                header += "p(most_likely_tool),p(true_positive),num_users"
-                self.csv_files[id_].write(header+"\n")
-                # do the summary output else where
-                self.__marking_summary_setup__(output_directory,workflow_id,fname,task_id,shape)
+                    # write the headers for the csv summary files
+                    self.__marking_summary_header__(workflow_id,task_id,shape)
 
     def __marking_row__(self,workflow_id,task_id,subject_id,aggregations,shape):
         """
@@ -512,28 +500,52 @@ class CsvOut:
             row += str(prob_true_positive) + "," + str(num_users)
             self.csv_files[key].write(row+"\n")
 
-    def __marking_summary_setup__(self,output_directory,workflow_id,fname,task_id,shape):
+    def __marking_detailed_header__(self,workflow_id,task_id,shape):
+        """
+        create the csv file headers for the detailed results
+        :return:
+        """
+        assert shape != "polygon"
+
+        id_ = task_id,shape,"detailed"
+        with open(self.file_names[id_],"w") as csv_file:
+            csv_file.write( "subject_id,cluster_index,most_likely_tool,")
+            if shape == "point":
+                csv_file.write("x,y,")
+            elif shape == "rectangle":
+                # todo - fix this
+                csv_file.write("x1,y1,x2,y2,")
+            elif shape == "line":
+                csv_file.write("x1,y1,x2,y2,")
+            elif shape == "ellipse":
+                csv_file.write("x1,y1,r1,r2,theta,")
+
+            csv_file.write("p(most_likely_tool),p(true_positive),num_users")
+
+    def __marking_summary_header__(self,workflow_id,task_id,shape):
         """
         setup the summary csv file for a given marking tool
         all shape aggregation will have a summary file - with one line per subject
+        DON'T call this for polygons - they need to be handled differently
         :return:
         """
-        # the summary file will contain just line per subject
+        assert shape != "polygon"
+
         id_ = task_id,shape,"summary"
-        self.csv_files[id_] = open(output_directory+fname+"_"+shape+"_summary.csv","wb")
-        header = "subject_id"
-        # extract only the tools which can actually make point markings
-        for tool_id in sorted(self.instructions[workflow_id][task_id]["tools"].keys()):
-            tool_id = int(tool_id)
-            # self.workflows[workflow_id][0] is the list of classification tasks
-            # we want [1] which is the list of marking tasks
-            found_shape = self.workflows[workflow_id][1][task_id][tool_id]
-            if found_shape == shape:
-                tool_label = self.instructions[workflow_id][task_id]["tools"][tool_id]["marking tool"]
-                tool_label = helper_functions.csv_string(tool_label)
-                header += ",median(" + tool_label +")"
-        header += ",mean_probability,median_probability,mean_tool,median_tool"
-        self.csv_files[id_].write(header+"\n")
+        with open(self.file_names[id_],"w") as csv_file:
+            # the summary file will contain just line per subject
+            csv_file.write("subject_id")
+            # extract only the tools which can actually make point markings
+            for tool_id in sorted(self.instructions[workflow_id][task_id]["tools"].keys()):
+                tool_id = int(tool_id)
+                # self.workflows[workflow_id][0] is the list of classification tasks
+                # we want [1] which is the list of marking tasks
+                found_shape = self.workflows[workflow_id][1][task_id][tool_id]
+                if found_shape == shape:
+                    tool_label = self.instructions[workflow_id][task_id]["tools"][tool_id]["marking tool"]
+                    tool_label = helper_functions.csv_string(tool_label)
+                    csv_file.write(",median(" + tool_label +")")
+            csv_file.write(",mean_probability,median_probability,mean_tool,median_tool\n")
 
     def __polygon_row__(self,workflow_id,task_id,subject_id,aggregations):
         id_ = task_id,"polygon","detailed"
@@ -586,6 +598,13 @@ class CsvOut:
             row += ","+ str(total_area[t])
 
         self.csv_files[id_].write(row+"\n")
+
+    def __polygon_header_setup__(self):
+        """
+        once the csv files have been created, write the headers
+        :return:
+        """
+
 
     def __shannon_entropy__(self,probabilities):
         return -sum([p*math.log(p) for p in probabilities])
