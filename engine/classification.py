@@ -39,7 +39,7 @@ class Classification:
         # sort by how many times each tool was used
         sorted_tools = sorted(tool_count.items(), key = lambda x:x[1])
 
-        most_likely_tool,percentage = sorted_tools[-1][0]
+        most_likely_tool,percentage = sorted_tools[-1]
 
         return most_likely_tool,percentage
 
