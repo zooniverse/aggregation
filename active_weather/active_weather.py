@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from __future__ import print_function
 import matplotlib.pyplot as plt
 import cv2
@@ -25,4 +26,14 @@ id_ = fname.split("/")[-1][:-4]
 gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 masked_image = preprocessing.__mask_lines__(gray)
 transcriptions = preprocessing.__ocr_image__(masked_image)
-transcriptions_in_cells = preprocessing.__place_in_cell__(transcriptions,gray,id_)
+# transcriptions_in_cells = preprocessing.__place_in_cell__(transcriptions,gray,id_)
+
+cur = preprocessing.con.cursor()
+cur.execute("select * from transcriptions where confidence <= 80;")
+# print(preprocessing.cur.fetchone())
+
+horizontal_grid,vertical_grid = preprocessing.__cell_boundaries__(gray)
+
+for fname,region_id,column,row,_,_ in cur.fetchall():
+    print(horizontal_grid[row],horizontal_grid[row+1])
+

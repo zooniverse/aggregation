@@ -9,7 +9,6 @@ import tesserpy
 # import shapely
 from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
-from descartes import PolygonPatch
 from sklearn.cluster import DBSCAN
 from sklearn.decomposition import PCA
 from skimage.filters import threshold_otsu, rank
@@ -18,9 +17,9 @@ from sklearn import mixture
 import sqlite3 as lite
 
 con = lite.connect('/home/ggdhines/active.db')
-cur = con.cursor()
 
-cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
+
+# cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
 
 
 
@@ -537,6 +536,7 @@ def __place_in_cell__(transcriptions,image,id_):
 
     problems = 0
     print("*******")
+    cur = con.cursor()
     for key in cell_contents:
         sorted_contents = sorted(cell_contents[key], key = lambda x:x[0])
         _,text,confidence = zip(*sorted_contents)
@@ -553,6 +553,9 @@ def __place_in_cell__(transcriptions,image,id_):
             print(text)
             problems += 1
     print("problems " + str(problems))
+
+    con.commit()
+    # con.close()
 
     plt.hist(confidence_array, bins=20, normed=1, histtype='step', cumulative=1)
     plt.show()
