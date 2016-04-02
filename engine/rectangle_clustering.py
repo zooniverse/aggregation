@@ -115,8 +115,8 @@ class RectangleClustering(clustering.Cluster):
             new_cluster["center"] = self.__median_rectangles__(clique)
             new_cluster["cluster members"] = clique
             new_cluster["users"] = [user_ids[i] for i in c]
+            # the tools used by each person with a rectangle in this cluster
             new_cluster["tools"] = tools_in_clique
-            new_cluster["tool_classification"] = tools_in_clique
             new_cluster["image area"] = None
 
             results.append(new_cluster)

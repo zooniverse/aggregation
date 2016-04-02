@@ -98,7 +98,7 @@ class Agglomerative(clustering.Cluster):
         :return:
         """
         # todo - why do I have tool_classification in here?
-        results = [{"users":[u],"cluster members":[p],"tools":[t],"num users":1,"tool_classification":({t:1},-1)} for u,p,t in zip(user_ids,markings,tools)]
+        results = [{"users":[u],"cluster members":[p],"tools":[t],"num users":1} for u,p,t in zip(user_ids,markings,tools)]
 
         # cluster_mergers is a list representation of a tree
         # let's traverse this tree looking for mergers between clusters with common users - those clusters should

@@ -31,11 +31,16 @@ class Classification:
         #     raise
         # # rectangles return their tool_classification differently
         # # if we have an attribute error - assume we have a rectangle cluster and work with that
-        # # todo - figure out how other tool types return tool_classification and refactor for a more consistent approach
+        # todo - figure out how other tool types return tool_classification and refactor for a more consistent approach
         # except AttributeError:
-        tools = cluster["tool_classification"]
+        tools = cluster["tools"]
         # count how many times each tool is used
-        tool_count = {t:sum([t_ for t_ in tools if (t == t_)]) for t in set(tools)}
+        try:
+            tool_count = {t:sum([t_ for t_ in tools if (t == t_)]) for t in set(tools)}
+        except TypeError:
+            print(cluster)
+            print(tools)
+            raise
         # sort by how many times each tool was used
         sorted_tools = sorted(tool_count.items(), key = lambda x:x[1])
 
