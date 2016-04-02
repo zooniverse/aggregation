@@ -107,9 +107,13 @@ class CsvOut:
                 try:
                     tool_id = cluster["most_likely_tool"]
                 except KeyError:
-                    print(cluster.keys())
+                    print("missing most likely tool")
                     continue
                 # and the follow up questions
+                # first check if there are any follow questions
+                if "followup_questions" not in self.instructions[workflow_id][task_id]["tools"][tool_id]:
+                    continue
+                    
                 followup_questions = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"]
 
                 # go through each of the follow up questions
