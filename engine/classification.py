@@ -23,16 +23,6 @@ class Classification:
         :param cluster:
         :return:
         """
-        # # what is the most likely tool for this cluster?
-        # try:
-        #     most_likely_tool,_ = max(cluster["tool_classification"][0].items(),key = lambda x:x[1])
-        # except TypeError:
-        #     print(cluster)
-        #     raise
-        # # rectangles return their tool_classification differently
-        # # if we have an attribute error - assume we have a rectangle cluster and work with that
-        # todo - figure out how other tool types return tool_classification and refactor for a more consistent approach
-        # except AttributeError:
         tools = cluster["tools"]
         # count how many times each tool is used
         try:
@@ -89,7 +79,6 @@ class Classification:
             for shape in shapes_in_task:
                 # go through each cluster associated with that shape
                 for cluster_index,cluster in aggregations[subject_id][task_id][shape + " clusters"].items():
-                    # todo - pretty sure that all_users is still a key, not sure about "param"
                     # skip keys which don't actually point to clusters (e.g. misc. extra info)
                     if cluster_index == "all_users":
                         continue
@@ -104,28 +93,33 @@ class Classification:
                     relevant_identifiers = self.__get_relevant_identifiers__(most_likely_tool,cluster)
 
                     # now go through each individual follow up question that comes with this particular tool
-                    for followup_question_index in range(len(classification_tasks[task_id][most_likely_tool])):
-                        # global_index allows us to extract based on task, tool and followup question index
-                        global_index = str(task_id)+"_" +str(most_likely_tool)+"_"+str(followup_question_index)
+                    try:
+                        for followup_question_index in range(len(classification_tasks[task_id][most_likely_tool])):
+                            # global_index allows us to extract based on task, tool and followup question index
+                            global_index = str(task_id)+"_" +str(most_likely_tool)+"_"+str(followup_question_index)
 
-                        # extract all of the answers for this particular followup question
-                        followup_answers = []
-                        for id_ in relevant_identifiers:
-                            # extract this person's follow up answers
-                            answer = raw_classifications[global_index][subject_id][id_]
-                            # id_[1] is the user id (marking coordinates are [0] and don't matter any more)
-                            u = id_[1]
-                            followup_answers.append((u,answer))
+                            # extract all of the answers for this particular followup question
+                            followup_answers = []
+                            for id_ in relevant_identifiers:
+                                # extract this person's follow up answers
+                                answer = raw_classifications[global_index][subject_id][id_]
+                                # id_[1] is the user id (marking coordinates are [0] and don't matter any more)
+                                u = id_[1]
+                                followup_answers.append((u,answer))
 
-                        # task_aggregation can work over multiple subjects at once (which is what happens if we call
-                        # it for a simple classification task, i.e. one that is not a following task) so
-                        # task_aggregation is actually expecting a dictionary which maps from subject_id to individual
-                        # classifications. Hence the dummy_wrapper
-                        dummy_wrapper = {subject_id:followup_answers}
-                        followup_results = self.__task_aggregation__(dummy_wrapper,global_index,{})
+                            # task_aggregation can work over multiple subjects at once (which is what happens if we call
+                            # it for a simple classification task, i.e. one that is not a following task) so
+                            # task_aggregation is actually expecting a dictionary which maps from subject_id to individual
+                            # classifications. Hence the dummy_wrapper
+                            dummy_wrapper = {subject_id:followup_answers}
+                            followup_results = self.__task_aggregation__(dummy_wrapper,global_index,{})
 
-                        # extract the result and add it to the overall set of aggregations
-                        aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"][followup_question_index] = followup_results[subject_id][global_index]
+                            # extract the result and add it to the overall set of aggregations
+                            aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"][followup_question_index] = followup_results[subject_id][global_index]
+                    except KeyError:
+                        pass
+                        # print("cluster tool index does not match up with follow up question indices - might be an old version")
+
 
         # return the updated set of aggregations
         return aggregations
