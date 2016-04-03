@@ -16,12 +16,6 @@ from skimage.morphology import disk
 from sklearn import mixture
 import sqlite3 as lite
 
-con = lite.connect('/home/ggdhines/active.db')
-
-
-# cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
-
-
 
 
 __author__ = 'ggdhines'
@@ -318,7 +312,7 @@ def __mask_lines__(gray):
         corrected_l = __correct__(gray,l,True)
         mask = np.max([mask,corrected_l],axis=0)
 
-    cv2.imwrite("/home/ggdhines/testing.jpg",mask)
+    # cv2.imwrite("/home/ggdhines/testing.jpg",mask)
     vertical_lines = paper_quad.__extract_grids__(gray,False)
     for l in vertical_lines:
         corrected_l = __identity__(gray,l)
@@ -334,9 +328,9 @@ def __mask_lines__(gray):
     thresh1 = __threshold_image__(gray)
     masked_image = np.max([thresh1,mask],axis=0)
 
-    plt.imshow(masked_image,cmap="gray")
-    plt.title("masked image")
-    plt.show()
+    # plt.imshow(masked_image,cmap="gray")
+    # plt.title("masked image")
+    # plt.show()
     # cv2.imwrite("/home/ggdhines/2.jpg",masked_image)
     # assert False
 
@@ -348,10 +342,12 @@ def __threshold_image__(img):
     #     print(list(i))
     ret,thresh1 = cv2.threshold(img,190,255,cv2.THRESH_BINARY)
 
-    thresh3 = cv2.adaptiveThreshold(img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,251,2)
+    gaussian_threshold = cv2.adaptiveThreshold(img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,351,2)
     ret2,th2 = cv2.threshold(img,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    # plt.imshow(gaussian_threshold)
+    # plt.show()
 
-    return thresh3
+    # return thresh3
 
 
     radius = 200
@@ -384,7 +380,7 @@ def __threshold_image__(img):
     # plt.show()
     thresh3[x,y] = 0
 
-    return thresh3
+    return gaussian_threshold
 
 
 def __gen_columns__(masked_image,gray):
@@ -413,7 +409,7 @@ def __ocr_image__(image):
     tess.tessedit_pageseg_mode = tesserpy.PSM_SINGLE_BLOCK
     # tess.tessedit_ocr_engine_mode = tesserpy.OEM_CUBE_ONLY
     # tess.tessedit_page_iteratorlevel = tess.RIL_SYMBOL
-    tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.abcdefghijkmnopqrstuvwxyz"
+    tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.abcdefghijkmnopqrstuvwxyz-"
 
     tess.set_image(image)
     tess.get_utf8_text()
@@ -428,10 +424,13 @@ def __ocr_image__(image):
         height = abs(bb.top-bb.bottom)
         width = bb.right - bb.left
 
-        if min(height,width) >= 10:
-
+        if min(height,width) > 5:
+            # print(word.text,height,width)
             transcribed.append((word.text, word.confidence, bb.top, bb.left, bb.right, bb.bottom))
             # print("{}\t{}\tt:{}; l:{}; r:{}; b:{}".format(word.text, word.confidence, bb.top, bb.left, bb.right, bb.bottom))
+        else:
+            pass
+            # print(word.text,height,width,word.confidence)
         # confidences.append(word.confidence)
         # text.append(word.text)
         # boxes.append(word.bounding_box)
@@ -522,15 +521,13 @@ def __place_in_cell__(transcriptions,image,id_):
             assert False
             continue
 
-        # plt.imshow(image,cmap="gray")
-        # plt.plot(mid_x,mid_y,"o")
-        # plt.show()
+
 
         key = (row_index,column_index)
         if key not in cell_contents:
-            cell_contents[key] = [(mid_x,t,c)]
+            cell_contents[key] = [(mid_x,t,c,(top,left,right,bottom))]
         else:
-            cell_contents[key].append((mid_x,t,c))
+            cell_contents[key].append((mid_x,t,c,(top,left,right,bottom)))
 
     confidence_array = []
 
@@ -539,26 +536,29 @@ def __place_in_cell__(transcriptions,image,id_):
     cur = con.cursor()
     for key in cell_contents:
         sorted_contents = sorted(cell_contents[key], key = lambda x:x[0])
-        _,text,confidence = zip(*sorted_contents)
+        _,text,confidences,coordinates = zip(*sorted_contents)
         text = "".join(text)
-        confidence = min(confidence)
+        confidence = min(confidences)
         cell_contents[key] = (text,confidence)
         confidence_array.append(confidence)
 
         stmt = "insert into transcriptions values(\""+id_+"\",0,"+str(key[1])+","+str(key[0])+",\""+text+"\","+str(confidence)+")"
-        print(stmt)
         cur.execute(stmt)
 
+        for char,cnf,crd in zip(text,confidences,coordinates):
+            # cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y)")
+            stmt = "insert into characters values(\""+id_+"\",0,"+str(key[1])+","+str(key[0])+",\""+char+"\","+str(cnf)+","+str(crd[1])+","+str(crd[2])+","+str(crd[0])+","+str(crd[3])+")"
+            cur.execute(stmt)
+
         if confidence < 80:
-            print(text)
             problems += 1
     print("problems " + str(problems))
 
     con.commit()
     # con.close()
 
-    plt.hist(confidence_array, bins=20, normed=1, histtype='step', cumulative=1)
-    plt.show()
+    # plt.hist(confidence_array, bins=20, normed=1, histtype='step', cumulative=1)
+    # plt.show()
 
 
     return cell_contents
@@ -636,11 +636,12 @@ def __roc_plot__(true_positives,false_positives):
     print(p.area)
     print(len(false_positives))
 
-    plt.plot(roc_X,roc_Y)
-    plt.xlabel("% False Positives")
-    plt.ylabel("% True Positives")
-    plt.ylim((0,1.01))
-    plt.show()
+    # plt.plot(roc_X,roc_Y)
+    # plt.xlabel("% False Positives")
+    # plt.ylabel("% True Positives")
+    # plt.ylim((0,1.01))
+    # plt.ylim((0,1.01))
+    # plt.show()
 
     # fig = plt.figure(1, figsize=(5,5), dpi=90)
     # ax = fig.add_subplot(111)
@@ -660,6 +661,12 @@ def __gmm__(img):
         print(g.aic(x),g.means_,g.weights_)
 
 if __name__ == "__main__":
+
+    con = lite.connect('/home/ggdhines/to_upload3/active.db')
+
+    cur = con.cursor()
+    cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
+    cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
     img = cv2.imread('/home/ggdhines/region.jpg')
 
     # gray = __pca_mask__(img)
@@ -705,10 +712,6 @@ if __name__ == "__main__":
     true_positives,false_positives = __gold_standard_comparison__(transcriptions_in_cells)
 
     __roc_plot__(true_positives,false_positives)
-
-
-
-
 
     con.commit()
     con.close()
