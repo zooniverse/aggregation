@@ -12,7 +12,7 @@ def aggregate(project_id, token, href, metadata, environment):
         project.__aggregate__()
 
         with CsvOut(project) as writer:
-            tarpath = writer.__write_out__(compress=True)
+            tarpath = writer.__write_out__()
             response = send_uploading(metadata, token, href)
             url = response.json()["media"][0]["src"]
             with open(tarpath, 'rb') as tarball:
