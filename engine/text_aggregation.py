@@ -57,35 +57,59 @@ class SubjectRetirement(Classification):
 
         self.to_retire = None
 
-    def __aggregate__(self,raw_classifications,workflow_id,aggregations):
-        # start by looking for empty subjects
+    def __get_blank_subjects__(self,raw_classifications):
+        """
+        get all subjects which people have identified as blank
+        :param raw_classifications:
+        :return:
+        """
+        blank_subjects = set()
 
-        self.to_retire = set()
         for subject_id in raw_classifications["T0"]:
             user_ids,is_subject_empty = zip(*raw_classifications["T0"][subject_id])
             if is_subject_empty != []:
                 empty_count = sum([1 for i in is_subject_empty if i == True])
                 if empty_count >= 3:
-                    self.to_retire.add(subject_id)
+                    blank_subjects.add(subject_id)
 
-        blank_retirement = len(self.to_retire)
+        return blank_subjects
 
-        non_blanks = []
+    def __get_completed_subjects__(self,raw_classifications):
+        """
+        return all the subjects which people have said are completely transcribed
+        :param raw_classifications:
+        :return:
+        """
+        completely_transcribed = set()
 
-        # now look to see if everything has been transcribed
         for subject_id in raw_classifications["T3"]:
             user_ids,completely_transcribed = zip(*raw_classifications["T3"][subject_id])
 
             completely_count = sum([1 for i in completely_transcribed if i == True])
             if completely_count >= 3:
-                self.to_retire.add(subject_id)
-                non_blanks.append(subject_id)
+                completely_transcribed.add(subject_id)
 
+        return completely_transcribed
+
+    def __aggregate__(self,raw_classifications,workflow_id,aggregations):
+        self.to_retire = set()
+        # start by looking for empty subjects
+        # "T0" really should always be there but we may have a set of classifications (really old ones before
+        # the workflow changed) where it is missing - if "T0" isn't there, just skip
+        if "T0" in raw_classifications:
+            self.to_retire.update(self.__get_blank_subjects__(raw_classifications))
+
+        # now look to see what has been completely transcribed
+        if "T3" in raw_classifications:
+            self.to_retire.update(self.__get_completed_subjects__(raw_classifications))
+
+        # call the Panoptes API to retire these subjects
         # get an updated token
         assert isinstance(self.project,AggregationAPI)
         self.project.__panoptes_connect__()
         token = self.project.token
 
+        # need to retire the subjects one by one
         for retired_subject in self.to_retire:
             try:
                 headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+token}
@@ -97,12 +121,12 @@ class SubjectRetirement(Classification):
                 warning(e)
                 rollbar.report_exc_info()
 
-        print("we would have retired " + str(len(self.to_retire)))
-        print("with non-blanks " + str(len(self.to_retire)-blank_retirement))
-        print(str(len(self.to_retire)-blank_retirement))
-
-        self.num_retired = len(self.to_retire)
-        self.non_blanks_retired = len(self.to_retire)-blank_retirement
+        # print("we would have retired " + str(len(self.to_retire)))
+        # print("with non-blanks " + str(len(self.to_retire)-blank_retirement))
+        # print(str(len(self.to_retire)-blank_retirement))
+        #
+        # self.num_retired = len(self.to_retire)
+        # self.non_blanks_retired = len(self.to_retire)-blank_retirement
 
         return aggregations
 
