@@ -20,6 +20,7 @@ Contents:
    rectangle_aggregation.rst
    blob_aggregation.rst
    output.rst
+   error_handling.rst
 
 .. automodule:: engine
 
