@@ -211,7 +211,7 @@ class AggregationAPI:
         # connect to the Cassandra DB
         # only if we have given the necessary param
         if "cassandra" in environment_details:
-            self.__cassandra_connect__(environment_details["cassandra"])
+            self.cassandra_session = self.__cassandra_connect__(environment_details["cassandra"])
 
         # use for Cassandra connection - can override for Ourboros projects
         self.classification_table = "classifications"
@@ -436,8 +436,8 @@ class AggregationAPI:
 
         raise StopIteration()
 
-
-    def __cassandra_connect__(self,cassandra_instance):
+    @staticmethod
+    def __cassandra_connect__(cassandra_instance):
         """
         Connect to the Cassandra DB - either a local one or the Zooniverse aws one. If unable to connect, re-try up to 10 times and then raise an error.
 
@@ -450,19 +450,19 @@ class AggregationAPI:
             try:
                 if cassandra_instance == "local":
                     print("connecting to local Cassandra instance")
-                    self.cluster = Cluster()
+                    cluster = Cluster()
                 else:
                     print("connecting to Cassandra: " + cassandra_instance)
-                    self.cluster = Cluster([cassandra_instance])
+                    cluster = Cluster([cassandra_instance])
 
                 try:
-                    self.cassandra_session = self.cluster.connect("zooniverse")
+                    cassandra_session = cluster.connect("zooniverse")
                 except cassandra.InvalidRequest:
-                    cassandra_session = self.cluster.connect()
+                    cassandra_session = cluster.connect()
                     cassandra_session.execute("CREATE KEYSPACE zooniverse WITH REPLICATION = { 'class' : 'SimpleStrategy', 'replication_factor' : 2 }")
-                    self.cassandra_session = self.cluster.connect('zooniverse')
+                    cassandra_session = cluster.connect('zooniverse')
 
-                return
+                return cassandra_session
             except cassandra.cluster.NoHostAvailable as err:
                 if i == 9:
                     raise err
@@ -1190,8 +1190,8 @@ class AggregationAPI:
         while subjects_migrated != set():
             lower_bound_id,subjects_migrated = self.__migrate_with_id_limits__(select,lower_bound_id)
             all_subjects_migrated.update(subjects_migrated)
-            # if self.environment == "development":
-            #     break
+            if self.environment in ["development","quasi"]:
+                break
             print(lower_bound_id)
 
         return list(all_subjects_migrated)
