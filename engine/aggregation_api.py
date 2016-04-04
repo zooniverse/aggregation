@@ -205,13 +205,15 @@ class AggregationAPI:
         if (self.project_id in param_details) and ("default_date" in param_details[self.project_id]):
             self.previous_runtime = parser.parse(param_details[self.project_id]["default_date"])
 
-        # connect to whatever postgres db we want to
-        self.__postgres_connect__(environment_details)
-
         # connect to the Cassandra DB
         # only if we have given the necessary param
+        # and register this run
         if "cassandra" in environment_details:
             self.cassandra_session = self.__cassandra_connect__(environment_details["cassandra"])
+            self.__register_run__()
+
+        # connect to whatever postgres db we want to
+        self.__postgres_connect__(environment_details)
 
         # use for Cassandra connection - can override for Ourboros projects
         self.classification_table = "classifications"
@@ -470,6 +472,28 @@ class AggregationAPI:
 
         assert False
 
+    def __register_run__(self):
+        """
+        write to the cassandra db to note that this project is running in case it gets interrupted
+        :param project_id:
+        :return:
+        """
+        # have both the pid and project id in the primary key in case multiple people from the same project run
+        # aggregation at once
+        try:
+            self.cassandra_session.execute("CREATE TABLE running_processes(pid int, project_id int, PRIMARY KEY(pid,project_id))")
+        except cassandra.AlreadyExists:
+            pass
+
+        self.cassandra_session.execute("insert into running_processes (pid,project_id) values ("+str(os.getpid())+","+str(self.project_id)+")")
+
+    def __deregister_run__(self):
+        """
+        at the very end, remove this project from the list of running projects
+        :return:
+        """
+        self.cassandra_session.execute("delete from running_processes where pid = " + str(os.getpid()) + " and project_id = " + str(self.project_id))
+
     def __chunks__(self,l, n):
         """Yield successive n-sized chunks from l."""
         for i in xrange(0, len(l), n):
@@ -580,25 +604,10 @@ class AggregationAPI:
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
-        # todo - move this over annotate/folger
-        # only report to rollbar if we are not in development
-        if (exc_type is not None) and self.report_roll and (self.environment != "development"):
-            # load in the yml file - again - this time to get the rollbar token
-            try:
-                panoptes_file = open("/app/config/aggregation.yml","rb")
-            except IOError:
-                panoptes_file = open(base_directory+"/Databases/aggregation.yml","rb")
-            api_details = yaml.load(panoptes_file)
-
-            # rollbar_token = api_details[self.environment]["rollbar"]
-            # rollbar.init(rollbar_token,self.environment)
-            # rollbar.report_exc_info()
-
-            # self.postgres_session.rollback()
-
         # shutdown the connection to Cassandra and remove the lock so other aggregation instances
         # can run, regardless of whether an error occurred
         if self.cassandra_session is not None:
+            self.__deregister_run__()
             self.cassandra_session.shutdown()
 
     def __get_classifications__(self,subject_id,task_id,cluster_index=None,question_id=None):
