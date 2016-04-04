@@ -16,6 +16,12 @@ from skimage.morphology import disk
 from sklearn import mixture
 import sqlite3 as lite
 
+con = lite.connect('/home/ggdhines/to_upload3/active.db')
+cur = con.cursor()
+
+# cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
+# cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
+# con.commit()
 
 
 __author__ = 'ggdhines'
@@ -307,7 +313,7 @@ def __mask_lines__(gray):
 
     mask = np.zeros(gray.shape,np.uint8)
     for l in horizontal_lines:
-        corrected_l = __identity__(gray,l)
+        # corrected_l = __identity__(gray,l)
         # corrected_l = __polynomial_correct__(gray,l,True)
         corrected_l = __correct__(gray,l,True)
         mask = np.max([mask,corrected_l],axis=0)
@@ -315,7 +321,7 @@ def __mask_lines__(gray):
     # cv2.imwrite("/home/ggdhines/testing.jpg",mask)
     vertical_lines = paper_quad.__extract_grids__(gray,False)
     for l in vertical_lines:
-        corrected_l = __identity__(gray,l)
+        # corrected_l = __identity__(gray,l)
         # corrected_l = __polynomial_correct__(gray,l,False)
         corrected_l = __correct__(gray,l,False)
         mask = np.max([mask,corrected_l],axis=0)
@@ -662,11 +668,10 @@ def __gmm__(img):
 
 if __name__ == "__main__":
 
-    con = lite.connect('/home/ggdhines/to_upload3/active.db')
+
 
     cur = con.cursor()
-    cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
-    cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
+
     img = cv2.imread('/home/ggdhines/region.jpg')
 
     # gray = __pca_mask__(img)
