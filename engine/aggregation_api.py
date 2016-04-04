@@ -1609,7 +1609,7 @@ class AggregationAPI:
             try:
                 # extract the params specifically relevant to the given shape
                 relevant_params = self.marking_params_per_shape[shape](marking,dimensions)
-            except (helper_functions.InvalidMarking,helper_functions.EmptyPolygon,KeyError) as e:
+            except (helper_functions.InvalidMarking,helper_functions.EmptyPolygon,KeyError,TypeError) as e:
                 # badly formed marking - or the marking is slightly off the image
                 # either way - just skip it
                 continue
