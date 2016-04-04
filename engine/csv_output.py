@@ -247,39 +247,43 @@ class CsvOut:
         # get what percentage of users voted for each classification
         votes,num_users = aggregations[task_id]
 
-        most_likely,top_probability = max(votes.items(), key = lambda x:x[1])
+        try:
+            most_likely,top_probability = max(votes.items(), key = lambda x:x[1])
 
-        # extract the text corresponding to the most likely answer
-        # follow up questions for markings with have a different structure
-        if tool_id is not None:
-            answers = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_id]["answers"]
-            most_likely_label = answers[int(most_likely)]["label"]
-        else:
-            most_likely_label = self.instructions[workflow_id][task_id]["answers"][int(most_likely)]
+            # extract the text corresponding to the most likely answer
+            # follow up questions for markings with have a different structure
+            if tool_id is not None:
+                answers = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_id]["answers"]
+                most_likely_label = answers[int(most_likely)]["label"]
+            else:
+                most_likely_label = self.instructions[workflow_id][task_id]["answers"][int(most_likely)]
 
-        # and get rid of any bad characters
-        most_likely_label = helper_functions.csv_string(most_likely_label)
+            # and get rid of any bad characters
+            most_likely_label = helper_functions.csv_string(most_likely_label)
 
-        # calculate some summary values such as entropy and mean and median percentage of votes for each classification
-        probabilities = votes.values()
-        entropy = self.__shannon_entropy__(probabilities)
+            # calculate some summary values such as entropy and mean and median percentage of votes for each classification
+            probabilities = votes.values()
+            entropy = self.__shannon_entropy__(probabilities)
 
-        mean_p = np.mean(votes.values())
-        median_p = np.median(votes.values())
+            mean_p = np.mean(votes.values())
+            median_p = np.median(votes.values())
 
-        with open(self.file_names[id_],"a") as results_file:
-            results_file.write(str(subject_id)+",")
+            with open(self.file_names[id_],"a") as results_file:
+                results_file.write(str(subject_id)+",")
 
-            # write out details regarding the top choice
-            # this might not be a useful value if multiple choices are allowed - in which case just ignore it
-            results_file.write(str(most_likely_label)+","+str(top_probability))
-            # write out some summaries about the distributions of people's answers
-            # again entropy probably only makes sense if only one answer is allowed
-            # and mean_p and median_p probably only make sense if multiple answers are allowed
-            # so people will need to pick and choose what they want
-            results_file.write(","+str(entropy)+","+str(mean_p)+","+str(median_p))
-            # finally - how many people have seen this subject for this task
-            results_file.write(","+str(num_users)+"\n")
+                # write out details regarding the top choice
+                # this might not be a useful value if multiple choices are allowed - in which case just ignore it
+                results_file.write(str(most_likely_label)+","+str(top_probability))
+                # write out some summaries about the distributions of people's answers
+                # again entropy probably only makes sense if only one answer is allowed
+                # and mean_p and median_p probably only make sense if multiple answers are allowed
+                # so people will need to pick and choose what they want
+                results_file.write(","+str(entropy)+","+str(mean_p)+","+str(median_p))
+                # finally - how many people have seen this subject for this task
+                results_file.write(","+str(num_users)+"\n")
+        # empty values should be ignored - but shouldn't happen too often either
+        except ValueError:
+            pass
 
     def __classification_file_setup__(self,output_directory,workflow_id):
         """
