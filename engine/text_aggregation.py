@@ -196,7 +196,7 @@ class TranscriptionAPI(AggregationAPI):
             rollbar.init(rollbar_token,self.environment)
             rollbar.report_exc_info()
 
-        # calling the parent 
+        # calling the parent
         AggregationAPI.__exit__(self, exc_type, exc_value, traceback)
 
 
@@ -467,7 +467,7 @@ class TranscriptionAPI(AggregationAPI):
             Source='greg@zooniverse.org',
             Destination={
                 'ToAddresses': [
-                    'greg@zooniverse.org','victoria@zooniverse.org','matt@zooniverse.org'
+                    'greg@zooniverse.org','victoria@zooniverse.org','matt@zooniverse.org','shakespearesworldteam@jiscmail.ac.uk'
                 ]#,
                 # 'CcAddresses': [
                 #     'string',
