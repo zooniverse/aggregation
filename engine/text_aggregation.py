@@ -80,16 +80,16 @@ class SubjectRetirement(Classification):
         :param raw_classifications:
         :return:
         """
-        completely_transcribed = set()
+        completed_subjects = set()
 
         for subject_id in raw_classifications["T3"]:
             user_ids,completely_transcribed = zip(*raw_classifications["T3"][subject_id])
 
             completely_count = sum([1 for i in completely_transcribed if i == True])
             if completely_count >= 3:
-                completely_transcribed.add(subject_id)
+                completed_subjects.add(subject_id)
 
-        return completely_transcribed
+        return completed_subjects
 
     def __aggregate__(self,raw_classifications,workflow_id,aggregations):
         self.to_retire = set()
