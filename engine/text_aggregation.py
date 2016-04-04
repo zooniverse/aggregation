@@ -180,6 +180,26 @@ class TranscriptionAPI(AggregationAPI):
         self.only_retired_subjects = False
         self.only_recent_subjects = True
 
+    def __exit__(self, exc_type, exc_value, traceback):
+        """
+        report any errors via rollbar and shut down
+        :param exc_type:
+        :param exc_value:
+        :param traceback:
+        :return:
+        """
+        if exc_type is not None:
+            panoptes_file = open("/app/config/aggregation.yml","rb")
+            api_details = yaml.load(panoptes_file)
+
+            rollbar_token = api_details[self.environment]["rollbar"]
+            rollbar.init(rollbar_token,self.environment)
+            rollbar.report_exc_info()
+
+        # calling the parent 
+        AggregationAPI.__exit__(self, exc_type, exc_value, traceback)
+
+
     def __cluster_output_with_colour__(self,workflow_id,ax,subject_id):
         """
         use colour to show where characters match and don't match between different transcriptions of
