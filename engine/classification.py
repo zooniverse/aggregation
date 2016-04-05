@@ -1,8 +1,6 @@
 from __future__ import print_function
 import itertools
-from copy import deepcopy
 import abc
-
 __author__ = 'greg'
 
 def findsubsets(S,m):
@@ -26,7 +24,7 @@ class Classification:
         tools = cluster["tools"]
         # count how many times each tool is used
         try:
-            tool_count = {t:sum([t_ for t_ in tools if (t == t_)]) for t in set(tools)}
+            tool_count = {t:len([t_ for t_ in tools if (t == t_)]) for t in set(tools)}
         except TypeError:
             print(cluster)
             print(tools)
@@ -34,9 +32,14 @@ class Classification:
         # sort by how many times each tool was used
         sorted_tools = sorted(tool_count.items(), key = lambda x:x[1])
 
-        most_likely_tool,percentage = sorted_tools[-1]
+        # get the most likely tool and how many voted for this tool
+        most_likely_tool,max_count = sorted_tools[-1]
+        # how many people voted in total?
+        total_count = sum(tool_count.values())
+        percentage = max_count/float(total_count)
 
-        return most_likely_tool,percentage
+        assert percentage > 0
+        return most_likely_tool,percentage,sorted_tools
 
     def __get_relevant_identifiers__(self,most_likely_tool,cluster):
         """
@@ -70,58 +73,52 @@ class Classification:
         :param aggregations:
         :return:
         """
-        # get the list of all shapes used in markings for this task
-        # we group clusters based on shape - not tool
-        shapes_in_task = marking_tasks[task_id]
-        for subject_id in aggregations:
 
-            # go through each shape
-            for shape in shapes_in_task:
-                # go through each cluster associated with that shape
+        # the global index contains the task id, tool id and the follow up question id
+        for global_index in raw_classifications.keys():
+            task_id,most_likely_tool,followup_question_index = global_index.split("_")
+
+            # since clusters are stored by shape not tool - convert the tool to its shape
+            # and get all of the clusters with the that shape. Then for each of those clusters, look
+            # for only those people who used the right tool and extract their classifications
+            shape = marking_tasks[task_id][int(most_likely_tool)]
+
+            # go through each subject that has classifications for the given
+            # task, tool and follow up question
+            for subject_id in raw_classifications[global_index]:
+                # go through each individual cluster
                 for cluster_index,cluster in aggregations[subject_id][task_id][shape + " clusters"].items():
                     # skip keys which don't actually point to clusters (e.g. misc. extra info)
                     if cluster_index == "all_users":
                         continue
-
                     # create a new dictionary element to store the results
-                    aggregations[subject_id][task_id][shape + " clusters"] [cluster_index]["followup_question"] = {}
+                    aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"] = {}
 
-                    # what is the most likely tool associated with this marking (e.g. adult penguin vs. chick)
-                    most_likely_tool = aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["most_likely_tool"]
-
-                    # get all of the relevant markings - i.e. everyone who used the correct tool
                     relevant_identifiers = self.__get_relevant_identifiers__(most_likely_tool,cluster)
 
-                    # now go through each individual follow up question that comes with this particular tool
-                    try:
-                        for followup_question_index in range(len(classification_tasks[task_id][most_likely_tool])):
-                            # global_index allows us to extract based on task, tool and followup question index
-                            global_index = str(task_id)+"_" +str(most_likely_tool)+"_"+str(followup_question_index)
+                    # extract all of the answers for this particular followup question
+                    followup_answers = []
+                    # id_ will be a combination of the user's id (either zooniverse login name or ip address)
+                    # and the coordinates of their marking
+                    # so even though raw_classifications doesn't record clusters, we can use ids + coordinates
+                    # to find the markings
+                    for id_ in relevant_identifiers:
+                        # extract this person's follow up answers
+                        answer = raw_classifications[global_index][subject_id][id_]
+                        # id_[1] is the user id (marking coordinates are [0] and don't matter any more)
+                        u = id_[1]
+                        followup_answers.append((u,answer))
 
-                            # extract all of the answers for this particular followup question
-                            followup_answers = []
-                            for id_ in relevant_identifiers:
-                                # extract this person's follow up answers
-                                answer = raw_classifications[global_index][subject_id][id_]
-                                # id_[1] is the user id (marking coordinates are [0] and don't matter any more)
-                                u = id_[1]
-                                followup_answers.append((u,answer))
+                    # task_aggregation can work over multiple subjects at once (which is what happens if we call
+                    # it for a simple classification task, i.e. one that is not a following task) so
+                    # task_aggregation is actually expecting a dictionary which maps from subject_id to individual
+                    # classifications. Hence the dummy_wrapper
+                    dummy_wrapper = {subject_id:followup_answers}
+                    followup_results = self.__task_aggregation__(dummy_wrapper,global_index,{})
 
-                            # task_aggregation can work over multiple subjects at once (which is what happens if we call
-                            # it for a simple classification task, i.e. one that is not a following task) so
-                            # task_aggregation is actually expecting a dictionary which maps from subject_id to individual
-                            # classifications. Hence the dummy_wrapper
-                            dummy_wrapper = {subject_id:followup_answers}
-                            followup_results = self.__task_aggregation__(dummy_wrapper,global_index,{})
+                    # extract the result and add it to the overall set of aggregations
+                    aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"][followup_question_index] = followup_results[subject_id][global_index]
 
-                            # extract the result and add it to the overall set of aggregations
-                            aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"][followup_question_index] = followup_results[subject_id][global_index]
-                    except KeyError:
-                        pass
-                        # print("cluster tool index does not match up with follow up question indices - might be an old version")
-
-
-        # return the updated set of aggregations
         return aggregations
 
     def __existence_classification__(self,task_id,shape,aggregations):
@@ -144,26 +141,6 @@ class Classification:
             if subject_id == "param":
                 continue
 
-            # gold standard pts may not match up perfectly with the given clusters -
-            # for example, we could have a gold penguin at 10,10 but the users' cluster
-            # is centered at 10.1,9.8 - same penguin though
-            # so as we go through the clusters, we need to see which ones match up more closely
-            # with the gold standard
-            # if subject_id in gold_standard_clustering[0]:
-            #     # closest cluster and distance
-            #     gold_to_cluster = {pt:(None,float("inf")) for pt in gold_standard_clustering[0][subject_id]}
-            # else:
-            #     gold_to_cluster = None
-
-
-            # clusters_per_subject.append([])
-
-            # # in either case probably an empty image
-            # if subject_id not in clustering_results:
-            #     continue
-            # if task_id not in clustering_results[subject_id]:
-            #     continue
-
             # if no one did this task for this subject
             if task_id not in aggregations[subject_id]:
                 continue
@@ -181,29 +158,6 @@ class Classification:
                 # extract the users who marked this cluster
                 cluster = aggregations[subject_id][task_id][shape+ " clusters"][local_cluster_index]
 
-                # todo - put this back when we support gold standard clustering
-                # # is this user cluster close to any gold standard pt?
-                # if subject_id in gold_standard_clustering[0]:
-                #     x,y = cluster["center"]
-                #     for (gold_x,gold_y) in gold_to_cluster:
-                #         dist = math.sqrt((x-gold_x)**2+(y-gold_y)**2)
-                #         if dist < gold_to_cluster[(gold_x,gold_y)][1]:
-                #             gold_to_cluster[(gold_x,gold_y)] = local_cluster_index,dist
-                #
-                # # now repeat for negative gold standards
-                # if subject_id in gold_standard_clustering[1]:
-                #     x,y = cluster["center"]
-                #     min_dist = float("inf")
-                #     closest= None
-                #     for x2,y2 in gold_standard_clustering[1][subject_id]:
-                #         dist = math.sqrt((x-x2)**2+(y-y2)**2)
-                #         if dist < min_dist:
-                #             min_dist = min(dist,min_dist)
-                #             closest = (x2,y2)
-                #     if min_dist == 0.:
-                #         assert (x,y) == closest
-                #         mapped_gold_standard[(subject_id,local_cluster_index)] = 0
-
                 users = cluster["users"]
 
                 ballots = []
@@ -217,36 +171,16 @@ class Classification:
 
                 existence_classification[(subject_id,local_cluster_index)] = ballots
                 # clusters_per_subject[-1].append(global_cluster_index)
-                # global_cluster_index += 1
 
-            # # note we don't care about why a cluster corresponds to a gold standard pt - that is
-            # # it could be really close to given gold standards - the point is that it is close
-            # # to at least one of them
-            # if gold_to_cluster is not None:
-            #     for (local_cluster_index,dist) in gold_to_cluster.values():
-            #         # arbitrary threshold but seems reasonable
-            #         if dist < 1:
-            #             mapped_gold_standard[(subject_id,local_cluster_index)] = 1
 
         existence_results = self.__task_aggregation__(existence_classification,task_id,{})#,mapped_gold_standard)
         assert isinstance(existence_results,dict)
 
         for subject_id,cluster_index in existence_results:
             new_results = existence_results[(subject_id,cluster_index)][task_id]
-            # new_agg = {subject_id: {task_id: {shape + " clusters": {cluster_index: {"existence": new_results}}}}}
-            # aggregations = self.__merge_results__(aggregations,new_agg)
+
             aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["existence"] = new_results
-            # if subject_id not in aggregations:
-            #     aggregations[subject_id] = {}
-            # if task_id not in aggregations[subject_id]:
-            #     aggregations[subject_id][task_id] = {}
-            # if (shape + " clusters") not in aggregations[subject_id][task_id]:
-            #     aggregations[subject_id][task_id][shape+ " clusters"] = {}
-            # # this part is probably redundant
-            # if cluster_index not in aggregations[subject_id][task_id][shape+ " clusters"]:
-            #     aggregations[subject_id][task_id][shape+ " clusters"][cluster_index] = {}
-            #
-            # aggregations[subject_id][task_id][shape+ " clusters"][cluster_index]["existence"] = existence_results[(subject_id,cluster_index)]
+
 
         return aggregations
 
@@ -254,6 +188,7 @@ class Classification:
         """
         for a given task/shape figure out the most likely tool to have created each cluster
         """
+
         for subject_id in aggregations:
             if task_id not in aggregations[subject_id]:
                 continue
@@ -264,13 +199,14 @@ class Classification:
                 if cluster_index == "all_users":
                     continue
 
-                most_likely_tool,percentage = self.__most_likely_tool__(cluster)
+                most_likely_tool,percentage,sorted_tools = self.__most_likely_tool__(cluster)
                 aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["most_likely_tool"] = most_likely_tool
                 aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["percentage"] = percentage
+                # aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["sorted_tools"] = sorted_tools
 
         return aggregations
 
-    def __aggregate__(self,raw_classifications,workflow,aggregations):
+    def __aggregate__(self,raw_classifications,workflow,aggregations,workflow_id):
         # use the first subject_id to find out which tasks we are aggregating the classifications for
         # aggregations = {}
         classification_tasks,marking_tasks,_ = workflow
