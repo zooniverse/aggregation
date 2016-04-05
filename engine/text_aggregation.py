@@ -4,18 +4,14 @@ from aggregation_api import AggregationAPI
 from classification import Classification
 import rollbar
 import requests
-import os
-import pickle
+import datetime
 import helper_functions
 import yaml
 import json
-from blob_clustering import BlobClustering
 from rectangle_clustering import RectangleClustering
 import parser
 import getopt
 import sys
-# import folger
-# import annotate
 import numpy as np
 import boto3
 import tarfile
@@ -54,8 +50,12 @@ class SubjectRetirement(Classification):
 
         self.num_retired = None
         self.non_blanks_retired = None
-
+        # to know how often we should call Panoptes to get a new token
+        # save on having to make unnecessary calls
+        self.token_date = datetime.datetime.now()
         self.to_retire = None
+
+        self.total_retired = 0
 
     def __get_blank_subjects__(self,raw_classifications):
         """
@@ -91,35 +91,57 @@ class SubjectRetirement(Classification):
 
         return completed_subjects
 
-    def __aggregate__(self,raw_classifications,workflow_id,aggregations):
-        self.to_retire = set()
+    def __aggregate__(self,raw_classifications,workflow,aggregations,workflow_id):
+        """
+        classification aggregation for annotate/folger means looking for subjects which we can retire
+        :param raw_classifications:
+        :param workflow:
+        :param aggregations:
+        :param workflow_id:
+        :return:
+        """
+        assert isinstance(workflow_id,int)
+        to_retire = set()
         # start by looking for empty subjects
         # "T0" really should always be there but we may have a set of classifications (really old ones before
         # the workflow changed) where it is missing - if "T0" isn't there, just skip
         if "T0" in raw_classifications:
-            self.to_retire.update(self.__get_blank_subjects__(raw_classifications))
+            to_retire.update(self.__get_blank_subjects__(raw_classifications))
 
         # now look to see what has been completely transcribed
         if "T3" in raw_classifications:
-            self.to_retire.update(self.__get_completed_subjects__(raw_classifications))
+            to_retire.update(self.__get_completed_subjects__(raw_classifications))
 
         # call the Panoptes API to retire these subjects
         # get an updated token
-        assert isinstance(self.project,AggregationAPI)
-        self.project.__panoptes_connect__()
+        time_delta = datetime.datetime.now()-self.token_date
+        # update every 30 minutes
+        if time_delta.seconds > (30*60):
+            self.token_date = datetime.datetime.now()
+            assert isinstance(self.project,AggregationAPI)
+            self.project.__panoptes_connect__()
+
         token = self.project.token
 
+        # print("retiring " + str(len(to_retire)) + " subjects")
+
         # need to retire the subjects one by one
-        for retired_subject in self.to_retire:
+        for retired_subject in to_retire:
+            self.total_retired += 1
             try:
                 headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+token}
                 params = {"subject_id":retired_subject}
                 r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(workflow_id)+"/retired_subjects",headers=headers,data=json.dumps(params))
-                # rollbar.report_message("results from trying to retire subjects","info",extra_data=r.text)
-
+                if self.environment != "production":
+                    print(r.status_code)
+                # return an error if we have a 404 status
+                assert r.status_code == 200
             except TypeError as e:
                 warning(e)
                 rollbar.report_exc_info()
+
+        if to_retire != set():
+            print("total retired so far " + str(self.total_retired))
 
         # print("we would have retired " + str(len(self.to_retire)))
         # print("with non-blanks " + str(len(self.to_retire)-blank_retirement))
@@ -144,7 +166,6 @@ class TranscriptionAPI(AggregationAPI):
         :param workflow_id:
         :return:
         """
-
         if raw_markings == {}:
             warning("warning - empty set of images")
             return {}
@@ -491,7 +512,7 @@ class TranscriptionAPI(AggregationAPI):
             Source='greg@zooniverse.org',
             Destination={
                 'ToAddresses': [
-                    'greg@zooniverse.org','victoria@zooniverse.org','matt@zooniverse.org','shakespearesworldteam@jiscmail.ac.uk'
+                    'greg@zooniverse.org'#,'victoria@zooniverse.org','matt@zooniverse.org','shakespearesworldteam@jiscmail.ac.uk'
                 ]#,
                 # 'CcAddresses': [
                 #     'string',

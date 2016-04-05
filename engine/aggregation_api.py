@@ -324,7 +324,7 @@ class AggregationAPI:
 
                     # we ALWAYS have to do classifications - even if we only have marking tasks, we need to do
                     # tool classification and existence classifications
-                    aggregations = self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],aggregations)
+                    aggregations = self.classification_alg.__aggregate__(raw_classifications,self.workflows[workflow_id],aggregations,workflow_id)
                 else:
                     if self.project_id == 593:
                         # Wildcam Gorongosa is different - because why not?
@@ -1199,7 +1199,7 @@ class AggregationAPI:
         while subjects_migrated != set():
             lower_bound_id,subjects_migrated = self.__migrate_with_id_limits__(select,lower_bound_id)
             all_subjects_migrated.update(subjects_migrated)
-            if self.environment in ["development","quasi"]:
+            if self.environment in ["development"]:
                 break
             print(lower_bound_id)
 
@@ -1317,7 +1317,6 @@ class AggregationAPI:
 
                 try:
                     response = opener.open(request)
-                    print(response)
                 except urllib2.HTTPError as e:
                     warning('In get_bearer_token, stage 3:')
                     warning('The server couldn\'t fulfill the request.')
@@ -1336,6 +1335,7 @@ class AggregationAPI:
                 json_data = json.loads(body)
                 bearer_token = json_data["access_token"]
 
+                print(bearer_token)
                 self.token = bearer_token
                 break
             except (urllib2.HTTPError,urllib2.URLError) as e:
