@@ -212,7 +212,7 @@ class TranscriptionAPI(AggregationAPI):
         :param traceback:
         :return:
         """
-        if exc_type is not None:
+        if (exc_type is not None) and (self.environment == "production"):
             panoptes_file = open("/app/config/aggregation.yml","rb")
             api_details = yaml.load(panoptes_file)
 
@@ -552,5 +552,6 @@ if __name__ == "__main__":
 
         processed_subjects = project.__aggregate__()
         print("about to send off email")
-        project.__summarize__()
+        if environment == "production":
+            project.__summarize__()
 
