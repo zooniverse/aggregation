@@ -160,25 +160,25 @@ class TranscriptionAPI(AggregationAPI):
         # just to stop me from using transcription on other projects
         assert int(project_id) in [245,376]
 
-    def __cluster__(self,used_shapes,raw_markings,image_dimensions):
+    def __cluster__(self,used_shapes,raw_markings,image_dimensions,aggregations):
         """
-        for when I want to see raw classifications in addition to markings
-        :param workflow_id:
-        :return:
+        :param aggregations: we're working on a subject by subject basis - aggregations is from previous subjects
         """
+
         if raw_markings == {}:
             warning("warning - empty set of images")
             return {}
 
         # start by clustering text
         print("clustering text")
-        cluster_aggregation = self.text_algorithm.__aggregate__(raw_markings,image_dimensions)
+        cluster_aggregations = self.text_algorithm.__aggregate__(raw_markings,image_dimensions)
+        aggregations = self.__merge_aggregations__(aggregations,cluster_aggregations)
         print("clustering images")
-        image_aggregation = self.image_algorithm.__aggregate__(raw_markings,image_dimensions)
+        image_aggregations = self.image_algorithm.__aggregate__(raw_markings,image_dimensions)
 
-        cluster_aggregation = self.__merge_aggregations__(cluster_aggregation,image_aggregation)
+        aggregations = self.__merge_aggregations__(aggregations,image_aggregations)
 
-        return cluster_aggregation
+        return aggregations
 
     def __setup__(self):
         """
