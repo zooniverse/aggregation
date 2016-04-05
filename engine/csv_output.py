@@ -40,7 +40,7 @@ class CsvOut:
         self.file_names = {}
         self.workflow_directories = {}
 
-    def __add_detailed_row__(self,workflow_id,task_id,subject_id,aggregations,followup_id=None,tool_id=None):
+    def __detailed_row__(self,workflow_id,task_id,subject_id,aggregations,followup_id=None,tool_id=None):
         """
         given the results for a given workflow/task and subject_id (and possibly shape and follow up id for marking)
         give a detailed results with the probabilities for each class
@@ -77,7 +77,7 @@ class CsvOut:
 
             csv_file.write(","+str(num_users)+"\n")
 
-    def __add_marking_followup_rows__(self,workflow_id,task_id,subject_id,aggregations):
+    def __marking_followup_rows__(self,workflow_id,task_id,subject_id,aggregations):
         """
         for a given task id /subject id, handle all of the marking/cluster related outputs for follow up questions
         I had thought about this function returning the rows to add to the csv (inside of the writing happening inside
@@ -107,7 +107,7 @@ class CsvOut:
                 try:
                     tool_id = cluster["most_likely_tool"]
                 except KeyError:
-                    print("missing most likely tool")
+                    print("skipping cluster")
                     continue
                 # and the follow up questions
                 # first check if there are any follow questions
@@ -123,11 +123,15 @@ class CsvOut:
                         continue
 
                     # extract the responses to this specific followup question
-                    followup_aggregations = aggregations[shape + " clusters"][cluster_index]["followup_question"][str(followup_index)]
+                    try:
+                        followup_aggregations = aggregations[shape + " clusters"][cluster_index]["followup_question"][str(followup_index)]
+                    except KeyError:
+                        print(aggregations[shape + " clusters"][cluster_index])
+                        raise
 
                     # use {task_id:followup_aggregations} to get the follow up aggregations in the format that
                     # add_detailed_row is expecting (since they are used to simple classifications)
-                    self.__add_detailed_row__(workflow_id,task_id,subject_id,{task_id:followup_aggregations},followup_index,tool_id)
+                    self.__detailed_row__(workflow_id,task_id,subject_id,{task_id:followup_aggregations},followup_index,tool_id)
                     # and repeat with summary row
                     self.__classification_summary_row__(workflow_id,task_id,subject_id,{task_id:followup_aggregations},followup_index,tool_id)
 
@@ -374,6 +378,8 @@ class CsvOut:
         for cluster_index,cluster in aggregations[shape + " clusters"].items():
             if cluster_index == "all_users":
                 continue
+            # convert to int - not really sure why but get stored as unicode
+            cluster_index = int(cluster_index)
 
             # build up the row bit by bit to have the following structure
             # "subject_id,most_likely_tool,x,y,p(most_likely_tool),p(true_positive),num_users"
@@ -383,20 +389,23 @@ class CsvOut:
 
             # extract the most likely tool for this particular marking and convert it to
             # a string label
-            try:
-                most_likely_tool = cluster["most_likely_tool"]
-            except KeyError:
-                print(cluster.keys())
-                continue
+            # not completely sure why some clusters are missing this value but does seem to happen
 
+            most_likely_tool = cluster["most_likely_tool"]
+            # again - not sure why this percentage would be 0, but does seem to happen
             tool_probability = cluster["percentage"]
+            assert tool_probability > 0
+
+            # convert the tool into the string label
             tool_str = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool)]["marking tool"]
             row += helper_functions.csv_string(tool_str) + ","
 
             # get the central coordinates next
             for center_param in cluster["center"]:
                 if isinstance(center_param,list) or isinstance(center_param,tuple):
-                    row += "\"" + str(tuple(center_param)) + "\","
+                    # if we have a list, split it up into subpieces
+                    for param in center_param:
+                        row += str(param) + ","
                 else:
                     row += str(center_param) + ","
 
@@ -516,8 +525,8 @@ class CsvOut:
                 fname = helper_functions.csv_string(fname)
 
                 # create the files - both detailed and summary
-                self.file_names[(task_id,shape,"detailed")] = fname + "_" + shape + ".csv"
-                self.file_names[(task_id,shape,"summary")] = fname + "_" + shape + "_summary.csv"
+                self.file_names[(task_id,shape,"detailed")] = output_directory+"/"+fname + "_" + shape + ".csv"
+                self.file_names[(task_id,shape,"summary")] = output_directory+"/"+fname + "_" + shape + "_summary.csv"
 
                 # polygons - since they have an arbitary number of points are handled slightly differently
                 if shape == "polygon":
@@ -553,7 +562,7 @@ class CsvOut:
                 csv_file.write("x1,y1,r1,r2,theta,")
 
             # how much agreement is there on the most likely tool and how likely this cluster is to be something real
-            csv_file.write("p(most_likely_tool),p(true_positive),num_users")
+            csv_file.write("p(most_likely_tool),p(true_positive),num_users\n")
 
     def __marking_summary_header__(self,workflow_id,task_id,shape):
         """
@@ -676,12 +685,12 @@ class CsvOut:
             if task_id in marking_tasks:
                 # need the instructions for printing out labels
                 followup_questions = classification_tasks[task_id]
-                self.__add_marking_followup_rows__(workflow_id,task_id,subject_id,aggregations[task_id])
+                self.__marking_followup_rows__(workflow_id,task_id,subject_id,aggregations[task_id])
             else:
                 # we have a simple classification
                 # start by output the summary
                 self.__classification_summary_row__(workflow_id,task_id,subject_id,aggregations)
-                self.__add_detailed_row__(workflow_id,task_id,subject_id,aggregations)
+                self.__detailed_row__(workflow_id,task_id,subject_id,aggregations)
 
 
         for task_id,possible_shapes in marking_tasks.items():
@@ -691,7 +700,7 @@ class CsvOut:
                     # polygons are different since they have an arbitrary number of points
                     if shape == "polygon":
                         self.__polygon_row__(workflow_id,task_id,subject_id,aggregations[task_id])
-                        self.__polygon_summary_output__(workflow_id,task_id,subject_id,aggregations[task_id])
+                        # self.__polygon_summary_output__(workflow_id,task_id,subject_id,aggregations[task_id])
                     else:
                         self.__detailed_marking_row__(workflow_id,task_id,subject_id,aggregations[task_id],shape)
                         self.__marking_summary_row__(workflow_id,task_id,subject_id,aggregations,shape)
@@ -813,26 +822,6 @@ class CsvOut:
         maximum_species = followup_question["answers"][candidates[-1]]["label"]
 
         return "," + str(minimum_species) + "," + str(top_candidate) + "," + str(percentage) + "," + str(maximum_species)
-
-    # def __get_species_in_subject(self,aggregations):
-    #     """
-    #     use Ali's and Margaret's code to determine how many species are a given subject
-    #     and return those X top species
-    #     :return:
-    #     """
-    #     print(aggregations)
-    #     num_species = int(np.median(aggregations["num species"]))
-    #     assert(num_species >= 1)
-    #     # sort the species by the number of votes
-    #     species_by_vote = []
-    #
-    #     for species_id in aggregations:
-    #         if species_id not in ["num users","num species",""]:
-    #             species_by_vote.append((species_id,aggregations[species_id]["num votes"]))
-    #     sorted_species = sorted(species_by_vote,key = lambda x:x[1],reverse=True)
-    #
-    #     return sorted_species[:num_species]
-
 
     def __survey_row__(self,instructions,aggregations):
         """
