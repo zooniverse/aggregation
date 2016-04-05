@@ -282,6 +282,7 @@ class AggregationAPI:
         # have not be retired. If we want subjects that have been specifically retired, we'll make a separate call
         # for that
         for workflow_id,version in self.versions.items():
+
             migrated_subjects = self.__migrate__(workflow_id,version)
 
             aggregated_subjects.update(migrated_subjects)
@@ -316,10 +317,11 @@ class AggregationAPI:
             # to give area as percentage of the total image area
             # work subject by subject
             for ii,(raw_classifications,raw_markings,raw_surveys,image_dimensions) in enumerate(self.__sort_annotations__(workflow_id,subject_set)):
+
                 if survey_tasks == {}:
                     # do we have any marking tasks?
                     if marking_tasks != {}:
-                        aggregations = self.__cluster__(used_shapes,raw_markings,image_dimensions)
+                        aggregations = self.__cluster__(used_shapes,raw_markings,image_dimensions,aggregations)
                         # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
 
                     # we ALWAYS have to do classifications - even if we only have marking tasks, we need to do
@@ -512,11 +514,11 @@ class AggregationAPI:
         else:
             return None
 
-    def __cluster__(self,used_shapes,raw_markings,image_dimensions):
+    def __cluster__(self,used_shapes,raw_markings,image_dimensions,aggregations_so_far):
         """
         Run the clustering algorithm(s).
-
-        Run the clustering algorithm(s) on each shape used. Clustering is divided by via shapes - NOT tools.
+        Since we are dividing up the aggregation into smaller bits - so that we don't overwhelm the DB
+        we may have aggregations from previous iterations - "fold" them in
 
         Parameters
         ----------
@@ -531,7 +533,7 @@ class AggregationAPI:
 
         # will store the aggregations for all clustering
         # go through the shapes actually used by this project - one at a time
-        cluster_aggregation = {}
+        # cluster_aggregation = {}
         for shape in used_shapes:
             # were any additional params provided?
             if shape in self.additional_clustering_args:
@@ -542,14 +544,13 @@ class AggregationAPI:
             shape_aggregation = algorithm.__aggregate__(raw_markings,image_dimensions)
 
             # if this is not the first shape we've aggregated - merge in with previous results
-            if cluster_aggregation == {}:
-                cluster_aggregation = shape_aggregation
+            if aggregations_so_far == {}:
+                aggregations_so_far = shape_aggregation
             else:
-                assert isinstance(cluster_aggregation,dict)
-                cluster_aggregation = self.__merge_aggregations__(cluster_aggregation,shape_aggregation)
-                assert isinstance(cluster_aggregation,dict)
+                assert isinstance(aggregations_so_far,dict)
+                aggregations_so_far = self.__merge_aggregations__(aggregations_so_far,shape_aggregation)
 
-        return cluster_aggregation
+        return aggregations_so_far
 
     # def __count_check__(self,workflow_id,subject_id):
     #     """
@@ -1698,6 +1699,8 @@ class AggregationAPI:
 
     def __sort_annotations__(self,workflow_id,subject_set):
         """
+        return the annotations for a given subject set
+        each iteration yields a set for a SINGLE different annotation
         :param workflow_id:
         :param subject_set:
         :return:
@@ -1875,7 +1878,7 @@ class AggregationAPI:
             postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
         self.postgres_writeable_session.commit()
 
-        print("done upserting")
+        # print("done upserting")
 
     def __yield_aggregations__(self,workflow_id,subject_set=None):
         """
