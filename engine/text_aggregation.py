@@ -16,7 +16,7 @@ import numpy as np
 import boto3
 import tarfile
 from helper_functions import warning
-
+import os
 __author__ = 'ggdhines'
 
 
@@ -448,13 +448,21 @@ class TranscriptionAPI(AggregationAPI):
         s3 = boto3.resource('s3')
 
         aws_tar = self.__get_aws_tar_name__()
-        print("uploading")
-        print(aws_tar)
 
         key = "panoptes-uploads.zooniverse.org/production/project_aggregations_export/"+aws_tar
-        print(key)
 
-        print(s3.Object("zooniverse-static",key).put(Body=open("/tmp/"+aws_tar,"rb")))
+        if not os.path.exists("/tmp/"+aws_tar):
+            print("warning the tar file does not exist - creating an temporary one.")
+            panoptes_file = open("/app/config/aggregation.yml","rb")
+            api_details = yaml.load(panoptes_file)
+
+            rollbar_token = api_details[self.environment]["rollbar"]
+            rollbar.init(rollbar_token,self.environment)
+            rollbar.report_message('the tar file does not exist', 'warning')
+            with open("/tmp/"+aws_tar,"w") as f:
+                f.write("")
+        results = s3.Object("zooniverse-static",key).put(Body=open("/tmp/"+aws_tar,"rb"))
+        print(results)
 
     def __get_aws_tar_name__(self):
         media = self.__panoptes_call__("projects/"+str(self.project_id)+"/aggregations_export?admin=true")["media"]
@@ -479,7 +487,7 @@ class TranscriptionAPI(AggregationAPI):
 
     def __summarize__(self,tar_path=None):
         # start by updating the json output
-        self.__restructure_json__()
+        # self.__restructure_json__()
 
         # and then upload the files to s3
         self.__s3_upload__()
