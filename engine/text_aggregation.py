@@ -17,29 +17,9 @@ import boto3
 import tarfile
 from helper_functions import warning
 import os
+from boto.s3.key import Key
+from boto.s3.connection import S3Connection
 __author__ = 'ggdhines'
-
-
-def get_signed_url(time, bucket, obj):
-    """
-    from https://gist.github.com/richarvey/637cd595362760858496
-    :param time:
-    :param bucket:
-    :param obj:
-    :return:
-    """
-    s3 = boto3.resource('s3')
-
-    url = s3.generate_url(
-        time,
-        'GET',
-        bucket,
-        obj,
-        response_headers={
-          'response-content-type': 'application/octet-stream'
-        }
-    )
-    return url
 
 
 class SubjectRetirement(Classification):
@@ -444,12 +424,49 @@ class TranscriptionAPI(AggregationAPI):
         with tarfile.open("/tmp/"+aws_tar,mode="w") as t:
             t.add("/tmp/"+str(self.project_id)+".json")
 
+    def __s3_connect__(self):
+        """
+        connect to s3 - currently return both S3Connection and client because they seem
+        to do offer different functionality - uploading files vs. generating signed urls
+        seems pretty silly that this is the case - so feel free to fix it
+        :return:
+        """
+        # Adam has created keys which always work - had trouble with sending out emails otherwise
+        param_file = open("/app/config/aws.yml","rb")
+        param_details = yaml.load(param_file)
+
+        id_ = param_details["aws_access_key_id"]
+        key = param_details["aws_secret_access_key"]
+
+        conn = S3Connection(id_,key)
+
+        # s3 = boto3.resource("s3",aws_access_key_id=id_,aws_secret_access_key=key)
+
+        client = boto3.client(
+            's3',
+            aws_access_key_id=id_,
+            aws_secret_access_key=key,
+        )
+
+        return conn,client
+
     def __s3_upload__(self):
-        s3 = boto3.resource('s3')
+        """
+        upload the file to s3
+        see http://boto.cloudhackers.com/en/latest/s3_tut.html
+        :return:
+        """
+        # s3 = boto3.resource('s3')
+        s3,_ = self.__s3_connect__()
 
         aws_tar = self.__get_aws_tar_name__()
 
-        key = "panoptes-uploads.zooniverse.org/production/project_aggregations_export/"+aws_tar
+        b = s3.get_bucket('zooniverse-static')
+
+        key_str = "panoptes-uploads.zooniverse.org/production/project_aggregations_export/"+aws_tar
+
+        s3_key = Key(b)
+        s3_key.key = key_str
 
         if not os.path.exists("/tmp/"+aws_tar):
             print("warning the tar file does not exist - creating an temporary one.")
@@ -461,8 +478,8 @@ class TranscriptionAPI(AggregationAPI):
             rollbar.report_message('the tar file does not exist', 'warning')
             with open("/tmp/"+aws_tar,"w") as f:
                 f.write("")
-        results = s3.Object("zooniverse-static",key).put(Body=open("/tmp/"+aws_tar,"rb"))
-        print(results)
+
+        s3_key.set_contents_from_filename("/tmp/"+aws_tar)
 
     def __get_aws_tar_name__(self):
         media = self.__panoptes_call__("projects/"+str(self.project_id)+"/aggregations_export?admin=true")["media"]
@@ -476,12 +493,15 @@ class TranscriptionAPI(AggregationAPI):
         """
         from http://stackoverflow.com/questions/33549254/how-to-generate-url-from-boto3-in-amazon-web-services
         """
-        s3Client = boto3.client('s3')
+        # s3Client = boto3.client('s3')
+        _,s3 = self.__s3_connect__()
+
 
         aws_tar = self.__get_aws_tar_name__()
         key = "panoptes-uploads.zooniverse.org/production/project_aggregations_export/"+aws_tar
 
-        url = s3Client.generate_presigned_url('get_object', Params = {'Bucket': 'zooniverse-static', 'Key': key}, ExpiresIn = 604800)
+
+        url = s3.generate_presigned_url('get_object', Params = {'Bucket': 'zooniverse-static', 'Key': key}, ExpiresIn = 604800)
 
         return url
 
@@ -581,6 +601,6 @@ if __name__ == "__main__":
 
         processed_subjects = project.__aggregate__()
         print("about to send off email")
-        if environment == "production":
+        if True:#environment == "production":
             project.__summarize__()
 
