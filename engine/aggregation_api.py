@@ -1416,17 +1416,14 @@ class AggregationAPI:
         print("connecting to postgres db: " + database_details["postgres_host"])
 
         # build up the connection details
-        details = ""
-        details += "dbname = '" +database_details["postgres_db"] +"'"
-        details += " user = '" + database_details["postgres_username"] + "'"
-        details += " password = '"+database_details["postgres_password"]+"' "
-        details += " host ='" + database_details["postgres_host"] + "'"
-
-        # host = database_details["host"]
+        db = database_details["postgres_db"]
+        user = database_details["postgres_username"]
+        password = database_details["postgres_password"]
+        host = database_details["postgres_host"]
 
         for i in range(20):
             try:
-                self.postgres_session = psycopg2.connect(details)
+                self.postgres_session = psycopg2.connect(database=db, user=user, password= password, host= host, port='5432',sslmode='require')
                 self.postgres_session.autocommit = True
                 break
             except psycopg2.OperationalError as e:
