@@ -15,7 +15,8 @@ from skimage.filters import threshold_otsu, rank
 from skimage.morphology import disk
 from sklearn import mixture
 import sqlite3 as lite
-
+import random
+import numpy as np
 con = lite.connect('/home/ggdhines/to_upload3/active.db')
 cur = con.cursor()
 
@@ -130,7 +131,119 @@ def __identity__(img,line):
 
     return mask
 
-def __polynomial_correct__(img,line,horizontal):
+def __min_and_max__(line):
+    min_dict = {}
+    max_dict = {}
+    all_values = {}
+
+    for y,x in line:
+        try:
+            min_dict[x] = min(min_dict[x],y)
+        except KeyError:
+            min_dict[x] = y
+
+        try:
+            max_dict[x] = max(max_dict[x],y)
+        except KeyError:
+            max_dict[x] = y
+
+        try:
+            all_values[x].append(y)
+        except KeyError:
+            all_values[x] = [y]
+
+    # # assert sorted(min_dict.keys()) == sorted(max_dict.keys())
+    x_vals = sorted(min_dict.keys())
+    lower_bound = [min_dict[x] for x in x_vals]
+    upper_bound = [max_dict[x] for x in x_vals]
+
+    plt.plot(x_vals,upper_bound)
+    plt.plot(x_vals,lower_bound)
+
+    dist = {x:max_dict[x]-min_dict[x] for x in x_vals}
+    median_dist = np.mean(dist.values())
+    print(median_dist)
+    print("===---")
+    fitted_x = []
+    fitted_y = []
+    for x in x_vals:
+
+        if dist[x] <= median_dist:
+            fitted_x.extend([x,x])
+            fitted_y.extend([max_dict[x],min_dict[x]])
+            # print(x,np.mean(all_values[x]))
+            # plt.plot(x,np.mean(all_values[x]),"o")
+
+    # plt.show()
+
+    degrees = 1
+    coeff = list(reversed(np.polyfit(fitted_x,fitted_y,degrees)))
+
+    y_bar = [sum([coeff[p]*x_**p for p in range(degrees+1)]) for x_ in fitted_x]
+    std = math.sqrt(np.mean([(y1-y2)**2 for (y1,y2) in zip(fitted_y,y_bar)]))*1
+
+    def y_bar(x_,upper):
+        return int(round(sum([coeff[p]*x_**p for p in range(degrees+1)]) + upper*std))
+
+    upper_bound = [y_bar(x,1) for x in fitted_x]
+    plt.plot(fitted_x,upper_bound)
+
+    lower_bound = [y_bar(x,-1) for x in fitted_x]
+    plt.plot(fitted_x,lower_bound)
+
+    plt.show()
+
+    domain = sorted(all_values.keys())
+    y_vals = [y_bar(x,-1) for x in domain]
+    y_vals.extend([y_bar(x,1) for x in list(reversed(domain))])
+    x_vals = list(domain)
+    x_vals.extend(list(reversed(domain)))
+
+    #
+    # for x in x_vals:
+    #     upper_diff = max_dict[x] -y_bar(x)
+    #     lower_diff = y_bar(x)-min_dict[x]
+    #     if upper_diff < lower_diff:
+    #         min_dict[x] = y_bar(x) - upper_diff
+    #     else:
+    #         max_dict[x] = y_bar(x) + lower_diff
+    #
+    # mid_points = [(min_dict[x]+max_dict[x])/2. for x in x_vals]
+    # plt.plot(x_vals,mid_points)
+    #
+    # # y,x = zip(*line)
+    # #
+    # # plt.plot(x,y_bar)
+
+
+
+    # for i in range(300):
+    #     x1,x2 = random.sample(x_vals,2)
+    #
+    #     # print(max_dict[x2]-min_dict[x2],max_dict[x1]-min_dict[x1])
+    #     diff1 = max_dict[x1]-min_dict[x1]
+    #     diff2 = max_dict[x2]-min_dict[x2]
+    #
+    #     avg1 = (max_dict[x1]+min_dict[x1])/2.
+    #     max_dict[x1] = max(max_dict[x1],avg1+diff2/2.)
+    #     min_dict[x1] = min(min_dict[x1],avg1-diff2/2.)
+    #
+    #     avg2 = (max_dict[x2]+min_dict[x2])/2.
+    #     max_dict[x2] = max(max_dict[x2],avg2+diff1/2.)
+    #     min_dict[x2] = min(min_dict[x2],avg2-diff1/2.)
+
+
+
+    # mid_points = [(min_dict[x]+max_dict[x])/2. for x in x_vals]
+    # plt.plot(x_vals,mid_points)
+    plt.show()
+
+
+
+def __polynomial_correct__(img,line,horizontal,recurse=0):
+    __min_and_max__(line)
+
+
     if horizontal:
         x,y = zip(*line)
         domain = sorted(set(line[:,0]))
@@ -157,7 +270,10 @@ def __polynomial_correct__(img,line,horizontal):
     # degrees = 2
     coeff = list(reversed(np.polyfit(x,y,degrees)))
     y_bar = [sum([coeff[p]*x_**p for p in range(degrees+1)]) for x_ in x]
-    std = math.sqrt(np.mean([(y1-y2)**2 for (y1,y2) in zip(y,y_bar)]))
+    if recurse == 0:
+        std = math.sqrt(np.mean([(y1-y2)**2 for (y1,y2) in zip(y,y_bar)]))*1
+    else:
+        std = math.sqrt(np.mean([(y1-y2)**2 for (y1,y2) in zip(y,y_bar)]))*1.4
 
     def y_bar(x_,upper):
         return int(sum([coeff[p]*x_**p for p in range(degrees+1)]) + upper*std)
@@ -167,6 +283,9 @@ def __polynomial_correct__(img,line,horizontal):
     y_vals.extend([y_bar(x,1) for x in list(reversed(domain))])
     x_vals = list(domain)
     x_vals.extend(list(reversed(domain)))
+
+    ymax = np.max(y_vals) + 50
+    ymin = np.min(y_vals) - 50
 
     if horizontal:
         pts = np.asarray(zip(x_vals,y_vals))
@@ -183,13 +302,41 @@ def __polynomial_correct__(img,line,horizontal):
     # plt.imshow(mask3)
     # plt.show()
 
-    if horizontal:
-        x,y = zip(*line)
-    else:
-        y,x = zip(*line)
-    plt.plot(x,y)
-    plt.plot(x_vals,y_vals)
-    plt.show()
+    # if horizontal:
+    #     x,y = zip(*line)
+    # else:
+    #     y,x = zip(*line)
+    # plt.plot(x,y)
+    # # plt.plot(x_vals,y_vals)
+    # plt.show()
+
+    if recurse == 4:
+        #
+        pass
+        plt.plot(line[:,1],line[:,0])
+
+
+    _,contour, hier = cv2.findContours(mask3.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+    for cnt in contour:
+        x,y,w,h = cv2.boundingRect(cnt)
+        perimeter = cv2.arcLength(cnt,True)
+        if min(h,w) > 1 and (perimeter > 500):
+            s = cnt.shape
+            f = np.reshape(cnt,(s[0],s[2]))
+            # plt.plot(f[:,1],f[:,0])
+            # plt.xlim((0,mask2.shape[1]))
+            # plt.ylim((mask2.shape[0],0))
+            # plt.show()
+
+    # plt.ylim((ymin,ymax))
+    # plt.xlim((mask2.shape[0],0))
+
+
+
+    # if recurse > 0:
+    #     __polynomial_correct__(img,f,horizontal,recurse-1)
+    # else:
+    #     plt.show()
 
     return mask3
 
@@ -421,16 +568,23 @@ def __mask_lines__(gray,pca_image):
     horizontal_lines = paper_quad.__extract_grids__(gray,True)
 
     mask = np.zeros(gray.shape,np.uint8)
-    for l in horizontal_lines:
-        #     corrected_l = __identity__(gray,l)
-        corrected_l = __polynomial_correct__(gray,l,True)
-        # corrected_l = __correct__(gray,l,True)
-        mask = np.max([mask,corrected_l],axis=0)
+
+
+    # assert False
+
+    # for l in horizontal_lines:
+    #     #     corrected_l = __identity__(gray,l)
+    #     corrected_l = __polynomial_correct__(gray,l,True)
+    #     # corrected_l = __correct__(gray,l,True)
+    #     mask = np.max([mask,corrected_l],axis=0)
 
 
     # mask = np.zeros(gray.shape,np.uint8)
     # cv2.imwrite("/home/ggdhines/testing.jpg",mask)
     vertical_lines = paper_quad.__extract_grids__(gray,False)
+    # for l in vertical_lines:
+    #     plt.plot(l[:,0],l[:,1])
+    # plt.show()
     for l in vertical_lines:
         # corrected_l = __identity__(gray,l)
         corrected_l = __polynomial_correct__(gray,l,False)
