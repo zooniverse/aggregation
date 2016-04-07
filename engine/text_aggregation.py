@@ -33,7 +33,7 @@ class SubjectRetirement(Classification):
         # to know how often we should call Panoptes to get a new token
         # save on having to make unnecessary calls
         self.token_date = datetime.datetime.now()
-        self.to_retire = None
+        self.to_retire = set()
 
         self.total_retired = 0
 
@@ -108,6 +108,7 @@ class SubjectRetirement(Classification):
         # need to retire the subjects one by one
         for retired_subject in to_retire:
             self.total_retired += 1
+            self.to_retire.add(retired_subject)
             try:
                 headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+token}
                 params = {"subject_id":retired_subject}
