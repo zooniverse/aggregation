@@ -70,7 +70,7 @@ def __lower_bounds__(line):
 
     return x_ret,y_ret
 
-def __median_kernel__(img,line,horizontal):
+def __median_kernel__(img,line,horizontal,step):
     if horizontal:
         x,y = __upper_bounds__(line)
         x2,y2 = __lower_bounds__(line)
@@ -83,20 +83,26 @@ def __median_kernel__(img,line,horizontal):
     x2 = list(reversed(x2))
     y2 = list(reversed(y2))
 
+    # plt.plot(line)
+    # plt.show()
 
     x_pts = x
     x_pts.extend(x2)
 
     y_pts = []
-    step = 150
+
     for y_index in range(len(y)):
         m = np.median(y[max(y_index-step,0):y_index+step])
+        # print(y[max(y_index-step,0):y_index+step])
+
+        # m = min(y[max(y_index-step,0):y_index+step])
         assert not math.isnan(m)
 
         y_pts.append(int(round(m)))
 
     for y_index in range(len(y2)):
         m = np.median(y2[max(y_index-step,0):y_index+step])
+        # m = np.max(y2[max(y_index-step,0):y_index+step])
         assert not math.isnan(m)
 
         y_pts.append(int(round(m)))
@@ -128,9 +134,13 @@ def __polynomial_correct__(img,line,horizontal):
     if horizontal:
         x,y = zip(*line)
         domain = sorted(set(line[:,0]))
+
+
     else:
         y,x = zip(*line)
         domain = sorted(set(line[:,1]))
+
+
 
     init_mask = np.zeros(img.shape[:2],np.uint8)
     cv2.drawContours(init_mask,[line],0,255,-1)
@@ -140,11 +150,13 @@ def __polynomial_correct__(img,line,horizontal):
     mask2 = np.zeros(img.shape[:2],np.uint8)
 
     degrees = 2
-    coeff = list(reversed(np.polyfit(x,y,degrees)))
-    y_bar = [sum([coeff[p]*x_**p for p in range(degrees+1)]) for x_ in x]
+    # coeff = list(reversed(np.polyfit(x,y,degrees)))
+
+
 
     # degrees = 2
     coeff = list(reversed(np.polyfit(x,y,degrees)))
+    y_bar = [sum([coeff[p]*x_**p for p in range(degrees+1)]) for x_ in x]
     std = math.sqrt(np.mean([(y1-y2)**2 for (y1,y2) in zip(y,y_bar)]))
 
     def y_bar(x_,upper):
@@ -171,10 +183,13 @@ def __polynomial_correct__(img,line,horizontal):
     # plt.imshow(mask3)
     # plt.show()
 
-    # x,y = zip(*line)
-    # plt.plot(x,y)
-    # plt.plot(x_vals,y_vals)
-    # plt.show()
+    if horizontal:
+        x,y = zip(*line)
+    else:
+        y,x = zip(*line)
+    plt.plot(x,y)
+    plt.plot(x_vals,y_vals)
+    plt.show()
 
     return mask3
 
@@ -183,25 +198,82 @@ def __correct__(img,line,horizontal,background=0,foreground=255):
     mask = np.zeros(img.shape[:2],np.uint8)
     cv2.drawContours(mask,[line],0,255,-1)
 
+    for step in [1000,500,250]:
+        mask2 = __median_kernel__(img,line,horizontal,500)
 
-    mask2 = __median_kernel__(img,line,horizontal)
+        # plt.imshow(mask)
+        # plt.show(0)
 
-    # plt.imshow(mask)
-    # plt.show(0)
+        overlap = np.min([mask,mask2],axis=0)
 
-    overlap = np.min([mask,mask2],axis=0)
-
-    # plt.imshow(overlap)
-    # plt.show(0)
+        plt.imshow(overlap)
+        plt.show()
 
     return overlap
+
+def __db__(img):
+    shape = img.shape
+    x,y = np.where(img==0)
+    X = np.asarray(zip(x,y))
+    db = DBSCAN(eps=1, min_samples=2).fit(X)
+
+    unique_labels = set(db.labels_)
+    colors = plt.cm.Spectral(np.linspace(0, 1, len(unique_labels)))
+
+    x_values = []
+
+    for k, col in zip(unique_labels, colors):
+        if k == -1:
+            continue
+
+        class_member_mask = (db.labels_ == k)
+
+        xy = X[class_member_mask]
+        xvalue_range= max(xy[:,1])-min(xy[:,1])
+        yvalue_range= max(xy[:,0])-min(xy[:,0])
+        x_values.append(xvalue_range)
+
+        if ((xvalue_range/float(yvalue_range)) <= 5 ) and ((yvalue_range/float(xvalue_range)) <= 5 ):
+            plt.plot(xy[:, 1], -xy[:, 0], 'o', markerfacecolor=col,markeredgecolor='k', markersize=3)
+
+    print(x_values)
+    t = np.median([x for x in x_values if x > 0])
+    print(t)
+    plt.show()
+
+
+    for k, col in zip(unique_labels, colors):
+        if k == -1:
+            continue
+
+        class_member_mask = (db.labels_ == k)
+
+        xy = X[class_member_mask]
+        xvalue_range= max(xy[:,1])-min(xy[:,1])
+        if xvalue_range == 0:
+            continue
+
+        num_in_bins,_ = np.histogram(xy[:,1],bins=xvalue_range)
+        bin_diff = [num_in_bins[i+1]-num_in_bins[i] for i in range(num_in_bins.shape[0]-1)]
+        if bin_diff == []:
+            continue
+        if xvalue_range > 2*t:
+
+            print(xvalue_range)
+            # print(num_in_bins)
+            # print(max(bin_diff))
+            plt.plot(xy[:, 1], -xy[:, 0], 'o', markerfacecolor=col,markeredgecolor='k', markersize=3)
+            plt.show()
+
+    # plt.show()
+
 
 def __pca__(img):
     pca = PCA(n_components=1)
     s = img.shape
     flatten_table = np.reshape(img,(s[0]*s[1],3))
 
-    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+    # gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 
     X_r = pca.fit_transform(flatten_table)
     # background = max(X_r)[0]
@@ -212,21 +284,55 @@ def __pca__(img):
 
     res = np.uint8(cv2.normalize(pca_img,pca_img,0,255,cv2.NORM_MINMAX))
 
-    # plt.imshow(res)
+    # pixels = np.reshape(res,(res.shape[0]*res.shape[1]))
+    # plt.hist(pixels,20)
     # plt.show()
 
-    ink_pixels = np.where(res>90)
-    template = np.zeros(img.shape[:2],np.uint8)
-    # plt.plot(ink_pixels[1],-ink_pixels[0],".")
+    # gaussian_threshold = cv2.adaptiveThreshold(res,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,101,2)
+    # plt.imshow(gaussian_threshold,cmap="gray")
     # plt.show()
 
-    template[ink_pixels[0],ink_pixels[1]] = gray[ink_pixels[0],ink_pixels[1]]
+
+    ret2,th2 = cv2.threshold(res,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    if np.mean(X_r) < 120:
+        th2 = 255 - th2
+
+    return th2
+    # plt.imshow(th2,cmap="gray")
+    # plt.show()
+    #
+    # x,y = np.where(res>85)
+    # print(type(res))
+    # # res[:,:] = 255
+    # print(res)
+    # res = 255 - res
+    #
+    # template = np.zeros(img.shape[:2],np.uint8)
+    # print(template)
+    # print(template[x,y])
+    # template[x,y] = 255
+    # print(template)
+    # plt.imshow(res,cmap="gray")
+    # plt.show()
+    #
+    # template = 255 - template
+    #
+    # plt.imshow(template,cmap="gray")
+    # plt.show()
+    # return res
+    #
+    # ink_pixels = np.where(res>90)
+    # template = np.zeros(img.shape[:2],np.uint8)
+    # # plt.plot(ink_pixels[1],-ink_pixels[0],".")
+    # # plt.show()
+    #
+    # template[ink_pixels[0],ink_pixels[1]] = gray[ink_pixels[0],ink_pixels[1]]
     # plt.imshow(template)
     # plt.show()
 
     # assert False
-    template = 255 - template
-    return template
+    # template = 255 - template
+    # return template
 
 def __dbscan_threshold__(img):
     ink_pixels = np.where(img>0)
@@ -305,39 +411,47 @@ def __dbscan_threshold__(img):
 #     return pca_image
 
 
-def __mask_lines__(gray):
+def __mask_lines__(gray,pca_image):
     # img = cv2.imread('/home/ggdhines/region.jpg')
     # gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+
+    # plt.imshow(gray)
+    # plt.show()
 
     horizontal_lines = paper_quad.__extract_grids__(gray,True)
 
     mask = np.zeros(gray.shape,np.uint8)
     for l in horizontal_lines:
-        # corrected_l = __identity__(gray,l)
-        # corrected_l = __polynomial_correct__(gray,l,True)
-        corrected_l = __correct__(gray,l,True)
+        #     corrected_l = __identity__(gray,l)
+        corrected_l = __polynomial_correct__(gray,l,True)
+        # corrected_l = __correct__(gray,l,True)
         mask = np.max([mask,corrected_l],axis=0)
 
+
+    # mask = np.zeros(gray.shape,np.uint8)
     # cv2.imwrite("/home/ggdhines/testing.jpg",mask)
     vertical_lines = paper_quad.__extract_grids__(gray,False)
     for l in vertical_lines:
         # corrected_l = __identity__(gray,l)
-        # corrected_l = __polynomial_correct__(gray,l,False)
-        corrected_l = __correct__(gray,l,False)
+        corrected_l = __polynomial_correct__(gray,l,False)
+        # corrected_l = __correct__(gray,l,False)
         mask = np.max([mask,corrected_l],axis=0)
+
+    # plt.imshow(mask)
+    # plt.show()
 
     # cv2.imshow("img",mask)
     # cv2.waitKey(0)
     # cv2.destroyAllWindows()
 
 
-    thresh1 = __threshold_image__(gray)
-    masked_image = np.max([thresh1,mask],axis=0)
+    # thresh1 = __threshold_image__(gray)
+    masked_image = np.max([pca_image,mask],axis=0)
 
     # plt.imshow(masked_image,cmap="gray")
     # plt.title("masked image")
     # plt.show()
-    # cv2.imwrite("/home/ggdhines/2.jpg",masked_image)
+    cv2.imwrite("/home/ggdhines/2.jpg",masked_image)
     # assert False
 
     return masked_image
@@ -413,6 +527,8 @@ def __ocr_image__(image):
     tess = tesserpy.Tesseract("/home/ggdhines/github/tessdata/",language="eng")
     # print(vars(tess))
     tess.tessedit_pageseg_mode = tesserpy.PSM_SINGLE_BLOCK
+    # tess.tessedit_ocr_engine_mode = tesserpy.OEM_TESSERACT_CUBE_COMBINED
+    # tess.tessedit_pageseg_mode = tesserpy.PSM_SINGLE_WORD
     # tess.tessedit_ocr_engine_mode = tesserpy.OEM_CUBE_ONLY
     # tess.tessedit_page_iteratorlevel = tess.RIL_SYMBOL
     tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.abcdefghijkmnopqrstuvwxyz-"
@@ -422,6 +538,14 @@ def __ocr_image__(image):
     transcribed = []
 
     # image_height,image_width = image.shape[:2]
+    temp_image = np.zeros((image.shape[0],image.shape[1],3),np.uint8)
+    temp_image[:,:,0] = image
+    temp_image[:,:,1] = image
+    temp_image[:,:,2] = image
+    print(image.shape)
+    cv2.imwrite("/home/ggdhines/tmp.jpg",temp_image)
+    # assert False
+    plt.imshow(image,cmap="gray")
 
     for word in tess.symbols():
     # for word in tess.words():
@@ -430,9 +554,14 @@ def __ocr_image__(image):
         height = abs(bb.top-bb.bottom)
         width = bb.right - bb.left
 
-        if min(height,width) > 5:
+        if min(height,width) > 0:
             # print(word.text,height,width)
             transcribed.append((word.text, word.confidence, bb.top, bb.left, bb.right, bb.bottom))
+            if word.text == "M":
+                print(word.text,word.confidence)
+                plt.imshow(image,cmap="gray")
+            plt.plot([bb.left,bb.right,bb.right,bb.left,bb.left],[bb.top-1,bb.top-1,bb.bottom-1,bb.bottom-1,bb.top-1],color="blue")
+            # plt.show()
             # print("{}\t{}\tt:{}; l:{}; r:{}; b:{}".format(word.text, word.confidence, bb.top, bb.left, bb.right, bb.bottom))
         else:
             pass
@@ -440,6 +569,7 @@ def __ocr_image__(image):
         # confidences.append(word.confidence)
         # text.append(word.text)
         # boxes.append(word.bounding_box)
+    plt.show()
     return transcribed
 
 def __cell_boundaries__(image):

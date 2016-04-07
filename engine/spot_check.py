@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import aggregation_api
 import yaml
 import os

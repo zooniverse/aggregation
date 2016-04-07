@@ -46,7 +46,7 @@ masked_image = None
 tess = TesseractUpdate()
 tess.__create_blank_page__()
 
-for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.abcdefghijkmnopqrstuvwxyz-"[:4]:
+for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
 
     # cur.execute("select * from characters where characters = \""+c+"\" and confidence < 80")
     # for r in cur.fetchall():
@@ -74,7 +74,7 @@ for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.abcdefghijkmnopqrstuvwxyz-"[:4
 
 
     # cur.execute("select * from characters where characters = \""+char+"\" and confidence < 80 and confidence > 70")
-    cur.execute("select * from characters where characters = \""+char+"\" and confidence > 80")
+    cur.execute("select * from characters where characters = \""+char+"\" and confidence > 90")
 
     examples = []
     confidence_values = []
@@ -132,21 +132,22 @@ for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.abcdefghijkmnopqrstuvwxyz-"[:4
             rescaled_examples.append(c2)
 
         for i in range(10):
-            samples = [weighted_choice(weights) for i in range(40)]
+            num_samples = len(weights)
+            samples = [weighted_choice(weights) for i in range(max(1,min(int(num_samples/2.),10)))]
 
             image_list = [rescaled_examples[j] for j in samples]
             s = image_list[0].shape
 
-            flatten_list = [im.reshape((im.shape[0]*im.shape[1])) for im in image_list]
-            pca = PCA(n_components=1)
-            pca_images = pca.fit_transform(flatten_list)
+            # flatten_list = [im.reshape((im.shape[0]*im.shape[1])) for im in image_list]
+            # pca = PCA(n_components=1)
+            # pca_images = pca.fit_transform(flatten_list)
             # print(sum(pca.explained_variance_ratio_))
 
             average_image = np.mean(image_list,axis=0)
 
-            pca_average = np.median(pca_images,axis=0)
-            new_average = pca.inverse_transform(pca_average)
-            average_image = new_average.reshape(s)
+            # pca_average = np.median(pca_images,axis=0)
+            # new_average = pca.inverse_transform(pca_average)
+            # average_image = new_average.reshape(s)
 
             cv2.normalize(average_image,average_image,0,255,cv2.NORM_MINMAX)
             average_image = average_image.astype(np.uint8)
@@ -161,3 +162,4 @@ for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.abcdefghijkmnopqrstuvwxyz-"[:4
 
         # raw_input("enter something")
 
+tess.__update_tesseract__()

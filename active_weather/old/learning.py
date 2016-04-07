@@ -15,7 +15,6 @@ try:
 except ImportError:
     from PIL import Image
 
-from mnist import MNIST
 from sklearn import neighbors
 from sklearn.decomposition import PCA
 from sklearn import svm,metrics

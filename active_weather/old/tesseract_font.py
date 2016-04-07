@@ -50,6 +50,8 @@ class ActiveTess:
         self.max_height = 0
         self.max_width = 0
 
+
+
     def __process_image__(self,image):
         # self.tess.tessedit_pageseg_mode = tesserpy.PSM_SINGLE_CHAR
         self.tess.set_image(image)
@@ -98,11 +100,12 @@ class ActiveTess:
         self.curr_voffset = spacing
         self.curr_hoffset = spacing
 
-    def __add_char__(self,character,additional_y_offset):
+    def __add_char__(self,character):
         assert isinstance(character,np.ndarray)
         height,width = character.shape
 
-        h_lb = self.curr_hoffset+additional_y_offset
+        # figure out where on the page we want to place
+        h_lb = self.curr_hoffset
         h_ub = h_lb + height
 
         w_lb = self.curr_voffset
@@ -114,13 +117,16 @@ class ActiveTess:
 
         return w_lb,h_ub,w_ub,h_lb
 
-    def __add_characters__(self,char_list,image_list,minimum_y):
-        top_of_row = min(minimum_y)
 
-        for char,img,my in zip(char_list,image_list,minimum_y):
-            additional_y_offset = my-top_of_row
 
-            a,b,c,d = self.__add_char__(img,additional_y_offset)
+
+    def __add_characters__(self,char_list,image_list):
+        # top_of_row = min(minimum_y)
+
+        for char,img in zip(char_list,image_list):
+            additional_y_offset = 0#my-top_of_row
+
+            a,b,c,d = self.__add_char__(img)
             self.boxes[(a,b,c,d)] = char
 
             self.max_height = max(self.max_height,b)

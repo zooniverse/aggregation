@@ -18,17 +18,20 @@ def __extract_grids__(img,horizontal):
     grid_lines = []
 
     if horizontal:
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(10,2))
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(5,2))
         d_image = cv2.Sobel(img,cv2.CV_16S,0,2)
 
     else:
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(2,10))
 
-        d_image = cv2.Sobel(img,cv2.CV_16S,1,0)
+        d_image = cv2.Sobel(img,cv2.CV_16S,2,0)
 
     d_image = cv2.convertScaleAbs(d_image)
     cv2.normalize(d_image,d_image,0,255,cv2.NORM_MINMAX)
+
     ret,close = cv2.threshold(d_image,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    _,th1 = cv2.threshold(d_image,127,255,cv2.THRESH_BINARY)
+
     close = cv2.morphologyEx(close,cv2.MORPH_DILATE,kernel)
 
     _,contour, hier = cv2.findContours(close.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)

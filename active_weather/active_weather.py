@@ -23,15 +23,31 @@ class ActiveWeather:
 
 project = ActiveWeather()
 
-for fname in glob.glob("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/*.JPG")[:50]:
-    # fname = "/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0005.JPG"
+cur = preprocessing.con.cursor()
+
+
+# cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
+# cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
+
+for fname in glob.glob("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/*.JPG")[:40]:
+
+    fname = "/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0633.JPG"
     img = project.__extract_region__(fname)
     id_ = fname.split("/")[-1][:-4]
     print(id_)
 
+    pca_image = preprocessing.__pca__(img)
+
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    masked_image = preprocessing.__mask_lines__(gray)
+    masked_image = preprocessing.__mask_lines__(gray,pca_image)
+    plt.imshow(masked_image)
+    plt.show()
+
     cv2.imwrite("/home/ggdhines/to_upload3/"+id_+".jpg",masked_image)
+
+    # preprocessing.__db__(masked_image)
+    # continue
+
     transcriptions = preprocessing.__ocr_image__(masked_image)
     transcriptions_in_cells = preprocessing.__place_in_cell__(transcriptions,gray,id_)
 
