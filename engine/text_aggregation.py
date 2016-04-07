@@ -496,10 +496,8 @@ class TranscriptionAPI(AggregationAPI):
         # s3Client = boto3.client('s3')
         _,s3 = self.__s3_connect__()
 
-
         aws_tar = self.__get_aws_tar_name__()
         key = "panoptes-uploads.zooniverse.org/production/project_aggregations_export/"+aws_tar
-
 
         url = s3.generate_presigned_url('get_object', Params = {'Bucket': 'zooniverse-static', 'Key': key}, ExpiresIn = 604800)
 
@@ -507,7 +505,7 @@ class TranscriptionAPI(AggregationAPI):
 
     def __summarize__(self,tar_path=None):
         # start by updating the json output
-        # self.__restructure_json__()
+        self.__restructure_json__()
 
         # and then upload the files to s3
         self.__s3_upload__()
