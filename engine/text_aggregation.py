@@ -12,13 +12,12 @@ from rectangle_clustering import RectangleClustering
 import parser
 import getopt
 import sys
-import numpy as np
 import boto3
-import tarfile
 from helper_functions import warning
 import os
 from boto.s3.key import Key
 from boto.s3.connection import S3Connection
+from transcription_output import ShakespearesWorldOutput,AnnotateOutput
 __author__ = 'ggdhines'
 
 
@@ -194,9 +193,11 @@ class TranscriptionAPI(AggregationAPI):
         if self.project_id == 245:
             import annotate
             self.text_algorithm = annotate.AnnotateClustering("text",self,additional_text_args)
+            self.output_tool = AnnotateOutput(self)
         elif self.project_id == 376:
             import folger
             self.text_algorithm = folger.FolgerClustering("text",self,additional_text_args)
+            self.output_tool = ShakespearesWorldOutput(self)
         else:
             assert False
 
@@ -280,150 +281,7 @@ class TranscriptionAPI(AggregationAPI):
         else:
             assert False
 
-    def __restructure_json__(self):
-        print("restructing json results")
-        workflow_id = self.workflows.keys()[0]
 
-        cur = self.postgres_session.cursor()
-
-        stmt = "select subject_id,aggregation from aggregations where workflow_id = " + str(workflow_id)
-        cur.execute(stmt)
-
-        new_json = {}
-
-        subjects_with_results = 0
-
-        for ii,(subject_id,aggregation) in enumerate(cur.fetchall()):
-            #
-            if subject_id not in self.classification_alg.to_retire:
-                continue
-            try:
-                clusters_by_line = {}
-
-                if isinstance(aggregation,str):
-                    print("converting aggregation to string")
-                    aggregation = json.loads(aggregation)
-
-                for key,cluster in aggregation["T2"]["text clusters"].items():
-                    if key == "all_users":
-                        continue
-                    if isinstance(cluster,str):
-                        warning("cluster is in string format for some reason")
-                        cluster = json.loads(cluster)
-
-                    try:
-                        # for dev only since we may not have updated every transcription
-                        if cluster["cluster members"] == []:
-                            continue
-                    except TypeError:
-                        warning(cluster)
-                        warning()
-                        raise
-
-                    index = cluster["set index"]
-                    # text_y_coord.append((cluster["center"][2],cluster["center"][-1]))
-
-                    if index not in clusters_by_line:
-                        clusters_by_line[index] = [cluster]
-                    else:
-                        clusters_by_line[index].append(cluster)
-
-                cluster_set_coordinates = {}
-
-                for set_index,cluster_set in clusters_by_line.items():
-                    # clusters are based on purely horizontal lines so we don't need to take the
-                    # average or anything like that.
-                    # todo - figure out what to do with vertical lines, probably keep them completely separate
-                    cluster_set_coordinates[set_index] = cluster_set[0]["center"][2]
-
-                sorted_sets = sorted(cluster_set_coordinates.items(), key = lambda x:x[1])
-
-                for set_index,_ in sorted_sets:
-                    cluster_set = clusters_by_line[set_index]
-
-                    # now on the (slightly off chance) that there are multiple clusters for this line, sort them
-                    # by x coordinates
-                    line = [(cluster["center"][0],cluster["center"][-1]) for cluster in cluster_set]
-                    line.sort(key = lambda x:x[0])
-                    _,text = zip(*line)
-
-                    text = list(text)
-                    # for combining the possible multiple clusters for this line into one
-                    merged_line = ""
-                    for t in text:
-                        # think that storing in postgres converts from str to unicode
-                        # for general display, we don't need ord(24) ie skipped characters
-                        new_t = t.replace(chr(24),"")
-                        merged_line += new_t
-
-                    # we seem to occasionally get lines that are just skipped characters (i.e. the string
-                    # if just chr(24)) - don't report these lines
-                    if merged_line != "":
-                        # is this the first line we've encountered for this subject?
-                        if subject_id not in new_json:
-                            new_json[subject_id] = {"text":[],"individual transcriptions":[], "accuracy":[], "coordinates" : [],"users_per_line":[]}
-
-                            # add in the metadata
-                            metadata = self.__get_subject_metadata__(subject_id)["subjects"][0]["metadata"]
-                            new_json[subject_id]["metadata"] = metadata
-
-                            new_json[subject_id]["zooniverse subject id"] = subject_id
-
-                        # add in the line of text
-                        new_json[subject_id]["text"].append(merged_line)
-
-                        # now add in the aligned individual transcriptions
-                        # use the first cluster we found for this line as a "representative cluster"
-                        rep_cluster = cluster_set[0]
-
-                        zooniverse_ids = []
-                        for user_id in rep_cluster["cluster members"]:
-                            zooniverse_login_name = self.__get_login_name__(user_id)
-
-                            # todo - not sure why None can be returned but does seem to happen
-                            if zooniverse_login_name is not None:
-                                # new_json[subject_id]["users_per_line"].append(zooniverse_login_name)
-                                zooniverse_ids.append(zooniverse_login_name)
-                            else:
-                                zooniverse_ids.append("None")
-
-                        # todo - if a line is transcribed completely but in distinct separate parts
-                        # todo - this may cause trouble
-                        new_json[subject_id]["individual transcriptions"].append(rep_cluster["aligned_text"])
-                        new_json[subject_id]["users_per_line"].append(zooniverse_ids)
-
-                        # what was the accuracy for this line?
-                        accuracy = len([c for c in merged_line if ord(c) != 27])/float(len(merged_line))
-                        new_json[subject_id]["accuracy"].append(accuracy)
-
-                        # add in the coordinates
-                        # this is only going to work with horizontal lines
-                        line_segments = [cluster["center"][:-1] for cluster in cluster_set]
-                        x1,x2,y1,y2 = zip(*line_segments)
-
-                        # find the line segments which define the start and end of the line overall
-                        x_start = min(x1)
-                        x_end = max(x2)
-
-                        start_index = np.argmin(x1)
-                        end_index = np.argmax(x2)
-
-                        y_start = y1[start_index]
-                        y_end = y1[end_index]
-
-                        new_json[subject_id]["coordinates"].append([x_start,x_end,y_start,y_end])
-
-                # count once per subject
-                subjects_with_results += 1
-            except KeyError:
-                pass
-
-        json.dump(new_json,open("/tmp/"+str(self.project_id)+".json","wb"))
-
-        aws_tar = self.__get_aws_tar_name__()
-        print("saving json results")
-        with tarfile.open("/tmp/"+aws_tar,mode="w") as t:
-            t.add("/tmp/"+str(self.project_id)+".json")
 
     def __s3_connect__(self):
         """
@@ -506,7 +364,7 @@ class TranscriptionAPI(AggregationAPI):
 
     def __summarize__(self,tar_path=None):
         # start by updating the json output
-        self.__restructure_json__()
+        self.output_tool.__json_output__()
 
         # and then upload the files to s3
         self.__s3_upload__()
