@@ -64,19 +64,30 @@ class Classification:
 
         return relevant_identifiers
 
-    def __subtask_classification__(self,task_id,classification_tasks,marking_tasks,raw_classifications,aggregations):
+    def __subtask_classification__(self,given_task,marking_tasks,raw_classifications,aggregations):
         """
         call this when at least one of the tools associated with task_id has a follow up question
-        :param task_id:
-        :param classification_tasks:
+        :param given_task: - the task id with the subfollow classification
         :param raw_classifications:
         :param aggregations:
         :return:
         """
 
         # the global index contains the task id, tool id and the follow up question id
+        # search for all follow up classifications corresponding to the given task id
         for global_index in raw_classifications.keys():
-            task_id,most_likely_tool,followup_question_index = global_index.split("_")
+            try:
+                task_id,most_likely_tool,followup_question_index = global_index.split("_")
+            except ValueError:
+                # all task ids which correspond to a follow up classification (wrt a marking)
+                # will have a the format task_id,tool_id,follow_up_question_id
+                # so if we are unable to split the this particular id into three parts - it is not a follow
+                # up classification
+                continue
+
+            # is this particular task the given task id. if not - skip
+            if task_id != given_task:
+                continue
 
             # since clusters are stored by shape not tool - convert the tool to its shape
             # and get all of the clusters with the that shape. Then for each of those clusters, look
@@ -242,7 +253,11 @@ class Classification:
 
             else:
                 # we have a follow up classification
-                aggregations = self.__subtask_classification__(task_id,classification_tasks,marking_tasks,raw_classifications,aggregations)
+                print(classification_tasks,marking_tasks)
+                print(classification_tasks[task_id])
+                print(task_id)
+                print("****")
+                aggregations = self.__subtask_classification__(task_id,marking_tasks,raw_classifications,aggregations)
 
         return aggregations
 
