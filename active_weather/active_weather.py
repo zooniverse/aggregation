@@ -27,103 +27,7 @@ cur = con.cursor()
 
 __author__ = 'ggdhines'
 
-def __upper_bounds__(line):
-    sorted_l = sorted(line, key = lambda l:l[0])
 
-    x_ret = []
-    y_ret = []
-
-    current_x = sorted_l[0][0]
-    current_y = -float("inf")
-
-    for x,y in sorted_l:
-        if x != current_x:
-            x_ret.append(current_x)
-            y_ret.append(current_y)
-            current_x = x
-            current_y = -float("inf")
-        current_y = max(current_y,y)
-
-    x_ret.append(current_x)
-    y_ret.append(current_y)
-
-    return x_ret,y_ret
-
-def __lower_bounds__(line):
-    sorted_l = sorted(line, key = lambda l:l[0])
-
-    x_ret = []
-    y_ret = []
-
-    current_x = sorted_l[0][0]
-    current_y = float("inf")
-
-    for x,y in sorted_l:
-        if x != current_x:
-            x_ret.append(current_x)
-            y_ret.append(current_y)
-            current_x = x
-            current_y = float("inf")
-        current_y = min(current_y,y)
-
-    x_ret.append(current_x)
-    y_ret.append(current_y)
-
-    return x_ret,y_ret
-
-def __median_kernel__(img,line,horizontal,step):
-    if horizontal:
-        x,y = __upper_bounds__(line)
-        x2,y2 = __lower_bounds__(line)
-    else:
-        x,y = zip(*line)
-        line = zip(y,x)
-        x,y = __upper_bounds__(line)
-        x2,y2 = __lower_bounds__(line)
-
-    x2 = list(reversed(x2))
-    y2 = list(reversed(y2))
-
-    # plt.plot(line)
-    # plt.show()
-
-    x_pts = x
-    x_pts.extend(x2)
-
-    y_pts = []
-
-    for y_index in range(len(y)):
-        m = np.median(y[max(y_index-step,0):y_index+step])
-        # print(y[max(y_index-step,0):y_index+step])
-
-        # m = min(y[max(y_index-step,0):y_index+step])
-        assert not math.isnan(m)
-
-        y_pts.append(int(round(m)))
-
-    for y_index in range(len(y2)):
-        m = np.median(y2[max(y_index-step,0):y_index+step])
-        # m = np.max(y2[max(y_index-step,0):y_index+step])
-        assert not math.isnan(m)
-
-        y_pts.append(int(round(m)))
-
-    mask = np.zeros(img.shape,np.uint8)
-
-    # print zip(x,y)
-
-    if horizontal:
-        pts = np.asarray(zip(x_pts,y_pts))
-    else:
-        pts = np.asarray(zip(y_pts,x_pts))
-
-    cv2.drawContours(mask,[pts],0,255,-1)
-    # cv2.imshow("img",mask)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
-    # assert False
-
-    return mask
 
 def __identity__(img,line):
     mask = np.zeros(img.shape[:2],np.uint8)
@@ -131,39 +35,60 @@ def __identity__(img,line):
 
     return mask
 
-def __min_and_max__(line):
+def __non_extreme_regression__(img,line,horizontal):
+    # draw on the contour
+    grid_contour = np.zeros(img.shape[:2],np.uint8)
+    cv2.drawContours(grid_contour,[line],0,255,-1)
+
     min_dict = {}
     max_dict = {}
     all_values = {}
 
-    for y,x in line:
-        try:
-            min_dict[x] = min(min_dict[x],y)
-        except KeyError:
-            min_dict[x] = y
+    if horizontal:
+        for x,y in line:
+            try:
+                min_dict[x] = min(min_dict[x],y)
+            except KeyError:
+                min_dict[x] = y
 
-        try:
-            max_dict[x] = max(max_dict[x],y)
-        except KeyError:
-            max_dict[x] = y
+            try:
+                max_dict[x] = max(max_dict[x],y)
+            except KeyError:
+                max_dict[x] = y
 
-        try:
-            all_values[x].append(y)
-        except KeyError:
-            all_values[x] = [y]
+            try:
+                all_values[x].append(y)
+            except KeyError:
+                all_values[x] = [y]
+    else:
+        for y,x in line:
+            try:
+                min_dict[x] = min(min_dict[x],y)
+            except KeyError:
+                min_dict[x] = y
+
+            try:
+                max_dict[x] = max(max_dict[x],y)
+            except KeyError:
+                max_dict[x] = y
+
+            try:
+                all_values[x].append(y)
+            except KeyError:
+                all_values[x] = [y]
+
+
+
 
     # # assert sorted(min_dict.keys()) == sorted(max_dict.keys())
     x_vals = sorted(min_dict.keys())
     lower_bound = [min_dict[x] for x in x_vals]
     upper_bound = [max_dict[x] for x in x_vals]
 
-    plt.plot(x_vals,upper_bound)
-    plt.plot(x_vals,lower_bound)
-
     dist = {x:max_dict[x]-min_dict[x] for x in x_vals}
     median_dist = np.mean(dist.values())
-    print(median_dist)
-    print("===---")
+    # print(median_dist)
+    # print("===---")
     fitted_x = []
     fitted_y = []
     for x in x_vals:
@@ -171,12 +96,8 @@ def __min_and_max__(line):
         if dist[x] <= median_dist:
             fitted_x.extend([x,x])
             fitted_y.extend([max_dict[x],min_dict[x]])
-            # print(x,np.mean(all_values[x]))
-            # plt.plot(x,np.mean(all_values[x]),"o")
 
-    # plt.show()
-
-    degrees = 1
+    degrees = 3
     coeff = list(reversed(np.polyfit(fitted_x,fitted_y,degrees)))
 
     y_bar = [sum([coeff[p]*x_**p for p in range(degrees+1)]) for x_ in fitted_x]
@@ -185,13 +106,6 @@ def __min_and_max__(line):
     def y_bar(x_,upper):
         return int(round(sum([coeff[p]*x_**p for p in range(degrees+1)]) + upper*std))
 
-    upper_bound = [y_bar(x,1) for x in fitted_x]
-    plt.plot(fitted_x,upper_bound)
-
-    lower_bound = [y_bar(x,-1) for x in fitted_x]
-    plt.plot(fitted_x,lower_bound)
-
-    plt.show()
 
     domain = sorted(all_values.keys())
     y_vals = [y_bar(x,-1) for x in domain]
@@ -199,44 +113,16 @@ def __min_and_max__(line):
     x_vals = list(domain)
     x_vals.extend(list(reversed(domain)))
 
-    #
-    # for x in x_vals:
-    #     upper_diff = max_dict[x] -y_bar(x)
-    #     lower_diff = y_bar(x)-min_dict[x]
-    #     if upper_diff < lower_diff:
-    #         min_dict[x] = y_bar(x) - upper_diff
-    #     else:
-    #         max_dict[x] = y_bar(x) + lower_diff
-    #
-    # mid_points = [(min_dict[x]+max_dict[x])/2. for x in x_vals]
-    # plt.plot(x_vals,mid_points)
-    #
-    # # y,x = zip(*line)
-    # #
-    # # plt.plot(x,y_bar)
+    if horizontal:
+        pts = np.asarray(zip(x_vals,y_vals))
+    else:
+        pts = np.asarray(zip(y_vals,x_vals))
 
+    mask2 = np.zeros(img.shape[:2],np.uint8)
+    cv2.drawContours(mask2,[pts],0,255,-1)
 
-
-    # for i in range(300):
-    #     x1,x2 = random.sample(x_vals,2)
-    #
-    #     # print(max_dict[x2]-min_dict[x2],max_dict[x1]-min_dict[x1])
-    #     diff1 = max_dict[x1]-min_dict[x1]
-    #     diff2 = max_dict[x2]-min_dict[x2]
-    #
-    #     avg1 = (max_dict[x1]+min_dict[x1])/2.
-    #     max_dict[x1] = max(max_dict[x1],avg1+diff2/2.)
-    #     min_dict[x1] = min(min_dict[x1],avg1-diff2/2.)
-    #
-    #     avg2 = (max_dict[x2]+min_dict[x2])/2.
-    #     max_dict[x2] = max(max_dict[x2],avg2+diff1/2.)
-    #     min_dict[x2] = min(min_dict[x2],avg2-diff1/2.)
-
-
-
-    # mid_points = [(min_dict[x]+max_dict[x])/2. for x in x_vals]
-    # plt.plot(x_vals,mid_points)
-    plt.show()
+    overlap = np.min([grid_contour,mask2],axis=0)
+    return overlap
 
 
 
@@ -257,8 +143,6 @@ def __polynomial_correct__(img,line,horizontal,recurse=0):
 
     init_mask = np.zeros(img.shape[:2],np.uint8)
     cv2.drawContours(init_mask,[line],0,255,-1)
-    # plt.imshow(init_mask)
-    # plt.show()
 
     mask2 = np.zeros(img.shape[:2],np.uint8)
 
@@ -295,20 +179,9 @@ def __polynomial_correct__(img,line,horizontal,recurse=0):
 
     cv2.drawContours(mask2,[pts],0,255,-1)
 
-    # plt.imshow(mask2)
-    # plt.show()
 
     mask3 = np.min([init_mask,mask2],axis=0)
-    # plt.imshow(mask3)
-    # plt.show()
 
-    # if horizontal:
-    #     x,y = zip(*line)
-    # else:
-    #     y,x = zip(*line)
-    # plt.plot(x,y)
-    # # plt.plot(x_vals,y_vals)
-    # plt.show()
 
     if recurse == 4:
         #
@@ -323,40 +196,10 @@ def __polynomial_correct__(img,line,horizontal,recurse=0):
         if min(h,w) > 1 and (perimeter > 500):
             s = cnt.shape
             f = np.reshape(cnt,(s[0],s[2]))
-            # plt.plot(f[:,1],f[:,0])
-            # plt.xlim((0,mask2.shape[1]))
-            # plt.ylim((mask2.shape[0],0))
-            # plt.show()
 
-    # plt.ylim((ymin,ymax))
-    # plt.xlim((mask2.shape[0],0))
-
-
-
-    # if recurse > 0:
-    #     __polynomial_correct__(img,f,horizontal,recurse-1)
-    # else:
-    #     plt.show()
 
     return mask3
 
-def __correct__(img,line,horizontal,background=0,foreground=255):
-    assert len(img.shape) == 2
-    mask = np.zeros(img.shape[:2],np.uint8)
-    cv2.drawContours(mask,[line],0,255,-1)
-
-    for step in [1000,500,250]:
-        mask2 = __median_kernel__(img,line,horizontal,500)
-
-        # plt.imshow(mask)
-        # plt.show(0)
-
-        overlap = np.min([mask,mask2],axis=0)
-
-        plt.imshow(overlap)
-        plt.show()
-
-    return overlap
 
 def __db__(img):
     shape = img.shape
@@ -415,7 +258,12 @@ def __db__(img):
     # plt.show()
 
 
-def __pca__(img):
+def __pca__(img,threshold_value,display=False):
+    """
+    convert an image from RGB to "gray" scale using pca
+    :param img:
+    :return:
+    """
     pca = PCA(n_components=1)
     s = img.shape
     flatten_table = np.reshape(img,(s[0]*s[1],3))
@@ -423,63 +271,39 @@ def __pca__(img):
     # gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 
     X_r = pca.fit_transform(flatten_table)
-    # background = max(X_r)[0]
-    # foreground = 0
 
     pca_img = np.reshape(X_r,s[:2])
-    print(pca.explained_variance_ratio_)
+    # print(pca.explained_variance_ratio_)
 
     res = np.uint8(cv2.normalize(pca_img,pca_img,0,255,cv2.NORM_MINMAX))
 
-    # pixels = np.reshape(res,(res.shape[0]*res.shape[1]))
-    # plt.hist(pixels,20)
-    # plt.show()
-
-    # gaussian_threshold = cv2.adaptiveThreshold(res,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,101,2)
-    # plt.imshow(gaussian_threshold,cmap="gray")
-    # plt.show()
-
-
-    ret2,th2 = cv2.threshold(res,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    # flip if necessary so that black is text/grid lines
     if np.mean(X_r) < 120:
-        th2 = 255 - th2
+        ret2,threshed_image = cv2.threshold(res,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        # ret,threshed_image = cv2.threshold(res,90,255,cv2.THRESH_BINARY)
 
-    return th2
-    # plt.imshow(th2,cmap="gray")
-    # plt.show()
-    #
-    # x,y = np.where(res>85)
-    # print(type(res))
-    # # res[:,:] = 255
-    # print(res)
-    # res = 255 - res
-    #
-    # template = np.zeros(img.shape[:2],np.uint8)
-    # print(template)
-    # print(template[x,y])
-    # template[x,y] = 255
-    # print(template)
-    # plt.imshow(res,cmap="gray")
-    # plt.show()
-    #
-    # template = 255 - template
-    #
-    # plt.imshow(template,cmap="gray")
-    # plt.show()
-    # return res
-    #
-    # ink_pixels = np.where(res>90)
-    # template = np.zeros(img.shape[:2],np.uint8)
-    # # plt.plot(ink_pixels[1],-ink_pixels[0],".")
-    # # plt.show()
-    #
-    # template[ink_pixels[0],ink_pixels[1]] = gray[ink_pixels[0],ink_pixels[1]]
-    # plt.imshow(template)
-    # plt.show()
+        threshed_image = 255 - threshed_image
+        inverted = True
 
-    # assert False
-    # template = 255 - template
-    # return template
+        if display:
+            plt.imshow(threshed_image,cmap="gray")
+            plt.show()
+
+            ret,threshed_image = cv2.threshold(res,255-200,255,cv2.THRESH_BINARY)
+            threshed_image = 255 - threshed_image
+            plt.imshow(threshed_image,cmap="gray")
+            plt.show()
+    else:
+        print("not inverted")
+        # ret2,th2 = cv2.threshold(res,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        ret,threshed_image = cv2.threshold(res,threshold_value,255,cv2.THRESH_BINARY)
+
+        inverted = False
+
+
+
+    return threshed_image,inverted
+
 
 def __dbscan_threshold__(img):
     ink_pixels = np.where(img>0)
@@ -517,77 +341,23 @@ def __dbscan_threshold__(img):
             if min(x_max-x_min,y_max-y_min) >= 10:
                 return_image[xy[:, 1], xy[:, 0]] = gray[xy[:, 1], xy[:, 0]]
 
-# def __pca_mask__(img):
-#     assert len(img.shape) ==3
-#
-#     pca_image = __pca__(img)
-#     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-#
-#     horizontal_lines = paper_quad.__extract_grids__(gray,True)
-#
-#     mask = np.zeros(gray.shape,np.uint8)
-#     for l in horizontal_lines:
-#         corrected_l = __polynomial_correct__(gray,l,True)
-#         # corrected_l = 255 - corrected_l
-#         # corrected_l = __correct__(gray,l,True)
-#         pca_image = np.min([pca_image,corrected_l],axis=0)
-#
-#         # plt.imshow(pca_image,cmap="gray")
-#         # plt.show()
-#
-#     vertical_lines = paper_quad.__extract_grids__(gray,False)
-#     for l in vertical_lines:
-#         corrected_l = __polynomial_correct__(gray,l,False)
-#         # corrected_l = 255 -corrected_l
-#         # corrected_l = __correct__(gray,l,False)
-#         pca_image = np.min([pca_image,corrected_l],axis=0)
-#
-#
-#     # masked_image = np.max([pca_image,mask],axis=0)
-#
-#
-#     pca_image = 255 - pca_image
-#     plt.imshow(pca_image,cmap="gray")
-#     plt.show()
-#
-#
-#     # ink_pixels = np.where(masked_image>2)
-#     # # template = np.zeros(img.shape[:2],np.uint8)
-#     # plt.plot(ink_pixels[1],-ink_pixels[0],".")
-#     # plt.show()
-#     return pca_image
-
 
 def __mask_lines__(gray,pca_image):
-    # img = cv2.imread('/home/ggdhines/region.jpg')
-    # gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-
-    # plt.imshow(gray)
-    # plt.show()
-
     horizontal_lines = paper_quad.__extract_grids__(gray,True)
 
     mask = np.zeros(gray.shape,np.uint8)
 
+    for l in horizontal_lines:
+        #     corrected_l = __identity__(gray,l)
+        corrected_l = __non_extreme_regression__(gray,l,True)
+        # corrected_l = __correct__(gray,l,True)
+        mask = np.max([mask,corrected_l],axis=0)
 
-    # assert False
-
-    # for l in horizontal_lines:
-    #     #     corrected_l = __identity__(gray,l)
-    #     corrected_l = __polynomial_correct__(gray,l,True)
-    #     # corrected_l = __correct__(gray,l,True)
-    #     mask = np.max([mask,corrected_l],axis=0)
-
-
-    # mask = np.zeros(gray.shape,np.uint8)
-    # cv2.imwrite("/home/ggdhines/testing.jpg",mask)
     vertical_lines = paper_quad.__extract_grids__(gray,False)
-    # for l in vertical_lines:
-    #     plt.plot(l[:,0],l[:,1])
-    # plt.show()
+
     for l in vertical_lines:
         # corrected_l = __identity__(gray,l)
-        corrected_l = __polynomial_correct__(gray,l,False)
+        corrected_l = __non_extreme_regression__(gray,l,False)
         # corrected_l = __correct__(gray,l,False)
         mask = np.max([mask,corrected_l],axis=0)
 
@@ -696,10 +466,10 @@ def __ocr_image__(image):
     temp_image[:,:,0] = image
     temp_image[:,:,1] = image
     temp_image[:,:,2] = image
-    print(image.shape)
+    # print(image.shape)
     cv2.imwrite("/home/ggdhines/tmp.jpg",temp_image)
     # assert False
-    plt.imshow(image,cmap="gray")
+    # plt.imshow(image,cmap="gray")
 
     for word in tess.symbols():
     # for word in tess.words():
@@ -708,13 +478,13 @@ def __ocr_image__(image):
         height = abs(bb.top-bb.bottom)
         width = bb.right - bb.left
 
-        if min(height,width) > 0:
+        if max(height,width) > 7:
             # print(word.text,height,width)
             transcribed.append((word.text, word.confidence, bb.top, bb.left, bb.right, bb.bottom))
-            if word.text == "M":
-                print(word.text,word.confidence)
-                plt.imshow(image,cmap="gray")
-            plt.plot([bb.left,bb.right,bb.right,bb.left,bb.left],[bb.top-1,bb.top-1,bb.bottom-1,bb.bottom-1,bb.top-1],color="blue")
+            # if word.text == "M":
+            #     print(word.text,word.confidence)
+            #     plt.imshow(image,cmap="gray")
+            # plt.plot([bb.left,bb.right,bb.right,bb.left,bb.left],[bb.top-1,bb.top-1,bb.bottom-1,bb.bottom-1,bb.top-1],color="blue")
             # plt.show()
             # print("{}\t{}\tt:{}; l:{}; r:{}; b:{}".format(word.text, word.confidence, bb.top, bb.left, bb.right, bb.bottom))
         else:
@@ -723,7 +493,7 @@ def __ocr_image__(image):
         # confidences.append(word.confidence)
         # text.append(word.text)
         # boxes.append(word.bounding_box)
-    plt.show()
+    # plt.show()
     return transcribed
 
 def __cell_boundaries__(image):
@@ -763,7 +533,15 @@ def __cell_boundaries__(image):
 
     return horizontal_grid,vertical_grid
 
+
 def __place_in_cell__(transcriptions,image,id_):
+    """
+    :param transcriptions:
+    :param image:
+    :param id_:
+    :param save_to_db: do we actually want to save data to the database?
+    :return:
+    """
     horizontal_grid,vertical_grid = __cell_boundaries__(image)
     cell_contents = {}
 
@@ -822,7 +600,8 @@ def __place_in_cell__(transcriptions,image,id_):
     confidence_array = []
 
     problems = 0
-    print("*******")
+
+    # print("*******")
     cur = con.cursor()
     for key in cell_contents:
         sorted_contents = sorted(cell_contents[key], key = lambda x:x[0])
@@ -832,9 +611,12 @@ def __place_in_cell__(transcriptions,image,id_):
         cell_contents[key] = (text,confidence)
         confidence_array.append(confidence)
 
+        if id_ is not None:
+            continue
         stmt = "insert into transcriptions values(\""+id_+"\",0,"+str(key[1])+","+str(key[0])+",\""+text+"\","+str(confidence)+")"
         cur.execute(stmt)
 
+        # and now save the actual characters
         for char,cnf,crd in zip(text,confidences,coordinates):
             # cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y)")
             stmt = "insert into characters values(\""+id_+"\",0,"+str(key[1])+","+str(key[0])+",\""+char+"\","+str(cnf)+","+str(crd[1])+","+str(crd[2])+","+str(crd[0])+","+str(crd[3])+")"
@@ -843,15 +625,8 @@ def __place_in_cell__(transcriptions,image,id_):
         if confidence < 80:
             problems += 1
     print("problems " + str(problems))
-
-    con.commit()
-    # con.close()
-
-    # plt.hist(confidence_array, bins=20, normed=1, histtype='step', cumulative=1)
-    # plt.show()
-
-
-    return cell_contents
+    print("average " + str(np.mean(confidence_array)))
+    return cell_contents, confidence_array,problems
 
 def __gold_standard_comparison__(transcriptions):
     total = 0
@@ -939,16 +714,18 @@ def __roc_plot__(true_positives,false_positives):
     # ax.add_patch(ring_patch)
     # plt.show()
 
-def __gmm__(img):
-    x = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    x = np.reshape(x,x.shape[0]*x.shape[1])
 
-    for i in range(2,20):
-        g = mixture.GMM(n_components=i)
+def __image_run__(img,id_=None):
+    pca_image,inverted = __pca__(img,180)
+    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 
-        g.fit(x)
+    masked_image = __mask_lines__(gray,pca_image)
 
-        print(g.aic(x),g.means_,g.weights_)
+    if id_ is not None:
+        cv2.imwrite("/home/ggdhines/to_upload3/"+id_+".jpg",masked_image)
+
+    transcriptions = __ocr_image__(masked_image)
+    _,confidence_values,problems = __place_in_cell__(transcriptions,gray,id_)
 
 if __name__ == "__main__":
 
