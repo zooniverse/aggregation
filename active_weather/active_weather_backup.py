@@ -5,6 +5,7 @@ import cv2
 import preprocessing
 from copy import deepcopy
 import glob
+import numpy as np
 __author__ = 'ggdhines'
 
 count = -1
@@ -26,30 +27,46 @@ project = ActiveWeather()
 cur = preprocessing.con.cursor()
 
 
-# cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
-# cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
+cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
+cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
 
 for fname in glob.glob("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/*.JPG")[:40]:
 
-    fname = "/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0633.JPG"
     img = project.__extract_region__(fname)
     id_ = fname.split("/")[-1][:-4]
     print(id_)
 
-    pca_image = preprocessing.__pca__(img)
+    preprocessing.__image_run__()
 
-    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    masked_image = preprocessing.__mask_lines__(gray,pca_image)
-    plt.imshow(masked_image)
-    plt.show()
 
-    cv2.imwrite("/home/ggdhines/to_upload3/"+id_+".jpg",masked_image)
+    # # if not inverted:
+    # best_threshold = None
+    # best_confidence = 0
+    # for threshold_value in range(170,191,5):
+    #     pca_image,_ = preprocessing.__pca__(img,threshold_value)
+    #     masked_image = preprocessing.__mask_lines__(gray,pca_image)
+    #
+    #     transcriptions = preprocessing.__ocr_image__(masked_image)
+    #     _,confidence_values,_ = preprocessing.__place_in_cell__(transcriptions,gray,id_,save_to_db=False)
+    #
+    #     if np.mean(confidence_values) > best_confidence:
+    #         best_threshold = threshold_value
+    # pca_image,_ = preprocessing.__pca__(img,180)
+    #     raw_input("enter something")
+    #
+    # continue
+
+
+
 
     # preprocessing.__db__(masked_image)
     # continue
 
-    transcriptions = preprocessing.__ocr_image__(masked_image)
-    transcriptions_in_cells = preprocessing.__place_in_cell__(transcriptions,gray,id_)
+
+
+    if problems > 50:
+        pca_image,inverted = preprocessing.__pca__(img,180,True)
+
 
     cur = preprocessing.con.cursor()
 
