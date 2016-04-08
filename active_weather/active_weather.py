@@ -1,22 +1,20 @@
 from __future__ import print_function
-import numpy as np
 import cv2
 import csv
 import paper_quad
 import math
 import tesserpy
-# from scipy.integrate import simps
-# import shapely
 from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN
 from sklearn.decomposition import PCA
 from skimage.filters import threshold_otsu, rank
 from skimage.morphology import disk
-from sklearn import mixture
 import sqlite3 as lite
-import random
 import numpy as np
+import glob
+import warnings
+
 con = lite.connect('/home/ggdhines/to_upload3/active.db')
 cur = con.cursor()
 
@@ -258,7 +256,25 @@ def __db__(img):
     # plt.show()
 
 
-def __pca__(img,threshold_value,display=False):
+def __ostu_bin__(img,invert):
+    _,threshed_image = cv2.threshold(img,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+
+    return threshed_image
+
+
+def __binary_threshold_curry__(threshold):
+    assert isinstance(threshold,int) or isinstance(threshold,float)
+
+    def __binary_threshold__(img,invert):
+        if invert:
+            ret,threshed_image = cv2.threshold(img,255-threshold,255,cv2.THRESH_BINARY)
+        else:
+            ret,threshed_image = cv2.threshold(img,threshold,255,cv2.THRESH_BINARY)
+        return threshed_image
+
+    return __binary_threshold__
+
+def __pca__(img,threshold_alg):
     """
     convert an image from RGB to "gray" scale using pca
     :param img:
@@ -275,34 +291,40 @@ def __pca__(img,threshold_value,display=False):
     pca_img = np.reshape(X_r,s[:2])
     # print(pca.explained_variance_ratio_)
 
-    res = np.uint8(cv2.normalize(pca_img,pca_img,0,255,cv2.NORM_MINMAX))
+    normalized_image = np.uint8(cv2.normalize(pca_img,pca_img,0,255,cv2.NORM_MINMAX))
 
     # flip if necessary so that black is text/grid lines
-    if np.mean(X_r) < 120:
-        ret2,threshed_image = cv2.threshold(res,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-        # ret,threshed_image = cv2.threshold(res,90,255,cv2.THRESH_BINARY)
+    if np.mean(X_r) < 125:
+        normalized_image = 255 - normalized_image
 
-        threshed_image = 255 - threshed_image
-        inverted = True
+        threshed_image = threshold_alg(normalized_image,True)
 
-        if display:
-            plt.imshow(threshed_image,cmap="gray")
-            plt.show()
-
-            ret,threshed_image = cv2.threshold(res,255-200,255,cv2.THRESH_BINARY)
-            threshed_image = 255 - threshed_image
-            plt.imshow(threshed_image,cmap="gray")
-            plt.show()
     else:
-        print("not inverted")
-        # ret2,th2 = cv2.threshold(res,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-        ret,threshed_image = cv2.threshold(res,threshold_value,255,cv2.THRESH_BINARY)
+        threshed_image = threshold_alg(normalized_image,False)
+    #     ret2,threshed_image = cv2.threshold(res,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    #     # ret,threshed_image = cv2.threshold(res,90,255,cv2.THRESH_BINARY)
+    #
+    #     threshed_image = 255 - threshed_image
+    #     inverted = True
+    #
+    #     if display:
+    #         plt.imshow(threshed_image,cmap="gray")
+    #         plt.show()
+    #
+    #         ret,threshed_image = cv2.threshold(res,255-200,255,cv2.THRESH_BINARY)
+    #         threshed_image = 255 - threshed_image
+    #         plt.imshow(threshed_image,cmap="gray")
+    #         plt.show()
+    # else:
+    #     print("not inverted")
+    #     # ret2,th2 = cv2.threshold(res,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    #     ret,threshed_image = cv2.threshold(res,threshold_value,255,cv2.THRESH_BINARY)
+    #
+    #     inverted = False
 
-        inverted = False
 
 
-
-    return threshed_image,inverted
+    return threshed_image
 
 
 def __dbscan_threshold__(img):
@@ -611,7 +633,7 @@ def __place_in_cell__(transcriptions,image,id_):
         cell_contents[key] = (text,confidence)
         confidence_array.append(confidence)
 
-        if id_ is not None:
+        if id_ is None:
             continue
         stmt = "insert into transcriptions values(\""+id_+"\",0,"+str(key[1])+","+str(key[0])+",\""+text+"\","+str(confidence)+")"
         cur.execute(stmt)
@@ -624,8 +646,9 @@ def __place_in_cell__(transcriptions,image,id_):
 
         if confidence < 80:
             problems += 1
-    print("problems " + str(problems))
-    print("average " + str(np.mean(confidence_array)))
+    if id_ is not None:
+        print("problems " + str(problems))
+        print("average " + str(np.mean(confidence_array)))
     return cell_contents, confidence_array,problems
 
 def __gold_standard_comparison__(transcriptions):
@@ -714,9 +737,18 @@ def __roc_plot__(true_positives,false_positives):
     # ax.add_patch(ring_patch)
     # plt.show()
 
+def __extract_region__(fname,region_id = 0):
+    regions =  [(559,3282,1276,2097)]
 
-def __image_run__(img,id_=None):
-    pca_image,inverted = __pca__(img,180)
+    img = cv2.imread(fname)
+    region = regions[region_id]
+    sub_image = img[region[2]:region[3],region[0]:region[1]]
+
+    return sub_image
+
+
+def __run__(img,threshold_alg,id_=None):
+    pca_image = __pca__(img,threshold_alg)
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 
     masked_image = __mask_lines__(gray,pca_image)
@@ -727,57 +759,46 @@ def __image_run__(img,id_=None):
     transcriptions = __ocr_image__(masked_image)
     _,confidence_values,problems = __place_in_cell__(transcriptions,gray,id_)
 
+    return np.mean(confidence_values)
+
 if __name__ == "__main__":
+    # cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
+    # cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
+
+    with warnings.catch_warnings():
+        try:
+            for fname in glob.glob("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/*.JPG")[:40]:
+                fname = "/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0329.JPG"
+                img = __extract_region__(fname)
+                id_ = fname.split("/")[-1][:-4]
+                print(id_)
 
 
+                # set a baseline for performance with ostu's binarization
+                ostu_peformance = __run__(img,__ostu_bin__,None)
 
-    cur = con.cursor()
+                # if the performance is good enough - just go with it
+                if ostu_peformance >= 80:
+                    __run__(img,__ostu_bin__,id_)
+                # otherwise, use binary thresholding and search for a good threshold value
+                else:
+                    print("searching")
+                    best_threshold = None
+                    max_confidence = 0
+                    for bin_threshold in range(170,201,5):
+                        thres_alg = __binary_threshold_curry__(bin_threshold)
+                        confidence = __run__(img,thres_alg,None)
 
-    img = cv2.imread('/home/ggdhines/region.jpg')
+                        if math.isnan(confidence):
+                            continue
 
-    # gray = __pca_mask__(img)
-    #
-    # img = cv2.GaussianBlur(img,(5,5),0)
-    # gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    # # mask = np.zeros((gray.shape),np.uint8)
-    # kernel1 = cv2.getStructuringElement(cv2.MORPH_ELLIPSE,(5,5))
-    #
-    # close = cv2.morphologyEx(gray,cv2.MORPH_CLOSE,kernel1)
-    # div = np.float32(gray)/(close)
-    # res = np.uint8(cv2.normalize(div,div,0,255,cv2.NORM_MINMAX))
-    # res2 = cv2.cvtColor(res,cv2.COLOR_GRAY2BGR)
+                        if confidence > max_confidence:
+                            max_confidence = confidence
+                            best_threshold = bin_threshold
 
-    # plt.imshow(res2)
-    # plt.show()
-    # assert False
+                    assert best_threshold is not None
+                    thres_alg = __binary_threshold_curry__(best_threshold)
+                    __run__(img,thres_alg,id_)
+        except Warning:
+            raise
 
-    # x = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    # x = np.reshape(x,x.shape[0]*x.shape[1])
-    # n, bins, patches = plt.hist(x, 20, normed=1, facecolor='green', alpha=0.5)
-    # plt.show()
-
-    # gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    # ret,thresh1 = cv2.threshold(gray,198,255,cv2.THRESH_BINARY)
-    # plt.imshow(thresh1)
-    # plt.show()
-    # __gmm__(img)
-    # assert False
-
-    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
-    # gray = __pca__(img)
-
-
-    # assert False
-
-    masked_image = __mask_lines__(gray)
-    # masked_image = __pca_mask__(img)
-
-    transcriptions = __ocr_image__(masked_image)
-    transcriptions_in_cells = __place_in_cell__(transcriptions,gray)
-
-    true_positives,false_positives = __gold_standard_comparison__(transcriptions_in_cells)
-
-    __roc_plot__(true_positives,false_positives)
-
-    con.commit()
-    con.close()
