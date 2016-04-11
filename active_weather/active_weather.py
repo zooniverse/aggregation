@@ -8,12 +8,14 @@ from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
 from sklearn.cluster import DBSCAN
 from sklearn.decomposition import PCA
-from skimage.filters import threshold_otsu, rank
 from skimage.morphology import disk
 import sqlite3 as lite
 import numpy as np
 import glob
 import warnings
+from skimage.filters import threshold_otsu, rank
+
+warnings.simplefilter("error", RuntimeWarning)
 
 con = lite.connect('/home/ggdhines/to_upload3/active.db')
 cur = con.cursor()
@@ -80,8 +82,8 @@ def __non_extreme_regression__(img,line,horizontal):
 
     # # assert sorted(min_dict.keys()) == sorted(max_dict.keys())
     x_vals = sorted(min_dict.keys())
-    lower_bound = [min_dict[x] for x in x_vals]
-    upper_bound = [max_dict[x] for x in x_vals]
+    # lower_bound = [min_dict[x] for x in x_vals]
+    # upper_bound = [max_dict[x] for x in x_vals]
 
     dist = {x:max_dict[x]-min_dict[x] for x in x_vals}
     median_dist = np.mean(dist.values())
@@ -120,83 +122,84 @@ def __non_extreme_regression__(img,line,horizontal):
     cv2.drawContours(mask2,[pts],0,255,-1)
 
     overlap = np.min([grid_contour,mask2],axis=0)
+
     return overlap
 
 
 
-def __polynomial_correct__(img,line,horizontal,recurse=0):
-    __min_and_max__(line)
-
-
-    if horizontal:
-        x,y = zip(*line)
-        domain = sorted(set(line[:,0]))
-
-
-    else:
-        y,x = zip(*line)
-        domain = sorted(set(line[:,1]))
-
-
-
-    init_mask = np.zeros(img.shape[:2],np.uint8)
-    cv2.drawContours(init_mask,[line],0,255,-1)
-
-    mask2 = np.zeros(img.shape[:2],np.uint8)
-
-    degrees = 2
-    # coeff = list(reversed(np.polyfit(x,y,degrees)))
-
-
-
-    # degrees = 2
-    coeff = list(reversed(np.polyfit(x,y,degrees)))
-    y_bar = [sum([coeff[p]*x_**p for p in range(degrees+1)]) for x_ in x]
-    if recurse == 0:
-        std = math.sqrt(np.mean([(y1-y2)**2 for (y1,y2) in zip(y,y_bar)]))*1
-    else:
-        std = math.sqrt(np.mean([(y1-y2)**2 for (y1,y2) in zip(y,y_bar)]))*1.4
-
-    def y_bar(x_,upper):
-        return int(sum([coeff[p]*x_**p for p in range(degrees+1)]) + upper*std)
-
-
-    y_vals = [y_bar(x,-1) for x in domain]
-    y_vals.extend([y_bar(x,1) for x in list(reversed(domain))])
-    x_vals = list(domain)
-    x_vals.extend(list(reversed(domain)))
-
-    ymax = np.max(y_vals) + 50
-    ymin = np.min(y_vals) - 50
-
-    if horizontal:
-        pts = np.asarray(zip(x_vals,y_vals))
-    else:
-        pts = np.asarray(zip(y_vals,x_vals))
-
-
-    cv2.drawContours(mask2,[pts],0,255,-1)
-
-
-    mask3 = np.min([init_mask,mask2],axis=0)
-
-
-    if recurse == 4:
-        #
-        pass
-        plt.plot(line[:,1],line[:,0])
-
-
-    _,contour, hier = cv2.findContours(mask3.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
-    for cnt in contour:
-        x,y,w,h = cv2.boundingRect(cnt)
-        perimeter = cv2.arcLength(cnt,True)
-        if min(h,w) > 1 and (perimeter > 500):
-            s = cnt.shape
-            f = np.reshape(cnt,(s[0],s[2]))
-
-
-    return mask3
+# def __polynomial_correct__(img,line,horizontal,recurse=0):
+#     __min_and_max__(line)
+#
+#
+#     if horizontal:
+#         x,y = zip(*line)
+#         domain = sorted(set(line[:,0]))
+#
+#
+#     else:
+#         y,x = zip(*line)
+#         domain = sorted(set(line[:,1]))
+#
+#
+#
+#     init_mask = np.zeros(img.shape[:2],np.uint8)
+#     cv2.drawContours(init_mask,[line],0,255,-1)
+#
+#     mask2 = np.zeros(img.shape[:2],np.uint8)
+#
+#     degrees = 2
+#     # coeff = list(reversed(np.polyfit(x,y,degrees)))
+#
+#
+#
+#     # degrees = 2
+#     coeff = list(reversed(np.polyfit(x,y,degrees)))
+#     y_bar = [sum([coeff[p]*x_**p for p in range(degrees+1)]) for x_ in x]
+#     if recurse == 0:
+#         std = math.sqrt(np.mean([(y1-y2)**2 for (y1,y2) in zip(y,y_bar)]))*1
+#     else:
+#         std = math.sqrt(np.mean([(y1-y2)**2 for (y1,y2) in zip(y,y_bar)]))*1.4
+#
+#     def y_bar(x_,upper):
+#         return int(sum([coeff[p]*x_**p for p in range(degrees+1)]) + upper*std)
+#
+#
+#     y_vals = [y_bar(x,-1) for x in domain]
+#     y_vals.extend([y_bar(x,1) for x in list(reversed(domain))])
+#     x_vals = list(domain)
+#     x_vals.extend(list(reversed(domain)))
+#
+#     ymax = np.max(y_vals) + 50
+#     ymin = np.min(y_vals) - 50
+#
+#     if horizontal:
+#         pts = np.asarray(zip(x_vals,y_vals))
+#     else:
+#         pts = np.asarray(zip(y_vals,x_vals))
+#
+#
+#     cv2.drawContours(mask2,[pts],0,255,-1)
+#
+#
+#     mask3 = np.min([init_mask,mask2],axis=0)
+#
+#
+#     if recurse == 4:
+#         #
+#         pass
+#         plt.plot(line[:,1],line[:,0])
+#
+#
+#     _,contour, hier = cv2.findContours(mask3.copy(),cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)
+#     for cnt in contour:
+#         x,y,w,h = cv2.boundingRect(cnt)
+#         perimeter = cv2.arcLength(cnt,True)
+#         if min(h,w) > 1 and (perimeter > 500):
+#             s = cnt.shape
+#             f = np.reshape(cnt,(s[0],s[2]))
+#
+#
+#     return mask3
 
 
 def __db__(img):
@@ -256,10 +259,19 @@ def __db__(img):
     # plt.show()
 
 
-def __ostu_bin__(img,invert):
-    _,threshed_image = cv2.threshold(img,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 
-    return threshed_image
+def __otsu_bin__(img,invert):
+    # with scikit-image
+    thresh = threshold_otsu(img)
+    # threshed_image = img > thresh
+
+    threshed_image = np.zeros(img.shape,np.uint8)
+    threshed_image[np.where(img > thresh)] = 255
+
+    # with open cv
+    # _,threshed_image = cv2.threshold(img,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+
+    return threshed_image,thresh
 
 
 def __binary_threshold_curry__(threshold):
@@ -270,7 +282,7 @@ def __binary_threshold_curry__(threshold):
             ret,threshed_image = cv2.threshold(img,255-threshold,255,cv2.THRESH_BINARY)
         else:
             ret,threshed_image = cv2.threshold(img,threshold,255,cv2.THRESH_BINARY)
-        return threshed_image
+        return threshed_image,threshold
 
     return __binary_threshold__
 
@@ -292,15 +304,20 @@ def __pca__(img,threshold_alg):
     # print(pca.explained_variance_ratio_)
 
     normalized_image = np.uint8(cv2.normalize(pca_img,pca_img,0,255,cv2.NORM_MINMAX))
-
+    # threshold_global_otsu,threshold_value = threshold_otsu(normalized_image)
+    # print(threshold_global_otsu)
     # flip if necessary so that black is text/grid lines
     if np.mean(X_r) < 125:
+        print("inverted")
         normalized_image = 255 - normalized_image
 
-        threshed_image = threshold_alg(normalized_image,True)
+
+        threshed_image,threshold_value = threshold_alg(normalized_image,True)
+        threshold_value = 255 - threshold_value
 
     else:
-        threshed_image = threshold_alg(normalized_image,False)
+        print("not inverted")
+        threshed_image,threshold_value = threshold_alg(normalized_image,False)
     #     ret2,threshed_image = cv2.threshold(res,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
     #     # ret,threshed_image = cv2.threshold(res,90,255,cv2.THRESH_BINARY)
     #
@@ -324,7 +341,7 @@ def __pca__(img,threshold_alg):
 
 
 
-    return threshed_image
+    return threshed_image,threshold_value
 
 
 def __dbscan_threshold__(img):
@@ -383,8 +400,7 @@ def __mask_lines__(gray,pca_image):
         # corrected_l = __correct__(gray,l,False)
         mask = np.max([mask,corrected_l],axis=0)
 
-    # plt.imshow(mask)
-    # plt.show()
+
 
     # cv2.imshow("img",mask)
     # cv2.waitKey(0)
@@ -394,60 +410,18 @@ def __mask_lines__(gray,pca_image):
     # thresh1 = __threshold_image__(gray)
     masked_image = np.max([pca_image,mask],axis=0)
 
-    # plt.imshow(masked_image,cmap="gray")
-    # plt.title("masked image")
-    # plt.show()
+    plt.imshow(pca_image,cmap="gray")
+    plt.show()
+    plt.imshow(mask,cmap="gray")
+    plt.show()
+    plt.imshow(masked_image,cmap="gray")
+    plt.title("masked image")
+    plt.show()
+
     cv2.imwrite("/home/ggdhines/2.jpg",masked_image)
     # assert False
 
     return masked_image
-
-def __threshold_image__(img):
-    assert len(img.shape) == 2
-    # for i in img:
-    #     print(list(i))
-    ret,thresh1 = cv2.threshold(img,190,255,cv2.THRESH_BINARY)
-
-    gaussian_threshold = cv2.adaptiveThreshold(img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C,cv2.THRESH_BINARY,351,2)
-    ret2,th2 = cv2.threshold(img,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
-    # plt.imshow(gaussian_threshold)
-    # plt.show()
-
-    # return thresh3
-
-
-    radius = 200
-    selem = disk(radius)
-    local_otsu = rank.otsu(img, selem)
-
-    # print(img >= local_otsu)
-    thresh2 = np.zeros(img.shape[:2],np.uint8)
-    thresh2.fill(255)
-    x,y = np.where(img < local_otsu)
-    thresh2[x,y] = 0
-
-    # plt.imshow(thresh1,cmap="gray")
-    # plt.show()
-    # plt.imshow(thresh2,cmap="gray")
-    # plt.show()
-
-    threshold_global_otsu = threshold_otsu(img)
-    global_otsu = img >= threshold_global_otsu
-    # print(img)
-    # print(global_otsu)
-    # print(threshold_global_otsu)
-    thresh3 = np.zeros(img.shape[:2],np.uint8)
-    x,y = np.where(img < threshold_global_otsu)
-    thresh3.fill(255)
-    # print(np.where(img< global_otsu))
-    # for i in img:
-    #     print(min(i))
-    # plt.plot(x,y,".")
-    # plt.show()
-    thresh3[x,y] = 0
-
-    return gaussian_threshold
-
 
 def __gen_columns__(masked_image,gray):
     vertical_contours = paper_quad.__extract_grids__(gray,False)
@@ -748,10 +722,13 @@ def __extract_region__(fname,region_id = 0):
 
 
 def __run__(img,threshold_alg,id_=None):
-    pca_image = __pca__(img,threshold_alg)
+    pca_image,threshold = __pca__(img,threshold_alg)
     gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
 
     masked_image = __mask_lines__(gray,pca_image)
+
+
+
 
     if id_ is not None:
         cv2.imwrite("/home/ggdhines/to_upload3/"+id_+".jpg",masked_image)
@@ -765,40 +742,43 @@ if __name__ == "__main__":
     # cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
     # cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
 
-    with warnings.catch_warnings():
-        try:
-            for fname in glob.glob("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/*.JPG")[:40]:
-                fname = "/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0329.JPG"
-                img = __extract_region__(fname)
-                id_ = fname.split("/")[-1][:-4]
-                print(id_)
+    for fname in glob.glob("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/*.JPG")[:40]:
+        # fname = "/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0329.JPG"
+        img = __extract_region__(fname)
+        id_ = fname.split("/")[-1][:-4]
+        print(id_)
 
 
-                # set a baseline for performance with ostu's binarization
-                ostu_peformance = __run__(img,__ostu_bin__,None)
+        # set a baseline for performance with otsu's binarization
+        otsu_peformance,threshold = __run__(img,__otsu_bin__,None)
+        print(otsu_peformance,threshold)
+        continue
 
-                # if the performance is good enough - just go with it
-                if ostu_peformance >= 80:
-                    __run__(img,__ostu_bin__,id_)
-                # otherwise, use binary thresholding and search for a good threshold value
-                else:
-                    print("searching")
-                    best_threshold = None
-                    max_confidence = 0
-                    for bin_threshold in range(170,201,5):
-                        thres_alg = __binary_threshold_curry__(bin_threshold)
-                        confidence = __run__(img,thres_alg,None)
+        # if the performance is good enough - just go with it
+        if ostu_peformance >= 80:
+            __run__(img,__ostu_bin__,id_)
+        # otherwise, use binary thresholding and search for a good threshold value
+        else:
+            print("searching")
+            best_threshold = None
+            max_confidence = 0
+            for bin_threshold in range(10,241,10):
+                # print("here " + str(bin_threshold))
+                thres_alg = __binary_threshold_curry__(bin_threshold)
+                print("a")
+                try:
+                    confidence = __run__(img,thres_alg,None)
+                except RuntimeWarning:
+                    continue
 
-                        if math.isnan(confidence):
-                            continue
+                print(bin_threshold,confidence)
+                if confidence > max_confidence:
+                    max_confidence = confidence
+                    best_threshold = bin_threshold
 
-                        if confidence > max_confidence:
-                            max_confidence = confidence
-                            best_threshold = bin_threshold
+            assert best_threshold is not None
+            thres_alg = __binary_threshold_curry__(best_threshold)
+            __run__(img,thres_alg,id_)
 
-                    assert best_threshold is not None
-                    thres_alg = __binary_threshold_curry__(best_threshold)
-                    __run__(img,thres_alg,id_)
-        except Warning:
-            raise
+        break
 
