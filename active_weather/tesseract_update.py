@@ -18,7 +18,7 @@ class TesseractUpdate:
         if not os.path.exists("/tmp/tessdata"):
             os.makedirs("/tmp/tessdata")
 
-        with open("/tmp/tessdata/active_weather.lobster.exp0.box","w") as f:
+        with open("active_weather.basic.exp0.box","w") as f:
             f.write("")
 
     def __create_blank_page__(self):
@@ -27,7 +27,8 @@ class TesseractUpdate:
         :return:
         """
         self.width = 2508
-        self.height = 2480
+        # self.height = 2480
+        self.height = 4000
         self.training_page = np.zeros((self.height,self.width),dtype=np.uint8)
         self.training_page.fill(255)
 
@@ -86,11 +87,11 @@ class TesseractUpdate:
         print([b.shape for b in self.row_bitmaps])
 
         # cv2.imwrite("/tmp/tessdata/active_weather.lobster.exp0.tiff",self.training_page[:self.__get_image_height__(),:])
-        cv2.imwrite("/tmp/tessdata/active_weather.lobster.exp0.tiff",self.training_page)
+        cv2.imwrite("active_weather.basic.exp0.tiff",self.training_page)
 
     def __box_file_flush__(self):
         pruned_height = self.__get_image_height__()
-        with open("/tmp/tessdata/active_weather.lobster.exp0.box","w") as f:
+        with open("active_weather.basic.exp0.box","w") as f:
             for a,b,c,d,e in self.box_file:
                 f.write(str(a)+" "+str(b)+" "+str(c)+" " + str(d) + " " + str(e) + " 0\n")
 
@@ -195,21 +196,31 @@ class TesseractUpdate:
 
         self.__box_file_flush__()
 
-        os.chdir('/tmp/tessdata')
-        call(["tesseract", "active_weather.lobster.exp0.tiff", "active_weather.lobster.exp0", "nobatch" ,"box.train"])
-        # call(["unicharset_extractor", "active_weather.lobster.exp0.box"])
-        call(["unicharset_extractor", "*.box"])
+        # os.chdir('tessdata')
+        call(["tesseract", "active_weather.basic.exp0.tiff", "active_weather.basic.exp0", "nobatch" ,"box.train"])
+        # raw_input("hello world")
+        call(["unicharset_extractor", "active_weather.basic.exp0.box"])
+        # raw_input("goodbye")
 
-        with open("/tmp/tessdata/font_properties","w") as f:
-            f.write("lobster 0 0 0 0 0\n")
+        with open("font_properties","w") as f:
+            f.write("basic 0 0 0 0 0\n")
 
-        os.system("shapeclustering -F font_properties -U unicharset active_weather.lobster.exp0.tr")
-        # "mftraining -F font_properties -U unicharset -O active_weather.unicharset active_weather.lobster.exp0.tr"
-        os.system("mftraining -F font_properties -U unicharset -O active_weather.unicharset active_weather.lobster.exp0.tr")
-        os.system("cntraining active_weather.lobster.exp0.tr")
+        os.system("shapeclustering -F font_properties -U unicharset active_weather.basic.exp0.tr")
+
+        os.system("mftraining -F font_properties -U unicharset -O active_weather.unicharset active_weather.basic.exp0.tr")
+        os.system("cntraining active_weather.basic.exp0.tr")
 
         os.system("mv inttemp active_weather.inttemp")
         os.system("mv normproto active_weather.normproto")
         os.system("mv pffmtable active_weather.pffmtable")
         os.system("mv shapetable active_weather.shapetable")
         os.system("combine_tessdata active_weather.")
+
+        os.system("mv active_weather.basic.* /tmp/tessdata/")
+        os.system("mv active_weather.inttemp /tmp/tessdata/")
+        os.system("mv active_weather.normproto /tmp/tessdata/")
+        os.system("mv active_weather.pffmtable /tmp/tessdata/")
+        os.system("mv active_weather.shapetable /tmp/tessdata/")
+        os.system("mv active_weather.traineddata /tmp/tessdata/")
+        os.system("mv active_weather.unicharset /tmp/tessdata/")
+        os.system("mv font_properties /tmp/tessdata/")

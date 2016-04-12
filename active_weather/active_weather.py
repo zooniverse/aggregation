@@ -17,11 +17,16 @@ from skimage.filters import threshold_otsu, rank
 
 warnings.simplefilter("error", RuntimeWarning)
 
-con = lite.connect('/home/ggdhines/to_upload3/active.db')
+# db_id = "5"
+
+tess_directory,language,db_id = "/home/ggdhines/github/tessdata/","eng","3"
+tess_directory,language,db_id = "/tmp/tessdata/","active_weather","4"
+
+con = lite.connect('/home/ggdhines/to_upload'+db_id+'/active.db')
 cur = con.cursor()
 
-# cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
-# cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
+cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
+cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
 # con.commit()
 
 
@@ -314,9 +319,11 @@ def __pca__(img,threshold_alg):
 
         threshed_image,threshold_value = threshold_alg(normalized_image,True)
         threshold_value = 255 - threshold_value
+        inverted = True
 
     else:
         print("not inverted")
+        inverted = False
         threshed_image,threshold_value = threshold_alg(normalized_image,False)
     #     ret2,threshed_image = cv2.threshold(res,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
     #     # ret,threshed_image = cv2.threshold(res,90,255,cv2.THRESH_BINARY)
@@ -340,8 +347,7 @@ def __pca__(img,threshold_alg):
     #     inverted = False
 
 
-
-    return threshed_image,threshold_value
+    return threshed_image,threshold_value,inverted
 
 
 def __dbscan_threshold__(img):
@@ -380,8 +386,8 @@ def __dbscan_threshold__(img):
             if min(x_max-x_min,y_max-y_min) >= 10:
                 return_image[xy[:, 1], xy[:, 0]] = gray[xy[:, 1], xy[:, 0]]
 
-
-def __mask_lines__(gray,pca_image):
+def __create_mask__(img):
+    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
     horizontal_lines = paper_quad.__extract_grids__(gray,True)
 
     mask = np.zeros(gray.shape,np.uint8)
@@ -400,25 +406,16 @@ def __mask_lines__(gray,pca_image):
         # corrected_l = __correct__(gray,l,False)
         mask = np.max([mask,corrected_l],axis=0)
 
+    return mask
 
 
-    # cv2.imshow("img",mask)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
 
+def __mask_lines__(img,mask):
 
     # thresh1 = __threshold_image__(gray)
-    masked_image = np.max([pca_image,mask],axis=0)
+    masked_image = np.max([img,mask],axis=0)
 
-    plt.imshow(pca_image,cmap="gray")
-    plt.show()
-    plt.imshow(mask,cmap="gray")
-    plt.show()
-    plt.imshow(masked_image,cmap="gray")
-    plt.title("masked image")
-    plt.show()
-
-    cv2.imwrite("/home/ggdhines/2.jpg",masked_image)
+    # cv2.imwrite("/home/ggdhines/2.jpg",masked_image)
     # assert False
 
     return masked_image
@@ -444,7 +441,12 @@ def __gen_columns__(masked_image,gray):
         yield colour_sub_image
 
 def __ocr_image__(image):
-    tess = tesserpy.Tesseract("/home/ggdhines/github/tessdata/",language="eng")
+    # tess = tesserpy.Tesseract("/home/ggdhines/github/tessdata/",language="eng")
+
+
+
+    print(tess_directory,language)
+    tess = tesserpy.Tesseract(tess_directory,language=language)
     # print(vars(tess))
     tess.tessedit_pageseg_mode = tesserpy.PSM_SINGLE_BLOCK
     # tess.tessedit_ocr_engine_mode = tesserpy.OEM_TESSERACT_CUBE_COMBINED
@@ -463,7 +465,7 @@ def __ocr_image__(image):
     temp_image[:,:,1] = image
     temp_image[:,:,2] = image
     # print(image.shape)
-    cv2.imwrite("/home/ggdhines/tmp.jpg",temp_image)
+    # cv2.imwrite("/home/ggdhines/tmp.jpg",temp_image)
     # assert False
     # plt.imshow(image,cmap="gray")
 
@@ -493,12 +495,14 @@ def __ocr_image__(image):
     return transcribed
 
 def __cell_boundaries__(image):
+    gray = cv2.cvtColor(image,cv2.COLOR_BGR2GRAY)
+
     horizontal_grid = []
     vertical_grid = []
 
     height,width = image.shape[:2]
 
-    horizontal_lines = paper_quad.__extract_grids__(image,True)
+    horizontal_lines = paper_quad.__extract_grids__(gray,True)
 
     # plt.imshow(image)
     for row_index in range(len(horizontal_lines)):
@@ -514,7 +518,7 @@ def __cell_boundaries__(image):
     horizontal_grid.extend([0,height])
     horizontal_grid.sort()
 
-    vertical_lines = paper_quad.__extract_grids__(image,False)
+    vertical_lines = paper_quad.__extract_grids__(gray,False)
     for column_index in range(len(vertical_lines)):
         c = np.median(vertical_lines[column_index],axis=0)[0]
         # ub = np.max(vertical_lines[column_index+1],axis=0)[0]
@@ -530,7 +534,7 @@ def __cell_boundaries__(image):
     return horizontal_grid,vertical_grid
 
 
-def __place_in_cell__(transcriptions,image,id_):
+def __place_in_cell__(transcriptions,horizontal_grid,vertical_grid,id_):
     """
     :param transcriptions:
     :param image:
@@ -538,12 +542,14 @@ def __place_in_cell__(transcriptions,image,id_):
     :param save_to_db: do we actually want to save data to the database?
     :return:
     """
-    horizontal_grid,vertical_grid = __cell_boundaries__(image)
+    # horizontal_grid,vertical_grid = __cell_boundaries__(image)
     cell_contents = {}
 
     for (t,c,top,left,right,bottom) in transcriptions:
         if t == None:
             continue
+
+
 
         # print(t,c)
         mid_y = (int(top)+int(bottom))/2.
@@ -558,14 +564,9 @@ def __place_in_cell__(transcriptions,image,id_):
                 in_row = True
                 break
 
-        if not in_row:
-            plt.imshow(image,cmap="gray")
-            # plt.plot(mid_x,mid_y,"o")
-            print(mid_x,mid_y)
-            print((t,c,top,left,right,bottom))
-            plt.show()
-            assert False
-            continue
+        assert in_row
+
+
 
         # assert in_row
 
@@ -576,15 +577,7 @@ def __place_in_cell__(transcriptions,image,id_):
             if lb <= mid_x <= ub:
                 in_column = True
                 break
-        if not in_column:
-            plt.imshow(image,cmap="gray")
-            # plt.plot(mid_x,mid_y,"o")
-            print(mid_x,mid_y)
-            print((t,c,top,left,right,bottom))
-            plt.show()
-            assert False
-            continue
-
+        assert in_column
 
 
         key = (row_index,column_index)
@@ -607,6 +600,9 @@ def __place_in_cell__(transcriptions,image,id_):
         cell_contents[key] = (text,confidence)
         confidence_array.append(confidence)
 
+        if confidence < 80:
+            problems += 1
+
         if id_ is None:
             continue
         stmt = "insert into transcriptions values(\""+id_+"\",0,"+str(key[1])+","+str(key[0])+",\""+text+"\","+str(confidence)+")"
@@ -618,11 +614,10 @@ def __place_in_cell__(transcriptions,image,id_):
             stmt = "insert into characters values(\""+id_+"\",0,"+str(key[1])+","+str(key[0])+",\""+char+"\","+str(cnf)+","+str(crd[1])+","+str(crd[2])+","+str(crd[0])+","+str(crd[3])+")"
             cur.execute(stmt)
 
-        if confidence < 80:
-            problems += 1
-    if id_ is not None:
+
+    if True:#id_ is not None:
         print("problems " + str(problems))
-        print("average " + str(np.mean(confidence_array)))
+
     return cell_contents, confidence_array,problems
 
 def __gold_standard_comparison__(transcriptions):
@@ -721,22 +716,27 @@ def __extract_region__(fname,region_id = 0):
     return sub_image
 
 
-def __run__(img,threshold_alg,id_=None):
-    pca_image,threshold = __pca__(img,threshold_alg)
-    gray = cv2.cvtColor(img,cv2.COLOR_BGR2GRAY)
+def __run__(img,mask,horizontal_grid,vertical_grid,threshold_alg,id_=None):
+    pca_image,threshold,inverted = __pca__(img,threshold_alg)
 
-    masked_image = __mask_lines__(gray,pca_image)
+
+    masked_image = __mask_lines__(pca_image,mask)
 
 
 
 
     if id_ is not None:
-        cv2.imwrite("/home/ggdhines/to_upload3/"+id_+".jpg",masked_image)
+        cv2.imwrite("/home/ggdhines/to_upload"+db_id+"/"+id_+".jpg",masked_image)
 
     transcriptions = __ocr_image__(masked_image)
-    _,confidence_values,problems = __place_in_cell__(transcriptions,gray,id_)
+    _,confidence_values,problems = __place_in_cell__(transcriptions,horizontal_grid,vertical_grid,id_)
 
-    return np.mean(confidence_values)
+    return np.mean(confidence_values),threshold,inverted
+
+
+def round_ten(x):
+    # http://stackoverflow.com/questions/26454649/python-round-up-to-the-nearest-ten
+    return int(round(x / 10.0)) * 10
 
 if __name__ == "__main__":
     # cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
@@ -750,24 +750,41 @@ if __name__ == "__main__":
 
 
         # set a baseline for performance with otsu's binarization
-        otsu_peformance,threshold = __run__(img,__otsu_bin__,None)
-        print(otsu_peformance,threshold)
-        continue
+        mask = __create_mask__(img)
+        horizontal_grid,vertical_grid = __cell_boundaries__(img)
 
-        # if the performance is good enough - just go with it
-        if ostu_peformance >= 80:
-            __run__(img,__ostu_bin__,id_)
+
+        otsu_peformance,otsu_threshold,inverted = __run__(img,mask,horizontal_grid,vertical_grid,__otsu_bin__,None)
+        print(otsu_threshold,otsu_peformance)
+
+
+
+        # # if the performance is good enough - just go with it
+        if otsu_peformance >= 80:
+            __run__(img,mask,horizontal_grid,vertical_grid,__otsu_bin__,id_)
         # otherwise, use binary thresholding and search for a good threshold value
         else:
             print("searching")
-            best_threshold = None
-            max_confidence = 0
-            for bin_threshold in range(10,241,10):
+            print("******")
+            best_threshold = otsu_threshold
+            max_confidence = otsu_peformance
+
+            previous_confidence = otsu_peformance
+
+            step = 2
+            if inverted:
+                lb = round_ten(otsu_threshold-20)
+                search_range = range(int(round(otsu_threshold))-step,lb,-step)
+            else:
+                ub = round_ten(otsu_threshold+20)
+                search_range = range(int(round(otsu_threshold))+step,ub,step)
+
+            for bin_threshold in search_range:
                 # print("here " + str(bin_threshold))
+
                 thres_alg = __binary_threshold_curry__(bin_threshold)
-                print("a")
                 try:
-                    confidence = __run__(img,thres_alg,None)
+                    confidence,_,_ = __run__(img,mask,horizontal_grid,vertical_grid,thres_alg,None)
                 except RuntimeWarning:
                     continue
 
@@ -776,9 +793,14 @@ if __name__ == "__main__":
                     max_confidence = confidence
                     best_threshold = bin_threshold
 
+
+                previous_confidence = confidence
+
+
             assert best_threshold is not None
             thres_alg = __binary_threshold_curry__(best_threshold)
-            __run__(img,thres_alg,id_)
+            __run__(img,mask,horizontal_grid,vertical_grid,thres_alg,id_)
 
-        break
 
+con.commit()
+con.close()

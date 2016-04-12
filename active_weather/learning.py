@@ -2,14 +2,11 @@
 from __future__ import print_function
 import sqlite3 as lite
 import cv2
-import matplotlib.pyplot as plt
-import preprocessing
 import numpy as np
 import math
 import random
-from sklearn.decomposition import PCA
-import os
 from tesseract_update import TesseractUpdate
+import matplotlib.pyplot as plt
 __author__ = 'ggdhines'
 
 
@@ -25,8 +22,8 @@ def weighted_choice(choices):
     assert False, "Shouldn't get here"
 
 def boltzman_sampling(confidences):
-    temp = 2.5
-    values = [math.exp(-c/temp) for c in confidences]
+    temp = 15
+    values = [math.exp(c/temp) for c in confidences]
 
     # print(values)
     summed = sum(values)
@@ -115,6 +112,13 @@ for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
         height_values.append(chr_height)
         width_values.append(chr_width)
 
+    if confidence_values == []:
+        continue
+
+    combined = zip(confidence_values,examples,height_values,width_values)
+    combined.sort(key=lambda x:x[0],reverse=True)
+    confidence_values,examples,height_values,width_values = zip(*combined[:100])
+
     if height_values != []:
         print("for character : " + char + " we have " + str(len(height_values)) + " samples")
 
@@ -131,9 +135,14 @@ for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
 
             rescaled_examples.append(c2)
 
-        for i in range(10):
+        for s in rescaled_examples:
+            plt.imshow(s)
+            plt.show()
+
+        for i in range(30):
             num_samples = len(weights)
-            samples = [weighted_choice(weights) for i in range(max(1,min(int(num_samples/2.),10)))]
+            samples = [weighted_choice(weights) for i in range(max(1,min(int(num_samples/2.),20)))]
+
 
             image_list = [rescaled_examples[j] for j in samples]
             s = image_list[0].shape
@@ -143,7 +152,8 @@ for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
             # pca_images = pca.fit_transform(flatten_list)
             # print(sum(pca.explained_variance_ratio_))
 
-            average_image = np.mean(image_list,axis=0)
+            average_image = np.median(image_list,axis=0)
+
 
             # pca_average = np.median(pca_images,axis=0)
             # new_average = pca.inverse_transform(pca_average)
