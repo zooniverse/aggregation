@@ -40,7 +40,7 @@ class CsvOut:
         self.file_names = {}
         self.workflow_directories = {}
 
-    def __detailed_row__(self,workflow_id,task_id,subject_id,aggregations,followup_id=None,tool_id=None):
+    def __detailed_row__(self,workflow_id,task_id,subject_id,aggregations,followup_id=None,tool_id=None,cluster_index=None):
         """
         given the results for a given workflow/task and subject_id (and possibly shape and follow up id for marking)
         give a detailed results with the probabilities for each class
@@ -60,6 +60,9 @@ class CsvOut:
 
         with open(self.file_names[id_],"a") as csv_file:
             csv_file.write(str(subject_id))
+
+            if cluster_index is not None:
+                csv_file.write("," + str(cluster_index))
 
             # pretty sure that the answers should already be sorted by numerical key value
             # but if someone has been messing around with their tasks that might not be the case
@@ -131,9 +134,9 @@ class CsvOut:
 
                     # use {task_id:followup_aggregations} to get the follow up aggregations in the format that
                     # add_detailed_row is expecting (since they are used to simple classifications)
-                    self.__detailed_row__(workflow_id,task_id,subject_id,{task_id:followup_aggregations},followup_index,tool_id)
+                    self.__detailed_row__(workflow_id,task_id,subject_id,{task_id:followup_aggregations},followup_index,tool_id,cluster_index)
                     # and repeat with summary row
-                    self.__classification_summary_row__(workflow_id,task_id,subject_id,{task_id:followup_aggregations},followup_index,tool_id)
+                    self.__classification_summary_row__(workflow_id,task_id,subject_id,{task_id:followup_aggregations},followup_index,tool_id,cluster_index)
 
     def __marking_summary_row__(self,workflow_id,task_id,subject_id,aggregations,given_shape):
         """
@@ -233,7 +236,7 @@ class CsvOut:
 
         self.csv_files[id_].write(row+"\n")
 
-    def __classification_summary_row__(self,workflow_id,task_id,subject_id,aggregations,followup_id=None,tool_id = None):
+    def __classification_summary_row__(self,workflow_id,task_id,subject_id,aggregations,followup_id=None,tool_id = None,cluster_index=None):
         """
         given a result for a specific subject (and possibily a specific cluster within that specific subject)
         add one row of results to the summary file. that row contains
@@ -274,6 +277,9 @@ class CsvOut:
 
             with open(self.file_names[id_],"a") as results_file:
                 results_file.write(str(subject_id)+",")
+
+                if cluster_index is not None:
+                    results_file.write(str(cluster_index)+",")
 
                 # write out details regarding the top choice
                 # this might not be a useful value if multiple choices are allowed - in which case just ignore it
