@@ -68,10 +68,17 @@ for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
     #     plt.show()
     # continue
 
+    cur.execute("select count(*) from characters where characters = \""+char+"\"")
+    a = cur.fetchone()
+    cur.execute("select count(*) from characters where characters = \""+char+"\" and confidence > 80")
+    b = cur.fetchone()
+    if (a[0] > 0) and (b[0] == 0):
+        raw_input((char,a))
+    continue
 
 
     # cur.execute("select * from characters where characters = \""+char+"\" and confidence < 80 and confidence > 70")
-    cur.execute("select * from characters where characters = \""+char+"\" and confidence > 90")
+    cur.execute("select * from characters where characters = \""+char+"\" and confidence > 80")
 
     examples = []
     confidence_values = []
@@ -117,7 +124,7 @@ for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
 
     combined = zip(confidence_values,examples,height_values,width_values)
     combined.sort(key=lambda x:x[0],reverse=True)
-    confidence_values,examples,height_values,width_values = zip(*combined[:100])
+    confidence_values,examples,height_values,width_values = zip(*combined[:150])
 
     if height_values != []:
         print("for character : " + char + " we have " + str(len(height_values)) + " samples")
@@ -135,11 +142,7 @@ for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
 
             rescaled_examples.append(c2)
 
-        for s in rescaled_examples:
-            plt.imshow(s)
-            plt.show()
-
-        for i in range(30):
+        for i in range(20):
             num_samples = len(weights)
             samples = [weighted_choice(weights) for i in range(max(1,min(int(num_samples/2.),20)))]
 
@@ -152,7 +155,7 @@ for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
             # pca_images = pca.fit_transform(flatten_list)
             # print(sum(pca.explained_variance_ratio_))
 
-            average_image = np.median(image_list,axis=0)
+            average_image = np.mean(image_list,axis=0)
 
 
             # pca_average = np.median(pca_images,axis=0)

@@ -13,7 +13,7 @@ class TesseractUpdate:
         self.column_pointer = None
         self.training_page = None
 
-        self.box_file = []
+        self.box_file_entries = []
 
         if not os.path.exists("/tmp/tessdata"):
             os.makedirs("/tmp/tessdata")
@@ -27,8 +27,8 @@ class TesseractUpdate:
         :return:
         """
         self.width = 2508
-        # self.height = 2480
-        self.height = 4000
+        self.height = 2480
+        # self.height = 4000
         self.training_page = np.zeros((self.height,self.width),dtype=np.uint8)
         self.training_page.fill(255)
 
@@ -40,15 +40,14 @@ class TesseractUpdate:
 
         self.used_height = spacing
 
-    def __flush_row__(self):
+    def __next_row(self):
         """
         add each of the saved characters into the row
         :return:
         """
         if self.row_bitmaps != []:
-
-            self.__training_image_output__()
-            self.__box_file_output__()
+            self.__update_training_image__()
+            self.__update_box_entries__()
 
             # move onto the next row
             row_height = max([b.shape[0] for b in self.row_bitmaps])
@@ -69,7 +68,7 @@ class TesseractUpdate:
             row_height = max([b.shape[0] for b in self.row_bitmaps])
             return self.row_pointer+row_height+spacing
 
-    def __training_image_output__(self):
+    def __update_training_image__(self,save_image=False):
         """
         put the bitmaps into the training image
         :return:
@@ -86,19 +85,23 @@ class TesseractUpdate:
             column_pointer += width + spacing
         print([b.shape for b in self.row_bitmaps])
 
-        # cv2.imwrite("/tmp/tessdata/active_weather.lobster.exp0.tiff",self.training_page[:self.__get_image_height__(),:])
-        cv2.imwrite("active_weather.basic.exp0.tiff",self.training_page)
+        if save_image:
+            cv2.imwrite("active_weather.basic.exp0.tiff",self.training_page)
 
     def __box_file_flush__(self):
-        pruned_height = self.__get_image_height__()
+        """
+        write out the entries to the box file
+        :return:
+        """
+        # pruned_height = self.__get_image_height__()
         with open("active_weather.basic.exp0.box","w") as f:
-            for a,b,c,d,e in self.box_file:
+            for a,b,c,d,e in self.box_file_entries:
                 f.write(str(a)+" "+str(b)+" "+str(c)+" " + str(d) + " " + str(e) + " 0\n")
 
 
-    def __box_file_output__(self):
+    def __update_box_entries__(self):
         """
-        write out the current line of characters to the box files
+        update the list of box file entries
         :return:
         """
         column_pointer = spacing
@@ -109,23 +112,8 @@ class TesseractUpdate:
             # calculate the coordinates for the box file
             height,width = b.shape
 
-            # save the values to list since we will be adjusting the image size based on how much
-            # we actually write to to the image
-            # print(self.height,self.row_pointer)
-            self.box_file.append([char,column_pointer,self.height-(self.row_pointer+height-1),column_pointer+width-1,self.height-self.row_pointer])
+            self.box_file_entries.append([char,column_pointer,self.height-(self.row_pointer+height-1),column_pointer+width-1,self.height-self.row_pointer])
 
-            # # start with the character label
-            # f.write(char + " ")
-            # # and the column (x-axis) lower bound
-            # f.write(str(column_pointer) + " ")
-            # # and the row (y-axis) lower bound
-            # f.write(str(pruned_height-(self.row_pointer+height)+1) + " ")
-            # # and then the column upper bound
-            # f.write(str(column_pointer+width-1) + " ")
-            # # and then finally the row upper bound - and add in the page number too
-            # f.write(str(pruned_height-self.row_pointer) + " 0\n")
-            # # f.write(str(self.max_height-b+spacing) + " " + str(c) + " " + str(self.max_height-d+spacing) + " 0\n")
-            #
             column_pointer += width + spacing
 
     def __add_char__(self,character,bitmap):
@@ -141,7 +129,7 @@ class TesseractUpdate:
         # do we have too many characters for this row?
         # if so - flush
         if (self.column_pointer+char_width) >= self.width-spacing:
-            self.__flush_row__()
+            self.__next_row()
 
         self.row_bitmaps.append(bitmap)
         self.row_characters.append(character)
@@ -192,8 +180,7 @@ class TesseractUpdate:
         actually run the code to update Tesseract
         :return:
         """
-        self.__flush_row__()
-
+        self.__update_training_image__(True)
         self.__box_file_flush__()
 
         # os.chdir('tessdata')

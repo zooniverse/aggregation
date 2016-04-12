@@ -3,7 +3,7 @@ import sqlite3 as lite
 import warnings
 import matplotlib.pyplot as plt
 import numpy as np
-
+import cv2
 warnings.simplefilter("error", RuntimeWarning)
 
 con = lite.connect('/home/ggdhines/to_upload3/active.db')
@@ -37,7 +37,7 @@ for count,r in enumerate(cur.fetchall()):
 
         c1 = r[5]
         c2 = r2[5]
-        print(c1,c2)
+        # print(c1,c2)
 
         try:
             init_confidence[original_chr].append(c1)
@@ -46,16 +46,34 @@ for count,r in enumerate(cur.fetchall()):
             init_confidence[original_chr] = [c1]
             updated_confidences[original_chr] = [c2]
 
-print(same,count)
+    # else:
+    #     print("/home/ggdhines/to_upload4/"+r[0]+".JPG")
+    #     img = cv2.imread("/home/ggdhines/to_upload4/"+r[0]+".jpg")
+    #     plt.imshow(img)
+    #     height,width,_ = img.shape
+    #     lb_x = int(lb_x)
+    #     lb_y = int(lb_y)
+    #     ub_y = int(ub_y)
+    #     print(original_chr,updated_chr)
+    #
+    #     plt.plot([lb_x,lb_x],[lb_y,ub_y],color="red")
+    #     plt.plot([ub_x,ub_x],[lb_y,ub_y],color="red")
+    #     plt.plot([lb_x,ub_x],[lb_y,lb_y],color="red")
+    #     plt.plot([lb_x,ub_x],[lb_y,lb_y],color="red")
+    #     plt.show()
+
+
 
 x = []
 y = []
 for c in init_confidence:
+    print(c,np.mean(init_confidence[c]),np.mean(updated_confidences[c]))
     x.append(np.mean(init_confidence[c]))
     y.append(np.mean(updated_confidences[c]))
 
 plt.plot(x,y,"o")
 plt.plot([0,100],[0,100])
-
+print("==---")
+print(same,count)
 plt.show()
 
