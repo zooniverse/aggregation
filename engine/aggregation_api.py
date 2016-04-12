@@ -1717,6 +1717,7 @@ class AggregationAPI:
 
             non_logged_in_users = 0
 
+
             if dimensions is not (None,None):
                 image_dimensions[subject_id] = dimensions
 

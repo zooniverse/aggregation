@@ -98,7 +98,8 @@ class CsvOut:
         # go through each shape separately
         for shape in all_shapes:
             # go through all clusters of this particular shape
-            for cluster_index,cluster in aggregations[shape + " clusters"].items():
+            relevant_aggregations=aggregations[task_id][shape + " clusters"]
+            for cluster_index,cluster in relevant_aggregations.items():
                 # misc. info that should be skipped
                 if cluster_index == "all_users":
                     continue
@@ -119,14 +120,13 @@ class CsvOut:
                 # go through each of the follow up questions
                 for followup_index in followup_questions.keys():
                     # bit of a sanity check but we may have cases where the followup questions were not done
-                    if "followup_question" not in aggregations[shape + " clusters"][cluster_index]:
+                    if "followup_question" not in relevant_aggregations[cluster_index]:
                         continue
 
                     # extract the responses to this specific followup question
                     try:
-                        followup_aggregations = aggregations[shape + " clusters"][cluster_index]["followup_question"][str(followup_index)]
+                        followup_aggregations = relevant_aggregations[cluster_index]["followup_question"][str(followup_index)]
                     except KeyError:
-                        print(aggregations[shape + " clusters"][cluster_index])
                         raise
 
                     # use {task_id:followup_aggregations} to get the follow up aggregations in the format that
@@ -685,7 +685,7 @@ class CsvOut:
             if task_id in marking_tasks:
                 # need the instructions for printing out labels
                 followup_questions = classification_tasks[task_id]
-                self.__marking_followup_rows__(workflow_id,task_id,subject_id,aggregations[task_id])
+                self.__marking_followup_rows__(workflow_id,task_id,subject_id,aggregations)
             else:
                 # we have a simple classification
                 # start by output the summary

@@ -59,7 +59,7 @@ class Classification:
             user_identifiers = zip([tuple(x) for x in cluster["cluster members"]],cluster["users"])
 
         for user_identifiers,tool_used in zip(user_identifiers,cluster["tools"]):
-            if tool_used == most_likely_tool:
+            if int(tool_used) == int(most_likely_tool):
                 relevant_identifiers.append(user_identifiers)
 
         return relevant_identifiers
@@ -72,7 +72,6 @@ class Classification:
         :param aggregations:
         :return:
         """
-
         # the global index contains the task id, tool id and the follow up question id
         # search for all follow up classifications corresponding to the given task id
         for global_index in raw_classifications.keys():
@@ -89,6 +88,8 @@ class Classification:
             if task_id != given_task:
                 continue
 
+
+
             # since clusters are stored by shape not tool - convert the tool to its shape
             # and get all of the clusters with the that shape. Then for each of those clusters, look
             # for only those people who used the right tool and extract their classifications
@@ -97,13 +98,12 @@ class Classification:
             # go through each subject that has classifications for the given
             # task, tool and follow up question
             for subject_id in raw_classifications[global_index]:
+
                 # go through each individual cluster
                 for cluster_index,cluster in aggregations[subject_id][task_id][shape + " clusters"].items():
                     # skip keys which don't actually point to clusters (e.g. misc. extra info)
                     if cluster_index == "all_users":
                         continue
-                    # create a new dictionary element to store the results
-                    aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"] = {}
 
                     relevant_identifiers = self.__get_relevant_identifiers__(most_likely_tool,cluster)
 
@@ -128,7 +128,13 @@ class Classification:
                     followup_results = self.__task_aggregation__(dummy_wrapper,global_index,{})
 
                     # extract the result and add it to the overall set of aggregations
-                    aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"][followup_question_index] = followup_results[subject_id][global_index]
+                    try:
+                        aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"][followup_question_index] = followup_results[subject_id][global_index]
+                    except KeyError:
+                        # create a new dictionary element to store the results - if this is the first
+                        # time we've see this particular subject for this task/cluster
+                        aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"] = {}
+                        aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"][followup_question_index] = followup_results[subject_id][global_index]
 
         return aggregations
 
@@ -253,11 +259,9 @@ class Classification:
 
             else:
                 # we have a follow up classification
-                print(classification_tasks,marking_tasks)
-                print(classification_tasks[task_id])
-                print(task_id)
-                print("****")
                 aggregations = self.__subtask_classification__(task_id,marking_tasks,raw_classifications,aggregations)
+
+
 
         return aggregations
 
