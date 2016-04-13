@@ -322,7 +322,7 @@ class TranscriptionAPI(AggregationAPI):
 
         b = s3.get_bucket('zooniverse-static')
 
-        key_str = "production/project_aggregations_export/"+aws_tar
+        key_str = "panoptes-uploads.zooniverse.org/production/project_aggregations_export/"+aws_tar
 
         s3_key = Key(b)
         s3_key.key = key_str

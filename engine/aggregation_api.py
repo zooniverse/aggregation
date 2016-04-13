@@ -967,7 +967,7 @@ class AggregationAPI:
 
             slash_index = url.rfind("/")
             fname = url[slash_index+1:]
-            url = "https://panoptes-storage.s3.amazonaws.com/production/subject_location/"+url[slash_index+1:]
+            url = "http://zooniverse-static.s3.amazonaws.com/panoptes-uploads.zooniverse.org/production/subject_location/"+url[slash_index+1:]
 
             path = base_directory+"/Databases/images/"+fname
             image_paths.append(path)
