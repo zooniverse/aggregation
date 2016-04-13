@@ -320,9 +320,9 @@ class TranscriptionAPI(AggregationAPI):
 
         aws_tar = self.__get_aws_tar_name__()
 
-        b = s3.get_bucket('panoptes-storage')
+        b = s3.get_bucket('zooniverse-static')
 
-        key_str = "production/project_aggregations_export/"+aws_tar
+        key_str = "panoptes-uploads.zooniverse.org/project_aggregations_export/"+aws_tar
 
         s3_key = Key(b)
         s3_key.key = key_str
@@ -356,9 +356,9 @@ class TranscriptionAPI(AggregationAPI):
         _,s3 = self.__s3_connect__()
 
         aws_tar = self.__get_aws_tar_name__()
-        key = "production/project_aggregations_export/"+aws_tar
+        key = "panoptes-uploads.zooniverse.org/production/project_aggregations_export/"+aws_tar
 
-        url = s3.generate_presigned_url('get_object', Params = {'Bucket': 'panoptes-storage', 'Key': key}, ExpiresIn = 604800)
+        url = s3.generate_presigned_url('get_object', Params = {'Bucket': 'zooniverse-static', 'Key': key}, ExpiresIn = 604800)
 
         return url
 
