@@ -1,5 +1,4 @@
 import json
-from text_aggregation import TranscriptionAPI
 from helper_functions import warning
 import tarfile
 import numpy as np
@@ -12,7 +11,6 @@ __author__ = 'ggdhines'
 
 class TranscriptionOutput:
     def __init__(self,project):
-        assert isinstance(project,TranscriptionAPI)
         self.project = project
 
     def __json_output__(self):
