@@ -21,6 +21,7 @@ Contents:
    blob_aggregation.rst
    output.rst
    error_handling.rst
+   graphics.rst
 
 .. automodule:: engine
 

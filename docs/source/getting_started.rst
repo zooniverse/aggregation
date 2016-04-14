@@ -1,6 +1,6 @@
-******
+*********************************
 The Zooniverse Aggregation Engine
-******
+*********************************
 
 What is all this?
 =================
@@ -15,3 +15,4 @@ The two most important commands for updating the documentation are:
 * make html
 
 A good cheat list of commands to use with rst files is found at http://thomas-cokelaer.info/tutorials/sphinx/rest_syntax.html#list-and-bullets
+
