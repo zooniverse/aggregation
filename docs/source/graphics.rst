@@ -83,9 +83,21 @@ And now iterate over all the contours, drawing them on ::
 
                 cv2.drawContours(contour_image,[cnt],0,0,1)
 
-The two if statements are quick sanity checks. We know that the wings are "roughly" rectangular so if we have a contour plot that is especially narrow (height or width), we can ignore it. I also know that the wings tend to have a parameter of between 200 and 2000 pixels. Any things below that is just noise and anything above that is usefully the ruler. We should be left with 4 contour plots (if not, this is a good subjec to give to the users) ::
+The two if statements are quick sanity checks. We know that the wings are "roughly" rectangular so if we have a contour plot that is especially narrow (height or width), we can ignore it. I also know that the wings tend to have a parameter of between 200 and 2000 pixels. Any things below that is just noise and anything above that is usefully the ruler. We should be left with 4 contour plots (if not, this is a good subjec to give to the users).
 
 .. image:: images/butterfly3.jpg
     :width: 500px
     :height: 300px
     :alt: alternate text
+
+Now that we've done all that, we're ready for the first task that this project wants - a measure of the wing span of top left wing.
+
+.. image:: images/step1.jpg
+    :width: 500px
+    :height: 300px
+    :alt: alternate text
+
+One possibility is to simply find the maximum length line between any two points in a contour plot. I found this sometimes gave slightly strange results. We need to make sure that the line goes from the bottom right of the wing to the top left. Let's start by finding the bottom right of the wing. This isn't completely trivial - a point (x,y) might have the lowest x value but not actually be the most "bottom right hand point".
+The problem is that there isn't a single mathematical definition for "most bottom right" - we could try lexographical sorting but do we sort first on the y or x axis? Both are perfectly reasonable choices but may give different answers.
+
+Consider a bounding box around top left wing. This box has a clear well defined "most bottom right" point, i.e. the bottom right hand corner. However, this corner probably isn't going to be in the contour plot.
