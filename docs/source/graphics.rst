@@ -45,16 +45,47 @@ Not sure exactly why "distance" needs to be used 3 times, the openCV documentati
 Finally, we apply a threshold - map each pixel to be either 0 or 255 (instead of ranging between those values). We'll use binary thresholding which takes a given threshold - if a pixel is below that threshold, it gets maps to 0. Otherwise the pixel is mapped to 255.
 If you don't want to rely on choosing a threshold, look into Otsu's binarization (i haven't played with it for this particular problem but seems like a good possibility). However, for our problem there is such a large difference between foreground and background pixel (and that difference is pretty constant over multiple images) that I choose a threshold of 200 and it worked fine ::
 
-    _,overall_d = cv2.threshold(overall_d,200,255,cv2.THRESH_BINARY)
+    _,distance = cv2.threshold(distance,200,255,cv2.THRESH_BINARY)
 
 The "_" means that cv2 is returning another value that I don't care about. To save the image, we can use ::
 
-    cv2.imwrite(file_name,overall_d)
+    cv2.imwrite(file_name,distance)
 
 Technically we could also matplotlib but I wouldn't recommend it - the image will get shrunk by borders and it is a complete pain to deal with. The image looks like
 
 .. image:: images/butterfly2.jpg
     :width: 300px
     :align: center
+    :height: 300px
+    :alt: alternate text
+
+So we've extracted the foreground (wings, ruler and card). Next we need to identify the wings specifically. We can use heuristics such as "all the pixels in the ruler have x-values less than 300" (this seems to be a pretty good heuristic from my experience with these particular subjects). But for now we'll proceed without such heuristics.
+We'll extract the contours of the above image - the outlines of each blob - using openCV ::
+
+    _,contour, _ = cv2.findContours(distance.copy(),cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+
+See http://docs.opencv.org/3.1.0/d4/d73/tutorial_py_contours_begin.html#gsc.tab=0 for a discussion about the details of how to find contours (and neat things you can do with them). A couple of points
+
+* findContours actually destroys the image you pass in. So if we wanted to use "distance" again, we actually need to give findContours a copy. (hence .copy())
+* if you read the documentation, you will come across the idea of setting the second parameter to cv2.RETR_EXTERNAL (instead of cv2.RETR_TREE) which may seem like a good idea but sometimes can give weird results. My rule of thumb is that unless you specifically want only the external contours (which can happen), DO NOT use cv2.RETR_EXTERNAL
+
+Let's create a white template image (the same dimensions as distance) and draw on the contours. First create the template image ::
+
+    contour_image = np.zeros(image.shape[:2],np.uint8)
+    contour_image.fill(255)
+
+And now iterate over all the contours, drawing them on ::
+
+    for cnt in contour:
+        x,y,w,h_ = cv2.boundingRect(cnt)
+        if 0.5 <= (h_/float(w)) <= 2:
+            if 200 <= cv2.arcLength(cnt,True) < 2000:
+
+                cv2.drawContours(contour_image,[cnt],0,0,1)
+
+The two if statements are quick sanity checks. We know that the wings are "roughly" rectangular so if we have a contour plot that is especially narrow (height or width), we can ignore it. I also know that the wings tend to have a parameter of between 200 and 2000 pixels. Any things below that is just noise and anything above that is usefully the ruler. We should be left with 4 contour plots (if not, this is a good subjec to give to the users) ::
+
+.. image:: images/butterfly3.jpg
+    :width: 500px
     :height: 300px
     :alt: alternate text
