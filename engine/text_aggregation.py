@@ -112,16 +112,16 @@ class SubjectRetirement(Classification):
                 headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+token}
                 params = {"subject_id":retired_subject}
                 r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(workflow_id)+"/retired_subjects",headers=headers,data=json.dumps(params))
-                if self.environment != "production":
-                    print(r.status_code)
+                # if self.environment != "production":
+                #     print(r.status_code)
                 # return an error if we have a 404 status
                 assert r.status_code == 200
             except TypeError as e:
                 warning(e)
                 rollbar.report_exc_info()
 
-        if to_retire != set():
-            print("total retired so far " + str(self.total_retired))
+        # if to_retire != set():
+        #     print("total retired so far " + str(self.total_retired))
 
         # print("we would have retired " + str(len(self.to_retire)))
         # print("with non-blanks " + str(len(self.to_retire)-blank_retirement))
@@ -146,14 +146,14 @@ class TranscriptionAPI(AggregationAPI):
         """
 
         if raw_markings == {}:
-            warning("warning - empty set of images")
-            return {}
+            warning("skipping")
+            return aggregations
 
         # start by clustering text
-        print("clustering text")
+        # print("clustering text")
         cluster_aggregations = self.text_algorithm.__aggregate__(raw_markings,image_dimensions)
         aggregations = self.__merge_aggregations__(aggregations,cluster_aggregations)
-        print("clustering images")
+        # print("clustering images")
         image_aggregations = self.image_algorithm.__aggregate__(raw_markings,image_dimensions)
 
         aggregations = self.__merge_aggregations__(aggregations,image_aggregations)
@@ -456,8 +456,13 @@ if __name__ == "__main__":
         # print "done migrating"
         # # project.__aggregate__(subject_set = [671541,663067,664482,662859])
 
+        # for workflow_id,version in project.versions.items():
+        #     print(workflow_id)
+        #     migrated_subjects = project.__migrate__(workflow_id,version)
+        # project.output_tool.__json_output__()
+
         processed_subjects = project.__aggregate__()
-        print("about to send off email")
+        # print("about to send off email")
         if True:#environment == "production":
             project.__summarize__()
 

@@ -1,3 +1,4 @@
+from __future__ import print_function
 import json
 from helper_functions import warning
 import tarfile
@@ -21,7 +22,6 @@ class TranscriptionOutput:
         print("saving json results")
         with tarfile.open("/tmp/"+aws_tar,mode="w") as t:
             t.add("/tmp/"+str(self.project.project_id)+".json")
-
 
 
 class ShakespearesWorldOutput(TranscriptionOutput):
@@ -49,7 +49,6 @@ class ShakespearesWorldOutput(TranscriptionOutput):
                 clusters_by_line = {}
 
                 if isinstance(aggregation,str):
-                    print("converting aggregation to string")
                     aggregation = json.loads(aggregation)
 
                 for key,cluster in aggregation["T2"]["text clusters"].items():
@@ -175,15 +174,178 @@ class AnnotateOutput(TranscriptionOutput):
     def __init__(self,project):
         TranscriptionOutput.__init__(self,project)
 
+        # set up the reverse tags - so we can take a token (representing a full tag) and replace it with the
+        # original tag
+        self.tags = self.project.text_algorithm.tags
+        self.reverse_tags = dict()
+
+        for a,b in self.tags.items():
+            self.reverse_tags[b] = a
+
+    def __write_out_cluster__(self,cluster):
+        """
+        set up the json output for a single individual cluster
+        :param cluster:
+        :return:
+        """
+        cluster_to_json = {}
+        # we need to retokenize everything
+
+        tokenized_strings = []
+        for annotation in cluster["cluster members"]:
+            # extract the individual transcription
+            i_transcription = annotation[-2]
+            # convert from unicode to ascii
+            i_transcription = i_transcription.encode('ascii','ignore')
+            # replace each tag with a single character representation
+            for chr_representation,tag in self.tags.items():
+                i_transcription = i_transcription.replace(tag,chr(chr_representation))
+
+            tokenized_strings.append(i_transcription)
+
+        # and now repeat with aggregated line
+        aggregated_line = str(cluster["center"][-1])
+        for chr_representation,tag in self.tags.items():
+            aggregated_line = aggregated_line.replace(tag,chr(chr_representation))
+        assert isinstance(aggregated_line,str)
+
+        # store this cleaned aggregate text
+        cluster_to_json["aggregated_text"] = self.__write_out_aggregate_line__(aggregated_line,tokenized_strings)
+        # plus the coordinates
+        cluster_to_json["coordinates"] = cluster["center"][:-1]
+        # now add in the individual pieces of text
+        cluster_to_json["individual transcriptions"] = self.__write_out_individual_lines__(cluster)
+
+        return cluster_to_json
+
+    def __write_out_individual_lines__(self,cluster):
+        """
+        set up the output for each individual transcription in a cluster
+        :param cluster:
+        :return:
+        """
+        individual_text_to_json = []
+        for ii, annotation in enumerate(cluster["cluster members"]):
+            # I think annotation[5] is no variants of words - for folger
+            coords = annotation[:4]
+            individual_text = annotation[4]
+            assert isinstance(individual_text,unicode)
+
+            # again, convert the tags to the ones needed by Folger or Tate (as opposed to the ones
+            # zooniverse is using)
+            # assert isinstance(individual_text,str)
+            # for old,new in replacement_tags.items():
+            #     individual_text = individual_text.replace(old,new)
+
+            temp_text = individual_text
+            skip = 0
+            is_skip = False
+
+            # we need to "rebuild" the individual text so that we can insert <skip>X</skip>
+            # to denote that MAFFT inserted X spaces into the line
+            individual_text = ""
+            for c in temp_text:
+                if ord(c) in [24,27]:
+                    is_skip = True
+                    skip += 1
+                else:
+                    if is_skip:
+                        individual_text += "<skip>"+str(skip)+"</skip>"
+                        skip = 0
+                        is_skip = 0
+                    individual_text += c
+
+            individual_text_to_json.append({"coordinates":coords,"text":individual_text})
+
+        return individual_text_to_json
+
+    def __write_out_aggregate_line__(self,aggregated_line,tokenized_strings):
+        """
+        take care of setting up the output for one aggregate line
+        :param tokenized_strings: so if there is disagreement, we can list the different options
+        :return:
+        """
+        # convert some special characters and tokenize the disagreements
+
+        line = ""
+
+        agreement = True
+        differences = {}
+
+        for c_i,c in enumerate(aggregated_line):
+            # if we have a disagreement (represented by either ord(c) = 27), keep on a running tally of
+            # what all the differences are over all users so we can report the disagreements per "word"
+            # of disagreement, not per character
+            if ord(c) == 27:
+                agreement = False
+
+                # get all of the different transcriptions given by each user
+                try:
+                    char_options = [(ii,individual_text[c_i]) for ii,individual_text in enumerate(tokenized_strings)]
+                except IndexError:
+                    print([len(t) for t in tokenized_strings])
+                    print(len(aggregated_line))
+                    print([c for c in aggregated_line])
+                    print("==---")
+                    for t in tokenized_strings:
+                        print(t)
+
+                    raise
+
+                # add these characters to the running total - ord(c) == 24 is when MAFFT inserted
+                # a space to align the text, which corresponds to not having anything there
+                for ii,c in char_options:
+                    if ord(c) != 24:
+                        if ii not in differences:
+                            differences[ii] = c
+                        else:
+                            differences[ii] += c
+                    else:
+                        if ii not in differences:
+                            differences[ii] = ""
+            elif ord(c) != 24:
+                # if we just had a disagreement, print it out
+                if not agreement:
+                    line += "<disagreement>"
+                    for options in set(differences.values()):
+                        for tag,chr_representation in self.reverse_tags.items():
+                            options = options.replace(chr(chr_representation),tag)
+                        line += "<option>"+options+"</option>"
+                    line += "</disagreement>"
+                    differences = {}
+
+                agreement = True
+
+                # untokenize any tokens we find - replace them with the original tag
+                for tag,chr_representation in self.reverse_tags.items():
+                    c = c.replace(chr(chr_representation),tag)
+                line += c
+
+        # did we end on a disagreement?
+        if not agreement:
+            line += "<disagreement>"
+            for c in set(differences.values()):
+                for tag,chr_representation in self.reverse_tags.items():
+                    c = c.replace(chr(chr_representation),tag)
+                line += "<option>"+c+"</option>"
+            line += "</disagreement>"
+
+        # for the illegible tag, we added in some extra stuff, so now remove it
+        line = line.replace(".*?","")
+        return line
+
+
     def __json_output__(self):
         aggregations_to_json = dict()
         # get the list of all retired subjects
-        # retired_subjects = project.__get_subjects__(workflow_id,only_retired_subjects=True)
-
         workflow_id = self.project.workflows.keys()[0]
 
-        for subject_id,aggregations in list(self.project.__yield_aggregations__(workflow_id))[:10]:
-            print subject_id
+        print("creating json output ready")
+        for count,(subject_id,aggregations) in enumerate(self.project.__yield_aggregations__(workflow_id)):
+            if (self.project.environment in ["quasi","development"]) and (count > 100):
+                print("breaking early due to development environment")
+                break
+            print(subject_id)
 
             # an empty subject is represented by not having an image value or text value
             aggregations_to_json[subject_id] = {}
@@ -205,191 +367,58 @@ class AnnotateOutput(TranscriptionOutput):
                     aggregations_to_json[subject_id]["images"].append(image["center"])
 
             # are there any text clusters?
-            if len(aggregations["T2"]["text clusters"]) > 1:
+            if len(aggregations["T2"]["text clusters"]) >= 1:
                 aggregations_to_json[subject_id]["text"] = []
 
                 # now build up each one of the results
                 for cluster_index,cluster in aggregations["T2"]["text clusters"].items():
-
+                    # this isn't really a cluster - more metadata, so skip it
                     if cluster_index == "all_users":
                         continue
-                    if "Ward" in cluster["center"][-1]:
-                        print [individual_text for (coord,individual_text) in enumerate(cluster["cluster members"])]
-                        for (coord,text) in cluster["cluster members"]:
-                            print text
-                            print [(ii,individual_text[c_i]) for ii,(coord,individual_text) in enumerate(cluster["cluster members"])]
-                        print
-                    # print cluster
-                    # assert False
 
-                    cluster_to_json = {}
-
-                    # for folger this will allow us to remove sw- from all of the tags
-                    # for both folger and annotate, we will set <unclear>.*</unclear> to just <unclear></unclear>
-                    # aggregated_line = str(cluster["center"][-1])
-
-                    # we need to retokenize everything
-                    # print aggregated_line
-                    tags = self.project.text_algorithm.tags
-                    reverse_tags = dict()
-
-                    for a,b in tags.items():
-                        reverse_tags[b] = a
-
-                    tokenized_strings = []
-                    for _,l_m in cluster["cluster members"]:
-                        l_m = l_m.encode('ascii','ignore')
-                        for tag,chr_representation in tags.items():
-                            l_m = l_m.replace(tag,chr(chr_representation))
-                            # aggregated_line = aggregated_line.replace(old,chr(new))
-
-                        tokenized_strings.append(l_m)
-
-                    aggregated_line = str(cluster["center"][-1])
-                    # print type(aggregated_line)
-                    assert isinstance(aggregated_line,str)
-
-                    # convert some special characters and tokenize the disagreements
-                    line = ""
-
-                    agreement = True
-                    differences = {}
-
-                    # we need to treat tags as a single character
-                    # convert the aggregated line to tokenized tags so that it and all
-                    # of the individual lines are the same length
-                    try:
-                        for chr_representation,tag in reverse_tags.items():
-                            aggregated_line = aggregated_line.replace(chr(chr_representation),tag)
-                    except UnicodeDecodeError:
-                        print aggregated_line
-                        raise
-
-                    for c_i,c in enumerate(aggregated_line):
-                        # if we have a disagreement (represented by either ord(c) = 27), keep on a running tally of
-                        # what all the differences are over all users so we can report the disagreements per "word"
-                        # of disagreement, not per character
-                        if ord(c) == 27:
-                            agreement = False
-
-                            # get all of the different transcriptions given by each user
-                            try:
-
-                                # print [(ii,individual_text[c_i]) for ii,(coord,individual_text) in enumerate(cluster["cluster members"])]
-                                # print "***"
-                                char_options = [(ii,individual_text[c_i]) for ii,individual_text in enumerate(tokenized_strings)]
-                            except IndexError:
-                                print aggregated_line
-                                print len(aggregated_line)
-                                print [len(l[1]) for l in cluster["cluster members"]]
-                                for l in cluster["cluster members"]:
-                                    print l
-                                raise
-
-                            # add these characters to the running total - ord(c) == 24 is when MAFFT inserted
-                            # a space to align the text, which corresponds to not having anything there
-                            for ii,c in char_options:
-                                if ord(c) != 24:
-                                    if ii not in differences:
-                                        differences[ii] = c
-                                    else:
-                                        differences[ii] += c
-                                else:
-                                    if ii not in differences:
-                                        differences[ii] = ""
-                        elif ord(c) != 24:
-                            # if we just had a disagreement, print it out
-                            if not agreement:
-                                line += "<disagreement>"
-                                for options in set(differences.values()):
-                                    for chr_representation,tag in reverse_tags.items():
-                                        options = options.replace(chr(chr_representation),tag)
-                                    line += "<option>"+options+"</option>"
-                                line += "</disagreement>"
-                                differences = {}
-
-                            agreement = True
-
-                            for chr_representation,tag in reverse_tags.items():
-                                c = c.replace(chr(chr_representation),tag)
-                            line += c
-
-                    # did we end on a disagreement?
-                    if not agreement:
-                        line += "<disagreement>"
-                        for c in set(differences.values()):
-                            for chr_representation,tag in reverse_tags.items():
-                                c = c.replace(chr(chr_representation),tag)
-                            line += "<option>"+c+"</option>"
-                        line += "</disagreement>"
-
-                    # if "Ward" in line:
-                    #     print line
-                    #     print cluster["cluster members"]
-                    #     print json.dumps(cluster["cluster members"],sort_keys=True,indent=4, separators=(',', ': '))
-                    #     assert False
-
-                    # store this cleaned aggregate text
-                    cluster_to_json["aggregated_text"] = line
-                    # plus the coordinates
-                    cluster_to_json["coordinates"] = cluster["center"][:-1]
-
-                    # now add in the individual pieces of text
-                    individual_text_to_json = []
-                    for ii,(coords,individual_text) in enumerate(cluster["cluster members"]):
-                        # again, convert the tags to the ones needed by Folger or Tate (as opposed to the ones
-                        # zooniverse is using)
-                        # assert isinstance(individual_text,str)
-                        # for old,new in replacement_tags.items():
-                        #     individual_text = individual_text.replace(old,new)
-
-                        temp_text = individual_text
-                        skip = 0
-                        is_skip = False
-
-                        # we need to "rebuild" the individual text so that we can insert <skip>X</skip>
-                        # to denote that MAFFT inserted X spaces into the line
-                        individual_text = ""
-                        for c in temp_text:
-                            if ord(c) in [24,27]:
-                                is_skip = True
-                                skip += 1
-                            else:
-                                if is_skip:
-                                    individual_text += "<skip>"+str(skip)+"</skip>"
-                                    skip = 0
-                                    is_skip = 0
-                                individual_text += c
-
-                        individual_text_to_json.append({"coordinates":coords,"text":individual_text})
-
-                    cluster_to_json["individual transcriptions"] = individual_text_to_json
-                    aggregations_to_json[subject_id]["text"].append(cluster_to_json)
+                    # add this cluster to the total list
+                    aggregations_to_json[subject_id]["text"].append(self.__write_out_cluster__(cluster))
 
                 # sort so they should appear in reading order
                 aggregations_to_json[subject_id]["text"].sort(key = lambda x:x["coordinates"][2])
 
-
                 # finally, give all of the individual transcriptions (removing alignment tags) without regards to
                 # cluster - this way, people can tell if any text was ignored
-                transcriptions = self.project.__sort_annotations__(workflow_id,[subject_id])[1]
-                aggregations_to_json[subject_id]["raw transcriptions"] = []
-                for ii,(user_id,transcription,tool) in enumerate(transcriptions["T2"]["text"][subject_id]):
-                    if transcription is None:
-                        continue
-                    coords = transcription[:-1]
-                    individual_text = transcription[-1]
-                    if "\n" in individual_text:
-                        continue
+                aggregations_to_json[subject_id]["raw transcriptions"] = self.__add_global_transcriptions__(subject_id)
 
-                    individual_text = individual_text.encode('ascii','ignore')
-                    aggregations_to_json[subject_id]["raw transcriptions"].append({"coordinates":coords,"text":individual_text})
 
         project_id = str(self.project.project_id)
         with open("/tmp/"+project_id+".json", 'w') as outfile:
-            # print aggregations_to_json
-            # print json.dumps(aggregations_to_json, sort_keys=True,indent=4, separators=(',', ': '))
-            # assert False
             json.dump(aggregations_to_json,outfile)
 
         self.__tar_output__()
+
+    def __add_global_transcriptions__(self,subject_id):
+        """
+        add the individual transcriptions without regards to the cluster - so people can tell if any
+        text was ignored
+        :return:
+        """
+        global_list = []
+
+        workflow_id = self.project.workflows.keys()[0]
+
+        for annotations in self.project.__sort_annotations__(workflow_id,[subject_id]):
+            # annotation[1] is the list of markings for this subject - annotation[0] is the list
+            # of classifications, [2] survey annotations and [3] image dimensions
+            transcriptions = annotations[1]
+
+
+            for ii,(user_id,transcription,tool) in enumerate(transcriptions["T2"]["text"][subject_id]):
+                if transcription is None:
+                    continue
+                coords = transcription[:4]
+                individual_text = transcription[4]
+                assert isinstance(individual_text,unicode)
+                if "\n" in individual_text:
+                    continue
+
+                individual_text = individual_text.encode('ascii','ignore')
+                global_list.append({"coordinates":coords,"text":individual_text})
+
+        return global_list

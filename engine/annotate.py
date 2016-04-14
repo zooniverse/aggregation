@@ -64,6 +64,7 @@ class AnnotateClustering(TextClustering):
     def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,subject_id):
         unique_users = set(user_ids)
         if len(unique_users) <= 2:
+            print("too few users")
             return [],0
 
         # to create the clusters, we need two things - the user id corresponding to each
@@ -92,7 +93,7 @@ class AnnotateClustering(TextClustering):
         # todo - play around with n_components, if e_v_r is than 0.95, maybe increase to 3?
         pca = PCA(n_components=2)
         pca.fit(pts)
-        print("explained variance is " + str(sum(pca.explained_variance_ratio_)))
+        # print("explained variance is " + str(sum(pca.explained_variance_ratio_)))
         xy = pca.transform(pts)
 
         # do agglomerative clustering - right now based on ward distance
@@ -237,10 +238,20 @@ class AnnotateClustering(TextClustering):
             # in cases where there is disagreement, use voting to determine the most likely character
             # if there is strong disagreement, we'll mark those spots as unknown
             aggregate_text,percent_agreement= self.__merge_aligned_text__(aligned_transcriptions)
+
+            # store the cluster members with alignment spaces added in
+            dummy = [[] for _ in aligned_transcriptions]
+            print(aligned_transcriptions)
+            untokenized_text = [self.__reset_tags__(t) for t in aligned_transcriptions]
+            print(untokenized_text)
+            cluster_members = zip(x1_values,x2_values,y1_values,y2_values,untokenized_text,dummy)
         else:
             # we know that we have near complete agreement (up to disagreement about capitalizations) so we know
             # that the text is aligned
             aggregate_text,percent_agreement = self.__merge_aligned_text__(transcriptions)
+
+            # we didn't do any alignment changes so the cluster members are the original pieces of text
+            cluster_members = markings_in_cluster
 
         # convert tags from tokens back into multicharacter strings (so people can read them)
         aggregate_text = self.__reset_tags__(aggregate_text)
@@ -257,7 +268,7 @@ class AnnotateClustering(TextClustering):
 
         cluster["tools"] = []
 
-        cluster["cluster members"] = markings_in_cluster
+        cluster["cluster members"] = cluster_members
 
         cluster["num users"] = len(cluster["cluster members"])
 
