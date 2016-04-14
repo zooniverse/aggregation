@@ -297,7 +297,6 @@ class AggregationAPI:
 
             if subject_set == []:
                 print("skipping workflow " + str(workflow_id) + " due to an empty subject set")
-                subject_set = None
                 continue
             print(self.only_retired_subjects)
             print("workflow id : " + str(workflow_id))
@@ -393,7 +392,7 @@ class AggregationAPI:
         if subject_set is None:
             subject_set = self.__load_subjects__(workflow_id)
 
-        print("getting annotations via cassandra")
+        # print("getting annotations via cassandra")
 
         # do this in bite sized pieces to avoid overwhelming DB
         for s in self.__chunks__(subject_set,50):
@@ -575,6 +574,15 @@ class AggregationAPI:
     #     # return count
     #     assert False
 
+    def __count_subjects__(self,workflow_id):
+        stmt = """ SELECT count(*) FROM "subjects"
+                    INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."subject_id" = "subjects"."id"
+                    WHERE "subject_workflow_counts"."workflow_id" = """ + str(workflow_id)
+
+        cursor = self.postgres_session.cursor()
+        cursor.execute(stmt)
+        print(cursor.fetchall())
+
     def __count_subjects_classified__(self,workflow_id):
         """
         there are sometimes workflows which haven't received any classifications (for any subjects)
@@ -718,6 +726,15 @@ class AggregationAPI:
             warning(data)
             raise
         # return None
+
+    def __get_subjects_in_workflow__(self,workflow_id):
+        stmt = """ SELECT * FROM "subjects"
+                    INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."subject_id" = "subjects"."id"
+                    WHERE "subject_workflow_counts"."workflow_id" = """ + str(workflow_id)
+
+        cursor = self.postgres_session.cursor()
+        cursor.execute(stmt)
+        return [r[0] for r in cursor.fetchall()]
 
     def __get_newly_retired_subjects__(self,workflow_id):#,only_retired_subjects=False):#,only_recent_subjects=True):
         """
@@ -1765,7 +1782,6 @@ class AggregationAPI:
                         assert False
 
             yield raw_classifications,raw_markings,raw_surveys,image_dimensions
-
         raise StopIteration()
 
     def __subject_ids_in_set__(self,set_id):
@@ -1882,11 +1898,14 @@ class AggregationAPI:
         """
         generator for giving aggregation results per subject id/task
         """
-        stmt = "select subject_id,aggregation,updated_at from aggregations where workflow_id = " + str(workflow_id)
-
         # connect to the postgres db
         cursor = self.postgres_session.cursor()
 
+        stmt = "select count(*) from aggregations where workflow_id = " + str(workflow_id)
+        cursor.execute(stmt)
+        print("aggregations to date: " + str(cursor.fetchone()))
+
+        stmt = "select subject_id,aggregation,updated_at from aggregations where workflow_id = " + str(workflow_id)
         cursor.execute(stmt)
 
         # go through each of the results
@@ -1906,7 +1925,7 @@ class AggregationAPI:
             assert isinstance(aggregation,dict)
 
             yield r[0],aggregation
-
+        print("done")
         raise StopIteration()
 
 if __name__ == "__main__":
