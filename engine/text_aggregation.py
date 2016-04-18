@@ -452,7 +452,7 @@ if __name__ == "__main__":
 
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
-        project.__reset_cassandra_dbs__()
+        # project.__reset_cassandra_dbs__()
         # print "done migrating"
         # # project.__aggregate__(subject_set = [671541,663067,664482,662859])
 
@@ -461,7 +461,7 @@ if __name__ == "__main__":
         #     migrated_subjects = project.__migrate__(workflow_id,version)
         # project.output_tool.__json_output__()
 
-        processed_subjects = project.__aggregate__()
+        # processed_subjects = project.__aggregate__()
         # print("about to send off email")
         if True:#environment == "production":
             project.__summarize__()

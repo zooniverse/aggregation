@@ -14,6 +14,9 @@ class TranscriptionOutput:
     def __init__(self,project):
         self.project = project
 
+        workflow_id = self.project.workflows.keys()[0]
+        self.metadata = self.project.__get_subject_metadata__(workflow_id)
+
     def __json_output__(self):
         pass
 
@@ -111,8 +114,8 @@ class ShakespearesWorldOutput(TranscriptionOutput):
                             new_json[subject_id] = {"text":[],"individual transcriptions":[], "accuracy":[], "coordinates" : [],"users_per_line":[]}
 
                             # add in the metadata
-                            metadata = self.project.__get_subject_metadata__(subject_id)["subjects"][0]["metadata"]
-                            new_json[subject_id]["metadata"] = metadata
+
+                            new_json[subject_id]["metadata"] = self.metadata[subject_id]
 
                             new_json[subject_id]["zooniverse subject id"] = subject_id
 
@@ -351,11 +354,7 @@ class AnnotateOutput(TranscriptionOutput):
             aggregations_to_json[subject_id] = {}
 
             # get the metadata for this subject
-            m = self.project.__get_subject_metadata__(subject_id)
-            metadata = m["subjects"][0]["metadata"]
-            # metadata = json.dumps(metadata)
-            aggregations_to_json[subject_id]["metadata"] = metadata
-
+            aggregations_to_json[subject_id]["metadata"] = self.metadata[subject_id]
 
             # are there any images in this subject?
             # there will always be "all_users" so we can looking for a list longer than one

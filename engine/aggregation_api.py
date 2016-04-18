@@ -335,8 +335,8 @@ class AggregationAPI:
 
                     aggregations = survey_alg.__aggregate__(raw_surveys,aggregations)
 
-                # upsert at every 50th subject - not sure if that's actually ideal but might be a good trade off
-                if (ii > 0) and (ii % 50 == 0):
+                # upsert at every 250th subject - not sure if that's actually ideal but might be a good trade off
+                if (ii > 0) and (ii % 250 == 0):
                     # finally, store the results
                     self.__upsert_results__(workflow_id,aggregations)
                     aggregations = {}
@@ -781,25 +781,28 @@ class AggregationAPI:
 
         return list(subjects)
 
-    def __get_subject_metadata__(self,subject_id):
-        # print self.host_api+"subjects/"+str(subject_id)+"?"
-        request = urllib2.Request(self.host_api+"subjects/"+str(subject_id)+"?")
-        request.add_header("Accept","application/vnd.api+json; version=1")
-        request.add_header("Authorization","Bearer "+self.token)
-        # print self.host_api+"subjects/"+str(subject_id)+"?"
+    def __get_subject_metadata__(self,workflow_id):
+        """
+        return the set of all subjects and their associated metadata for a given workflow
+        :param workflow_id:
+        :return:
+        """
+        metadata = dict()
 
-        for i in range(20):
-            try:
-                response = urllib2.urlopen(request)
-                body = response.read()
-                data = json.loads(body)
-                return data
+        stmt = """ SELECT subject_id,metadata FROM "subjects"
+            INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."subject_id" = "subjects"."id"
+            WHERE "subject_workflow_counts"."workflow_id" = """ + str(workflow_id) + """ AND "subject_workflow_counts"."retired_at" >= '""" + str(self.oldest_new_classification) + """'"""
 
-            except urllib2.HTTPError as e:
-                warning(e)
-                warning("trouble connecting to Panoptes - trying again")
+        cursor = self.postgres_session.cursor()
+        cursor.execute(stmt)
+        self.postgres_session.commit()
 
-        assert False
+        for id_,met in cursor.fetchall():
+            metadata[int(id_)] = met
+
+        return metadata
+
+
 
 
 
@@ -1938,9 +1941,11 @@ if __name__ == "__main__":
         environment = "development"
 
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
-        project.__setup__()
 
-        aggregated_subjects = project.__aggregate__()
+        project.__setup__()
+        # project.__reset_cassandra_dbs__()
+        # aggregated_subjects = project.__aggregate__()
 
         with csv_output.CsvOut(project) as c:
-            c.__write_out__(subject_set=aggregated_subjects)
+            # c.__write_out__(subject_set=aggregated_subjects)
+            c.__write_out__(subject_set=None)
