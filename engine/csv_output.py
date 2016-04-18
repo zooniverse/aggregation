@@ -718,8 +718,8 @@ class CsvOut:
             # with open(self.file_names[id_],"a") as f:
             #     summary_line = self.__survey_summary_row(aggregations)
             #     f.write(str(subject_id)+summary_line)
-
-            id_ = (task_id,"detailed")
+            # print(self.file_names.keys())
+            id_ = task_id
             with open(self.file_names[id_],"a") as f:
                 detailed_lines = self.__survey_row__(instructions,aggregations)
                 for l in detailed_lines:
@@ -794,8 +794,6 @@ class CsvOut:
 
                 csv_file.write(header+"\n")
 
-
-
     def __survey_how_many__(self,instructions,aggregations,species_id):
         """
         return the columns for the question how many animals are present in an image
@@ -810,7 +808,10 @@ class CsvOut:
         """
         followup_id = "HWMN"
         followup_question = instructions["questions"][followup_id]
-        votes = aggregations[species_id]["followup"][followup_id].items()
+        try:
+            votes = aggregations[species_id]["followup"][followup_id].items()
+        except KeyError:
+            return ",NA,NA,NA,NA"
         # sort by num voters
         sorted_votes = sorted(votes,key = lambda x:x[1],reverse=True)
         candidates,vote_counts = zip(*sorted_votes)
