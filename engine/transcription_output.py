@@ -406,17 +406,18 @@ class AnnotateOutput(TranscriptionOutput):
             # of classifications, [2] survey annotations and [3] image dimensions
             transcriptions = annotations[1]
 
+            # make sure that this user actually provided transcriptions, otherwise, just skip
+            if "T2" in transcriptions:
+                for ii,(user_id,transcription,tool) in enumerate(transcriptions["T2"]["text"][subject_id]):
+                    if transcription is None:
+                        continue
+                    coords = transcription[:4]
+                    individual_text = transcription[4]
+                    assert isinstance(individual_text,unicode)
+                    if "\n" in individual_text:
+                        continue
 
-            for ii,(user_id,transcription,tool) in enumerate(transcriptions["T2"]["text"][subject_id]):
-                if transcription is None:
-                    continue
-                coords = transcription[:4]
-                individual_text = transcription[4]
-                assert isinstance(individual_text,unicode)
-                if "\n" in individual_text:
-                    continue
-
-                individual_text = individual_text.encode('ascii','ignore')
-                global_list.append({"coordinates":coords,"text":individual_text})
+                    individual_text = individual_text.encode('ascii','ignore')
+                    global_list.append({"coordinates":coords,"text":individual_text})
 
         return global_list
