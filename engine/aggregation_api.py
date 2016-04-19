@@ -791,7 +791,7 @@ class AggregationAPI:
 
         stmt = """ SELECT subject_id,metadata FROM "subjects"
             INNER JOIN "subject_workflow_counts" ON "subject_workflow_counts"."subject_id" = "subjects"."id"
-            WHERE "subject_workflow_counts"."workflow_id" = """ + str(workflow_id) + """ AND "subject_workflow_counts"."retired_at" >= '""" + str(self.oldest_new_classification) + """'"""
+            WHERE "subject_workflow_counts"."workflow_id" = """ + str(workflow_id) + """ AND "subject_workflow_counts"."retired_at" >= '""" + str(datetime.datetime(2000,1,1)) + """'"""
 
         cursor = self.postgres_session.cursor()
         cursor.execute(stmt)
