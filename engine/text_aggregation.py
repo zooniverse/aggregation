@@ -188,6 +188,8 @@ class TranscriptionAPI(AggregationAPI):
         if "tags" in api_details[self.project_id]:
             additional_text_args["tags"] = api_details[self.project_id]["tags"]
 
+        self.email_recipients = api_details[self.project_id]["email"]
+
         # now that we have the additional text arguments, convert text_algorithm from a class
         # to an actual instance
         if self.project_id == 245:
@@ -372,17 +374,8 @@ class TranscriptionAPI(AggregationAPI):
         # and then get the url to send to people
         url = self.__get_signed_url__()
 
-        # now get some stats to include in the email
-        num_retired = self.classification_alg.num_retired
-        non_blanks_retired = self.classification_alg.non_blanks_retired
-        #
-        # stats = self.text_algorithm.stats
-        #
-        # old_time_string = self.previous_runtime.strftime("%B %d %Y")
-        # new_time_string = end_date.strftime("%B %d %Y")
-        #
-        # accuracy =  1. - stats["errors"]/float(stats["characters"])
-        #
+
+
         subject = "Aggregation summary for Project " + str(self.project_id) #+ str(old_time_string) + " to " + str(new_time_string)
 
         body = "The link to the json aggregation results for all retired subjects is " + url
@@ -397,7 +390,7 @@ class TranscriptionAPI(AggregationAPI):
             Source='greg@zooniverse.org',
             Destination={
                 'ToAddresses': [
-                    'greg@zooniverse.org'#,'victoria@zooniverse.org','matt@zooniverse.org','shakespearesworldteam@jiscmail.ac.uk'
+                    'greg@zooniverse.org',self.email_recipients
                 ]#,
                 # 'CcAddresses': [
                 #     'string',
@@ -463,6 +456,6 @@ if __name__ == "__main__":
 
         # processed_subjects = project.__aggregate__()
         # print("about to send off email")
-        if True:#environment == "production":
+        if datetime.datetime.today().weekday() == 1:#environment == "production":
             project.__summarize__()
 
