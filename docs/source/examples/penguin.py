@@ -1,12 +1,16 @@
 #!/usr/bin/env python
 from __future__ import print_function
+import matplotlib
+matplotlib.use('WXAgg')
+import matplotlib.pyplot as plt
 import pymongo
 import sys
 sys.path.append("/home/ggdhines/github/aggregation/engine")
-sys.path.append("/home/ggdhines/Pycharm/reduction/engine")
 from agglomerative import Agglomerative
 import csv
 import os
+import urllib
+import matplotlib.cbook as cbook
 
 name_changes = {}
 with open("/home/ggdhines/Downloads/Nomenclature_changes.csv","rb") as f:
@@ -92,7 +96,7 @@ subject_collection = db["penguin_subjects"]
 #
 #     classification_collection.update_one({"_id":_id},{"$set":{"zooniverse_id":zooniverse_id}})
 
-clustering_engine = Agglomerative(None,{})
+clustering_engine = Agglomerative(None,None,{})
 
 # result = db.profiles.create_index([('zooniverse_id', pymongo.ASCENDING)],unique=False)
 # print result
@@ -137,6 +141,9 @@ for c in classification_collection.find():
 
         try:
             for penguin in c2["annotations"][1]["value"].values():
+                if penguin["value"] == "other":
+                    continue
+
                 try:
                     x = float(penguin["x"])
                     y = float(penguin["y"])
@@ -152,11 +159,9 @@ for c in classification_collection.find():
                         print("skipping due to being outside roi")
                         continue
 
-                penguin_type = penguin["value"]
-
                 markings.append((x,y))
                 user_ids.append(id_)
-                tools.append(penguin_type)
+                tools.append(penguin["value"])
         except AttributeError:
             continue
         except KeyError:
@@ -164,19 +169,45 @@ for c in classification_collection.find():
 
     with open(d+"/"+little_path+".csv","w") as f:
         if markings != []:
+            # call the panoptes based clustering algorithm
             clustering_results = clustering_engine.__cluster__(markings,user_ids,tools,markings,None,None)
 
-            f.write("penguin_index,x_center,y_center,probability_of_adult,probability_of_true_positive,num_markings\n")
+            # print(len(markings))
+            # pts = [c["center"] for c in clustering_results[0]]
+            # # for c in clustering_results[0]:
+            # #     print(c["center"])
+            # #     print(c["cluster members"])
+            # #     print("")
+            # x,y = zip(*pts)
+            #
+            # subject = subject_collection.find_one({"zooniverse_id":zooniverse_id})
+            # url = subject["location"]["standard"]
+            # fName = url.split("/")[-1]
+            # if not(os.path.isfile("/home/ggdhines/Databases/penguins/images/"+fName)):
+            #     #urllib.urlretrieve ("http://demo.zooniverse.org/penguins/subjects/standard/"+fName, "/home/greg/Databases/penguins/images/"+fName)
+            #     urllib.urlretrieve ("http://www.penguinwatch.org/subjects/standard/"+fName, "/home/ggdhines/Databases/penguins/images/"+fName)
+            # image_file = cbook.get_sample_data("/home/ggdhines/Databases/penguins/images/"+fName)
+            # image = plt.imread(image_file)
+            #
+            # fig, ax = plt.subplots()
+            # im = ax.imshow(image)
+            #
+            # plt.plot(x,y,".",color="red")
+            # plt.show()
+
+            f.write("penguin_index,x_center,y_center,probability_of_adult,probability_of_chick,probability_of_egg,probability_of_true_positive,num_markings\n")
 
             for penguin_index,cluster in enumerate(clustering_results[0]):
                 center = cluster["center"]
                 tools = cluster["tools"]
 
                 probability_adult = sum([1 for t in tools if t == "adult"])/float(len(tools))
+                probability_chick = sum([1 for t in tools if t == "chick"])/float(len(tools))
+                probability_egg = sum([1 for t in tools if t == "egg"])/float(len(tools))
                 probability_true_positive = len(tools)/float(num_users)
                 count_true_positive = len(tools)
 
-                f.write(str(penguin_index)+","+str(center[0])+","+str(center[1])+","+str(probability_adult)+","+str(probability_true_positive)+","+str(count_true_positive)+"\n")
+                f.write(str(penguin_index)+","+str(center[0])+","+str(center[1])+","+str(probability_adult)+","+str(probability_chick)+"," + str(probability_egg)+ ","+str(probability_true_positive)+","+str(count_true_positive)+"\n")
                 # print(d+"/"+little_path+".csv")
         else:
             f.write("-1\n")
