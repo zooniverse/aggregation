@@ -12,6 +12,7 @@ import numpy
 import multiClickCorrect
 import json
 import random
+from copy import deepcopy
 
 
 def text_line_mappings(line_segments):
@@ -75,12 +76,13 @@ class Agglomerative(clustering.Cluster):
         :param cluster2:
         :return:
         """
-        cluster1["users"].extend(cluster2["users"])
-        cluster1["cluster members"].extend(cluster2["cluster members"])
-        cluster1["tools"].extend(cluster2["tools"])
-        cluster1["num users"] += cluster2["num users"]
+        new_cluster = deepcopy(cluster1)
+        new_cluster["users"].extend(cluster2["users"])
+        new_cluster["cluster members"].extend(cluster2["cluster members"])
+        new_cluster["tools"].extend(cluster2["tools"])
+        new_cluster["num users"] += cluster2["num users"]
 
-        return cluster1
+        return new_cluster
 
     def __tree_traverse__(self,dendrogram,markings,user_ids,tools):
         """
@@ -99,7 +101,6 @@ class Agglomerative(clustering.Cluster):
         """
         # todo - why do I have tool_classification in here?
         results = [{"users":[u],"cluster members":[p],"tools":[t],"num users":1} for u,p,t in zip(user_ids,markings,tools)]
-
         # cluster_mergers is a list representation of a tree
         # let's traverse this tree looking for mergers between clusters with common users - those clusters should
         # not be merged. (we'll call those two child clusters "capped clusters"
@@ -129,6 +130,8 @@ class Agglomerative(clustering.Cluster):
                 # check if we should merge - only if there is no overlap
                 # otherwise "cap" or terminate both nodes
                 intersection = [u for u in rnode["users"] if u in lnode["users"]]
+                assert "center" not in rnode
+                assert "center" not in lnode
 
                 # if there are users in common, add to the end clusters list (which consists of cluster centers
                 # the points in each cluster and the list of users)
@@ -139,6 +142,7 @@ class Agglomerative(clustering.Cluster):
                 else:
                     # else just merge
                     merged_clusters = self.__merge_clusters__(rnode,lnode)
+                    # print(merged_clusters.keys())
                     results.append(merged_clusters)
 
         # go and remove all non terminal nodes from the results
@@ -148,7 +152,6 @@ class Agglomerative(clustering.Cluster):
             # in both cases does not mean immediately above or below
             if (results[i] is None) or ("center" not in results[i]):
                 results.pop(i)
-
         return results
 
     def __cluster__(self,markings,user_ids,tools,reduced_markings,image_dimensions,subject_id):
