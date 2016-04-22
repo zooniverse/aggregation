@@ -290,6 +290,7 @@ class BlobClustering(clustering.Cluster):
         """
         if we an "invalid" polygon - so a polygon which crosses over itself
         split that polygon up into smaller polygons - each of which will be valid
+        uses a recursive approach
         :param points:
         :return:
         """
@@ -297,44 +298,42 @@ class BlobClustering(clustering.Cluster):
 
         points = list(points)
 
+        # we know that we have an invalid polygon - let's get more details
+        # explain_validity will return a point where the polygon intersects itself
+        # there may be more than one such point - in which we will need to call this function recursively
         validity = explain_validity(Polygon(points))
 
-        # x,y = zip(*Polygon(points).exterior.coords)
-        # x = list(x)
-        # y = list(y)
-        # x.append(x[0])
-        # y.append(y[0])
-        # plt.plot(x,y)
-        # plt.show()
-
         assert isinstance(validity,str)
+
+        # extract the intersection point
         s,t = validity.split("[")
         x_0,y_0 = t.split(" ")
         x_0 = float(x_0)
         y_0 = float(y_0[:-1])
 
-        # search for all of the line segments which touch the intersection point
-        # we need to wrap around to the beginning to get all of the line segments
+        # search for all of the line segments which go through this intersection point
+        # hopefully there will be 2 - say for example A and B. Then we will create two "sub" polygons
+        # one from A to B and the other from B to A (wrapping around the list)
+        # both polygons will not intersect at this problem point anymore (again, there be other self intersections)
         splits = []
         for line_index in range(len(points)):
             (x_1,y_1) = points[line_index]
             (x_2,y_2) = points[(line_index+1)%len(points)]
 
+            # how close does this line get to the point?
             # the equation from a point to the nearest place on a line is from
             # https://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line
             try:
                 dist = math.fabs((y_2-y_1)*x_0-(x_2-x_1)*y_0+x_2*y_1-y_2*x_1)/math.sqrt((y_2-y_1)**2+(x_2-x_1)**2)
             except ZeroDivisionError:
-                print(points)
-                print(line_index)
                 raise
 
+            # allow for a little bit of numerical error
             if dist < 0.01:
                 splits.append(line_index)
 
         # seems to be the easiest way to dealing with needing to extract
         # sublists which wrap around the end/beginning of the list
-
         points.extend(points)
         for intersection_index,line_index in enumerate(splits):
             # find the index for the next line segment with intersect (x_0,y_0)
@@ -375,6 +374,25 @@ class BlobClustering(clustering.Cluster):
 
         return fixed_polygons
 
+    def __remove_duplicate_points__(self,polygon_points):
+        """
+        on very rare occasions, a line segment may have zero length (so the start and end point are the same)
+        not sure why this happens but if it does skip this point
+
+        :param polygon_points:
+        :return:
+        """
+        unique_points = []
+
+        for i in range(len(polygon_points)):
+            p1 = polygon_points[i]
+            p2 = polygon_points[(i + 1) % len(polygon_points)]
+
+            if p1 != p2:
+                unique_points.append(p1)
+
+        return unique_points
+
     def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions,subject_id):
         poly_dictionary = {}
         # the polygon dictionary will contain the "processed" polygons for each user along with that
@@ -386,6 +404,9 @@ class BlobClustering(clustering.Cluster):
             # we need at least 3 points to made a valid polygon
             if len(polygon_pts) < 3:
                 continue
+
+            # remove any duplicate points
+            polygon_pts = self.__remove_duplicate_points__(polygon_pts)
 
             poly = Polygon(polygon_pts)
             validity = explain_validity(poly)

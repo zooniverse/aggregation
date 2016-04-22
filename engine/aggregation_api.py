@@ -164,6 +164,11 @@ class AggregationAPI:
         self.cluster_algs = {}
 
     def __setup__(self):
+        """
+        set up all the connections to panoptes and different databases
+        :return:
+        """
+        print("setting up")
         # just for when we are treating an ouroboros project like a panoptes one
         # in which the subject ids will be zooniverse_ids, which are strings
         self.subject_id_type = "int"
@@ -199,11 +204,9 @@ class AggregationAPI:
         param_details = yaml.load(param_file)
 
         environment_details = param_details[self.environment]
-
         # do we have a specific date as the minimum date for this project?
         if (self.project_id in param_details) and ("default_date" in param_details[self.project_id]):
             self.previous_runtime = parser.parse(param_details[self.project_id]["default_date"])
-
         # connect to the Cassandra DB
         # only if we have given the necessary param
         # and register this run
@@ -212,6 +215,7 @@ class AggregationAPI:
             self.__register_run__()
 
         # connect to whatever postgres db we want to
+        print("connecting to postgres")
         self.__postgres_connect__(environment_details)
 
         # use for Cassandra connection - can override for Ourboros projects
@@ -620,9 +624,11 @@ class AggregationAPI:
 
     def __exit__(self, exc_type, exc_value, traceback):
         # remove the temporary table
-        postgres_cursor = self.postgres_writeable_session.cursor()
-        # truncate the temporary table for this project so we're just re-uploading aggregations
-        postgres_cursor.execute("drop table newvals" + str(self.project_id))
+        # if we got that far in the code
+        if self.postgres_writeable_session is not None:
+            postgres_cursor = self.postgres_writeable_session.cursor()
+            # truncate the temporary table for this project so we're just re-uploading aggregations
+            postgres_cursor.execute("drop table newvals" + str(self.project_id))
 
         # shutdown the connection to Cassandra and remove the lock so other aggregation instances
         # can run, regardless of whether an error occurred
@@ -1464,6 +1470,8 @@ class AggregationAPI:
         if self.postgres_session is None:
             raise psycopg2.OperationalError()
 
+        # in the past there have been times where we are using different postgres dbs to read and write from
+        # if this is the case, here is where we make a new connection to the db that we will be writing to
         if "writeable_postgres_host" in database_details:
             details = ""
             details += "host ='" + database_details["writeable_postgres_host"] + "' "
@@ -1496,6 +1504,10 @@ class AggregationAPI:
                 raise psycopg2.OperationalError()
         else:
             self.postgres_writeable_session = self.postgres_session
+
+        assert self.postgres_writeable_session is not None
+        assert self.postgres_session is not None
+
 
         # create a new temporary table just for this project (in case multiple people are running aggregation at once)
         # will use this table later for doing upserts
@@ -1969,7 +1981,7 @@ if __name__ == "__main__":
     with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
 
         project.__setup__()
-        project.__reset_cassandra_dbs__()
+        # project.__reset_cassandra_dbs__()
         aggregated_subjects = project.__aggregate__()
 
         with csv_output.CsvOut(project) as c:
