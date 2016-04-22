@@ -13,7 +13,7 @@ WORKDIR /app/
 
 ADD . /app/
 
-RUN pip install -U cassandra-driver Flask redis rq requests==2.4.3 rollbar termcolor boto3 setproctitle alignment scikit-learn boto
+RUN pip install -U cassandra-driver Flask redis rq requests==2.4.3 rollbar termcolor boto3 setproctitle alignment scikit-learn boto descartes
 RUN pip install .
 
 ADD supervisord.conf /etc/supervisor/conf.d/cron.conf

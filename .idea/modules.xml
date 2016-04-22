@@ -3,7 +3,6 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/.idea/aggregation.iml" filepath="$PROJECT_DIR$/.idea/aggregation.iml" />
-      <module fileurl="file://$PROJECT_DIR$/.idea/aggregation.iml" filepath="$PROJECT_DIR$/.idea/aggregation.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/reduction.iml" filepath="$PROJECT_DIR$/.idea/reduction.iml" />
     </modules>
   </component>

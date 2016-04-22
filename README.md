@@ -17,3 +17,12 @@ Probably the one you are most interested in is "engine" - this is where all of t
 "Experimental" is where I keep all of the random code that I've worked on - this is probably in need of a major cleaning. Lots of small bits of (hopefully) really useful code here but probably not easy to find.
 
 "Active_weather" - I've been doing long term on getting OCR to work with Old Weather (and doing things like use active learning - hence the name). 
+
+sudo apt-get install libeigen3-dev
+libjasper-dev
+libdc1394-22-dev libdc1394-22 libdc1394-utils
+sudo apt-get install libv4l-0 libv4l-dev
+sudo apt-get install ffmpeg libavcodec-dev libavformat-dev
+swig
+libxine2-dev
+libavcodec-dev libavformat-dev libswscale-dev libdc1394-22-dev libxine-dev libgstreamer0.10-dev libgstreamer-plugins-base0.10-dev libv4l-dev
