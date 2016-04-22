@@ -20,3 +20,13 @@ But our engine isn't trained on "R" at all - so we really don't know what will h
 With Active Weather, we face two competing problems
 
 * connected characters - especially when text is typed (as opposed to hand written), the characters are usually distinct. But sometimes the characters are touching - for example in the below image:
+
+.. image:: images/touching_chars.jpeg
+    :width: 200px
+    :align: center
+    :height: 100px
+
+There has been a lot of work done on character segmentation (word segmentation at least for typed text is much easier) [links to be inserted] and it remains a major source of error for OCR engines.
+
+* incomplete characters - this is the opposite of the above problem. Due to scanning or how the text was original typed, some parts of the characters can be missing (see the "B" in the above example). This could be due to low ink in the typewriter.
+Also could happen if a character crosses a grid line - then when the grid line is removed, we are left with a gap in the character.

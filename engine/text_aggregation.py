@@ -454,7 +454,7 @@ if __name__ == "__main__":
         #     migrated_subjects = project.__migrate__(workflow_id,version)
         # project.output_tool.__json_output__()
 
-        # processed_subjects = project.__aggregate__()
+        processed_subjects = project.__aggregate__()
         # print("about to send off email")
         if datetime.datetime.today().weekday() == 1:#environment == "production":
             project.__summarize__()
