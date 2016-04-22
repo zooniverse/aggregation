@@ -261,6 +261,8 @@ class CsvOut:
             # follow up questions for markings with have a different structure
             if tool_id is not None:
                 answers = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_id]["answers"]
+                print(answers)
+                print(most_likely)
                 most_likely_label = answers[int(most_likely)]["label"]
             else:
                 most_likely_label = self.instructions[workflow_id][task_id]["answers"][int(most_likely)]

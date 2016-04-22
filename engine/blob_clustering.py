@@ -1,3 +1,4 @@
+from __future__ import print_function
 import clustering
 import matplotlib.pyplot as plt
 # for sphinx documentation, there seems to be trouble with importing shapely
@@ -12,6 +13,7 @@ except OSError:
 import itertools
 import math
 import numpy
+from descartes import PolygonPatch
 
 def findsubsets(S,m):
     return set(itertools.combinations(S, m))
@@ -285,6 +287,12 @@ class BlobClustering(clustering.Cluster):
         self.rectangle = (shape == "rectangle") or (shape == "image")
 
     def __fix_polygon__(self,points):
+        """
+        if we an "invalid" polygon - so a polygon which crosses over itself
+        split that polygon up into smaller polygons - each of which will be valid
+        :param points:
+        :return:
+        """
         fixed_polygons = None
 
         points = list(points)
@@ -317,8 +325,8 @@ class BlobClustering(clustering.Cluster):
             try:
                 dist = math.fabs((y_2-y_1)*x_0-(x_2-x_1)*y_0+x_2*y_1-y_2*x_1)/math.sqrt((y_2-y_1)**2+(x_2-x_1)**2)
             except ZeroDivisionError:
-                print points
-                print line_index
+                print(points)
+                print(line_index)
                 raise
 
             if dist < 0.01:
@@ -341,10 +349,14 @@ class BlobClustering(clustering.Cluster):
             new_polygon_points = [(x_0,y_0)]
             new_polygon_points.extend(points[line_index+1:line_index2+1])
 
+            # a polygon needs 3 points to be valid - other wise we just have a line or point
+            # this can happen (forget the exact circumstances) so just skip over all such cases
             if len(new_polygon_points) < 3:
                 continue
 
             try:
+                # if we STILL don't have a valid polygon - fix it before adding it to the list
+                # i.e. make a recursive call
                 if explain_validity(Polygon(new_polygon_points)) != "Valid Geometry":
                     # if this is the first "sub"polygon - just accept it
                     if fixed_polygons is None:
@@ -358,7 +370,7 @@ class BlobClustering(clustering.Cluster):
                     else:
                         fixed_polygons.append(Polygon(new_polygon_points))
             except ValueError:
-                print new_polygon_points
+                print(new_polygon_points)
                 raise
 
         return fixed_polygons
@@ -383,13 +395,18 @@ class BlobClustering(clustering.Cluster):
             # correct the geometry if we have to - will probably result in a multipolygon
             # which we will keep as one object and NOT split into individual polygons
             elif validity != "Valid Geometry":
+                assert polygon_pts is not None
                 corrected_polygon = self.__fix_polygon__(polygon_pts)
-                corrected_polygon = cascaded_union(corrected_polygon)
+                if corrected_polygon is not None:
+                    # now transform that polygon from a list into one object (makes future union operations easier)
+                    corrected_polygon = cascaded_union(corrected_polygon)
 
-                if u not in poly_dictionary:
-                    poly_dictionary[u] = [(corrected_polygon,t,marking_index),]
+                    if u not in poly_dictionary:
+                        poly_dictionary[u] = [(corrected_polygon,t,marking_index),]
+                    else:
+                        poly_dictionary[u].append((corrected_polygon,t,marking_index))
                 else:
-                    poly_dictionary[u].append((corrected_polygon,t,marking_index))
+                    print("empty polygon!")
 
             else:
                 if u not in poly_dictionary:
