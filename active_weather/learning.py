@@ -43,7 +43,7 @@ masked_image = None
 tess = TesseractUpdate()
 tess.__create_blank_page__()
 
-for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
+for char in "A":#BCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
 
     # cur.execute("select * from characters where characters = \""+c+"\" and confidence < 80")
     # for r in cur.fetchall():

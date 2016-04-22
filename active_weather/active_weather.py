@@ -17,18 +17,6 @@ from skimage.filters import threshold_otsu, rank
 
 warnings.simplefilter("error", RuntimeWarning)
 
-# db_id = "5"
-
-tess_directory,language,db_id = "/home/ggdhines/github/tessdata/","eng","3"
-tess_directory,language,db_id = "/tmp/tessdata/","active_weather","4"
-
-con = lite.connect('/home/ggdhines/to_upload'+db_id+'/active.db')
-cur = con.cursor()
-
-cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
-cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
-# con.commit()
-
 
 __author__ = 'ggdhines'
 
@@ -441,12 +429,12 @@ def __gen_columns__(masked_image,gray):
         yield colour_sub_image
 
 def __ocr_image__(image):
-    # tess = tesserpy.Tesseract("/home/ggdhines/github/tessdata/",language="eng")
+    tess = tesserpy.Tesseract("/home/ggdhines/github/tessdata/",language="eng")
 
 
 
-    print(tess_directory,language)
-    tess = tesserpy.Tesseract(tess_directory,language=language)
+    # print(tess_directory,language)
+    # tess = tesserpy.Tesseract(tess_directory,language=language)
     # print(vars(tess))
     tess.tessedit_pageseg_mode = tesserpy.PSM_SINGLE_BLOCK
     # tess.tessedit_ocr_engine_mode = tesserpy.OEM_TESSERACT_CUBE_COMBINED
@@ -742,6 +730,22 @@ if __name__ == "__main__":
     # cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
     # cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
 
+
+    # db_id = "5"
+
+    tess_directory, language, db_id = "/home/ggdhines/github/tessdata/", "eng", "3"
+    tess_directory, language, db_id = "/tmp/tessdata/", "active_weather", "4"
+
+    con = lite.connect('/home/ggdhines/to_upload' + db_id + '/active.db')
+    cur = con.cursor()
+
+    cur.execute(
+        "create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
+    cur.execute(
+        "create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
+    # con.commit()
+
+
     for fname in glob.glob("/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/*.JPG")[:40]:
         # fname = "/home/ggdhines/Databases/old_weather/aligned_images/Bear/1940/Bear-AG-29-1940-0329.JPG"
         img = __extract_region__(fname)
@@ -802,5 +806,5 @@ if __name__ == "__main__":
             __run__(img,mask,horizontal_grid,vertical_grid,thres_alg,id_)
 
 
-con.commit()
-con.close()
+    con.commit()
+    con.close()
