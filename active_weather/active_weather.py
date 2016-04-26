@@ -15,7 +15,6 @@ import glob
 import warnings
 from skimage.filters import threshold_otsu, rank
 
-warnings.simplefilter("error", RuntimeWarning)
 
 
 __author__ = 'ggdhines'
@@ -727,6 +726,19 @@ def round_ten(x):
     return int(round(x / 10.0)) * 10
 
 if __name__ == "__main__":
+    warnings.simplefilter("error", RuntimeWarning)
+
+    # db_id = "5"
+
+    tess_directory,language,db_id = "/home/ggdhines/github/tessdata/","eng","3"
+    tess_directory,language,db_id = "/tmp/tessdata/","active_weather","4"
+
+    con = lite.connect('/home/ggdhines/to_upload'+db_id+'/active.db')
+    cur = con.cursor()
+
+    cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
+    cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
+
     # cur.execute("create table transcriptions(subject_id text, region int, column int, row int, contents text, confidence float)")
     # cur.execute("create table characters(subject_id text, region int, column int, row int, characters text, confidence float,lb_x int,ub_x int, lb_y int,ub_y int)")
 

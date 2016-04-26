@@ -6,6 +6,7 @@ import numpy as np
 import math
 import random
 from tesseract_update import TesseractUpdate
+import random
 import matplotlib.pyplot as plt
 __author__ = 'ggdhines'
 
@@ -22,7 +23,7 @@ def weighted_choice(choices):
     assert False, "Shouldn't get here"
 
 def boltzman_sampling(confidences):
-    temp = 15
+    temp = 30
     values = [math.exp(c/temp) for c in confidences]
 
     # print(values)
@@ -42,9 +43,26 @@ masked_image = None
 
 tess = TesseractUpdate()
 tess.__create_blank_page__()
+#
+# <<<<<<< 8ce8e3a4c7d9552551e469bcbd4315f395525d63
+# for char in "A":#BCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
+# =======
+# current_subject_id = None
+#
+# big_dict = {}
+#
+# characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz"
+# total_character_list = []
+# for c in characters:
+#     total_character_list.extend([c for _ in range(10)])
+# random.shuffle(total_character_list)
+# for ii,char in enumerate(total_character_list):
+#     if (ii>0) and (ii%30 == 0):
+#         print("output")
+#         tess.__next_image__()
+# >>>>>>> active weather updates
 
-for char in "A":#BCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
-
+for char in "F.":
     # cur.execute("select * from characters where characters = \""+c+"\" and confidence < 80")
     # for r in cur.fetchall():
     #     subject_id,region,column,row,characters,confidence,lb_x,ub_x,lb_y,ub_y = r
@@ -68,25 +86,26 @@ for char in "A":#BCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz"
     #     plt.show()
     # continue
 
-    cur.execute("select count(*) from characters where characters = \""+char+"\"")
-    a = cur.fetchone()
-    cur.execute("select count(*) from characters where characters = \""+char+"\" and confidence > 80")
-    b = cur.fetchone()
-    if (a[0] > 0) and (b[0] == 0):
-        raw_input((char,a))
-    continue
+    # cur.execute("select count(*) from characters where characters = \""+char+"\"")
+    # a = cur.fetchone()
+    # cur.execute("select count(*) from characters where characters = \""+char+"\" and confidence > 80")
+    # b = cur.fetchone()
+    # if (a[0] > 0) and (b[0] == 0):
+    #     raw_input((char,a))
+    # continue
 
 
     # cur.execute("select * from characters where characters = \""+char+"\" and confidence < 80 and confidence > 70")
-    cur.execute("select * from characters where characters = \""+char+"\" and confidence > 80")
+    cur.execute("select * from characters where characters = \""+char+"\" order by confidence desc")
 
     examples = []
     confidence_values = []
     height_values = []
     width_values = []
 
-    for r in cur.fetchall():
+    for r in cur.fetchall()[:150]:
         subject_id,region,column,row,characters,confidence,lb_x,ub_x,lb_y,ub_y = r
+        # print(confidence)
         # if subject_id != current_subject:
         #     current_subject = subject_id
         #     fname = base + subject_id + ".JPG"
@@ -97,7 +116,9 @@ for char in "A":#BCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz"
         #     gray = cv2.cvtColor(sub_image,cv2.COLOR_BGR2GRAY)
         #     masked_image = preprocessing.__mask_lines__(gray)
 
-        masked_image = cv2.imread("/home/ggdhines/to_upload3/"+subject_id+".jpg",0)
+        if subject_id != current_subject_id:
+            masked_image = cv2.imread("/home/ggdhines/to_upload3/"+subject_id+".jpg",0)
+            current_subject_id = subject_id
         height,width = masked_image.shape
 
         char_image = masked_image[lb_y:ub_y+1,lb_x:ub_x+1]
@@ -110,21 +131,22 @@ for char in "A":#BCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz"
         #     continue
         # assert input_ == "y"
 
-
-        examples.append(char_image)
-        confidence_values.append(confidence)
         chr_height = ub_y-lb_y+1
         chr_width = ub_x-lb_x+1
 
+        examples.append(char_image)
+        confidence_values.append(confidence)
         height_values.append(chr_height)
         width_values.append(chr_width)
+
+    # raw_input("enter")
 
     if confidence_values == []:
         continue
 
-    combined = zip(confidence_values,examples,height_values,width_values)
-    combined.sort(key=lambda x:x[0],reverse=True)
-    confidence_values,examples,height_values,width_values = zip(*combined[:150])
+    # combined = zip(confidence_values,examples,height_values,width_values)
+    # combined.sort(key=lambda x:x[0],reverse=True)
+    # confidence_values,examples,height_values,width_values = zip(*combined[:150])
 
     if height_values != []:
         print("for character : " + char + " we have " + str(len(height_values)) + " samples")
@@ -142,7 +164,7 @@ for char in "A":#BCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz"
 
             rescaled_examples.append(c2)
 
-        for i in range(20):
+        for i in range(1):
             num_samples = len(weights)
             samples = [weighted_choice(weights) for i in range(max(1,min(int(num_samples/2.),20)))]
 
@@ -155,14 +177,14 @@ for char in "A":#BCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz"
             # pca_images = pca.fit_transform(flatten_list)
             # print(sum(pca.explained_variance_ratio_))
 
-            average_image = np.mean(image_list,axis=0)
+            average_image = np.median(image_list,axis=0)
 
 
             # pca_average = np.median(pca_images,axis=0)
             # new_average = pca.inverse_transform(pca_average)
             # average_image = new_average.reshape(s)
 
-            cv2.normalize(average_image,average_image,0,255,cv2.NORM_MINMAX)
+            average_image = cv2.normalize(average_image,average_image,0,255,cv2.NORM_MINMAX)
             average_image = average_image.astype(np.uint8)
             # print(average_image)
 
