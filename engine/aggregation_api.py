@@ -751,7 +751,10 @@ class AggregationAPI:
 
         cursor = self.postgres_session.cursor()
         cursor.execute(stmt)
+
+
         return [r[0] for r in cursor.fetchall()]
+
 
     def __get_newly_retired_subjects__(self,workflow_id):#,only_retired_subjects=False):#,only_recent_subjects=True):
         """
@@ -1011,7 +1014,7 @@ class AggregationAPI:
 
             if not(os.path.isfile(path)):
                 if download:
-                    # print "downloading"
+                    print("downloading",url,path)
                     urllib.urlretrieve(url, path)
                 # raise ImageNotDownloaded()
 
