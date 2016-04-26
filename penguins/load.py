@@ -5,7 +5,7 @@ import cPickle as pickle
 import os
 
 client = pymongo.MongoClient()
-db = client['penguin_2015-05-08']
+db = client['penguin']
 classification_collection = db["penguin_classifications"]
 subject_collection = db["penguin_subjects"]
 
@@ -28,7 +28,7 @@ for c in classification_collection.find({"user_name":"caitlin.black"})[:25]:
     zooniverse_id = c["subjects"][0]["zooniverse_id"]
     print zooniverse_id
 
-    subject =  subject_collection.find_one({"zooniverse_id":zooniverse_id})
+    subject = subject_collection.find_one({"zooniverse_id":zooniverse_id})
     try:
         animals_present = subject["metadata"]["counters"]["animals_present"]
     except KeyError:
@@ -43,6 +43,8 @@ for c in classification_collection.find({"user_name":"caitlin.black"})[:25]:
         gold_dict[zooniverse_id] = pickle.load(open(file_base+"_gold.pickle","rb"))
     else:
         markings_dict[zooniverse_id] = dict()
+
+
 
 
         for c2 in classification_collection.find({"subjects" : {"$elemMatch": {"zooniverse_id":zooniverse_id}}}):

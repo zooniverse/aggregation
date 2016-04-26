@@ -755,8 +755,7 @@ class AggregationAPI:
 
         return [r[0] for r in cursor.fetchall()]
 
-
-    def __get_newly_retired_subjects__(self,workflow_id):#,only_retired_subjects=False):#,only_recent_subjects=True):
+    def __get_newly_retired_subjects__(self,workflow_id):
         """
         gets the subjects to aggregate
         if we need retired subjects, query against the production postgresDB
