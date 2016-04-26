@@ -26,3 +26,9 @@ sudo apt-get install ffmpeg libavcodec-dev libavformat-dev
 swig
 libxine2-dev
 libavcodec-dev libavformat-dev libswscale-dev libdc1394-22-dev libxine-dev libgstreamer0.10-dev libgstreamer-plugins-base0.10-dev libv4l-dev
+
+db='panoptes_development'
+username='postgres'
+
+local_backup_file="panoptes_staging.dump"
+pg_restore --clean --verbose -Fc -h localhost -U ${username} -d ${db} ${local_backup_file}
