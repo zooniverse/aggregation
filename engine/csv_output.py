@@ -261,8 +261,6 @@ class CsvOut:
             # follow up questions for markings with have a different structure
             if tool_id is not None:
                 answers = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_id]["answers"]
-                print(answers)
-                print(most_likely)
                 most_likely_label = answers[int(most_likely)]["label"]
             else:
                 most_likely_label = self.instructions[workflow_id][task_id]["answers"][int(most_likely)]
@@ -629,20 +627,20 @@ class CsvOut:
         #     most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
         #     total_area[int(most_likely_tool)] += cluster["area"]
 
-        for p_index,cluster in aggregations["polygon clusters"].items():
-            if p_index == "all_users":
-                continue
+        with open(self.file_names[id_],"a") as csv_file:
+            for p_index,cluster in aggregations["polygon clusters"].items():
+                if p_index == "all_users":
+                    continue
 
-            tool_classification = cluster["tool_classification"][0].items()
-            most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
-            tool = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool)]["marking tool"]
-            tool = helper_functions.csv_string(tool)
+                tool_classification = cluster["tool_classification"][0].items()
+                most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
+                tool = self.instructions[workflow_id][task_id]["tools"][int(most_likely_tool)]["marking tool"]
+                tool = helper_functions.csv_string(tool)
 
-            for polygon in cluster["center"]:
-                p = geometry.Polygon(polygon)
+                row = str(subject_id) + ","+ str(p_index)+ ","+ tool + ","+ str(cluster["area"]) + ",\"" +str(cluster["center"]) + "\""
 
-                row = str(subject_id) + ","+ str(p_index)+ ","+ tool + ","+ str(p.area/float(cluster["image area"])) + ",\"" +str(polygon) + "\""
-                self.csv_files[id_].write(row+"\n")
+                csv_file.write(row+"\n")
+
 
 
 
@@ -944,21 +942,21 @@ class CsvOut:
             for subject_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
                 self.__subject_output__(subject_id,aggregations,workflow_id)
 
-        # todo - update the readme text
-        try:
-            with open("/tmp/"+project_prefix+"/readme.md", "w") as readme_file:
-                # readme_file.write("Details and food for thought:\n")
-                with open("/app/engine/readme.txt","rb") as f:
-                    text = f.readlines()
-                    for l in text:
-                        readme_file.write(l)
-        except IOError as e:
-
-            with open("/tmp/"+project_prefix+"/readme.md", "w") as readme_file:
-                readme_file.write("There was an IO error - \n")
-                readme_file.write(str(e) + "\n")
-                readme_file.write(os.getcwd())
-            #     readme_file.write("There are no retired subjects for this project")
+        # # todo - update the readme text
+        # try:
+        #     with open("/tmp/"+project_prefix+"/readme.md", "w") as readme_file:
+        #         # readme_file.write("Details and food for thought:\n")
+        #         with open("/app/engine/readme.txt","rb") as f:
+        #             text = f.readlines()
+        #             for l in text:
+        #                 readme_file.write(l)
+        # except IOError as e:
+        #
+        #     with open("/tmp/"+project_prefix+"/readme.md", "w") as readme_file:
+        #         readme_file.write("There was an IO error - \n")
+        #         readme_file.write(str(e) + "\n")
+        #         readme_file.write(os.getcwd())
+        #     #     readme_file.write("There are no retired subjects for this project")
 
         # compress the results directory
         tar_file_path = "/tmp/" + project_prefix + "_export.tar.gz"
