@@ -961,7 +961,7 @@ class CsvOut:
         # compress the results directory
         tar_file_path = "/tmp/" + project_prefix + "_export.tar.gz"
         with tarfile.open(tar_file_path, "w:gz") as tar:
-            tar.add("/tmp/"+project_prefix+"/")
+            tar.add("/tmp/"+project_prefix+"/",arcname=project_prefix)
 
         return tar_file_path
 
