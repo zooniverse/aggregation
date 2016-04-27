@@ -11,3 +11,7 @@ The basic idea is to look for pixels which enough people have selected (i.e. pix
 (Not to mention that we would then need to group any such pixels, maybe using DBscan, and then return the outline of each cluster.)
 
 We can use openCV (a python and C++ graphics library) to do the same basic idea but much more efficiently. Note that openCV can be a pain to install. There is a ubuntu package for opencv but it is rather old. As of time of writing this page, I'm still confirming that opencv will work. It should but in case it doesn't (or if in the future there are any trouble with opencv, everything in theory should be doable with scikit-image another python graphics library).
+
+The polygon marking tools returns polygons such as the one below [EXAMPLE TO BE INSERTED]
+
+Any pixel inside that polygon has been "selected". So we really just want to "fill in" the polygon.
