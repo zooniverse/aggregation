@@ -20,10 +20,10 @@ class BlobClustering(clustering.Cluster):
         clustering.Cluster.__init__(self,shape,project,additional_params)
         self.rectangle = (shape == "rectangle") or (shape == "image")
 
-    def __find_outlined_areas__(self,user_ids,markings,dimensions):
+    def __find_positive_regions__(self,user_ids,markings,dimensions):
         """
         give a set of polygon markings made by people, determine the area(s) in the image which were outlined
-        by enough people
+        by enough people. "positive" => true positive as opposed to noise or false positive
         """
         unique_users = set(user_ids)
 
@@ -34,7 +34,6 @@ class BlobClustering(clustering.Cluster):
             # tools_per_user = [tools[j] for j in polygons_by_user]
             polygons_as_arrays = [np.asarray(markings[j],np.int) for j in polygons_by_user]
             # print(tools_per_user)
-
 
             template = np.zeros(dimensions,np.uint8)
 
@@ -56,49 +55,70 @@ class BlobClustering(clustering.Cluster):
 
         return thresh1
 
-    def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions,subject_id):
-        poly_dictionary = {}
-
-        outlined_area = self.__find_outlined_areas__(user_ids,markings,dimensions)
-
-
-
-        # empty_points = np.where(thres1 == 0)
-        # plt.imshow(thresh1)
-        # plt.show()
-        # print(dimensions)
-
+    def __most_common_tool_array__(self,markings,user_ids,tools,dimensions):
+        """
+        return an array the same size as the original image where the value of each pixel corresponds to 1+ the
+        most common tool used to select that pixel. 0 => no one selected that pixel
+        :return:
+        """
         # now go through on a tool by tool basis
         # this time, the brightness of the polygons corresponds to the tools used
         polygons_by_tools = []
 
+        # do it user by user - so if a user outlines a region multiple times, their vote will only count once
+        # if a user outlines a region using two different tools not really not sure what will happen there
+        unique_users = set(user_ids)
 
-        for poly,t in zip(markings,tools):
-            polygons_by_user = [j for j,u in enumerate(user_ids) if u == i]
-            # tools_per_user = [tools[j] for j in polygons_by_user]
-            polygons_as_arrays = [np.asarray(markings[j],np.int) for j in polygons_by_user]
+        for i in unique_users:
+            polygons_by_user = [j for j, u in enumerate(user_ids) if u == i]
+            # convert the polygons into numpy arrays - makes opencv happy
+            polygons_as_arrays = [np.asarray(markings[j], np.int) for j in polygons_by_user]
 
-            template = np.zeros(dimensions,np.uint8)
+            # find the tool used to create each of these tools
+            tools_per_polygons = [tools[j] for j in polygons_by_user]
 
-            # start by drawing the outline of the area
-            cv2.polylines(template,polygons_as_arrays,True,255)
+            # this is where we will draw each of the polygons
 
-            # now take the EXTERNAL contour
-            im2, contours, hierarchy = cv2.findContours(template,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
-            template2 = np.zeros(dimensions,np.uint8)
-            # +1 since I don't know if the tools are 1 indexed or 0 indexed
-            # if 0-indexed, this might get confused with black - so just playing it safe
-            cv2.drawContours(template2,contours,-1,t+1,-1)
+            template2 = np.zeros(dimensions, np.uint8)
+            for poly, t in zip(polygons_as_arrays, tools_per_polygons):
+                # start by drawing the outline of the area
+                template = np.zeros(dimensions, np.uint8)
+                cv2.polylines(template, poly, True, 255)
+                # now take the EXTERNAL contour
+                im2, contours, hierarchy = cv2.findContours(template, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                # +1 since I don't know if the tools are 1 indexed or 0 indexed
+                # if 0-indexed, this might get confused with black - so just playing it safe
+                cv2.drawContours(template2, contours, -1, t + 1, -1)
 
             polygons_by_tools.append(template2)
 
         # find the most common tool used to outline each pixel
         most_common_tool = stats.mode(polygons_by_tools)[0][0]
 
+        return most_common_tool
+
+    def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions,subject_id):
+        """
+        do polygon clustering looking for regions which have been highlighted/selected/outlined by enough people
+        :param markings:
+        :param user_ids:
+        :param tools:
+        :param reduced_markings:
+        :param dimensions:
+        :param subject_id:
+        :return:
+        """
+        positive_area = self.__find_positive_regions__(user_ids,markings,dimensions)
+
+        most_common_tool = self.__most_common_tool_array__(markings,user_ids,tools,dimensions)
+
         clusters = []
 
+        threshold = int(0.25 * len(set(user_ids)))
+
         for tool_index in sorted(set(tools)):
-            area_by_tool = np.where((most_common_tool==(tool_index+1)) & (thresh1 > 0))
+            area_by_tool = np.where((most_common_tool==(tool_index+1)) & (positive_area > 0))
 
             template = np.zeros(dimensions,np.uint8)
             template[area_by_tool] = 255
@@ -115,13 +135,9 @@ class BlobClustering(clustering.Cluster):
 
         return clusters,0
 
-
-
-
-
     def __new_cluster__(self,polygon,tool_index,threshold,dimensions):
         """
-        actually combine everything done so far into the results that we will return
+        create the dictionary entry representing the new cluster
         :return:
         """
         s = polygon.shape
