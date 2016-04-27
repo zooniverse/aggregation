@@ -23,6 +23,7 @@ You should now have several docker containers running. You can check with "docke
 5. Finally run "pg_restore --clean --verbose -Fc -h localhost -U ${username} -d ${db} ${local_backup_file}". This will take a while (but again you only need to do this once)
 
 The aggregation engine is now ready to be run. Exit the postgres container and use the following steps
+
 1. docker exec -it aggregation_aggregation_1 bash
 2. cd engine
 3. ./aggregation_api.py project_id development 
