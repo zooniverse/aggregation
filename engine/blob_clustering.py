@@ -41,7 +41,11 @@ class BlobClustering(clustering.Cluster):
             cv2.polylines(template,polygons_as_arrays,True,255)
 
             # now take the EXTERNAL contour
-            im2, contours, hierarchy = cv2.findContours(template,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+            # the docker image has an older version of opencv where findcontours only returns 2 values
+            if cv2.__version__ == '2.4.8':
+                contours, hierarchy = cv2.findContours(template,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+            else:
+                im2, contours, hierarchy = cv2.findContours(template,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
             template2 = np.zeros(dimensions,np.uint8)
             cv2.drawContours(template2,contours,-1,1,-1)
 
@@ -85,7 +89,11 @@ class BlobClustering(clustering.Cluster):
                 template = np.zeros(dimensions, np.uint8)
                 cv2.polylines(template, poly, True, 255)
                 # now take the EXTERNAL contour
-                im2, contours, hierarchy = cv2.findContours(template, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                # the docker image has an older version of opencv where findcontours only returns 2 values
+                if cv2.__version__ == '2.4.8':
+                    contours, hierarchy = cv2.findContours(template,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+                else:
+                    im2, contours, hierarchy = cv2.findContours(template,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 
                 # +1 since I don't know if the tools are 1 indexed or 0 indexed
                 # if 0-indexed, this might get confused with black - so just playing it safe
@@ -125,7 +133,11 @@ class BlobClustering(clustering.Cluster):
 
             # finally extract each (possible seperate) area which has been outlined by enough people
             # and is of the right tool
-            im2, contours, hierarchy = cv2.findContours(template,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+            # the docker image has an older version of opencv where findcontours only returns 2 values
+            if cv2.__version__ == '2.4.8':
+                contours, hierarchy = cv2.findContours(template,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
+            else:
+                im2, contours, hierarchy = cv2.findContours(template,cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_SIMPLE)
 
             for cnt in contours:
                 try:
