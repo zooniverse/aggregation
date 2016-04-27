@@ -4,13 +4,21 @@ Rectangle Clustering
 One of the marking tools available through the PFE is rectangles. This allows users to outline a rectangular region of an image. A rectangle is just a special type of polygon and in fact you can basically use polygon aggregation on rectangles. This turned out to be overkill and rather slow so we created a clustering technique specifically for rectangles.
 The code for clustering rectangles is in rectangle_clustering.py
 
-The idea behind rectangle clustering is to find regions that multiple people have outlined. For example, the image below shows 3 overlapping rectangles and the region common to all 3 rectangles is shown in blue. This isn't the greatest example since those 3 rectangles don't really seem to be "referring to the same thing". But probably good to know what happens even when things aren't perfect.
+The idea behind rectangle clustering is to find regions that multiple people have outlined. For example, the image below shows 3 overlapping rectangles and the region common to all 3 rectangles is shown in blue.
 
 .. image:: images/rectangle_overlap.jpg
     :width: 500px
     :align: center
     :height: 500px
     :alt: 3 rectangular markings with overlapping region in blue
+
+There are two different ways projects might use the rectangle tool. The following examples should illustrate the difference.
+
+* A project might ask users to use rectangles to outline all of the grass in each subject. So in the above example, there is considerable disagreement about where the grass is but the users do agree that there is grass in the blue region.
+* A project might ask users to outline each zebra in an image. This time with the above example, the 3 rectangles are so different that they are probably referring to different zebras and the blue region isn't really a good aggregated result (since it doesn't really refer to anything)
+
+These are two very different uses of the rectangle tool. Currently the aggregation code handles the first case. If we wanted to handle the second case, we would probably need to convert each rectangle into a point marking (the center of the rectangle). We would then use normal point clustering. Once we had our cluster of points, we would revert back to rectangles and take the median values of each corner.
+(Both cases could probably be supported - that would mean having some confusing csv output. So people would get csv results for both cases and they might not understand the difference, or every why there are two cases. Good documentation would be essiental.)
 
 Checking for overlap between rectangles is easy. Two rectangles overlap if and only iff
 
@@ -47,3 +55,5 @@ A set of nodes where every pair of nodes is connected is called a `clique <https
     g.add_nodes_from(range(len(markings)))
     g.add_edge(i,j)
     cliques = list(networkx.find_cliques(g))
+
+Each clique represents a cluster of rectangles. To get the "centroid rectangle" for that cluster (the single rectangle which represents that cluster) - we than take median value for each corner.
