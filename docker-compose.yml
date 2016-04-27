@@ -3,6 +3,9 @@ postgres:
   environment:
     - "POSTGRES_USER=panoptes"
     - "POSTGRES_PASSWORD=panoptes"
+    - "PGDATA=/data"
+  volumes:
+    - ./data:/data
 
 cassandra:
   image: cassandra
