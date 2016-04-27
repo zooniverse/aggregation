@@ -99,9 +99,17 @@ class BlobClustering(clustering.Cluster):
             polygons_by_tools.append(template2)
 
         # find the most common tool used to outline each pixel
-        most_common_tool = stats.mode(polygons_by_tools)[0][0]
+        # most_common_tool = stats.mode(polygons_by_tools)[0][0]
+        values,counts = np.unique(polygons_by_tools,return_counts=True)
+        values_and_counts = zip(values,counts)
+        # sort by the number of occurances
+        values_and_counts.sort(reverse=True,key= lambda x:x[1])
 
-        return most_common_tool
+        # if the most common tool was "nothing" return the second most common tool
+        if values_and_counts[0][0] == 0:
+            return values_and_counts[1][0]
+        else:
+            return values_and_counts[0][0]
 
     def __convert_to_numpy__(self,markings):
         """
