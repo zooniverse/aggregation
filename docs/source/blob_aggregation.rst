@@ -14,4 +14,6 @@ We can use openCV (a python and C++ graphics library) to do the same basic idea 
 
 The polygon marking tools returns polygons such as the one below [EXAMPLE TO BE INSERTED]
 
-Any pixel inside that polygon has been "selected". So we really just want to "fill in" the polygon.
+Any pixel inside that polygon has been "selected". So we really just want to "fill in" the polygon -think of using a Paint fill in tool and then selecting all the white pixels. Which is exactly what we're going to do. (The way things work with openCV, the background, or pixels which have not been selected are going to be black)
+
+A slight technical issue first -
