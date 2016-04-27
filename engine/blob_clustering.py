@@ -30,15 +30,12 @@ class BlobClustering(clustering.Cluster):
         aggregate_polygon_list = []
 
         for i in unique_users:
-            polygons_by_user = [j for j,u in enumerate(user_ids) if u == i]
-            # tools_per_user = [tools[j] for j in polygons_by_user]
-            polygons_as_arrays = [np.asarray(markings[j],np.int) for j in polygons_by_user]
-            # print(tools_per_user)
+            user_polygons = [markings[j] for j,u in enumerate(user_ids) if u == i]
 
             template = np.zeros(dimensions,np.uint8)
 
             # start by drawing the outline of the area
-            cv2.polylines(template,polygons_as_arrays,True,255)
+            cv2.polylines(template,user_polygons,True,255)
 
             # now take the EXTERNAL contour
             # the docker image has an older version of opencv where findcontours only returns 2 values
@@ -76,7 +73,7 @@ class BlobClustering(clustering.Cluster):
         for i in unique_users:
             polygons_by_user = [j for j, u in enumerate(user_ids) if u == i]
             # convert the polygons into numpy arrays - makes opencv happy
-            polygons_as_arrays = [np.asarray(markings[j], np.int) for j in polygons_by_user]
+            user_polygons = [markings[j] for j in polygons_by_user]
 
             # find the tool used to create each of these tools
             tools_per_polygons = [tools[j] for j in polygons_by_user]
@@ -84,10 +81,10 @@ class BlobClustering(clustering.Cluster):
             # this is where we will draw each of the polygons
 
             template2 = np.zeros(dimensions, np.uint8)
-            for poly, t in zip(polygons_as_arrays, tools_per_polygons):
+            for poly, t in zip(user_polygons, tools_per_polygons):
                 # start by drawing the outline of the area
                 template = np.zeros(dimensions, np.uint8)
-                cv2.polylines(template, poly, True, 255)
+                cv2.polylines(template, [poly], True, 255)
                 # now take the EXTERNAL contour
                 # the docker image has an older version of opencv where findcontours only returns 2 values
                 if cv2.__version__ == '2.4.8':
@@ -106,6 +103,27 @@ class BlobClustering(clustering.Cluster):
 
         return most_common_tool
 
+    def __convert_to_numpy__(self,markings):
+        """
+        opencv needs the markings to be in numpy array format. We need this format several times, so it makes sense
+        to do it once here
+        :param markings:
+        :return:
+        """
+        return [np.asarray(m,np.int) for m in markings]
+
+    def __get_dimensions__(self,markings):
+        """
+        if image dimensions are not provided, use the markings to determine the template size
+        :param markings:
+        :return:
+        """
+        # images often swap vertical with horizontal and I right now I can't remember which is which
+        # so to place it safe, I'll just set both dimensions to the maximum value
+        a,b = zip(*([np.max(m,axis=0) for m in markings]))
+        return max(max(a),max(b))+1,max(max(a),max(b))+1
+
+
     def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions,subject_id):
         """
         do polygon clustering looking for regions which have been highlighted/selected/outlined by enough people
@@ -117,6 +135,12 @@ class BlobClustering(clustering.Cluster):
         :param subject_id:
         :return:
         """
+        # start by converting to numpy array
+        markings = self.__convert_to_numpy__(markings)
+
+        if dimensions == (None,None):
+            dimensions = self.__get_dimensions__(markings)
+
         positive_area = self.__find_positive_regions__(user_ids,markings,dimensions)
 
         most_common_tool = self.__most_common_tool_array__(markings,user_ids,tools,dimensions)
