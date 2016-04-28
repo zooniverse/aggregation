@@ -76,7 +76,7 @@ class Classification:
         # search for all follow up classifications corresponding to the given task id
         for global_index in raw_classifications.keys():
             try:
-                task_id,most_likely_tool,followup_question_index = global_index.split("_")
+                task_id,tool_id,followup_question_index = global_index.split("_")
             except ValueError:
                 # all task ids which correspond to a follow up classification (wrt a marking)
                 # will have a the format task_id,tool_id,follow_up_question_id
@@ -88,12 +88,10 @@ class Classification:
             if task_id != given_task:
                 continue
 
-
-
             # since clusters are stored by shape not tool - convert the tool to its shape
-            # and get all of the clusters with the that shape. Then for each of those clusters, look
-            # for only those people who used the right tool and extract their classifications
-            shape = marking_tasks[task_id][int(most_likely_tool)]
+            # and get all of the clusters with that shape. Then for each of those clusters,
+            # look for ones which are the most likely tool is tool_id
+            shape = marking_tasks[task_id][int(tool_id)]
 
             # go through each subject that has classifications for the given
             # task, tool and follow up question
@@ -103,6 +101,12 @@ class Classification:
                 for cluster_index,cluster in aggregations[subject_id][task_id][shape + " clusters"].items():
                     # skip keys which don't actually point to clusters (e.g. misc. extra info)
                     if cluster_index == "all_users":
+                        continue
+
+                    most_likely_tool = cluster["most_likely_tool"]
+                    # if this cluster's tool type does not match up with tool_id - skip this cluster
+                    # in other words, this particular follow up question is not relevant to this cluster
+                    if int(most_likely_tool) != int(tool_id):
                         continue
 
                     relevant_identifiers = self.__get_relevant_identifiers__(most_likely_tool,cluster)
@@ -129,12 +133,12 @@ class Classification:
 
                     # extract the result and add it to the overall set of aggregations
                     try:
-                        aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"][followup_question_index] = followup_results[subject_id][global_index]
+                        aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"][followup_question_index] = followup_results[subject_id][global_index][:]
                     except KeyError:
                         # create a new dictionary element to store the results - if this is the first
                         # time we've see this particular subject for this task/cluster
                         aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"] = {}
-                        aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"][followup_question_index] = followup_results[subject_id][global_index]
+                        aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["followup_question"][followup_question_index] = followup_results[subject_id][global_index][:]
 
         return aggregations
 
@@ -219,7 +223,6 @@ class Classification:
                 most_likely_tool,percentage,sorted_tools = self.__most_likely_tool__(cluster)
                 aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["most_likely_tool"] = most_likely_tool
                 aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["percentage"] = percentage
-                # aggregations[subject_id][task_id][shape + " clusters"][cluster_index]["sorted_tools"] = sorted_tools
 
         return aggregations
 
