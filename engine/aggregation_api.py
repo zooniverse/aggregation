@@ -272,12 +272,8 @@ class AggregationAPI:
 
     def __aggregate__(self):
         """
-        Returns
-        -------
-        aggregated_subjects : set
-            a list of all subjects which have been aggregated - over all workflows
+        the main function to call when running aggregation
         """
-        aggregated_subjects = set()
         # start by migrating any new classifications (since previous run) from postgres into cassandra
         # this will also give us a list of the migrated subjects, which is the list of subjects we want to run
         # aggregation on (if a subject has no new classifications, why bother rerunning aggregation)
@@ -285,14 +281,7 @@ class AggregationAPI:
         # have not be retired. If we want subjects that have been specifically retired, we'll make a separate call
         # for that
         for workflow_id,version in self.versions.items():
-
             migrated_subjects = self.__migrate__(workflow_id,version)
-
-            # return the list of all aggregated subjects - originally used for determining which subjects
-            # to include in the csv output, but actually the csv output should contain all subjects
-            # whether they have been just updated or have results from a while back
-            # todo - do I still need this?
-            aggregated_subjects.update(migrated_subjects)
 
             # for this workflow, what subjects have previously been aggregated?
             previously_aggregated = self.__get_previously_aggregated__(workflow_id)
@@ -322,9 +311,7 @@ class AggregationAPI:
 
             aggregations = {}
 
-            # image_dimensions can be used by some clustering approaches - ie. for blob clustering
-            # to give area as percentage of the total image area
-            # work subject by subject
+            # iterate subject by subject
             for ii,(raw_classifications,raw_markings,raw_surveys,image_dimensions) in enumerate(self.__sort_annotations__(workflow_id,subject_set)):
 
                 if survey_tasks == {}:
@@ -354,7 +341,6 @@ class AggregationAPI:
             # finally upsert any left over results
             if aggregations != {}:
                 self.__upsert_results__(workflow_id,aggregations,previously_aggregated)
-        return aggregated_subjects
 
     def __extract_width_height__(self,metadata):
         """
@@ -401,8 +387,6 @@ class AggregationAPI:
 
         if subject_set is None:
             subject_set = self.__load_subjects__(workflow_id)
-
-        # print("getting annotations via cassandra")
 
         # do this in bite sized pieces to avoid overwhelming DB
         for s in self.__chunks__(subject_set,50):
@@ -538,7 +522,7 @@ class AggregationAPI:
 
         if raw_markings == {}:
             warning("warning - empty set of images")
-            return {}
+            return aggregations_so_far
 
         # will store the aggregations for all clustering
         # go through the shapes actually used by this project - one at a time
@@ -1194,7 +1178,7 @@ class AggregationAPI:
             try:
                 results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=True)
                 results_boolean,_ = zip(*results)
-                assert False not in results_boolean
+                assert (False not in results_boolean)
                 break
             except (cassandra.WriteTimeout,cassandra.InvalidRequest) as e:
                 if i == 9:
@@ -1789,6 +1773,7 @@ class AggregationAPI:
         # todo - add support for reading in annotation from csv - honestly not sure if we even still want that option
         # todo - refactor since we are doing this subject by subject - don't really need to include subject_id as a subkey in the classifications/markings/surveys dictionary
         for subject_id,user_list,annotation_list,dimensions in self.__cassandra_annotations__(workflow_id,subject_set):
+            # print(subject_id == 572437)
             # this is what we return
             raw_classifications = {}
             raw_markings = {}
@@ -1935,8 +1920,6 @@ class AggregationAPI:
             postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
         self.postgres_writeable_session.commit()
 
-        # print("done upserting")
-
     def __yield_aggregations__(self,workflow_id,subject_set=None):
         """
         generator for giving aggregation results per subject id/task
@@ -1984,7 +1967,7 @@ if __name__ == "__main__":
 
         project.__setup__()
         # project.__reset_cassandra_dbs__()
-        aggregated_subjects = project.__aggregate__()
+        project.__aggregate__()
 
         with csv_output.CsvOut(project) as c:
             # c.__write_out__(subject_set=aggregated_subjects)
