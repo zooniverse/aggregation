@@ -132,11 +132,11 @@ class CsvOut:
                     except KeyError:
                         raise
 
-                    # use {task_id:followup_aggregations} to get the follow up aggregations in the format that
-                    # add_detailed_row is expecting (since they are used to simple classifications)
-                    self.__detailed_row__(workflow_id,task_id,subject_id,{task_id:followup_aggregations},followup_index,tool_id,cluster_index)
+                    # add both detailed and summary results for this particular follow up question
+                    self.__detailed_row__(workflow_id,task_id,subject_id,{task_id:followup_aggregations[:]},followup_index,tool_id,cluster_index)
                     # and repeat with summary row
-                    self.__classification_summary_row__(workflow_id,task_id,subject_id,{task_id:followup_aggregations},followup_index,tool_id,cluster_index)
+
+                    self.__classification_summary_row__(workflow_id,task_id,subject_id,{task_id:followup_aggregations[:]},followup_index,tool_id,cluster_index)
 
     def __marking_summary_row__(self,workflow_id,task_id,subject_id,aggregations,given_shape):
         """
@@ -257,6 +257,7 @@ class CsvOut:
         try:
             most_likely,top_probability = max(votes.items(), key = lambda x:x[1])
 
+            # if tool_id is not None -> we have a follow up question
             # extract the text corresponding to the most likely answer
             # follow up questions for markings with have a different structure
             if tool_id is not None:
@@ -617,15 +618,16 @@ class CsvOut:
             csv_file.write("subject_id,cluster_index,most_likely_tool,area,list_of_xy_polygon_coordinates\n")
 
     def __polygon_row__(self,workflow_id,task_id,subject_id,aggregations):
+        """
+        print out results for a polygon - include the outline in pixels, the area (as a percentage of image area)
+        and what is the most likely tool to have created this polygon
+        :param workflow_id:
+        :param task_id:
+        :param subject_id:
+        :param aggregations:
+        :return:
+        """
         id_ = task_id,"polygon","detailed"
-
-        # for p_index,cluster in aggregations["polygon clusters"].items():
-        #     if p_index == "all_users":
-        #         continue
-        #
-        #     tool_classification = cluster["tool_classification"][0].items()
-        #     most_likely_tool,tool_probability = max(tool_classification, key = lambda x:x[1])
-        #     total_area[int(most_likely_tool)] += cluster["area"]
 
         with open(self.file_names[id_],"a") as csv_file:
             for p_index,cluster in aggregations["polygon clusters"].items():
