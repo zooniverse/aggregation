@@ -1,0 +1,13 @@
+development: &default
+  panoptes_username: TBD
+  panoptes_password: TBD
+  panoptes: https://panoptes.zooniverse.org/
+  app_client_id: TBD
+  environment: development
+  rollbar: TBD
+  postgres_db: panoptes_development
+  postgres_host: localhost
+  postgres_username: postgres 
+  postgres_password: TBD
+  cassandra: local
+  public_connection: y
