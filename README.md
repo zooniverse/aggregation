@@ -1,9 +1,11 @@
-Zooniverse Aggregation Code
+# Zooniverse Aggregation Code
 
 This repo allows you to do aggregation with Zooniverse projects. Aggregation is the process of taking classifications/markings/transcriptions from the multiple users who see each subject and combining them into a "final" answer that is useful for researchers. 
 For example, if 3 out of 4 people say that an image contains a zebra, aggregation would report that there is a 75% probability that the image does indeed contain a zebra.
 
 The directory to do all of this in "engine". This is the code base that runs every time you press "export aggregations" in the builder builder page. You can also run things locally if you want - this is especially useful if you have an Ourboros project (just ignore that if you don't already know what Ourboros is) or if you want to do bespoke aggregation or fix a bug.
+
+## Running the Aggregation Code Locally
 
 The aggregation engine needs a bunch of stuff installed and running such as postgres and cassandra. While you can manually install all of the required packages and set them up, it is much easier to use [Docker](https://www.docker.com). Use the following steps to get the aggregation docker instance running on your computer.
 
@@ -22,6 +24,12 @@ You should now have several docker containers running. You can check with "docke
     * local_backup_file="panoptes_staging.dump" (change this to be whatever the specific name of the .dump file you have is)
 5. Finally run "pg_restore --clean --verbose -Fc -h localhost -U ${username} -d ${db} ${local_backup_file}". This will take a while (but again you only need to do this once)
 
+You'll need a file called "aggregation.yml" to provide a bunch of setup values. A simple example fine is in config/aggregation.yml in the aggregation repo and is already loaded for you into the docker image. In production, this yml files allows us to make a secure (admin) connection to Panoptes as well as Rollbar (for reporting errors) and connecting to the postgres/cassandra db. 
+For development, you just need to connect to the postgres/cassandra dbs in the docker images and the default values in the aggregation.yml file will allow you to do that. You only need a secure (possibly) admin connection to Panoptes to do a few specific things (such as for Annotate/Shakespeare's world being able to retire subjects via an API call). 
+For the "development" environment in the yml file we just use a public connection to Panoptes (which I don't think even really gets used). The yml file used in production (ask Adam for details/location) has all the necessary password/tokens etc. to make all the necessary connections.
+
+There is one password that you will need to set in the yml file and that is the postgres password. The docker image comes with the default password which could probably just be included in the yml file but to play it safe is not included. If you want to set the postgres user password, log into the postgres container and in psql use "alter user postgres password 'apassword';"
+
 The aggregation engine is now ready to be run. Exit the postgres container and use the following steps
 
 1. docker exec -it aggregation_aggregation_1 bash
@@ -30,3 +38,11 @@ The aggregation engine is now ready to be run. Exit the postgres container and u
 
 Project_id is the numerical value. You can search for the number using lita (on slack) with something like "lita project wildcam" which will tell the project ids of all projects which have "wildcam" in their title. 
 Assuming that everything worked - the aggregation_api will save the results to the /tmp directory in the docker image (no email will be sent out). There will be both a directory of results with your project id and tar.gz file. You can use "docker cp" to extract the results to your local directory.
+
+## Trouble Shooting
+
+Sometimes somethings goes wrong and the aggregation engine crashes. There are 3 reasons why this could happen
+
+1. A system crash - for example AWS goes down (but hopefully not). This is probably the rarest cause and Adam/Cam/etc. should probably realize that something is up with AWS
+2. Newly deployed code interrupts an aggregation run - when deploying new code, there is no way of checking to see if there is currently an aggregation run in progress. Any such runs will automatically be stopped. The file spot_check.py runs every hours to see if there are any interrupted runs. If so an email is sent out to Zooniverse admin (the email is specified in the aggregation.yml file) (There is currently no way to automatically restart any such runs but this is again a relatively rare case.)
+3. Edge cases - something about your classifications causes an expected case in the aggregation code and Python raises an exception. This is by far the most likely cause of error. There is currently no way of automatically emailing people to let them know that such as a case has occurred (definite future plans) but any such errors are reported automatically via Rollbar and github. To see the errors in Rollbar you need to have an account there and access to the Zooniverse_Aggregation dashboard. Currently Cam, Adam, Marten and Greg have such access. Rollbar will also automatically raise an issue on github (in the Aggregation repo) and show the Python exception. However, currently the Github issues do not report the project id so you may not be completely sure if your project caused a specific error. (The project ids are reported in Rollbar).  
