@@ -41,7 +41,7 @@ Assuming that everything worked - the aggregation_api will save the results to t
 
 ## Trouble Shooting
 
-Sometimes somethings goes wrong and the aggregation engine crashes. There are 3 reasons why this could happen.
+Sometimes something goes wrong and the aggregation engine crashes. There are 3 reasons why this could happen.
 
 1. A system crash - for example AWS goes down (but hopefully not). This is probably the rarest cause and Adam/Cam/etc. should probably realize that something is up with AWS
 2. Newly deployed code interrupts an aggregation run - when deploying new code, there is no way of checking to see if there is currently an aggregation run in progress. Any such runs will automatically be stopped. The file spot_check.py runs every hours to see if there are any interrupted runs. If so an email is sent out to Zooniverse admin (the email is specified in the aggregation.yml file) (There is currently no way to automatically restart any such runs but this is again a relatively rare case.)
