@@ -184,11 +184,12 @@ class TranscriptionAPI(AggregationAPI):
         additional_text_args = {"reduction":helper_functions.text_line_reduction}
 
         # load in the tag file if there is one
-        api_details = yaml.load(open("/app/config/aggregation.yml","rb"))
-        if "tags" in api_details[self.project_id]:
-            additional_text_args["tags"] = api_details[self.project_id]["tags"]
+        param_details = yaml.load(open("/app/config/aggregation.yml","rb"))
+        if "tags" in param_details[self.project_id]:
+            additional_text_args["tags"] = param_details[self.project_id]["tags"]
 
-        self.email_recipients = api_details[self.project_id]["email"]
+        self.email_recipients = param_details[self.project_id]["email"]
+        self.project_name = param_details[self.project_id]["project_name"]
 
         # now that we have the additional text arguments, convert text_algorithm from a class
         # to an actual instance
@@ -204,7 +205,6 @@ class TranscriptionAPI(AggregationAPI):
             assert False
 
         self.image_algorithm = RectangleClustering("image",self,{})
-
 
         self.only_retired_subjects = False
         self.only_recent_subjects = True
@@ -374,13 +374,9 @@ class TranscriptionAPI(AggregationAPI):
         # and then get the url to send to people
         url = self.__get_signed_url__()
 
-
-
-        subject = "Aggregation summary for Project " + str(self.project_id) #+ str(old_time_string) + " to " + str(new_time_string)
+        subject = "Aggregation summary for Project " + str(self.project_name)
 
         body = "The link to the json aggregation results for all retired subjects is " + url
-        # body += " A total of " + str(stats["retired lines"]) + " lines were retired. "
-        # body += " The accuracy of these lines was " + "{:2.1f}".format(accuracy*100) + "% - defined as the percentage of characters where at least 3/4's of the users were in agreement."
 
         body += "\n\n Greg Hines \n Zooniverse \n \n PS This email was automatically generated."
 
