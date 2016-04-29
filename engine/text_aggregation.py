@@ -445,17 +445,10 @@ if __name__ == "__main__":
 
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
-        # project.__reset_cassandra_dbs__()
-        # print "done migrating"
-        # # project.__aggregate__(subject_set = [671541,663067,664482,662859])
-
-        # for workflow_id,version in project.versions.items():
-        #     print(workflow_id)
-        #     migrated_subjects = project.__migrate__(workflow_id,version)
-        # project.output_tool.__json_output__()
 
         processed_subjects = project.__aggregate__()
-        # print("about to send off email")
-        if datetime.datetime.today().weekday() == 1:#environment == "production":
+
+        # only send summary emails on Tuesday
+        if datetime.datetime.today().weekday() == 1:
             project.__summarize__()
 
