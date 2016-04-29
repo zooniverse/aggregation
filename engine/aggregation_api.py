@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function
+import matplotlib
+matplotlib.use('WXAgg')
 import os
 import yaml
 import urllib2
@@ -95,8 +97,6 @@ class AggregationAPI:
         # which version of panoptes - staging or production to call
         self.host_api = None
 
-        self.public_panoptes_connection = public_panoptes_connection
-
         self.postgres_session = None
         self.postgres_writeable_session = None
         self.cassandra_session = None
@@ -183,15 +183,8 @@ class AggregationAPI:
         # todo - probably want to change that at some point as there is value in
         # todo - non logged in users having a yaml file (where they can give csv classification files etc.)
 
-        # if we are using a public panoptes connection
-        # we won't be able to connect to the back end databases, so might as well exit here
-        if self.public_panoptes_connection:
-            # go with the very basic connection
-            print("trying public Panoptes connection - no login")
-            self.host = "https://panoptes.zooniverse.org/"
-            self.host_api = self.host+"api/"
-            self.token = None
-            return
+
+
 
         # todo - can probably get rid of public_panoptes_connection  - a bit redundant given
         # todo - csv_classification_file
@@ -221,9 +214,17 @@ class AggregationAPI:
         # use for Cassandra connection - can override for Ourboros projects
         self.classification_table = "classifications"
 
-        # make the actual connection to Panoptes
-        print("trying secure Panoptes connection")
-        self.__panoptes_connect__(environment_details)
+        # if we are using a public panoptes connection
+        if ("public_connection" in environment_details) and (environment_details["public_connection"] == True):
+            # go with the very basic connection
+            print("trying public Panoptes connection - no login")
+            self.host = "https://panoptes.zooniverse.org/"
+            self.host_api = self.host+"api/"
+            self.token = None
+        else:
+            # make the actual connection to Panoptes
+            print("trying secure Panoptes connection")
+            self.__panoptes_connect__(environment_details)
 
         self.__get_project_details__()
 
@@ -1833,9 +1834,12 @@ class AggregationAPI:
         raise StopIteration()
 
     def __subject_ids_in_set__(self,set_id):
-        # request = urllib2.Request(self.host_api+"aggregations?workflow_id="+str(2)+"&subject_id="+str(458021)+"&admin=true")
+        """
+        return the subjects in a given subject set
+        :param set_id:
+        :return:
+        """
         request = urllib2.Request(self.host_api+"set_member_subjects?subject_set_id="+str(set_id))
-        # request = urllib2.Request(self.host_api+"workflows/project_id="+str(self.project_id))
         request.add_header("Accept","application/vnd.api+json; version=1")
         request.add_header("Authorization","Bearer "+self.token)
 
