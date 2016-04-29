@@ -52,3 +52,4 @@ Aggregation runs can take a little while - depending on how big your project is 
 ## Important Notes
 
 1. The aggregation code for Annotate and Shakespeare's world runs daily but sends out a weekly summary email to the project team. This email is sent out on [Tuesdays](https://github.com/zooniverse/aggregation/blob/281279b9367167c42920648e03dc65ba3e2be038/engine/text_aggregation.py#L452) (nothing special - just first set it up on a Tuesday). The code takes a while to run so probably best not to deploy new code on Tuesdays.
+You can also log on to the ec2 node and check to see if the processes are running. Either "ps -auxf" or "top -c" will work. "top -c" mmight be a bit better since the aggregation code for anntotate and shakespeare's world takes up a lot of cpu so they tend to be at the top of the list. 
