@@ -20,12 +20,17 @@ def check_pid(pid):
 
 
 def send_email(project_id):
+    param_file = open("/app/config/aggregation.yml","rb")
+    param_details = yaml.load(param_file)
+
+    email_address = param_details["production"]["email"]
+
     client = boto3.client('ses',region_name='us-east-1')
     response = client.send_email(
         Source='greg@zooniverse.org',
         Destination={
             'ToAddresses': [
-                'greg@zooniverse.org'
+                email_address
             ]#,
         },
         Message={
@@ -41,9 +46,9 @@ def send_email(project_id):
             }
         },
         ReplyToAddresses=[
-            'greg@zooniverse.org',
+            email_address
         ],
-        ReturnPath='greg@zooniverse.org'
+        ReturnPath=email_address
     )
 
 param_file = open("/app/config/aggregation.yml","rb")
