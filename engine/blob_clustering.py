@@ -20,6 +20,11 @@ class BlobClustering(clustering.Cluster):
         clustering.Cluster.__init__(self,shape,project,additional_params)
         self.rectangle = (shape == "rectangle") or (shape == "image")
 
+        self.threshold = None
+
+    def __paint_canvas__(self,user_ids,markings,dimensions,tools=None):
+        pass
+
     def __find_positive_regions__(self,user_ids,markings,dimensions):
         """
         give a set of polygon markings made by people, determine the area(s) in the image which were outlined
@@ -51,7 +56,7 @@ class BlobClustering(clustering.Cluster):
         aggregate_polygon = np.sum(aggregate_polygon_list,axis=0,dtype=np.uint8)
 
         # the threshold determines the minimum number of people who have outlined an area
-        threshold = int(0.25*len(set(user_ids)))
+        threshold = int(len(set(user_ids))/2)
         ret,thresh1 = cv2.threshold(aggregate_polygon,threshold,255,cv2.THRESH_BINARY)
 
         return thresh1
@@ -70,7 +75,7 @@ class BlobClustering(clustering.Cluster):
         # if a user outlines a region using two different tools not really not sure what will happen there
         unique_users = set(user_ids)
 
-        for i in unique_users:
+        for j,i in enumerate(unique_users):
             polygons_by_user = [j for j, u in enumerate(user_ids) if u == i]
             # convert the polygons into numpy arrays - makes opencv happy
             user_polygons = [markings[j] for j in polygons_by_user]
@@ -79,8 +84,9 @@ class BlobClustering(clustering.Cluster):
             tools_per_polygons = [tools[j] for j in polygons_by_user]
 
             # this is where we will draw each of the polygons
-
             template2 = np.zeros(dimensions, np.uint8)
+            template2.fill(255-j)
+            # template2 = np.random.rand(dimensions[0],dimensions[1])
             for poly, t in zip(user_polygons, tools_per_polygons):
                 # start by drawing the outline of the area
                 template = np.zeros(dimensions, np.uint8)
@@ -99,17 +105,8 @@ class BlobClustering(clustering.Cluster):
             polygons_by_tools.append(template2)
 
         # find the most common tool used to outline each pixel
-        # most_common_tool = stats.mode(polygons_by_tools)[0][0]
-        values,counts = np.unique(polygons_by_tools,return_counts=True)
-        values_and_counts = zip(values,counts)
-        # sort by the number of occurances
-        values_and_counts.sort(reverse=True,key= lambda x:x[1])
-
-        # if the most common tool was "nothing" return the second most common tool
-        if values_and_counts[0][0] == 0:
-            return values_and_counts[1][0]
-        else:
-            return values_and_counts[0][0]
+        most_common_tool_canvas = stats.mode(polygons_by_tools)[0][0]
+        return most_common_tool_canvas
 
     def __convert_to_numpy__(self,markings):
         """
@@ -131,7 +128,6 @@ class BlobClustering(clustering.Cluster):
         a,b = zip(*([np.max(m,axis=0) for m in markings]))
         return max(max(a),max(b))+1,max(max(a),max(b))+1
 
-
     def __cluster__(self,markings,user_ids,tools,reduced_markings,dimensions,subject_id):
         """
         do polygon clustering looking for regions which have been highlighted/selected/outlined by enough people
@@ -143,6 +139,7 @@ class BlobClustering(clustering.Cluster):
         :param subject_id:
         :return:
         """
+        assert min(tools) >= 0
         # start by converting to numpy array
         markings = self.__convert_to_numpy__(markings)
 
@@ -154,8 +151,6 @@ class BlobClustering(clustering.Cluster):
         most_common_tool = self.__most_common_tool_array__(markings,user_ids,tools,dimensions)
 
         clusters = []
-
-        threshold = int(0.25 * len(set(user_ids)))
 
         for tool_index in sorted(set(tools)):
             area_by_tool = np.where((most_common_tool==(tool_index+1)) & (positive_area > 0))
@@ -173,17 +168,18 @@ class BlobClustering(clustering.Cluster):
 
             for cnt in contours:
                 try:
-                    clusters.append(self.__new_cluster__(cnt,tool_index,threshold,dimensions))
+                    clusters.append(self.__new_cluster__(cnt,tool_index,set(user_ids),dimensions))
                 except EmptyPolygon:
                     pass
 
         return clusters,0
 
-    def __new_cluster__(self,polygon,tool_index,threshold,dimensions):
+    def __new_cluster__(self,polygon,tool_index,unique_users,dimensions):
         """
         create the dictionary entry representing the new cluster
         :return:
         """
+        assert tool_index >= 0
         s = polygon.shape
         cluster = {}
         cluster["center"] = polygon.reshape((s[0],s[2])).tolist()
@@ -191,8 +187,8 @@ class BlobClustering(clustering.Cluster):
         if cluster["area"] <= 0.001:
             raise EmptyPolygon()
         # todo - remember why i needed both tool_classification and most_likely_tool
-        cluster["tool_classification"] = ({tool_index-1:1},-1)
+        cluster["tool_classification"] = ({tool_index:1},-1)
         cluster["most_likely_tool"] = tool_index
-        cluster["users"] = range(threshold)
+        cluster["users"] = list(unique_users)
 
         return cluster
