@@ -39,11 +39,19 @@ def __extract_grids__(img,horizontal):
         x,y,w,h = cv2.boundingRect(cnt)
         perimeter = cv2.arcLength(cnt,True)
         if min(h,w) > 1 and (perimeter > 500):
+
+
+
             s = cnt.shape
             f = np.reshape(cnt,(s[0],s[2]))
 
             if horizontal and (w/h > 5):
                 grid_lines.append(f)
+                template = np.zeros(img.shape,np.uint8)
+                template.fill(255)
+                cv2.drawContours(template, [cnt], 0, 0, -1)
+                plt.imshow(template)
+                plt.show()
 
             elif not horizontal and (h/w > 5):
                 grid_lines.append(f)
