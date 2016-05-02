@@ -693,11 +693,13 @@ def __roc_plot__(true_positives,false_positives):
     # ax.add_patch(ring_patch)
     # plt.show()
 
-def __extract_region__(fname,region_id = 0):
-    regions =  [(559,3282,1276,2097)]
+def __extract_region__(fname,region_id = 0,region=None):
+    if region is None:
+        regions =  [(559,3282,1276,2097)]
+        region = regions[region_id]
 
     img = cv2.imread(fname)
-    region = regions[region_id]
+
     sub_image = img[region[2]:region[3],region[0]:region[1]]
 
     return sub_image
