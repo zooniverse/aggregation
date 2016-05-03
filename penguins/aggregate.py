@@ -85,12 +85,13 @@ with open("/home/ggdhines/github/Penguins/public/roi.tsv","rb") as roiFile:
         t = [r.split(",") for r in l[1:] if r != ""]
         roi_dict[path] = [(int(x)/1.92,int(y)/1.92) for (x,y) in t]
 
-def dummy_func((zooniverse_id,markings,user_ids,tools)):
+def dummy_func((count,zooniverse_id,markings,user_ids,tools,num_users)):
     if markings == []:
-        return zooniverse_id,(-1,0)
+        return zooniverse_id,(-1,0),num_users
     clustering_engine = Agglomerative(None,None,{})
     clustering_results = clustering_engine.__cluster__(markings,user_ids,tools,markings,None,None)
-    return zooniverse_id,clustering_results
+    print("++ " + str(count))
+    return zooniverse_id,clustering_results,num_users
 
 client = pymongo.MongoClient()
 db = client['penguin']
@@ -116,11 +117,11 @@ pool = Pool(processes=4)
 
 processes = []
 
-for subject in subject_collection.find()[:10]:
+for ii,subject in enumerate(subject_collection.find()):
     # _id = c["_id"]
-
+    print(ii)
     zooniverse_id = subject["zooniverse_id"]
-    print(zooniverse_id)
+    # print(zooniverse_id)
 
 
 
@@ -168,11 +169,11 @@ for subject in subject_collection.find()[:10]:
             continue
 
 
-    processes.append(pool.apply_async(dummy_func,[(zooniverse_id,markings,user_ids,tools),]))
+    processes.append(pool.apply_async(dummy_func,[(ii,zooniverse_id,markings,user_ids,tools,num_users),]))
 
 
 for p in processes:
-    zooniverse_id,(clustering_results,_) = p.get()
+    zooniverse_id,(clustering_results,_),num_users = p.get()
 
     subject = subject_collection.find_one({"zooniverse_id":zooniverse_id})
 
