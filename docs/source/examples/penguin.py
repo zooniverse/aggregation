@@ -101,9 +101,9 @@ clustering_engine = Agglomerative(None,None,{})
 # result = db.profiles.create_index([('zooniverse_id', pymongo.ASCENDING)],unique=False)
 # print result
 
-for c in classification_collection.find():
-    _id = c["_id"]
-    zooniverse_id = c["subjects"][0]["zooniverse_id"]
+for subject in subject_collection.find():
+    # _id = c["_id"]
+    zooniverse_id = subject["subjects"][0]["zooniverse_id"]
     print(zooniverse_id)
 
     markings = []
@@ -111,7 +111,7 @@ for c in classification_collection.find():
     tools = []
 
     num_users = 0
-    path = subject_collection.find_one({"zooniverse_id":zooniverse_id})["metadata"]["path"]
+    path = subject["metadata"]["path"]
     _,image_id = path.split("/")
 
     site_id = image_id.split("_")[0]
