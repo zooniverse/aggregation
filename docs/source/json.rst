@@ -69,3 +69,13 @@ All of the tags should be in the format that Folger asked for (e.g. "<del>"). In
 
 Accuracy is a measure of how the users are in agreement (i.e. for what percentage of characters was there at least 2/3's agreement). If there is disagreement for a character you can refer back to the individual transcriptions to try and figure out what the best choice is.
 
+To get a list of all the points of disagreement for a given line, we could use ::
+
+    [i for i,c in enumerate(line) if ord(c) == 27]
+
+All of the individual lines of text have been formatted to be the same length. So if for line 2 (i.e. the third text in the list of aggregated text, Python is zero indexed) there is a disagreement at index 3, we can get all of the possibilities with ::
+
+    individual_transcriptions = aggregation_results["1274968"]["individual transcriptions"][2]
+    different_possibilities = set([t[3] for t in individual_transcriptions])
+
+Here "set()" just makes sure to give us the unique possibilities. There is one special character with ASCII value 24 which means that the aggregation engine has determined that the user "skipped" a character (e.g. transcribed "ello" when every one else transcribed "hello"). Note that differences in capitalization are settled favouring the capitalized letter and double (or triple spaces) are ignored.
