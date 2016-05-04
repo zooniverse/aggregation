@@ -271,7 +271,7 @@ class AggregationAPI:
 
         self.oldest_new_classification = datetime.datetime.now()
 
-    def __aggregate__(self):
+    def __aggregate__(self,given_subject_ids = None):
         """
         the main function to call when running aggregation
         """
@@ -282,18 +282,22 @@ class AggregationAPI:
         # have not be retired. If we want subjects that have been specifically retired, we'll make a separate call
         # for that
         for workflow_id,version in self.versions.items():
-            migrated_subjects = self.__migrate__(workflow_id,version)
+            if given_subject_ids is None:
+                migrated_subjects = self.__migrate__(workflow_id,version)
 
-            # for this workflow, what subjects have previously been aggregated?
-            previously_aggregated = self.__get_previously_aggregated__(workflow_id)
+                # for this workflow, what subjects have previously been aggregated?
+                previously_aggregated = self.__get_previously_aggregated__(workflow_id)
 
-            # the migrated_subject can contain classifications for subjects which are not yet retired
-            # so if we want only retired subjects, make a special call
-            # otherwise, use the migrated list of subjects
-            if self.only_retired_subjects:
-                subject_set = self.__get_newly_retired_subjects__(workflow_id)
+                # the migrated_subject can contain classifications for subjects which are not yet retired
+                # so if we want only retired subjects, make a special call
+                # otherwise, use the migrated list of subjects
+                if self.only_retired_subjects:
+                    subject_set = self.__get_newly_retired_subjects__(workflow_id)
+                else:
+                    subject_set = migrated_subjects
             else:
-                subject_set = migrated_subjects
+                subject_set = given_subject_ids
+                previously_aggregated = subject_set
 
             if subject_set == []:
                 print("skipping workflow " + str(workflow_id) + " due to an empty subject set")
