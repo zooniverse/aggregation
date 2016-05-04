@@ -22,6 +22,7 @@ Contents:
    output.rst
    error_handling.rst
    graphics.rst
+   json.rst
 
 .. automodule:: engine
 
