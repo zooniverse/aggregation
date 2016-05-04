@@ -376,7 +376,8 @@ class TranscriptionAPI(AggregationAPI):
 
         subject = "Aggregation summary for Project " + str(self.project_name)
 
-        body = "The link to the json aggregation results for all retired subjects is " + url
+        body = "The link to the json aggregation results for all retired subjects is " + url + "\n."
+        body += "For help understanding the json format please see https://developer.zooniverse.org/projects/aggregation/en/latest/json.html. The server currently hosting this site is having severe issues. We are looking into alternatives. In the mean time, if you get a message saying the the page doesn't exist or a 403 error, keep reloading (the page definitely does exist)."
 
         body += "\n\n Greg Hines \n Zooniverse \n \n PS This email was automatically generated."
 
