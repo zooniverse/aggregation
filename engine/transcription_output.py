@@ -23,11 +23,13 @@ class TranscriptionOutput:
         self.tags = None
         self.reverse_tags = None
 
+        self.safe_tags = dict()
+
     def __json_output__(self):
         aggregations_to_json = dict()
         print("creating json output ready")
         # by using metadata.keys, we automatically restrict the results to retired subjects
-        for count, (subject_id, aggregations) in enumerate(self.project.__yield_aggregations__(self.workflow_id,self.metadata.keys())):
+        for count, (subject_id, aggregations) in enumerate(self.project.__yield_aggregations__(self.workflow_id,[1281697])):#self.metadata.keys())):
             print(subject_id)
             if isinstance(aggregations, str):
                 aggregations = json.loads(aggregations)
@@ -36,6 +38,8 @@ class TranscriptionOutput:
             except IndexError:
                 print("skipping " + str(subject_id))
 
+        print(aggregations_to_json[1281697]['text'][0].keys())
+        assert False
         json.dump(aggregations_to_json, open("/tmp/" + str(self.project.project_id) + ".json", "wb"))
         self.__tar_output__()
 
@@ -53,6 +57,7 @@ class TranscriptionOutput:
         :param cluster:
         :return:
         """
+
         if isinstance(cluster,list):
             print("problem cluster")
             cluster = cluster[0]
@@ -71,11 +76,24 @@ class TranscriptionOutput:
         # store this cleaned aggregate text
         cluster_to_json["aggregated_text"] = self.__write_out_aggregate_line__(aggregated_line,tokenized_strings)
         # plus the coordinates
-        cluster_to_json["coordinates"] = cluster["center"][:-1]
+        cluster_to_json["central coordinates"] = cluster["center"][:-1]
         # now add in the individual pieces of text
         cluster_to_json["individual transcriptions"] = self.__write_out_individual_lines__(cluster)
 
+        cluster_to_json["accuracy"] = self.__calc_accuracy__(aggregated_line)
+
         return cluster_to_json
+
+    def __calc_accuracy__(self,aggregate_line):
+        """
+        calculate the percentage of characters where we have reached agreement
+        :param aggregate_line:
+        :return:
+        """
+        agreed_characters = len([c for c in aggregate_line if ord(c) != 24])
+        accuracy = agreed_characters/float(len(aggregate_line))
+
+        return accuracy
 
     def __write_out_individual_lines__(self,cluster):
         """
@@ -85,7 +103,7 @@ class TranscriptionOutput:
         """
         individual_text_to_json = []
         for coords,individual_text in self.__generate_transcriptions_and_coordinates__(cluster):
-            assert isinstance(individual_text,unicode)
+            assert isinstance(individual_text,unicode) or isinstance(individual_text,str)
 
             # again, convert the tags to the ones needed by Folger or Tate (as opposed to the ones
             # zooniverse is using)
@@ -172,16 +190,16 @@ class TranscriptionOutput:
                 agreement = True
 
                 # untokenize any tokens we find - replace them with the original tag
-                for tag,chr_representation in self.reverse_tags.items():
-                    c = c.replace(chr(chr_representation),tag)
+                for token,tag in self.tags.items():
+                    c = c.replace(chr(token),tag)
                 line += c
 
         # did we end on a disagreement?
         if not agreement:
             line += "<disagreement>"
             for c in set(differences.values()):
-                for tag,chr_representation in self.reverse_tags.items():
-                    c = c.replace(chr(chr_representation),tag)
+                for token,tag in self.tags.items():
+                    c = c.replace(chr(token),tag)
                 line += "<option>"+c+"</option>"
             line += "</disagreement>"
 
@@ -208,7 +226,7 @@ class TranscriptionOutput:
                     continue
                 subject_json["images"].append(image["center"])
 
-        # are there any text clusters?
+
         if len(aggregation["T2"]["text clusters"]) >= 1:
             subject_json["text"] = []
 
@@ -224,9 +242,9 @@ class TranscriptionOutput:
             # sort so they should appear in reading order
             subject_json["text"].sort(key = lambda x:x["coordinates"][2])
 
-            # finally, give all of the individual transcriptions (removing alignment tags) without regards to
-            # cluster - this way, people can tell if any text was ignored
-            subject_json["raw transcriptions"] = self.__add_global_transcriptions__(subject_id)
+        # finally, give all of the individual transcriptions (removing alignment tags) without regards to
+        # cluster - this way, people can tell if any text was ignored
+        subject_json["raw transcriptions"] = self.__add_global_transcriptions__(subject_id)
 
         return subject_json
 
@@ -257,7 +275,11 @@ class TranscriptionOutput:
                     if "\n" in individual_text:
                         continue
 
+                    # convert to ascii - and if this is the folger project, remove "sw-"
                     individual_text = individual_text.encode('ascii','ignore')
+                    for original,safe in self.safe_tags.items():
+                        individual_text = individual_text.replace(original,safe)
+
                     global_list.append({"coordinates":coords,"text":individual_text})
 
         return global_list
@@ -276,12 +298,14 @@ class ShakespearesWorldOutput(TranscriptionOutput):
         self.tags = self.project.text_algorithm.tags
         self.reverse_tags = dict()
 
-        # convert the tags into "folger safe" tags
-        for key,tag in self.tags.items():
-            self.tags[key] = tag.replace("sw-","")
+        for tag in self.tags.values():
+            self.safe_tags[tag] = tag.replace("sw-","")
 
-        for a,b in self.tags.items():
-            self.reverse_tags[b] = a
+        for key,tag in self.tags.items():
+            assert isinstance(tag,str)
+            self.reverse_tags[tag] = key
+
+        self.reverse_tags = None
 
     # def __subject_to_json__(self,subject_id,aggregation):
     #     """
@@ -422,6 +446,9 @@ class ShakespearesWorldOutput(TranscriptionOutput):
         :return:
         """
         for coords,text in zip(cluster["individual points"],cluster["aligned_text"]):
+            text = text.encode('ascii','ignore')
+            for original,safe in self.safe_tags.items():
+                text = text.replace(original,safe)
             yield coords,text
 
         raise StopIteration()
