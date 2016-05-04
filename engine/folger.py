@@ -76,13 +76,16 @@ class FolgerClustering(TextClustering):
     def __find_completed_components__(self,aligned_text,coordinates):
         """
         go through the aggregated text looking for subsets where at least 3 people have transcribed everything
+        for example if A,B,C also intersect, and C,D,E all intersect (without any overlap other than C between the two
+        subsets) return the two separate
         :param aligned_text:
         :param coordinates:
         :return:
         """
         completed_indices = []
-
+        # find all character indices where at least 3 people have transcribed
         for char_index in range(len(aligned_text[0])):
+            # 25 corresponds to before or after users started transcribing
             num_char = len([1 for text in aligned_text if ord(text[char_index]) != 25])
 
             if num_char >= 3:
@@ -91,22 +94,22 @@ class FolgerClustering(TextClustering):
         starting_points = {}
         ending_points = {}
 
-        # transcription_range = {}
-
         # find consecutive blocks
         if completed_indices != []:
             # find the contiguous blocks of completed transcriptions
+            # the first block of connected transcriptions
             blocks = [[completed_indices[0]],]
+
             for i,char_index in list(enumerate(completed_indices))[1:]:
                 # do we have a jump - if so, start a new block
-                if completed_indices[i-1] != (char_index-1):
-                    blocks[-1].append(completed_indices[i-1])
+                if completed_indices[i] != (completed_indices[i-1]+1):
                     blocks.append([char_index])
+                else:
+                    blocks[-1].append(completed_indices[i])
 
             # if the last character started a new block (kinda weird but happens)
             # then we have a block only one character long - skip it
-            blocks[-1].append(completed_indices[-1])
-            if blocks[-1][0] == blocks[-1][1]:
+            if len(blocks[-1]) == 1:
                 blocks = blocks[:-1]
 
             # technically we can have multiple transcriptions from the same user so
@@ -137,8 +140,8 @@ class FolgerClustering(TextClustering):
                             starting_points[b] = [(x1,y1)]
 
                     # does the end of the transcription match up with the end of the completed segment?
-                    if b[1] == last_char:
-                        if (first_char,last_char) in ending_points:
+                    if b[-1] == last_char:
+                        if b in ending_points:
                             ending_points[b].append((x2,y2))
                         else:
                             ending_points[b] = [(x2,y2)]
@@ -158,16 +161,22 @@ class FolgerClustering(TextClustering):
         clusters = []
 
         # go through every segment that is considered done
-        for (lb,ub) in starting_points:
+        for block in starting_points:
             # not sure how likely this is to happen, but just to be sure
             # make sure that we have both a starting and ending point
-            if (lb,ub) not in ending_points:
+            if block not in ending_points:
                 continue
+
+            # get the start and the end of the completed block
+            lb = min(block)
+            ub = max(block)
 
             new_cluster = {}
 
-            X1,Y1 = zip(*starting_points[(lb,ub)])
-            X2,Y2 = zip(*ending_points[(lb,ub)])
+            # get the coordinates of the transcriptions which matched up with the start or the end of this
+            # transcribed block - use those transcriptions to create the aggregate coordinates
+            X1,Y1 = zip(*starting_points[block])
+            X2,Y2 = zip(*ending_points[block])
 
             x1 = np.median(X1)
             x2 = np.median(X2)
@@ -182,9 +191,10 @@ class FolgerClustering(TextClustering):
             assert isinstance(completed_text,str)
 
             new_cluster["center"] = (x1,x2,y1,y2,completed_text)
-            #
-            # new_cluster["cluster members"] = list(user_ids)
-            new_cluster["individual points"] = zip(X1,Y1,X2,Y2)
+
+            new_cluster["individual points"] = text_coordinates
+
+
             # print(new_cluster["individual points"])
             # assert False
 
@@ -258,6 +268,8 @@ class FolgerClustering(TextClustering):
         """
         aggregate_text = ""
         num_agreed = 0
+
+        print(aligned_text)
 
         # will keep track of the percentage of characters from each transcription which agree
         # with the aggregate
