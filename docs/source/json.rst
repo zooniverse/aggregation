@@ -38,31 +38,27 @@ There is still a lot of output. aggregation_results["1274968"] is a dictionary s
 
     print(aggregation_results["1274968"].keys())
 
-Ideally Annotate and Shakespeare's World would have identically formatted aggregation results. However, in practice, there were different issues to deal with when creating the aggregation results. At the time of writing, Greg was close to finishing his contract so there may not be enough time to really correct this. For the time being, we'll discuss the aggregation formats separately.
 
-Shakespeare's World
-*******************
-For Shakespeare's World the aggregation results for each subject have the following keys ::
+This will give ::
 
-    [u'individual transcriptions', u'zooniverse subject id', u'text', u'metadata', u'coordinates', u'accuracy', u'users_per_line']
+    ['text', 'raw transcriptions', 'metadata']
 
-These keys and their values represent the complete aggregation/annotations for this particular subject. To access a specific value, we would do ::
+1. 'text' - the aggregated text
+2. 'raw transcriptions' - the original transcriptions for the given subject. Useful if you want to know which transcriptions were ignored
+3. 'metadata' - the metadata provided by Tate/Folger. Useful for figuring out which document each subject is
 
-    print(aggregation_results["1274968"]["individual transcriptions"])
+Looking at the text aggregation results - the aggregation results are stored in a list. Each element in the list refers to cluster of transcriptions, all transcribing the same text (each transcription in the cluster is by a different user).
+Each cluster has a number of properties ::
 
-Each aggregate transcription is based on a cluster of transcriptions which the aggregation engine considers to a transcription of the same text.
+    ['aggregated_text', 'individual transcriptions', 'coordinates', 'accuracy']
 
-1. "text" - the aggregated (combined) transcriptions
-2. "individual transcriptions" - for each aggregate transcription, the set of individual transcriptions in the cluster
-3. "coordinates" - for each aggregate transcription, the set of coordinates for each individual transcription (currently missing the aggregate coordinates - have made a note of that)
-4. "user_per_line" - the set of user ids per individual transcription (None means that they are not logged in)
-5. "accuracy" - a measure of how much user agreement there is
-6. "metadata" - all of the metadata uploaded with this specific subject. This is what will allow you to determine what document this subject actually is
-7. "zooniverse subject id" - slightly redundant
+1. 'aggregated_text' - the aggregate text (probably what you are most interested in)
+2. 'individual transcriptions' - the individual transcriptions in the cluster
+3. 'accuracy' - how much agreement there is between all of the transcriptions in the given cluster
 
 So to iterate over all of the aggregate transcriptions, we could do ::
 
-    for line in aggregation_results["1274968"]["text"]:
+    for cluster in aggregation_results["1274968"]["text"]:
         print(line)
 
 All of the tags should be in the format that Folger asked for (e.g. "<del>"). In the aggregate text, there is a special character with ASCII value 27. This is a non-printing character which corresponds to when users were not in agreement about a specific character. Agreement is defined as when at least 2/3's of the users have given the same character.
@@ -79,3 +75,5 @@ All of the individual lines of text have been formatted to be the same length. S
     different_possibilities = set([t[3] for t in individual_transcriptions])
 
 Here "set()" just makes sure to give us the unique possibilities. There is one special character with ASCII value 24 which means that the aggregation engine has determined that the user "skipped" a character (e.g. transcribed "ello" when every one else transcribed "hello"). Note that differences in capitalization are settled favouring the capitalized letter and double (or triple spaces) are ignored.
+
+\x1b
