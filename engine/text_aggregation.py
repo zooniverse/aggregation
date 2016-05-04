@@ -102,11 +102,10 @@ class SubjectRetirement(Classification):
 
         token = self.project.token
 
-        # print("retiring " + str(len(to_retire)) + " subjects")
+        self.total_retired += len(to_retire)
 
         # need to retire the subjects one by one
         for retired_subject in to_retire:
-            self.total_retired += 1
             self.to_retire.add(retired_subject)
             try:
                 headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+token}
@@ -376,7 +375,8 @@ class TranscriptionAPI(AggregationAPI):
 
         subject = "Aggregation summary for Project " + str(self.project_name)
 
-        body = "The link to the json aggregation results for all retired subjects is " + url + "\n."
+        body = "We have now retired/completed " + str(self.classification_alg.total_retired) + " documents."
+        body += "The link to the json aggregation results for all retired subjects is " + url + "\n."
         body += "For help understanding the json format please see https://developer.zooniverse.org/projects/aggregation/en/latest/json.html. The server currently hosting this site is having severe issues. We are looking into alternatives. In the mean time, if you get a message saying the the page doesn't exist or a 403 error, keep reloading (the page definitely does exist)."
 
         body += "\n\n Greg Hines \n Zooniverse \n \n PS This email was automatically generated."
