@@ -24,4 +24,48 @@ The aggregation results will only contain subjects which have been retired. To s
 
     print(aggregation_results.keys())
 
+An example result might be ::
+
+    [u'1274968', u'1274969', u'1276058', u'1279124', u'1273572', u'1274458', u'1273570', u'1274964', u'1273574', u'1273575' ...]
+
+Note that the subject ids are actually strings (not totally sure why that is the case but doesn't seem to cause any trouble). The u'' simply means unicode (for the purposes of printing out subject ids, just think of strings)
+
+To print out the aggregation results for one subject we can do ::
+
+    print(json.dumps(aggregation_results["1274968"], sort_keys=True, indent=4, separators=(',', ': ')))
+
+There is still a lot of output. aggregation_results["1274968"] is a dictionary so again we can look at the keys in the dictionary ::
+
+    print(aggregation_results["1274968"].keys())
+
+Ideally Annotate and Shakespeare's World would have identically formatted aggregation results. However, in practice, there were different issues to deal with when creating the aggregation results. At the time of writing, Greg was close to finishing his contract so there may not be enough time to really correct this. For the time being, we'll discuss the aggregation formats separately.
+
+Shakespeare's World
+*******************
+For Shakespeare's World the aggregation results for each subject have the following keys ::
+
+    [u'individual transcriptions', u'zooniverse subject id', u'text', u'metadata', u'coordinates', u'accuracy', u'users_per_line']
+
+These keys and their values represent the complete aggregation/annotations for this particular subject. To access a specific value, we would do ::
+
+    print(aggregation_results["1274968"]["individual transcriptions"])
+
+Each aggregate transcription is based on a cluster of transcriptions which the aggregation engine considers to a transcription of the same text.
+
+1. "text" - the aggregated (combined) transcriptions
+2. "individual transcriptions" - for each aggregate transcription, the set of individual transcriptions in the cluster
+3. "coordinates" - for each aggregate transcription, the set of coordinates for each individual transcription (currently missing the aggregate coordinates - have made a note of that)
+4. "user_per_line" - the set of user ids per individual transcription (None means that they are not logged in)
+5. "accuracy" - a measure of how much user agreement there is
+6. "metadata" - all of the metadata uploaded with this specific subject. This is what will allow you to determine what document this subject actually is
+7. "zooniverse subject id" - slightly redundant
+
+So to iterate over all of the aggregate transcriptions, we could do ::
+
+    for line in aggregation_results["1274968"]["text"]:
+        print(line)
+
+All of the tags should be in the format that Folger asked for (e.g. "<del>"). In the aggregate text, there is a special character with ASCII value 27. This is a non-printing character which corresponds to when users were not in agreement about a specific character. Agreement is defined as when at least 2/3's of the users have given the same character.
+
+Accuracy is a measure of how the users are in agreement (i.e. for what percentage of characters was there at least 2/3's agreement). If there is disagreement for a character you can refer back to the individual transcriptions to try and figure out what the best choice is.
 
