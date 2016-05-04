@@ -32,4 +32,15 @@ So what does __aggregate__ do? As with __aggregate__ in AggregationAPI, we have 
 \__clustering__
 ***************
 To aggregate both image markings and transcriptions, we run clustering algorithms. Image markings are handled as rectangles and use the standard rectangle clustering algorithm (more on this later). Annotate and Shakespeare's World use different clustering algorithms - this is because with Shakespeare's World if a user can only transcribe a small part of a line that user is encouraged to place markings just around that portion of the line. (As opposed to placing markings at the beginning and the end of the line - this makes a major difference.)
- The clustering algorithms for both projects are subclasses of clustering.py. For Annotate, the code is in annotate.py (class AnnotateClustering) and for Shakespeare's world, the code is in folger.py (class FolgerClustering). For both of these classes, the main code is in __cluster__ which is called by code in the Clustering class..
+ The clustering algorithms for both projects are subclasses of clustering.py. For Annotate, the code is in annotate.py (class AnnotateClustering) and for Shakespeare's world, the code is in folger.py (class FolgerClustering). For both of these classes, the main code is in __cluster__ which is called by code in the Clustering class.
+
+Folger Aggregation
+##################
+
+With Annotate, users are asked to mark the beginning and end of each line they transcribe. With Folger, users are asked to mark exactly what they are transcribing (so if you only transcribe one word, users will mark just that one word). Technically people could do the same approach with Annotate but the idea is to encourage people to transcribe anything in Folger, even if its just one word. (The text in Folger is generally harder to transcribe.)
+
+This makes is much harder to cluster transcriptions for the same line together. With Annotate if you and I transcribe the same line - our start/end markings will generally be close together. But with Folger, we could transcribe different parts of the same line and our start/end markings could actually be far apart.
+ If we have just two non-overlapping transcriptions for a given line, there really isn't anyway of knowing that these transcriptions could actually match up. But we can have a chain of overlaping markings. For example, suppose we have 3 transcriptions, A, B and C. A and B overlap as do B and C.
+  But A and C do not overlap. If we were to represent this graphically - each node represents a transcription and each edge represents two transcriptions with common text. Then what we are looking for are `connected_components <https://en.wikipedia.org/wiki/Connected_component_(graph_theory)>`
+
+With Folger (Shakespeare's Wor
