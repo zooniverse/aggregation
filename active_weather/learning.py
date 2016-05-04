@@ -93,7 +93,6 @@ for char in "A":#BCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz"
         cv2.normalize(average_char, average_char, 0, 255, cv2.NORM_MINMAX)
         average_char = average_char.astype(np.uint8)
 
-
         ret2, th2 = cv2.threshold(average_char, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         gold_standard_characters[char] = th2
 
