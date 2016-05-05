@@ -9,7 +9,7 @@ Welcome to Zooniverse Aggregation Engine's documentation!
 Contents:
 
 .. toctree::
-   :maxdepth: 2
+    :maxdepth: 2
 
     getting_started.rst
     ouroboros.rst
