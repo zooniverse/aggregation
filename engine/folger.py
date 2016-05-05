@@ -194,11 +194,6 @@ class FolgerClustering(TextClustering):
 
             new_cluster["individual points"] = text_coordinates
 
-
-            # print(new_cluster["individual points"])
-            # assert False
-
-
             new_cluster["set index"] = cluster_index
 
             new_aligned = []
@@ -268,8 +263,6 @@ class FolgerClustering(TextClustering):
         """
         aggregate_text = ""
         num_agreed = 0
-
-        print(aligned_text)
 
         # will keep track of the percentage of characters from each transcription which agree
         # with the aggregate
@@ -606,30 +599,4 @@ class FolgerClustering(TextClustering):
                 text_coordinates = [filtered_markings[i][:4] for i in c]
                 clusters.extend(self.__create_clusters__(completed_components,aggregate_text,ii,aligned_text,variants,users_in_line,text_coordinates))
 
-            # print clusters
-            # fname = self.project.__image_setup__(subject_id)[0]
-            # image = cv2.imread(fname)
-            # all_variants = set()
-            # all_text = {}
-            # total_errors = 0
-            # total_overall = 0.
-            # for cl in clusters:
-            #     x1,x2,y1,y2,text = cl["center"]
-            #     pruned_text = "".join([c for c in text if ord(c) != 24])
-            #     print(sum([1 for c in text if ord(c) != 27])/float(len(text)))
-            #     total_errors += sum([1 for c in text if ord(c) != 27])
-            #     total_overall += len(text)
-            #     all_text[y1] = pruned_text
-            #     # all_variants.update(cl["variants"])
-            #     # print(cl["center"],cl["individual points"])
-            #     for a,b,c,d in cl["individual points"][:4]:
-            #         cv2.line(image,(int(a),int(b)),(int(c),int(d)),(0,255,0))
-            #
-            #     cv2.line(image,(int(x1),int(y1)),(int(x2),int(y2)),(255,0,0))
-            # # print(all_variants)
-            # # for y in sorted(all_text.keys()):
-            # #     print(all_text[y])
-            # print(total_errors/total_overall)
-            # cv2.imwrite("/home/ggdhines/completed_subject.jpg",image)
-            print "number of completed components: " + str(len(clusters))
         return clusters,0
