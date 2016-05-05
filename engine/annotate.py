@@ -241,9 +241,7 @@ class AnnotateClustering(TextClustering):
 
             # store the cluster members with alignment spaces added in
             dummy = [[] for _ in aligned_transcriptions]
-            print(aligned_transcriptions)
             untokenized_text = [self.__reset_tags__(t) for t in aligned_transcriptions]
-            print(untokenized_text)
             cluster_members = zip(x1_values,x2_values,y1_values,y2_values,untokenized_text,dummy)
         else:
             # we know that we have near complete agreement (up to disagreement about capitalizations) so we know

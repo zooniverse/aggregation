@@ -246,20 +246,25 @@ class FolgerClustering(TextClustering):
             # since a simple spelling mistake can count as a variant, look for cases where at least
             # two people have given the same variant
             variant_dict = dict()
-            print(variants)
             assert len(variants) == len(user_ids)
             for i,u in enumerate(user_ids):
+                if u < 0:
+                    continue
+
                 for v in variants[i]:
                     if v not in variant_dict:
                         variant_dict[v] = [u]
                     else:
                         variant_dict[v].append(u)
-            for v,user_list in variant_dict:
-                if len(user_list) >= 2:
-                    new_cluster["variants"].append((v,user_list))
 
-            print(new_cluster["variants"])
-            assert new_cluster["variants"] == []
+            # see if any of the variants have been transcribed by at least two people
+            for v,user_list in variant_dict.items():
+                if len(user_list) >= 2:
+                    display_names = []
+                    for u in user_list:
+                        display_names.append(self.project.__get_user_name__(u))
+                    new_cluster["variants"].append((v,display_names))
+
             clusters.append(new_cluster)
 
         return clusters

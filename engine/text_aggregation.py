@@ -79,6 +79,8 @@ class SubjectRetirement(Classification):
         :param workflow_id:
         :return:
         """
+        if self.project.environment == "quasi":
+            return aggregations
         assert isinstance(workflow_id,int)
         to_retire = set()
         # start by looking for empty subjects
@@ -143,7 +145,6 @@ class TranscriptionAPI(AggregationAPI):
         """
         :param aggregations: we're working on a subject by subject basis - aggregations is from previous subjects
         """
-
         if raw_markings == {}:
             warning("skipping")
             return aggregations
@@ -151,12 +152,12 @@ class TranscriptionAPI(AggregationAPI):
         # start by clustering text
         # print("clustering text")
         cluster_aggregations = self.text_algorithm.__aggregate__(raw_markings,image_dimensions)
+
         aggregations = self.__merge_aggregations__(aggregations,cluster_aggregations)
         # print("clustering images")
         image_aggregations = self.image_algorithm.__aggregate__(raw_markings,image_dimensions)
 
         aggregations = self.__merge_aggregations__(aggregations,image_aggregations)
-
         return aggregations
 
     def __setup__(self):
@@ -363,9 +364,9 @@ class TranscriptionAPI(AggregationAPI):
 
         return url
 
-    def __summarize__(self,tar_path=None):
+    def __summarize__(self,subject_filter=None):
         # start by updating the json output
-        self.output_tool.__json_output__()
+        self.output_tool.__json_output__(subject_filter)
 
         # and then upload the files to s3
         self.__s3_upload__()
@@ -440,12 +441,14 @@ if __name__ == "__main__":
 
     assert project_id is not None
 
+    subject_id = 1273862
+
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
 
-        processed_subjects = project.__aggregate__([1273551])
+        processed_subjects = project.__aggregate__([subject_id])
 
         # only send summary emails on Tuesday
         if True:#datetime.datetime.today().weekday() == 1:
-            project.__summarize__()
+            project.__summarize__([subject_id])
 

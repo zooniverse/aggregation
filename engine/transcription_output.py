@@ -101,7 +101,13 @@ class TranscriptionOutput:
 
         cluster_to_json["accuracy"] = self.__calc_accuracy__(aggregated_line)
 
-        return cluster_to_json
+        if ("variants" in cluster) and (cluster["variants"] != []):
+            variants = cluster["variants"]
+        else:
+            variants = []
+
+
+        return cluster_to_json,variants
 
     def __calc_accuracy__(self,aggregate_line):
         """
@@ -239,12 +245,13 @@ class TranscriptionOutput:
 
         # are there text aggregations?
         if ("text clusters" in aggregation["T2"]) and (len(aggregation["T2"]["text clusters"]) > 1):
-            subject_json["text"] = self.__add_text_aggregation__(aggregation)
+            subject_json["text"],subject_json["variants"] = self.__add_text_aggregation__(aggregation)
 
         # finally, give all of the individual transcriptions (removing alignment tags) without regards to
         # cluster - this way, people can tell if any text was ignored
         subject_json["raw transcriptions"] = self.__add_global_transcriptions__(subject_id)
 
+        print(subject_json["variants"])
         return subject_json
 
 
@@ -271,6 +278,7 @@ class TranscriptionOutput:
         :return:
         """
         text_results = []
+        variants_per_subject = []
 
         # now build up each one of the results
         for cluster_index,cluster in aggregation["T2"]["text clusters"].items():
@@ -280,7 +288,11 @@ class TranscriptionOutput:
 
             # add this cluster to the total list
             try:
-                text_results.append(self.__write_out_cluster__(cluster))
+                text,variants = self.__write_out_cluster__(cluster)
+                text_results.append(text)
+
+                if variants != []:
+                    variants_per_subject.append(variants)
             except EmptyString:
                 pass
 
@@ -288,7 +300,7 @@ class TranscriptionOutput:
         text_results.sort(key = lambda x:x["central coordinates"][2])
 
         assert text_results != {}
-        return text_results
+        return text_results,variants_per_subject
 
 
     def __add_global_transcriptions__(self,subject_id):

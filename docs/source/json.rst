@@ -67,6 +67,8 @@ Each aggregate line(cluster) will have a number of different properties.
 2. 'coordinates' - the coordinates of this particular line (based on an average of all of the coordinates given by users). The format for these lines is [x1,y1,x2,y2] i.e. the first two values give the starting point of the line and the next two give the ending point.
 3. 'individual transcriptions' - contains both the text and the coordinates of the transcriptions making up this cluster
 4. 'accuracy' - for what percentage of characters did the users reach consensus on?
+5. 'images' - present if there were any images marked in the document (format is [x1,y1,x2,y2] giving two opposite corners)
+6. 'variants' - a list of variants, i.e. words that are not in the dictionary if you are looking for original words (key is always there but idea is only supported in Shakespeare's world)
 
 In "aggregated_text", there will be the tags that Annotate/SW use. There will also be some special tags
 
@@ -81,4 +83,14 @@ In the individual transcriptions there are a couple of special characters as wel
 There is a subtle differnce between these two special characters. (Again this only applies to Shakespeare's world):
 
 1. Consider "helo" vs "hello" - the first would be represented as "he\u0018l0". So here "\u0018" means that the first user thinks there is nothing in the spot.
-2. Now consider "ello" and "hello" - the first would be presented as "\x19ello". Here "\x19" would mean "no option" - it might be that the first user didn't think there was a "h", but it also could have been that the first user merely decided to start transcribing at the "e". (Seems more realistic if you replace each letter with a whole word.) So "\x19" has no affect on the aggregation.
+2. Now consider "ello" and "hello" - the first would be presented as "\x19ello". Here "\x19" would mean "no option" - it might be that the first user didn't think there was a "h", but it also could have been that the first user merely decided to start transcribing at the "e". (Seems more realistic if you replace each letter with a whole word.) So "\x19" has no effect on the aggregation.
+
+To get the average accuracy per line for a subject we would do::
+
+    import numpy as np
+    all_accuracies = [l["accuracy"] for l in aggregation_results["1274968"]["text"]
+    print(np.mean(all_accuracies))
+
+This would of course give a bias towards small lines of text.
+
+For variants, we are looking for cases where at least two people have transcribed the same word. In that case, the display name of each user is given. (So we have a list of lists.)

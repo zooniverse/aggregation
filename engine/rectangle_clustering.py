@@ -91,6 +91,7 @@ class RectangleClustering(clustering.Cluster):
         :param subject_id:
         :return:
         """
+
         # if empty markings, just return nothing
         if markings == []:
             return [],0

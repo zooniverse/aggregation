@@ -654,6 +654,12 @@ class AggregationAPI:
 
         raise StopIteration()
 
+    def __get_user_name__(self,user_id):
+        cursor = self.postgres_session.cursor()
+        cursor.execute("select display_name from users where id = " + str(user_id))
+
+        return cursor.fetchone()[0]
+
     def __get_retirement_threshold__(self):
         """
         return the number of classifications needed for a subject to be retired
