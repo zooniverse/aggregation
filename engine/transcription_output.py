@@ -11,6 +11,9 @@ before being emailed out
 __author__ = 'ggdhines'
 
 
+class EmptyString(Exception):
+    pass
+
 class TranscriptionOutput:
     __metaclass__ = ABCMeta
 
@@ -29,8 +32,18 @@ class TranscriptionOutput:
         aggregations_to_json = dict()
         print("creating json output ready")
         # by using metadata.keys, we automatically restrict the results to retired subjects
-        for count, (subject_id, aggregations) in enumerate(self.project.__yield_aggregations__(self.workflow_id,[1281697])):#self.metadata.keys())):
+
+        for count, (subject_id, aggregations) in enumerate(self.project.__yield_aggregations__(self.workflow_id)):#self.metadata.keys())):
+            # we will have aggregation results for subjects which haven't been retired yet
+            # (so we can show the black dots)
+            # but we don't want to include these subjects in the aggregation results. self.metadata only includes
+            # metadata for retired subjects - so if subject_id not in self.metadata, skip
+            if subject_id not in self.metadata.keys():
+                continue
             print(subject_id)
+
+            # on the off chance that the aggregations are in string format and not json (seems to happen sometimes)
+            # not sure if its because on running on Greg's computer vs. aws. But just playing it safe
             if isinstance(aggregations, str):
                 aggregations = json.loads(aggregations)
             try:
@@ -38,8 +51,6 @@ class TranscriptionOutput:
             except IndexError:
                 print("skipping " + str(subject_id))
 
-        print(aggregations_to_json[1281697]['text'][0].keys())
-        assert False
         json.dump(aggregations_to_json, open("/tmp/" + str(self.project.project_id) + ".json", "wb"))
         self.__tar_output__()
 
@@ -69,6 +80,11 @@ class TranscriptionOutput:
 
         # and now repeat with aggregated line
         aggregated_line = str(cluster["center"][-1])
+
+        # not sure why an empty aggregate string should exist but it does seem to happen every so often
+        if aggregated_line == "":
+            raise EmptyString()
+
         for chr_representation,tag in self.tags.items():
             aggregated_line = aggregated_line.replace(tag,chr(chr_representation))
         assert isinstance(aggregated_line,str)
@@ -181,8 +197,10 @@ class TranscriptionOutput:
                 if not agreement:
                     line += "<disagreement>"
                     for options in set(differences.values()):
-                        for tag,chr_representation in self.reverse_tags.items():
-                            options = options.replace(chr(chr_representation),tag)
+                        # when printing out convert all of the tokens for tags back into string format
+                        for token,tag in self.reverse_tags.items():
+                            assert isinstance(token,int)
+                            options = options.replace(chr(token),tag)
                         line += "<option>"+options+"</option>"
                     line += "</disagreement>"
                     differences = {}
@@ -237,10 +255,13 @@ class TranscriptionOutput:
                     continue
 
                 # add this cluster to the total list
-                subject_json["text"].append(self.__write_out_cluster__(cluster))
+                try:
+                    subject_json["text"].append(self.__write_out_cluster__(cluster))
+                except EmptyString:
+                    pass
 
             # sort so they should appear in reading order
-            subject_json["text"].sort(key = lambda x:x["coordinates"][2])
+            subject_json["text"].sort(key = lambda x:x["central coordinates"][2])
 
         # finally, give all of the individual transcriptions (removing alignment tags) without regards to
         # cluster - this way, people can tell if any text was ignored
@@ -298,14 +319,15 @@ class ShakespearesWorldOutput(TranscriptionOutput):
         self.tags = self.project.text_algorithm.tags
         self.reverse_tags = dict()
 
+        # for annotate we'll have safe_tags = tags but here we need to get rid of the "sw-"
         for tag in self.tags.values():
             self.safe_tags[tag] = tag.replace("sw-","")
 
+        # when converting from token back into string format, for folger we need to make sure that we are using the
+        # right, sw-safe tags. So we need a special self.reverse_tags
         for key,tag in self.tags.items():
             assert isinstance(tag,str)
-            self.reverse_tags[tag] = key
-
-        self.reverse_tags = None
+            self.reverse_tags[key] = self.safe_tags[tag]
 
     # def __subject_to_json__(self,subject_id,aggregation):
     #     """
