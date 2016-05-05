@@ -28,7 +28,7 @@ An example result might be ::
 
     [u'1274968', u'1274969', u'1276058', u'1279124', u'1273572', u'1274458', u'1273570', u'1274964', u'1273574', u'1273575' ...]
 
-Note that the subject ids are actually strings (not totally sure why that is the case but doesn't seem to cause any trouble). The u'' simply means unicode (for the purposes of printing out subject ids, just think of strings)
+Note that the subject ids are actually strings (even though they are all numbers). The u'' simply means unicode.
 
 To print out the aggregation results for one subject we can do ::
 
@@ -50,30 +50,35 @@ This will give ::
 Looking at the text aggregation results - the aggregation results are stored in a list. Each element in the list refers to cluster of transcriptions, all transcribing the same text (each transcription in the cluster is by a different user).
 Each cluster has a number of properties ::
 
-    ['aggregated_text', 'individual transcriptions', 'coordinates', 'accuracy']
+    ['text', 'individual transcriptions', 'coordinates', 'accuracy']
 
-1. 'aggregated_text' - the aggregate text (probably what you are most interested in)
+1. 'text' - the aggregate text (probably what you are most interested in)
 2. 'individual transcriptions' - the individual transcriptions in the cluster
 3. 'accuracy' - how much agreement there is between all of the transcriptions in the given cluster
 
 So to iterate over all of the aggregate transcriptions, we could do ::
 
-    for cluster in aggregation_results["1274968"]["text"]:
+    for line in aggregation_results["1274968"]["text"]:
         print(line)
 
-All of the tags should be in the format that Folger asked for (e.g. "<del>"). In the aggregate text, there is a special character with ASCII value 27. This is a non-printing character which corresponds to when users were not in agreement about a specific character. Agreement is defined as when at least 2/3's of the users have given the same character.
+Each aggregate line(cluster) will have a number of different properties.
 
-Accuracy is a measure of how the users are in agreement (i.e. for what percentage of characters was there at least 2/3's agreement). If there is disagreement for a character you can refer back to the individual transcriptions to try and figure out what the best choice is.
+1. 'aggregated_text' - this is the actual final text
+2. 'coordinates' - the coordinates of this particular line (based on an average of all of the coordinates given by users). The format for these lines is [x1,y1,x2,y2] i.e. the first two values give the starting point of the line and the next two give the ending point.
+3. 'individual transcriptions' - contains both the text and the coordinates of the transcriptions making up this cluster
+4. 'accuracy' - for what percentage of characters did the users reach consensus on?
 
-To get a list of all the points of disagreement for a given line, we could use ::
+In "aggregated_text", there will be the tags that Annotate/SW use. There will also be some special tags
 
-    [i for i,c in enumerate(line) if ord(c) == 27]
+1. <disagreement>...</disagreement> - these are used to show places where people have not reached consensus and we list every one of the possible options that people gave
+2. <option>...</option> - inside of the disagreement tags these option tags give the different options (note that the options can be more than one character long)
 
-All of the individual lines of text have been formatted to be the same length. So if for line 2 (i.e. the third text in the list of aggregated text, Python is zero indexed) there is a disagreement at index 3, we can get all of the possibilities with ::
+In the individual transcriptions there are a couple of special characters as well. These characters have been inserted so that all of the users transcriptions are of the same length. So string[4] (for example) will refer to the same character for all transcriptions. These characters are non-printing ascii values. The list below gives the ASCII value for each of these special characters. So for example, 24 doesn't mean the characters "24" but the character with ASCII value 24 (which is a non-printing character).
 
-    individual_transcriptions = aggregation_results["1274968"]["individual transcriptions"][2]
-    different_possibilities = set([t[3] for t in individual_transcriptions])
+1. 24 - the aggregation algorithm determined that a user skipped a character. For example if we have two transcriptions "hello" and "ello", then the secon transcription would be list as "\u0018ello". "\u0018" is a single character, specifically the character with ASCII value 24 listed in unicode format. (Converting to unicode was necessary for saving values in the database.)
+2. 25 - for Folger only this corresponds to spaces before or after where the user started transcribing. So with Folger, the example of "hello" and "ello" would be "\x19ello" (\x19 is another way of saying character 25 in unicode with hex).
 
-Here "set()" just makes sure to give us the unique possibilities. There is one special character with ASCII value 24 which means that the aggregation engine has determined that the user "skipped" a character (e.g. transcribed "ello" when every one else transcribed "hello"). Note that differences in capitalization are settled favouring the capitalized letter and double (or triple spaces) are ignored.
+There is a subtle differnce between these two special characters. (Again this only applies to Shakespeare's world):
 
-\x1b
+1. Consider "helo" vs "hello" - the first would be represented as "he\u0018l0". So here "\u0018" means that the first user thinks there is nothing in the spot.
+2. Now consider "ello" and "hello" - the first would be presented as "\x19ello". Here "\x19" would mean "no option" - it might be that the first user didn't think there was a "h", but it also could have been that the first user merely decided to start transcribing at the "e". (Seems more realistic if you replace each letter with a whole word.) So "\x19" has no affect on the aggregation.
