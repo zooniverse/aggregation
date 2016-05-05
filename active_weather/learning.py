@@ -51,7 +51,7 @@ tess.__create_blank_page__()
 gold_standard_characters = {}
 
 # <<<<<<< 8ce8e3a4c7d9552551e469bcbd4315f395525d63
-for char in "A":#BCDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
+for char in "A":#CDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
     try:
         cur.execute("select * from characters where characters = \"" + char + "\" order by confidence desc")
 

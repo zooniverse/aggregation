@@ -210,15 +210,14 @@ class TesseractUpdate:
         """
         if self.row_bitmaps != []:
             self.__write_out_row__()
-        cv2.imwrite("active_weather.basic.exp" + str(self.box_count) + ".jpeg", self.training_page)
-        call(["tesseract", "active_weather.basic.exp0.jpeg", "active_weather.basic.exp0", "nobatch", "box.train"])
+        cv2.imwrite("active_weather.basic.exp" + str(self.box_count) + ".tiff", self.training_page)
+        call(["convert", "-density 300", "-depth 4", "active_weather.basic.exp0.tiff","active_weather.basic.exp0.tiff"])
+        call(["tesseract", "active_weather.basic.exp0.tiff", "active_weather.basic.exp0", "nobatch", "box.train"])
 
         with open("font_properties","w") as f:
             f.write("basic 0 0 0 0 0\n")
 
-        call(["unicharset_extractor", "active_weather.basic.exp0.jpeg"])
-
-        assert False
+        call(["unicharset_extractor", "active_weather.basic.exp0.box"])
 
         os.system("shapeclustering -F font_properties -U unicharset active_weather.basic.exp0.tr")
 
