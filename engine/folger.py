@@ -148,6 +148,50 @@ class FolgerClustering(TextClustering):
 
         return starting_points,ending_points
 
+    def __setup_aligned_text__(self,aligned_text,text_coordinates,user_ids,x1,y1,x2,y2):
+        """
+        when printing out the individual transcriptions that make up a cluster we need to do a few things
+        including sorting them.
+        :return:
+        """
+        # todo - honestly not sure if most of this function is necessary
+
+        new_aligned = []
+
+        for t in aligned_text:
+            # todo - figure out if this is necessary or useful
+            if t is None:
+                warning("text was none - really not sure why but skipping")
+                continue
+            # put tags back into multicharacter format
+            t = self.__reset_tags__(t)
+            # instead of chr(24), use "\u0018" - postgres prefers that
+            new_aligned.append(t.replace(chr(24),unicode("\u0018")))
+
+        # if the text is horizontal - i.e. the angle of the center is less than 45 degrees
+        # sort the aligned text by x coordinates - otherwise sort by DECREASING y coordinates
+        # (since 0,0 is at the top left)
+        try:
+            tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
+            theta = math.atan(tan_theta)
+        except ZeroDivisionError:
+            theta = math.pi/2.
+
+        # horizontal
+        # pretty sure that X1 < X2 but don't want to make an assumption
+        if math.fabs(theta) <= math.pi/4.:
+            starting_coordinates = [min(x1,x2) for x1,x2,_,_ in text_coordinates]
+        # vertical text
+        # pretty not sure about whether Y1<Y2 so playing it safe
+        else:
+            starting_coordinates = [-max(y1,y2) for _,_,y1,y2 in text_coordinates]
+        text_and_ids_with_coordinates = zip(starting_coordinates,new_aligned,user_ids)
+        # sort
+        text_and_ids_with_coordinates.sort(key = lambda x:x[0])
+        _,aligned_text,user_id = zip(*text_and_ids_with_coordinates)
+
+        return aligned_text
+        
     def __create_clusters__(self,(starting_points,ending_points),aggregated_text,cluster_index,aligned_text,variants,user_ids,text_coordinates):
         """
         the aggregated text, split up into completed components and make a result (aggregate) cluster for each
@@ -190,50 +234,12 @@ class FolgerClustering(TextClustering):
             assert chr(26) not in completed_text
             assert isinstance(completed_text,str)
 
+            # set the different parameters for this cluster
             new_cluster["center"] = (x1,x2,y1,y2,completed_text)
-
             new_cluster["individual points"] = text_coordinates
-
             new_cluster["set index"] = cluster_index
-
-            new_aligned = []
-
-            for t in aligned_text:
-                # todo - figure out if this is necessary or useful
-                if t is None:
-                    warning("text was none - really not sure why but skipping")
-                    continue
-                # put tags back into multicharacter format
-                t = self.__reset_tags__(t)
-                # instead of chr(24), use "\u0018" - postgres prefers that
-                new_aligned.append(t.replace(chr(24),unicode("\u0018")))
-
-            # if the text is horizontal - i.e. the angle of the center is less than 45 degrees
-            # sort the aligned text by x coordinates - otherwise sort by DECREASING y coordinates
-            # (since 0,0 is at the top left)
-            try:
-                tan_theta = math.fabs(y1-y2)/math.fabs(x1-x2)
-                theta = math.atan(tan_theta)
-            except ZeroDivisionError:
-                theta = math.pi/2.
-
-            # horizontal
-            # pretty sure that X1 < X2 but don't want to make an assumption
-            if math.fabs(theta) <= math.pi/4.:
-                starting_coordinates = [min(x1,x2) for x1,x2,_,_ in text_coordinates]
-            # vertical text
-            # pretty not sure about whether Y1<Y2 so playing it safe
-            else:
-                starting_coordinates = [-max(y1,y2) for _,_,y1,y2 in text_coordinates]
-            text_and_ids_with_coordinates = zip(starting_coordinates,new_aligned,user_ids)
-            # sort
-            text_and_ids_with_coordinates.sort(key = lambda x:x[0])
-            _,aligned_text,user_id = zip(*text_and_ids_with_coordinates)
-
-
-            new_cluster["aligned_text"] = aligned_text
+            new_cluster["aligned_text"] = self.__setup_aligned_text__(aligned_text,text_coordinates,user_ids,x1,y1,x2,y2)
             new_cluster["cluster members"] = user_ids
-
             new_cluster["num users"] = len(new_cluster["cluster members"])
 
 
@@ -522,7 +528,6 @@ class FolgerClustering(TextClustering):
         note that overlaping is not transitive - if A overlaps B and B overlap C, it does not follow
         that A overlaps C. So we'll use some graph theory instead to search for
         """
-
         if len(set(user_ids)) <= 2:
             return [],0
 
@@ -532,11 +537,13 @@ class FolgerClustering(TextClustering):
         # given that we can have multiple non-overlapping lines transcribing the same line of text
         # and people who transcribe multiple lines at once (which need to be removed), doing
         # both vertical and horizontal lines at once isn't really feasible
+
         for horizontal in [True,False]:
             filtered_markings,_ = self.__filter_markings__(markings,user_ids,horizontal)
 
+            # if we didn't find any marks in this particular direction, skip to the next one
             if filtered_markings == []:
-                return [],0
+                continue
 
             # cluster the filtered components
             connected_components = self.__find_connected_transcriptions__(filtered_markings)
@@ -562,8 +569,6 @@ class FolgerClustering(TextClustering):
                 try:
                     coordinates = [filtered_markings[i][:4] for i in c]
                 except IndexError:
-                    print c
-                    print filtered_markings
                     raise
 
                 # as well as the text - at the same time deal with tags (make them all 1 character long)
