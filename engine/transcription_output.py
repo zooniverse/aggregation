@@ -38,6 +38,7 @@ class TranscriptionOutput:
             # (so we can show the black dots)
             # but we don't want to include these subjects in the aggregation results. self.metadata only includes
             # metadata for retired subjects - so if subject_id not in self.metadata, skip
+
             if subject_id not in self.metadata.keys():
                 continue
             print(subject_id)
@@ -309,7 +310,7 @@ class TranscriptionOutput:
         aws_tar = self.project.__get_aws_tar_name__()
         print("saving json results")
         with tarfile.open("/tmp/"+aws_tar,mode="w") as t:
-            t.add("/tmp/"+str(self.project.project_id)+".json")
+            t.add("/tmp/"+str(self.project.project_id)+".json",arcname=self.project.project_name+".json")
 
 
 class ShakespearesWorldOutput(TranscriptionOutput):
