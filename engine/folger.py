@@ -191,7 +191,7 @@ class FolgerClustering(TextClustering):
         _,aligned_text,user_id = zip(*text_and_ids_with_coordinates)
 
         return aligned_text
-        
+
     def __create_clusters__(self,(starting_points,ending_points),aggregated_text,cluster_index,aligned_text,variants,user_ids,text_coordinates):
         """
         the aggregated text, split up into completed components and make a result (aggregate) cluster for each
@@ -242,20 +242,24 @@ class FolgerClustering(TextClustering):
             new_cluster["cluster members"] = user_ids
             new_cluster["num users"] = len(new_cluster["cluster members"])
 
-
             new_cluster["variants"] = []
             # since a simple spelling mistake can count as a variant, look for cases where at least
             # two people have given the same variant
-            variant_count = dict()
-            for variant_list in variants:
-                for v in variant_list:
-                    if v not in variant_count:
-                        variant_count[v] = 1
+            variant_dict = dict()
+            print(variants)
+            assert len(variants) == len(user_ids)
+            for i,u in enumerate(user_ids):
+                for v in variants[i]:
+                    if v not in variant_dict:
+                        variant_dict[v] = [u]
                     else:
-                        variant_count[v] += 1
-                        if variant_count[v] == 2:
-                            new_cluster["variants"].append(v)
+                        variant_dict[v].append(u)
+            for v,user_list in variant_dict:
+                if len(user_list) >= 2:
+                    new_cluster["variants"].append((v,user_list))
 
+            print(new_cluster["variants"])
+            assert new_cluster["variants"] == []
             clusters.append(new_cluster)
 
         return clusters
@@ -528,6 +532,7 @@ class FolgerClustering(TextClustering):
         note that overlaping is not transitive - if A overlaps B and B overlap C, it does not follow
         that A overlaps C. So we'll use some graph theory instead to search for
         """
+        print(subject_id)
         if len(set(user_ids)) <= 2:
             return [],0
 
