@@ -441,14 +441,12 @@ if __name__ == "__main__":
 
     assert project_id is not None
 
-    subject_id = 1273862
-
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
 
-        processed_subjects = project.__aggregate__([subject_id])
+        processed_subjects = project.__aggregate__()
 
         # only send summary emails on Tuesday
         if True:#datetime.datetime.today().weekday() == 1:
-            project.__summarize__([subject_id])
+            project.__summarize__()
 
