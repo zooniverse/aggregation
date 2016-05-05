@@ -11,18 +11,19 @@ Contents:
 .. toctree::
    :maxdepth: 2
 
-   getting_started.rst
-   ouroboros.rst
-   aggregation.rst
-   marking.rst
-   text_aggregation.rst
-   point_aggregation.rst
-   rectangle_aggregation.rst
-   blob_aggregation.rst
-   output.rst
-   error_handling.rst
-   graphics.rst
-   json.rst
+    getting_started.rst
+    ouroboros.rst
+    aggregation.rst
+    aggregation_results.rst
+    marking.rst
+    text_aggregation.rst
+    point_aggregation.rst
+    rectangle_aggregation.rst
+    blob_aggregation.rst
+    output.rst
+    error_handling.rst
+    graphics.rst
+    json.rst
 
 .. automodule:: engine
 
