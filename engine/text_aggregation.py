@@ -443,9 +443,9 @@ if __name__ == "__main__":
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
 
-        processed_subjects = project.__aggregate__()
+        processed_subjects = project.__aggregate__([1273551])
 
         # only send summary emails on Tuesday
-        if datetime.datetime.today().weekday() == 1:
+        if True:#datetime.datetime.today().weekday() == 1:
             project.__summarize__()
 
