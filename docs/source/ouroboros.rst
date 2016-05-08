@@ -37,20 +37,20 @@ The classification "c" is a dictionary with a couple of important keys
 * annotations - the actual annotations made by their user (in the case of Penguin Watch, the markings for each of the penguins)
 * tutorial - if this annotation was made as part of a tutorial - should probably just skip those
 * subjects - contains the zooniverse ids, allows you to match annotations from different users on the same subject and the image's location on AWS (in case you want to download it)
-* user_name - for logged in users, this is their user name (so the above code searches for 25 classifications made by a given user). Field does not exist if user is not logged in
+* user_name - for logged in users, this is their user name (so the above code searches for 25 classifications made by a given user). Field does not exist if user is not logged in. (Non logged in users can be tracked via their ip-address. Copies of the database given to researchers will contain hashed values of the ip addresses.)
 
-Let's look at some annotations for Penguin Watch - annotations in all projects are stored in JSON format.
+Let's look at some annotations for Penguin Watch - annotations in all projects are stored in JSON format. The annotation below is for a subject which the user has said does not contain any penguins.
 
-.. code-block:: json
+.. code-block:: javascript
 
     [
       {u'value': u'no', u'key': u'animalsPresent'},
       ...
     ]
 
-So this annotation is for a subject which the user has said does not contain any penguins.
 
-.. code-block:: json
+
+.. code-block:: javascript
 
     [
       {u'value': {u'1': {u'y': u'118.132', u'x': u'-60.491', u'frame': u'0', u'value': u'adult'}, u'0': {u'y': u'167.988', u'x': u'127.011', u'frame': u'0', u'value': u'adult'}}, u'key': u'animalsPresent'},
