@@ -251,7 +251,6 @@ class TranscriptionOutput:
         # cluster - this way, people can tell if any text was ignored
         subject_json["raw transcriptions"] = self.__add_global_transcriptions__(subject_id)
 
-        print(subject_json["variants"])
         return subject_json
 
 
