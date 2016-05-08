@@ -58,8 +58,8 @@ Let's look at some annotations for Penguin Watch - annotations in all projects a
 
 And this annotation is for an image where the user has marked two penguins. Each penguins has 3 important fields
 
-* x,y - coordinates
-* value - adult or chick
+* 'x','y' - coordinates
+* 'value' - adult or chick
 
 In the above example, we see that for Penguin 1 there is a negative x coordinate - this is due to a problem with the UI and this marking should be ignored. Note that as always for images because computer graphics is a bit silly, 0,0 (the origin) for images is the top left hand corner.
 
@@ -88,34 +88,61 @@ Note that in Mongodb terms - penguin is the database (or db) and penguin_classif
 
     print classification_collection.count()
 
-Nice :) To improve things, let's create an index. We'll start with adding a "zooniverse_id" field to every classification
+We can improve efficiency by adding in an index for the "zooniverse_id" field. Also pymongo, has a habit of crashing after accessing the db for too long. So for example, if we have doing analysis which will take a day or two to run, pymongo may just crash out at some point. We're better off moving all of the classifications to a different db such as postgresql using the following code ::
 
-.. code-block:: python
+    #!/usr/bin/env python
+    import pymongo
+    import psycopg2
+    import json
 
-    for c in classification_collection.find():
-      _id = c["_id"]
-      zooniverse_id = c["subjects"][0]["zooniverse_id"]
+    client = pymongo.MongoClient()
+    db = client['penguin']
+    classification_collection = db["penguin_classifications"]
+    subject_collection = db["penguin_subjects"]
 
-      classification_collection.update_one({"_id":_id},{"$set":{"zooniverse_id":zooniverse_id}})
+    conn = psycopg2.connect("dbname='postgres' user='postgres' host='localhost' password='apassword'")
+    conn.autocommit = True
+    cur = conn.cursor()
+    cur.execute("create database penguins")
 
-That takes a while. But now we can search for a given zooniverse_id with
+    conn = psycopg2.connect("dbname='penguins' user='postgres' host='localhost' password='apassword'")
+    conn.autocommit = True
+    cur = conn.cursor()
 
-.. code-block:: python
+    cur.execute("create table classifications (zooniverse_id text, user_id text, annotations json, PRIMARY KEY(zooniverse_id, user_id))")
+    cur.execute("create index ids_ on classifications (zooniverse_id ASC)")
 
-    for classification in collection.find({"zooniverse_id":zooniverse_id}
+    for ii,classification in enumerate(classification_collection.find()):
 
-Now to create the index
+        zooniverse_id = classification["subjects"][0]["zooniverse_id"]
+        if ii % 100 == 0:
+            print(ii)
 
-.. code-block:: python
+        if "user_name" in classification:
+            id_ = classification["user_name"]
+            id_ = id_.encode('ascii','ignore')
+            id_ = id_.replace("'","")
+        else:
+            id_ = classification["user_ip"]
 
-    db.profiles.create_index([('zooniverse_id', pymongo.ASCENDING)],unique=False)
+        if "finished_at" in classification["annotations"][1]:
+            continue
 
-That part is pretty quick. Searching for all classifications for a given subject still takes a little bit but seems to be better (a quantitative difference would be nice - if it is actually still really bad, we might need to move the db over to postgres or something - but only as a last resort).
+        annotations = json.dumps(classification["annotations"])
+        annotations = annotations.replace("'","")
+        try:
+            cur.execute("insert into classifications values ('"+str(zooniverse_id)+"','"+str(id_)+"','"+annotations + "')")
+        except psycopg2.IntegrityError as e:
+            pass
+
+    conn.commit()
+
+
 
 Ourboros to Panoptes
 ####################
 
-Now to the actual clustering - we want to use the agglomerative clustering available through panoptes. (Link to be inserted later talking about the whole theory behind that) But we don't have to create an instance of AggregationAPI (which would mean basically whole "fake" panoptes project) - we can skip all of that.
+Now to the actual clustering - we want to use the `agglomerative https://en.wikipedia.org/wiki/Hierarchical_clustering`_ `clustering http://scikit-learn.org/stable/modules/clustering.html#hierarchical-clustering`_ available through Panoptes. (in the engine directory, look for the file called agglomerative.py) (Link to be inserted later talking about the details the clustering algorithm.) But we don't have to create an instance of AggregationAPI (which would mean basically whole "fake" panoptes project) - we can skip all of that.
 Agglomerative clustering is available through engine/agglomerative.api. We can easily import Agglomerative (the class in agglomerative.api that can do the clustering for penguin marking).
 
 .. code-block:: python
@@ -134,10 +161,10 @@ So we have to take the annotations from mongodb and convert them into the above 
 
 * markings - the raw x,y coordinates
 * user_ids - probably go with ip addresses - that way you guarantee that everyone has a id, even if they are not logged in
-* tools - either "adult" or "chick". This isn't actually used in the clustering algorithm. this is used later on to determine what type of penguin each cluster is mostly likely to be
+* tools - either "adult" or "chick". This isn't actually used in the clustering algorithm. this is used later on to determine what type of penguin each cluster is mostly likely to be. People could have also marked "other" (for example, there are actually reindeer in some of the photos). For this analysis we are only concerned with penguins so we should just skip anything else.
 * reduced_markings - doesn't matter for just point markings - just make it equal to the markings
-* image_dimensions - also doesn't matter for Agglomerative
-* subject_id - doesn't matter for Agglomerative (Agglomerative is a subclass of Clustering and there are other sub classes of Clustering for which image_dimensions and subject_id matter)
+* image_dimensions - in pixels but doesn't matter for Agglomerative
+* subject_id - again, doesn't matter for Agglomerative (Agglomerative is a subclass of Clustering and there are other sub classes of Clustering for which image_dimensions and subject_id matter)
 
 For a given zooniverse id, the code for converting the Ourboros annotations into Panoptes ones, and calling the clustering algorithm is::
 
@@ -168,9 +195,20 @@ For a given zooniverse id, the code for converting the Ourboros annotations into
 The first if statement inside the loop checks to see if the user marked any penguins at all (just using some knowledge about the structure of the annotations dictionary). We then extract the user id.
 The try statement surrounds the extraction of the individual coordinates - occasionally we may get some badly formed annotations due to browser issues. We'll just skip those annotations. Note that all of the values (including x and y coordinates) associated with each marking are stored in string format so we need to convert them to float values.
 
-Let's look at the results. The variable clustering_results is a tuple with the second value being the time needed for the algorithm to run - this is only really useful for papers etc. so we'll ignore it. The first item in clustering_results is the actual results we are interested in. This is a list of clusters - one cluster (hopefully) per one penguin. We can use the Python json library to print out the results for one pengin
+Let's look at the results. The variable clustering_results is a tuple with the second value being the time needed for the algorithm to run - this is only really useful for papers etc. so we'll ignore it. The first item in clustering_results is the actual results we are interested in. This is a list of clusters - one cluster (hopefully) per one penguin with the following key/values
 
-.. code-block:: json
+So we have some fields to look at.
+
+* center - the median center of this cluster
+* cluster members - the individuals coordinates of each marking
+* num users - how many people have marked this penguin
+* tool_classification - ignore this - honestly not sure why this is here. Have made a note to double check
+* tools - what tools (adult or chick) users have used to mark this penguin
+* users - the list of users which marked this people. We've removed the list of users since that included some ip addresses.
+
+An example penguin would be...
+
+.. code-block:: javascript
 
     {
     "center": [
@@ -278,26 +316,41 @@ Let's look at the results. The variable clustering_results is a tuple with the s
     ]
     }
 
-So we have some fields to look at.
-
-* center - the median center of this cluster
-* cluster members - the individuals coordinates of each marking
-* num users - how many people have marked this penguin
-* tool_classification - ignore this - honestly not sure why this is here. Have made a note to double check
-* tools - what tools (adult or chick) users have used to mark this penguin
-* users - the list of users which marked this people. We've removed the list of users since that included some ip addresses.
-
-For each cluster, we want to report three things in our csv output file.
+For Penguin Watch (and most other projects), we want the final aggregated results in csv format. For Penguin Watch specifically, we want some key values
 
 * the center
 * probability of true positive
-* probability of "adult"
+* probability of penguin being an adult
+* probability of penguin being a chick
+* probability of penguin being an egg
 
-We can get the first field directly from the clustering results. Probability of true positive is how likely the cluster represents an actual penguin - as opposed to someone confusing some rocks and snow with a penguin. All things being equal, the markings a cluster contains, the more likely it is that that cluster is a true positive.
-So for the "probability" of being a true positive, we'll report the percentage of users who have a marking in that cluster. (Quotations around probability there since it is a slight abuse of the term.) We'll also report the raw number of people who marked a penguin - sometimes the raw number is useful in addition to the percentage. Similarly for probability of adult we'll report the percentage of people who marked a penguin as an adult (as opposed to being a chick.)
+Center is the median of all the markings in the cluster for the one penguin (median is more robust than mean against outliers). Probability of true positive is how likely the cluster represents an actual penguin - as opposed to someone confusing some rocks and snow with a penguin. All things being equal, the markings a cluster contains, the more likely it is that that cluster is a true positive.
+So for the "probability" of being a true positive, we'll report the percentage of users who have a marking in that cluster. (Quotations around probability there since it is a slight abuse of the term.)
+
+The code to create this csv file is ::
+
+    with open(d+"/"+little_path+".csv","w") as f:
+            if clustering_results == -1:
+                f.write("-1\n")
+            else:
+                f.write("penguin_index,x_center,y_center,probability_of_adult,probability_of_chick,probability_of_egg,probability_of_true_positive,num_markings\n")
+
+                for penguin_index,cluster in enumerate(clustering_results):
+                    center = cluster["center"]
+                    tools = cluster["tools"]
+
+                    probability_adult = sum([1 for t in tools if t == "adult"])/float(len(tools))
+                    probability_chick = sum([1 for t in tools if t == "chick"])/float(len(tools))
+                    probability_egg = sum([1 for t in tools if t == "egg"])/float(len(tools))
+                    probability_true_positive = len(tools)/float(num_users)
+                    count_true_positive = len(tools)
+
+                    f.write(str(penguin_index)+","+str(center[0])+","+str(center[1])+","+str(probability_adult)+","+str(probability_chick)+"," + str(probability_egg)+ ","+str(probability_true_positive)+","+str(count_true_positive)+"\n")
 
 Regions of Interest
 *******************
+
+The remaining bit of this chapter would be an appendix if I (Greg) knew how to create them. So if you are not a penguin watch researcher, skip.
 
 To make things more interesting, with Penguin Watch, users are often asked to only mark penguins in a certain region of an image. The rest of the image is grayed out and it should, in theory, be impossible for people to not even make markings outside the region of interest (ROI).
 However, things don't always work out in practice and we can have markings outside the ROI (most likely due to browser issues). So after we've found a cluster of markings - we need to double check that the center is inside of the ROI.
