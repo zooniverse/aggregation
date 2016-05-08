@@ -23,6 +23,11 @@ class TranscriptionOutput:
         self.workflow_id = self.project.workflows.keys()[0]
         self.metadata = self.project.__get_subject_metadata__(self.workflow_id)
 
+        # tags and reverse tags allow you to tokenize tags (convert a sub-string representing a character into
+        # a single character, i.e. a token) and then from that token back into the original string. Useful
+        # for making sure that everyone's strings are the same length
+        # there is a difference between tags and reverse_tags (i.e. you can't just switch the key/value pairs in tags)
+        # because with Folger we need to worry about removing "sw-" from the tags
         self.tags = None
         self.reverse_tags = None
 
@@ -196,12 +201,13 @@ class TranscriptionOutput:
                         if ii not in differences:
                             differences[ii] = ""
             elif ord(c) != 24:
+
                 # if we just had a disagreement, print it out
                 if not agreement:
                     line += "<disagreement>"
                     for options in set(differences.values()):
                         # when printing out convert all of the tokens for tags back into string format
-                        for token,tag in self.reverse_tags.items():
+                        for tag,token in self.reverse_tags.items():
                             assert isinstance(token,int)
                             options = options.replace(chr(token),tag)
                         line += "<option>"+options+"</option>"
@@ -400,6 +406,7 @@ class AnnotateOutput(TranscriptionOutput):
         # set up the reverse tags - so we can take a token (representing a full tag) and replace it with the
         # original tag
         self.tags = self.project.text_algorithm.tags
+        assert self.tags != {}
         self.reverse_tags = dict()
 
         for a,b in self.tags.items():
