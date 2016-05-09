@@ -74,7 +74,7 @@ class InstanceAlreadyRunning(Exception):
 
 
 class AggregationAPI:
-    def __init__(self,project_id,environment,end_date=None,user_id=None,password=None,(csv_classification_file,csv_subject_file)=(None,None),public_panoptes_connection=False,report_rollbar=False):
+    def __init__(self,project_id,environment,end_date=None,user_id=None,password=None):
         # the panoptes project id - and the environment are the two main things to set
         self.project_id = int(project_id)
         self.environment = environment
@@ -104,14 +104,6 @@ class AggregationAPI:
         # user id and password used to connect to the panoptes api
         self.user_id = user_id
         self.password = password
-
-        # todo - allow users to provide their own classification and subject files
-        self.csv_classification_file = csv_classification_file
-        self.csv_subject_file = csv_subject_file
-
-        # aggregations runs called through the crontab will want this code to report errors to rollbar
-        # as opposed to via rq (which is what happens when someone presses the aggregation button)
-        self.report_roll = report_rollbar
 
         self.end_date = end_date
 
@@ -154,11 +146,12 @@ class AggregationAPI:
         self.default_clustering_algs["line"] = agglomerative.Agglomerative
         # these shapes use the blob clustering approach
         self.default_clustering_algs["rectangle"] = rectangle_clustering.RectangleClustering
+        # self.default_clustering_algs["rectangle"] = agglomerative.Agglomerative
         self.default_clustering_algs["polygon"] = blob_clustering.BlobClustering
         self.default_clustering_algs["bezier"] = blob_clustering.BlobClustering
         self.default_clustering_algs["image"] = rectangle_clustering.RectangleClustering
         # and set any reduction algorithms - to reduce the dimensionality of markings
-        self.additional_clustering_args = {"line": {"reduction":helper_functions.hesse_line_reduction}}
+        self.additional_clustering_args = {"line": {"reduction":helper_functions.hesse_line_reduction},"rectangle":{"reduction":helper_functions.rectangle_reduction}}
         # self.__set_clustering_algs__(default_clustering_algs,reduction_algs)
 
         self.cluster_algs = {}
@@ -183,12 +176,6 @@ class AggregationAPI:
         # todo - probably want to change that at some point as there is value in
         # todo - non logged in users having a yaml file (where they can give csv classification files etc.)
 
-
-
-
-        # todo - can probably get rid of public_panoptes_connection  - a bit redundant given
-        # todo - csv_classification_file
-        assert self.csv_classification_file is None
         #########
         # everything that follows assumes you have a secure connection to Panoptes
         # plus the DBs (either production or staging)
@@ -271,7 +258,7 @@ class AggregationAPI:
 
         self.oldest_new_classification = datetime.datetime.now()
 
-    def __aggregate__(self,given_subject_ids = None):
+    def __aggregate__(self,given_workflow_id = None,given_subject_ids=None):
         """
         the main function to call when running aggregation
         """
@@ -282,6 +269,9 @@ class AggregationAPI:
         # have not be retired. If we want subjects that have been specifically retired, we'll make a separate call
         # for that
         for workflow_id,version in self.versions.items():
+            if (given_workflow_id is not None) and (workflow_id != given_workflow_id):
+                continue
+
             if given_subject_ids is None:
                 migrated_subjects = self.__migrate__(workflow_id,version)
 
@@ -296,6 +286,7 @@ class AggregationAPI:
                 else:
                     subject_set = migrated_subjects
             else:
+                # self.__migrate__(workflow_id,version)
                 subject_set = given_subject_ids
                 previously_aggregated = subject_set
 
@@ -308,6 +299,8 @@ class AggregationAPI:
 
             # self.__describe__(workflow_id)
             classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
+
+            print(marking_tasks)
 
             # set up the clustering algorithms for the shapes we actually use
             used_shapes = set()
@@ -378,7 +371,7 @@ class AggregationAPI:
 
         return height,width
 
-    def __cassandra_annotations__(self,workflow_id,subject_set):
+    def __yield_annotations__(self,workflow_id,subject_set):
         """
         Yields
         ------
@@ -401,10 +394,10 @@ class AggregationAPI:
 
             for subject_id in s:
                 params = (subject_id,int(workflow_id),version)
+
                 statements_and_params.append((select_statement, params))
 
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
-
             # go through each subject independently
             for subject_id,(success,record_list) in zip(s,results):
                 # these are the values that we will return for this subject
@@ -1195,22 +1188,23 @@ class AggregationAPI:
                 if i == 9:
                     raise
 
-    def __migrate__(self,workflow_id,version):
+    def __migrate__(self,workflow_id,version,subject_set=None):
         """
         move data from postgres to cassandra
         set up the postgres queries and then break up the actual migrations into steps - trying to not
         overwhelm the postgres db
         :return:
         """
-        # no need to migrate if we are using csv input files
-        if self.csv_classification_file is not None:
-            return
 
         # what is the most recent classification we read in
         most_recent = self.__get_most_recent__()
 
         # some useful postgres bits of code
         postgres_constraint = "where workflow_id="+str(workflow_id) + " and workflow_version like '" + str(version) + "%'"
+        # if subject_set != None:
+        #     assert isinstance(subject_set,list) and len(subject_set) == 1
+        #     postgres_constraint += " and classification_subjects.subject_id = " + str(subject_set[0])
+
         # postgres_constraint += " and id > 3373491"
         postgres_table = "classifications INNER JOIN classification_subjects on classification_subjects.classification_id = classifications.id"
 
@@ -1370,7 +1364,6 @@ class AggregationAPI:
                 json_data = json.loads(body)
                 bearer_token = json_data["access_token"]
 
-                print(bearer_token)
                 self.token = bearer_token
                 break
             except (urllib2.HTTPError,urllib2.URLError) as e:
@@ -1783,7 +1776,8 @@ class AggregationAPI:
 
         # todo - add support for reading in annotation from csv - honestly not sure if we even still want that option
         # todo - refactor since we are doing this subject by subject - don't really need to include subject_id as a subkey in the classifications/markings/surveys dictionary
-        for subject_id,user_list,annotation_list,dimensions in self.__cassandra_annotations__(workflow_id,subject_set):
+        for subject_id,user_list,annotation_list,dimensions in self.__yield_annotations__(workflow_id,subject_set):
+            print(subject_id)
             # print(subject_id == 572437)
             # this is what we return
             raw_classifications = {}
@@ -1841,6 +1835,7 @@ class AggregationAPI:
                         assert False
 
             yield raw_classifications,raw_markings,raw_surveys,image_dimensions
+
         raise StopIteration()
 
     def __subject_ids_in_set__(self,set_id):
@@ -1977,12 +1972,22 @@ if __name__ == "__main__":
     else:
         environment = "development"
 
-    with AggregationAPI(project_identifier,environment,report_rollbar=True) as project:
+    if len(sys.argv) > 3:
+        workflow_id = int(sys.argv[3])
+    else:
+        workflow_id = None
+
+    if len(sys.argv) > 4:
+        subject_set = [int(sys.argv[3])]
+    else:
+        subject_set = None
+
+    with AggregationAPI(project_identifier,environment) as project:
 
         project.__setup__()
         # project.__reset_cassandra_dbs__()
-        project.__aggregate__()
+        project.__aggregate__(workflow_id,subject_set)
 
         with csv_output.CsvOut(project) as c:
             # c.__write_out__(subject_set=aggregated_subjects)
-            c.__write_out__(subject_set=None)
+            c.__write_out__()

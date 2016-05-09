@@ -1,10 +1,11 @@
 from __future__ import print_function
 import clustering
+import agglomerative
 import networkx
 import numpy as np
 
 
-class RectangleClustering(clustering.Cluster):
+class AreaRectangleClustering(clustering.Cluster):
     def __init__(self,shape,project,additional_params):
         assert shape != "point"
         clustering.Cluster.__init__(self,shape,project,additional_params)
@@ -92,6 +93,14 @@ class RectangleClustering(clustering.Cluster):
         :return:
         """
 
+        print(markings)
+        print(reduced_markings)
+        print(len(zip(*markings)))
+
+        print([np.median(axis) for axis in zip(*markings)])
+        print([np.median(axis,axis=0) for axis in zip(*markings)])
+        print([np.median(axis,axis=1) for axis in zip(*markings)])
+        assert False
         # if empty markings, just return nothing
         if markings == []:
             return [],0
@@ -122,3 +131,13 @@ class RectangleClustering(clustering.Cluster):
 
             results.append(new_cluster)
         return results,0
+
+class RectangleClustering(agglomerative.Agglomerative):
+    def __init__(self,shape,project,additional_params):
+        clustering.Cluster.__init__(self,shape,None,additional_params)
+
+    def __cluster_center__(self,pts):
+        center = list(np.median(pts,axis=0))
+        assert len(center) == 2
+
+        return center

@@ -84,6 +84,9 @@ class Agglomerative(clustering.Cluster):
 
         return new_cluster
 
+    def __cluster_center__(self,pts):
+        return np.median(pts)
+
     def __tree_traverse__(self,dendrogram,markings,user_ids,tools):
         """
         given a list representation of a dendrogram - resulting from running agglomerative clustering
@@ -120,11 +123,11 @@ class Agglomerative(clustering.Cluster):
                 results.append(None)
             # maybe just the rnode was is already done - in which case "finish" the lnode
             elif (rnode is None) or ("center" in rnode):
-                lnode["center"] = [np.median(axis) for axis in zip(*lnode["cluster members"])]
+                lnode["center"] = [self.__cluster_center__(axis) for axis in zip(*lnode["cluster members"])]
                 results.append(None)
             # maybe just the lnode is done:
             elif (lnode is None) or ("center" in lnode):
-                rnode["center"] = [np.median(axis) for axis in zip(*rnode["cluster members"])]
+                rnode["center"] = [self.__cluster_center__(axis) for axis in zip(*rnode["cluster members"])]
                 results.append(None)
             else:
                 # check if we should merge - only if there is no overlap
@@ -136,8 +139,8 @@ class Agglomerative(clustering.Cluster):
                 # if there are users in common, add to the end clusters list (which consists of cluster centers
                 # the points in each cluster and the list of users)
                 if intersection != []:
-                    rnode["center"] = [np.median(axis) for axis in zip(*rnode["cluster members"])]
-                    lnode["center"] = [np.median(axis) for axis in zip(*lnode["cluster members"])]
+                    rnode["center"] = [self.__cluster_center__(axis) for axis in zip(*rnode["cluster members"])]
+                    lnode["center"] = [self.__cluster_center__(axis) for axis in zip(*lnode["cluster members"])]
                     results.append(None)
                 else:
                     # else just merge
@@ -177,7 +180,7 @@ class Agglomerative(clustering.Cluster):
         if len(user_ids) == len(set(user_ids)):
             # all of the markings are from different users => so only one cluster
             result = {"users":user_ids,"cluster members":markings,"tools":tools,"num users":len(user_ids)}
-            result["center"] = [np.median(axis) for axis in zip(*markings)]
+            result["center"] = [self.__cluster_center__(axis) for axis in zip(*markings)]
             return [result],0
 
         # cluster based on the reduced markings, but list the clusters based on their original values
