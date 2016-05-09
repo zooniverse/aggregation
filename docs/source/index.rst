@@ -24,6 +24,7 @@ Contents:
     error_handling.rst
     graphics.rst
     json.rst
+    standalone.rst
 
 .. automodule:: engine
 
