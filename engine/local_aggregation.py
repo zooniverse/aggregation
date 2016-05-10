@@ -4,15 +4,32 @@ import pandas
 import classification
 import yaml
 import parser
+import json
+import math
+import csv_output
+
+def extract_subject_id(subject_data):
+    """
+    extract the subject id for each subject
+    :param subject_data:
+    :return:
+    """
+    json_subject = json.loads(subject_data)
+    return int(json_subject.keys()[0])
+
+def load_json(json_string):
+    return json.loads(json_string)
 
 class LocalAggregationAPI(AggregationAPI):
-    def __init__(self,csv_classification_file):
-        AggregationAPI.__init__(self,63,"development")
+    def __init__(self,project_id,csv_classification_file):
+        AggregationAPI.__init__(self,project_id,"development")
 
-        # todo - allow users to provide their own classification and subject files
-        self.csv_classification_file = csv_classification_file
-
+        # read in the csv file as a dataframe (pandas)
         self.classifications_dataframe = pandas.read_csv(csv_classification_file)
+        # extract the subject id for each subject - based on the subject data field
+        self.classifications_dataframe["subject_id"] = self.classifications_dataframe["subject_data"].map(lambda x: extract_subject_id(x))
+
+        self.aggregation_results = {}
 
     def __setup__(self):
         """
@@ -55,22 +72,9 @@ class LocalAggregationAPI(AggregationAPI):
         # there may be more than one workflow associated with a project - read them all in
         # and set up the associated tasks
         self.workflows,self.versions,self.instructions,self.updated_at_timestamps = self.__get_workflow_details__()
+        print("workflows are " + str(self.workflows))
         self.retirement_thresholds = self.__get_retirement_threshold__()
         self.workflow_names = self.__get_workflow_names__()
-
-        # is there an entry for the project in the yaml file?
-        # if so, has a specific workflow id has been provided?
-        # todo - this can be removed or rewritten
-        if "workflow_id" in environment_details:
-            workflow_id = int(environment_details["workflow_id"])
-            try:
-                print("aggregating only for workflow id : " + str(workflow_id))
-                self.workflows = {workflow_id: self.workflows[workflow_id]}
-            except KeyError:
-                warning("did not have given desired workflow: " + str(workflow_id))
-                warning("here's the workflows we do have")
-                warning(self.workflows)
-                raise
 
         # set up the clustering algorithms
         self.__setup_clustering_algs__()
@@ -93,16 +97,108 @@ class LocalAggregationAPI(AggregationAPI):
         self.only_recent_subjects = False
 
     def __migrate__(self,workflow_id,version,subject_set=None):
+        """
+        since we don't actually have to migrate classifications between databases, just return the set of all
+        subjects which have had classifications
+        :param workflow_id:
+        :param version:
+        :param subject_set:
+        :return:
+        """
         data_frame = self.classifications_dataframe
-        print(data_frame[data_frame["workflow_id"] == workflow_id])
-        print(workflow_id)
-        assert False
+
+        return set(data_frame["subject_id"])
 
     def __yield_annotations__(self,workflow_id,subject_set):
-        print(subject_set)
-        assert False
+        """
+        get all of the annotations for this particular workflow id and each subject in this subject set
+        :param workflow_id:
+        :param subject_set:
+        :return:
+        """
+        data_frame = self.classifications_dataframe
+
+        for subject_id in subject_set:
+            # select only those annotations for the current subject id
+            data_frame = data_frame[(data_frame.subject_id==int(subject_id)) & (data_frame.workflow_id == workflow_id)]
+
+            # what is the current workflow version for this particular workflow id
+            version = int(math.floor(float(self.versions[workflow_id])))
+            data_frame = data_frame[(data_frame.workflow_version >= version)]
+
+            users_per_subjects = data_frame["user_id"]
+            annotations_per_subjects = data_frame["annotations"]
+
+            # todo - load image dimensions
+            yield int(subject_id),users_per_subjects,annotations_per_subjects,(None,None)
+
+        raise StopIteration()
+
+    def __get_previously_aggregated__(self,workflow_id):
+        """
+        only useful for doing upserts - ie in production mode
+        :param workflow_id:
+        :return:
+        """
+        return None
+
+    def __upsert_results__(self,workflow_id,aggregations,previously_aggregated):
+        """
+        store the results in a dictionary - the term upsert only makes sense if we are storing to a db
+        :param workflow_id:
+        :param aggregations:
+        :param previously_aggregated:
+        :return:
+        """
+        # convert to int to be safe
+        workflow_id = int(workflow_id)
+        print("upserting " + str(workflow_id))
+        if workflow_id not in self.aggregation_results:
+            self.aggregation_results[workflow_id] = dict()
+        for subject_id,agg in aggregations.items():
+            self.aggregation_results[workflow_id][subject_id] = agg
+
+    def __count_subjects_classified__(self,workflow_id):
+        """
+        return a count of all the subjects classified
+        :param workflow_id:
+        :return:
+        """
+        workflow_id = int(workflow_id)
+
+        # if we haven't saved any aggregations - the total is 0
+        if workflow_id not in self.aggregation_results:
+            return 0
+        else:
+            return len(self.aggregation_results[int(workflow_id)])
+
+    def __yield_aggregations__(self,workflow_id,subject_set=None):
+        """
+        return all of the aggregations for the given workflow_id/subject_set
+        :param workflow_id:
+        :param subject_set:
+        :return:
+        """
+        workflow_id = int(workflow_id)
+
+        # stop if we don't have any aggregations
+        if workflow_id not in self.aggregation_results:
+            raise StopIteration()
+
+        for subject_id,aggregation in self.aggregation_results[workflow_id].items():
+            # if we have provided a filter for the subject ids and the current id is not in the filter
+            # skip this aggregation
+            if (subject_set is not None) and (subject_id not in subject_set):
+                continue
+
+            yield subject_id,aggregation
+
+        raise StopIteration()
 
 if __name__ == "__main__":
-    engine = LocalAggregationAPI("/home/ggdhines/Downloads/copy-of-kitteh-zoo-subjects-classifications.csv")
-    engine.__setup__()
-    engine.__aggregate__()
+    project = LocalAggregationAPI(63,"/home/ggdhines/Downloads/copy-of-kitteh-zoo-subjects-classifications.csv")
+    project.__setup__()
+    project.__aggregate__()
+
+    with csv_output.CsvOut(project) as c:
+        c.__write_out__()
