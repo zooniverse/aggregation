@@ -1894,6 +1894,7 @@ class AggregationAPI:
         insert_counter = 0
 
         # todo - sort the subject ids so that searching is faster
+
         for subject_id in aggregations:
             # todo - maybe get rid of param in subject_ids - end users won't see it anyways
             if subject_id == "param":
