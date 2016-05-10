@@ -429,6 +429,7 @@ def __gen_columns__(masked_image,gray):
 
 def __ocr_image__(image):
     tess = tesserpy.Tesseract("/home/ggdhines/github/tessdata/",language="eng")
+    tess = tesserpy.Tesseract("/tmp/tessdata/",language="active_weather")
 
 
 
@@ -440,7 +441,7 @@ def __ocr_image__(image):
     # tess.tessedit_pageseg_mode = tesserpy.PSM_SINGLE_WORD
     # tess.tessedit_ocr_engine_mode = tesserpy.OEM_CUBE_ONLY
     # tess.tessedit_page_iteratorlevel = tess.RIL_SYMBOL
-    tess.tessedit_char_whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.abcdefghijkmnopqrstuvwxyz-"
+    tess.tessedit_char_whitelist = "129"#BCDEFGHIJKLMNOPQRSTUVWXYZ1234567890.abcdefghijkmnopqrstuvwxyz-"
 
     tess.set_image(image)
     tess.get_utf8_text()
@@ -466,11 +467,14 @@ def __ocr_image__(image):
         if max(height,width) > 7:
             # print(word.text,height,width)
             transcribed.append((word.text, word.confidence, bb.top, bb.left, bb.right, bb.bottom))
+            print(word.confidence)
+            if word.confidence > 80:
+
             # if word.text == "M":
             #     print(word.text,word.confidence)
-            #     plt.imshow(image,cmap="gray")
-            # plt.plot([bb.left,bb.right,bb.right,bb.left,bb.left],[bb.top-1,bb.top-1,bb.bottom-1,bb.bottom-1,bb.top-1],color="blue")
-            # plt.show()
+                plt.imshow(image,cmap="gray")
+                plt.plot([bb.left,bb.right,bb.right,bb.left,bb.left],[bb.top-1,bb.top-1,bb.bottom-1,bb.bottom-1,bb.top-1],color="blue")
+                plt.show()
             # print("{}\t{}\tt:{}; l:{}; r:{}; b:{}".format(word.text, word.confidence, bb.top, bb.left, bb.right, bb.bottom))
         else:
             pass
