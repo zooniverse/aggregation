@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 from __future__ import print_function
+import matplotlib
+matplotlib.use('WXAgg')
 import cv2
 import matplotlib.pyplot as plt
 from tensorflow.examples.tutorials.mnist import input_data
