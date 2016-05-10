@@ -211,16 +211,16 @@ class TesseractUpdate:
         if self.row_bitmaps != []:
             self.__write_out_row__()
         cv2.imwrite("active_weather.basic.exp" + str(self.box_count) + ".tiff", self.training_page)
-        call(["convert", "-density 300", "-depth 4", "active_weather.basic.exp0.tiff","active_weather.basic.exp0.tiff"])
-        call(["tesseract", "active_weather.basic.exp0.tiff", "active_weather.basic.exp0", "nobatch", "box.train"])
+        # call(["convert", "-density 300", "-depth 4", "active_weather.basic.exp0.tiff","active_weather.basic.exp0.tiff"])
+        call(["/usr/bin/tesseract", "active_weather.basic.exp0.tiff", "active_weather.basic.exp0", "nobatch", "box.train"])
 
         with open("font_properties","w") as f:
             f.write("basic 0 0 0 0 0\n")
 
         call(["unicharset_extractor", "active_weather.basic.exp0.box"])
-
-        os.system("shapeclustering -F font_properties -U unicharset active_weather.basic.exp0.tr")
-
+        os.system("/home/ggdhines/github/tesseract/training/set_unicharset_properties -F font_properties -U unicharset -O unicharset --script_dir=/home/ggdhines/langdata")
+        # os.system("shapeclustering -F font_properties -U unicharset active_weather.basic.exp0.tr")
+        # os.system("shapeclustering -F font_properties active_weather.basic.exp0.tr")
         os.system("mftraining -F font_properties -U unicharset -O active_weather.unicharset active_weather.basic.exp0.tr")
         os.system("cntraining active_weather.basic.exp0.tr")
 
@@ -230,11 +230,11 @@ class TesseractUpdate:
         os.system("mv shapetable active_weather.shapetable")
         os.system("combine_tessdata active_weather.")
 
-        # os.system("mv active_weather.basic.* /tmp/tessdata/")
-        # os.system("mv active_weather.inttemp /tmp/tessdata/")
-        # os.system("mv active_weather.normproto /tmp/tessdata/")
-        # os.system("mv active_weather.pffmtable /tmp/tessdata/")
-        # os.system("mv active_weather.shapetable /tmp/tessdata/")
-        # os.system("mv active_weather.traineddata /tmp/tessdata/")
-        # os.system("mv active_weather.unicharset /tmp/tessdata/")
-        # os.system("mv font_properties /tmp/tessdata/")
+        os.system("mv active_weather.basic.* /tmp/tessdata/")
+        os.system("mv active_weather.inttemp /tmp/tessdata/")
+        os.system("mv active_weather.normproto /tmp/tessdata/")
+        os.system("mv active_weather.pffmtable /tmp/tessdata/")
+        os.system("mv active_weather.shapetable /tmp/tessdata/")
+        os.system("mv active_weather.traineddata /tmp/tessdata/")
+        os.system("mv active_weather.unicharset /tmp/tessdata/")
+        os.system("mv font_properties /tmp/tessdata/")
