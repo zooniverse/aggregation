@@ -30,11 +30,13 @@ For the "development" environment in the yml file we just use a public connectio
 
 There is one password that you will need to set in the yml file and that is the postgres password. The docker image comes with the default password which could probably just be included in the yml file but to play it safe is not included. If you want to set the postgres user password, log into the postgres container and in psql use "alter user postgres password 'apassword';"
 
-The aggregation engine is now ready to be run. Exit the postgres container and use the following steps
+The aggregation engine is now ready to be run. Exit the postgres container and use the following steps 
 
 1. docker exec -it aggregation_aggregation_1 bash
 2. cd engine
 3. ./aggregation_api.py project_id development 
+4. The first time you run it, make sure that __reset_cassandra_dbs__() is executed, i.e. right after project.__setup__(), run project.__reset_cassandra_dbs__(). This only needs to be done once
+
 
 Project_id is the numerical value. You can search for the number using lita (on slack) with something like "lita project wildcam" which will tell the project ids of all projects which have "wildcam" in their title. 
 Assuming that everything worked - the aggregation_api will save the results to the /tmp directory in the docker image (no email will be sent out). There will be both a directory of results with your project id and tar.gz file. You can use "docker cp" to extract the results to your local directory.
