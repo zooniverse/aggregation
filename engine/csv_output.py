@@ -234,7 +234,8 @@ class CsvOut:
         for t in sorted([int(t) for t in polygon_tools]):
             row += ","+ str(total_area[t])
 
-        self.csv_files[id_].write(row+"\n")
+        with open(self.file_names[id_],"a") as csv_file:
+            csv_file.write(row + "\n")
 
     def __classification_summary_row__(self,workflow_id,task_id,subject_id,aggregations,followup_id=None,tool_id = None,cluster_index=None):
         """
@@ -537,8 +538,8 @@ class CsvOut:
 
                 # polygons - since they have an arbitary number of points are handled slightly differently
                 if shape == "polygon":
+                    self.__add_polygon_summary_row__()
                     self.__polygon_detailed_setup__(task_id)
-                    self.__polygon_summary_setup__(workflow_id,task_id)
                 else:
                     # write the headers for the csv summary files
                     self.__marking_summary_header__(workflow_id,task_id,shape)
@@ -643,24 +644,24 @@ class CsvOut:
 
                 csv_file.write(row+"\n")
 
-
-
-
-    def __polygon_summary_setup__(self,workflow_id,task_id):
-        """
-        once the csv files have been created, write the headers
-        :return:
-        """
-        id_ = task_id,"polygon","summary"
-
-        with open(self.file_names[id_],"w") as csv_file:
-            # self.csv_files[id_].write("subject_id,\n")
-            polygon_tools = [t_index for t_index,t in enumerate(self.workflows[workflow_id][1][task_id]) if t == "polygon"]
-            csv_file.write("subject_id,")
-            for tool_id in polygon_tools:
-                tool = self.instructions[workflow_id][task_id]["tools"][tool_id]["marking tool"]
-                tool = helper_functions.csv_string(tool)
-                csv_file.write("area("+tool+"),")
+    #
+    #
+    #
+    # def __polygon_summary_setup__(self,workflow_id,task_id):
+    #     """
+    #     once the csv files have been created, write the headers
+    #     :return:
+    #     """
+    #     id_ = task_id,"polygon","summary"
+    #
+    #     with open(self.file_names[id_],"w") as csv_file:
+    #         # self.csv_files[id_].write("subject_id,\n")
+    #         polygon_tools = [t_index for t_index,t in enumerate(self.workflows[workflow_id][1][task_id]) if t == "polygon"]
+    #         csv_file.write("subject_id,")
+    #         for tool_id in polygon_tools:
+    #             tool = self.instructions[workflow_id][task_id]["tools"][tool_id]["marking tool"]
+    #             tool = helper_functions.csv_string(tool)
+    #             csv_file.write("area("+tool+"),")
 
     def __shannon_entropy__(self,probabilities):
         """
@@ -920,7 +921,7 @@ class CsvOut:
         the workflows are specified by self.workflows which is determined when the aggregation engine starts
         a zipped file is created in the end
         """
-        assert (subject_set is None) or isinstance(subject_set,set)
+        assert (subject_set is None) or isinstance(subject_set,set) or isinstance(subject_set,list)
 
         project_prefix = str(self.project_id)
 
