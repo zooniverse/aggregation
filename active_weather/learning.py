@@ -51,7 +51,7 @@ tess.__create_blank_page__()
 gold_standard_characters = {}
 
 # <<<<<<< 8ce8e3a4c7d9552551e469bcbd4315f395525d63
-for char in "A":#CDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
+for char in "129":#CDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
     try:
         cur.execute("select * from characters where characters = \"" + char + "\" order by confidence desc")
 
@@ -73,7 +73,7 @@ for char in "A":#CDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
 
         bitmaps = []
         cur.execute("select * from characters where characters = \"" + char + "\" order by confidence desc")
-        for r in cur.fetchall()[:30]:
+        for r in cur.fetchall()[:150]:
             subject_id, region, column, row, characters, confidence, lb_x, ub_x, lb_y, ub_y = r
 
             masked_image = cv2.imread("/home/ggdhines/to_upload3/" + subject_id + ".jpg", 0)
@@ -81,6 +81,10 @@ for char in "A":#CDEFGHIJKLMNOPQRSTUVWXYZ-1234567890.abcdefghijkmnopqrstuvwxyz":
 
             resized_char = cv2.resize(char_image,(desired_width,desired_height))
             bitmaps.append(resized_char.flatten())
+
+        for j in range()
+        bitmaps = [bitmaps[i] for i in (np.random.choice(range(150),30))]
+        assert False
 
         bitmaps = np.asarray(bitmaps)
         pca = PCA(n_components=1)
@@ -106,7 +110,7 @@ characters_with_gold_standard = gold_standard_characters.keys()
 
 total_character_list = []
 for c in characters_with_gold_standard:
-    total_character_list.extend([c for _ in range(10)])
+    total_character_list.extend([c for _ in range(20)])
 random.shuffle(total_character_list)
 # for ii,char in enumerate(total_character_list):
 #     if (ii>0) and (ii%30 == 0):
