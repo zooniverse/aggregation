@@ -51,6 +51,24 @@ Sometimes something goes wrong and the aggregation engine crashes. There are 3 r
 
 Aggregation runs can take a little while - depending on how big your project is and what type of tools you used (polygon aggregation takes longer than simple classification aggregation). Depending on the current load on Panoptes, it might take a little while for the aggregation to start. Currently there is no way of checking to see the current state of the aggregation. If you haven't received an email with a link to your results in a couple of hours, check github to see if any new issues have been raised. In the future we aim to send out emails saying when an aggregation run has crashed.
 
+## Using Classification CSV files as input
+
+You can also use the classification csv files (available from the panoptes project builder page) as input for the aggregation engine. If you use the CSV files you do not need to connect to postgres or cassandra. However the current implementation is slightly inefficient since values are stored in a Pandas dataframe without indexing (this could definitely be improved in the future). You will need to also have a yaml file located in /app/config/aggregation.yml with the following code
+
+development: &default
+  panoptes_username: TBD
+  panoptes_password: TBD
+  
+since the aggregation code will need to connec to Panoptes to get some information. (The location could be updated in the future - /app/config is just where the file is on AWS) The code to run aggregation locally is in local_aggregation. The code to run it is
+
+from local_aggregation import LocalAggregationAPI
+project = LocalAggregationAPI(63,"/home/ggdhines/Downloads/copy-of-kitteh-zoo-subjects-classifications.csv")
+project.__setup__()
+project.__aggregate__()
+
+with csv_output.CsvOut(project) as c:
+    c.__write_out__()
+
 ## Important Notes
 
 1. The aggregation code for Annotate and Shakespeare's world runs daily but sends out a weekly summary email to the project team. This email is sent out on [Tuesdays](https://github.com/zooniverse/aggregation/blob/281279b9367167c42920648e03dc65ba3e2be038/engine/text_aggregation.py#L452) (nothing special - just first set it up on a Tuesday). The code takes a while to run so probably best not to deploy new code on Tuesdays.
