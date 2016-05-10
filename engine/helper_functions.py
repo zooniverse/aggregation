@@ -160,6 +160,22 @@ def hesse_line_reduction(line_segments):
 
     return reduced_markings
 
+def rectangle_reduction(list_of_rectangles):
+    """
+    reduce rectangles to a 2-d marking,ie. their center
+    :param list_of_rectangles:
+    :return:
+    """
+
+    reduced_rectangles = []
+    for (a,b),(_,c),(d,_),_ in list_of_rectangles:
+        x_center = (a+d)/2.
+        y_center = (b+c)/2.
+
+        reduced_rectangles.append((x_center,y_center))
+
+    return reduced_rectangles
+
 def relevant_text_params(marking,image_dimensions):
     """
     extract the relevant params from the the transcription marking
