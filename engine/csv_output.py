@@ -945,21 +945,8 @@ class CsvOut:
             for subject_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
                 self.__subject_output__(subject_id,aggregations,workflow_id)
 
-        # # todo - update the readme text
-        # try:
-        #     with open("/tmp/"+project_prefix+"/readme.md", "w") as readme_file:
-        #         # readme_file.write("Details and food for thought:\n")
-        #         with open("/app/engine/readme.txt","rb") as f:
-        #             text = f.readlines()
-        #             for l in text:
-        #                 readme_file.write(l)
-        # except IOError as e:
-        #
-        #     with open("/tmp/"+project_prefix+"/readme.md", "w") as readme_file:
-        #         readme_file.write("There was an IO error - \n")
-        #         readme_file.write(str(e) + "\n")
-        #         readme_file.write(os.getcwd())
-        #     #     readme_file.write("There are no retired subjects for this project")
+        with open("/tmp/"+project_prefix+"/readme.txt", "w") as readme_file:
+            readme_file.write("For documentation about the aggregation results please see https://github.com/zooniverse/aggregation/wiki/Understanding-Aggregation-Results")
 
         # compress the results directory
         tar_file_path = "/tmp/" + project_prefix + "_export.tar.gz"
