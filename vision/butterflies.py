@@ -81,7 +81,7 @@ for subject_id in butterflies.__get_subjects_in_workflow__(874):
 
     plt.imshow(third_template,cmap="gray")
     plt.show()
-    continue
+
 
     # plt.show()
 
