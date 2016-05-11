@@ -109,6 +109,7 @@ class Survey:
 
         task_id = raw_classifications.keys()[0]
 
+        # go through each subject independently
         for subject_id in raw_classifications[task_id]:
             # just to save on some typing
             annotation_dictionary = raw_classifications[task_id][subject_id]
@@ -116,16 +117,13 @@ class Survey:
             # as a result, don't calculate "num users" just yet
             subject_results = {"num species":[]}
 
-            num_users = 0
-
             for annotations_per_user in annotation_dictionary.values():
                 # how many species did this user report?
                 num_species = len([a for a in annotations_per_user if a != []])
+
                 # if the user just reported nothing - skip
                 if num_species == 0:
                     continue
-
-                num_users += 1
 
                 subject_results["num species"].append(num_species)
                 # assert False
@@ -141,7 +139,9 @@ class Survey:
             # save the results and record how many people have seen this particular subject
             # on the off chance that all of the annotations were empty, skip it
             if subject_results["num species"] != []:
-                subject_results["num users"] = num_users
+                # record how many people saw this image
+                subject_results["num users"] = len(annotation_dictionary)
+                # what is the aggregate number of species in this image?
                 subject_results["num species in image"] = self.__get_species_in_subject__(subject_results)
                 subject_results["pielou index"] = self.__calc__pielou__(subject_results)
 
