@@ -126,7 +126,6 @@ class Survey:
                     continue
 
                 subject_results["num species"].append(num_species)
-                # assert False
 
                 # go through each individual species annotation from user
                 for ann in annotations_per_user:
@@ -148,7 +147,4 @@ class Survey:
 
                 aggregated_results[subject_id] = subject_results
 
-                print(aggregated_results[subject_id])
-                print(raw_classifications[task_id][subject_id])
-                assert False
         return aggregated_results
