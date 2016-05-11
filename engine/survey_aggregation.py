@@ -85,13 +85,13 @@ class Survey:
                 if isinstance(answer,list):
                     for ans in answer:
                         # first time we've seen this particular answer?
-                        if ans not in aggregation_so_far[species]["followup"]:
+                        if ans not in aggregation_so_far[species]["followup"][question]:
                             aggregation_so_far[species]["followup"][question][ans] = 1
                         else:
                             aggregation_so_far[species]["followup"][question][ans] += 1
                 else:
                     # first time we've seen this particular answer
-                    if answer not in aggregation_so_far[species]["followup"]:
+                    if answer not in aggregation_so_far[species]["followup"][question]:
                         aggregation_so_far[species]["followup"][question][answer] = 1
                     else:
                         aggregation_so_far[species]["followup"][question][answer] += 1
@@ -99,7 +99,7 @@ class Survey:
         return aggregation_so_far
 
 
-    def __aggregate__(self,raw_classifications,aggregated_results={}):
+    def __aggregate__(self,raw_classifications,aggregated_results):
 
         # todo - figure out why this is happening
         if raw_classifications == {}:
@@ -148,4 +148,7 @@ class Survey:
 
                 aggregated_results[subject_id] = subject_results
 
+                print(aggregated_results[subject_id])
+                print(raw_classifications[task_id][subject_id])
+                assert False
         return aggregated_results
