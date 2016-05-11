@@ -25,6 +25,7 @@ Contents:
     graphics.rst
     json.rst
     standalone.rst
+    blanks.rst
 
 .. automodule:: engine
 
