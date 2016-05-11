@@ -5,6 +5,8 @@ For example, if 3 out of 4 people say that an image contains a zebra, aggregatio
 
 Documentation for the Zooniverse Aggregation code can be found at https://developer.zooniverse.org/projects/aggregation/en/latest/ - we are currently experiencing severe problems with loading (lots of 403 errors and pages just not loading). We've raised issue and are looking into alternative hosting options - but in the mean time just keep reloading until you get the site to show.
 
+There is a draft of a paper that I was planning on writing on ocr and Tesseract. There is lots of random code in the active-weather directory and a [link](https://drive.google.com/open?id=0By-LeWaBxt31ZVBfZ2R6SXl4NWs) to an unfinished paper I was working on - that paper has some good ideas on how to do line detection/extraction for tabular data.
+
 The directory to do all of this in "engine". This is the code base that runs every time you press "export aggregations" in the builder builder page. You can also run things locally if you want - this is especially useful if you have an Ourboros project (just ignore that if you don't already know what Ourboros is) or if you want to do bespoke aggregation or fix a bug.
 
 ## Running the Aggregation Code Locally
