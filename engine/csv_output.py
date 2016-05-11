@@ -470,7 +470,7 @@ class CsvOut:
         :return:
         """
         # list answer in decreasing order
-        sorted_votes = sorted(votes,key = lambda x:x[1],reverse=True)
+        sorted_votes = sorted(votes.items(),key = lambda x:x[1],reverse=True)
         candidates,vote_counts = zip(*sorted_votes)
 
         top_candidate = candidates[0]
@@ -709,12 +709,13 @@ class CsvOut:
                     # polygons are different since they have an arbitrary number of points
                     if shape == "polygon":
                         self.__polygon_row__(workflow_id,task_id,subject_id,aggregations[task_id])
-                        # self.__polygon_summary_output__(workflow_id,task_id,subject_id,aggregations[task_id])
+                        self.__add_polygon_summary_row__(workflow_id,task_id,subject_id,aggregations[task_id])
                     else:
                         self.__detailed_marking_row__(workflow_id,task_id,subject_id,aggregations[task_id],shape)
                         self.__marking_summary_row__(workflow_id,task_id,subject_id,aggregations,shape)
 
         for task_id in survey_tasks:
+            print(task_id)
             instructions = self.instructions[workflow_id][task_id]
 
             # id_ = (task_id,"summary")
@@ -764,23 +765,26 @@ class CsvOut:
         for task_id in survey_tasks:
             instructions = self.instructions[workflow_id][task_id]
 
-            fname = output_directory+str(task_id) + ".csv"
-            self.file_names[task_id] = fname + ".csv"
+            self.file_names[task_id] = output_directory+str(task_id) + ".csv"
 
             with open(self.file_names[task_id],"w") as csv_file:
                 # now write the header
                 header = "subject_id,num_classifications,pielou_score,species,"
                 header += "percentage_of_votes_for_species,number_of_votes_for_species"
 
+                # always include these headers for HWMN follow up question - these columns may be NA in output
+                # but at least we have the header explaining why
+                header += ",minimum_number_of_animals,most_likely_number_of_animals,percentage,maximum_number_of_animals"
+
                 # todo - we'll assume, for now, that "how many" is always the first question
-                for followup_id in instructions["questionsOrder"]:
+                # for followup_id in instructions["questionsOrder"]:
+                for followup_id in instructions["questions"].keys():
                     multiple_answers = instructions["questions"][followup_id]["multiple"]
                     label = instructions["questions"][followup_id]["label"]
 
                     # the question "how many" is treated differently - we'll give the minimum, maximum and mostly likely
                     if followup_id == "HWMN":
-
-                        header += ",minimum_number_of_animals,most_likely_number_of_animals,percentage,maximum_number_of_animals"
+                        continue
                     else:
                         if "behavior" in label:
                             stem = "behaviour:"
@@ -809,8 +813,10 @@ class CsvOut:
         max - the maximum number of animals anyone said
         :return:
         """
+
         followup_id = "HWMN"
         followup_question = instructions["questions"][followup_id]
+
         try:
             votes = aggregations[species_id]["followup"][followup_id].items()
         except KeyError:
@@ -881,36 +887,48 @@ class CsvOut:
             row += self.__survey_how_many__(instructions,aggregations,species_id)
 
             # now go through each of the other follow up questions
-            for followup_id in instructions["questionsOrder"]:
+            # for followup_id in instructions["questionsOrder"]:
+            for ii,followup_id in enumerate(instructions["questions"].keys()):
                 followup_question = instructions["questions"][followup_id]
 
                 if followup_question["label"] == "How many?":
                     # this gets dealt with separately
                     continue
 
+                multiple_answers = instructions["questions"][followup_id]["multiple"]
+
                 # this follow up question might not be relevant to the particular species
                 if followup_id not in aggregations[species_id]["followup"]:
-                    for answer_id in instructions["questions"][followup_id]["answersOrder"]:
+                    # if we do not allow for multiple answers, include blank columns for top candidate
+                    # and corresponding percentage
+                    if not multiple_answers:
+                        row += ","
+
+                    # add in a blank column for each follow up answer (since none of these answers are relevant)
+                    for _ in instructions["questions"][followup_id]["answersOrder"]:
                         row += ","
                 else:
                     votes = aggregations[species_id]["followup"][followup_id]
 
                     # if users are only allowed to pick a single answer - return the most likely answer
                     # but still give the individual break downs
-                    multiple_answers = instructions["questions"][followup_id]["multiple"]
+
                     if not multiple_answers:
-                        votes = aggregations[species_id]["followup"][followup_id].items()
+                        votes = aggregations[species_id]["followup"][followup_id]
                         answers =(instructions["questions"][followup_id]["answers"])
                         top_candidate,percent = self.__get_top_survey_followup__(votes,answers)
 
-                        row += "," + str(top_candidate) + "," + str(percent)
+                        row += "," + str(top_candidate)# + "," + str(percent)
 
                     for answer_id in instructions["questions"][followup_id]["answersOrder"]:
+
                         if answer_id in votes:
                             row += "," + str(votes[answer_id]/float(num_votes))
                         else:
                             row += ",0"
 
+            # print(len(row.split(",")))
+            # assert len(row.split(",")) == 58
             rows.append(row+"\n")
 
         return rows
@@ -943,6 +961,7 @@ class CsvOut:
             # results are going to be ordered by subject id (because that's how the results are stored)
             # so we can going to be cycling through task_ids. That's why we can't loop through classification_tasks etc.
             for subject_id,aggregations in self.__yield_aggregations__(workflow_id,subject_set):
+                print(subject_id)
                 self.__subject_output__(subject_id,aggregations,workflow_id)
 
         with open("/tmp/"+project_prefix+"/readme.txt", "w") as readme_file:
