@@ -79,8 +79,7 @@ class SubjectRetirement(Classification):
         :param workflow_id:
         :return:
         """
-        if self.project.environment == "quasi":
-            return aggregations
+
         assert isinstance(workflow_id,int)
         to_retire = set()
         # start by looking for empty subjects
@@ -151,6 +150,7 @@ class TranscriptionAPI(AggregationAPI):
 
         # start by clustering text
         # print("clustering text")
+        # cluster_aggregations = {}
         cluster_aggregations = self.text_algorithm.__aggregate__(raw_markings,image_dimensions)
 
         aggregations = self.__merge_aggregations__(aggregations,cluster_aggregations)
@@ -388,7 +388,7 @@ class TranscriptionAPI(AggregationAPI):
             Source='greg@zooniverse.org',
             Destination={
                 'ToAddresses': [
-                    'greg@zooniverse.org',self.email_recipients
+                    'greg@zooniverse.org'#,self.email_recipients
                 ]#,
                 # 'CcAddresses': [
                 #     'string',
@@ -444,9 +444,9 @@ if __name__ == "__main__":
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
 
-        # processed_subjects = project.__aggregate__()
+        processed_subjects = project.__aggregate__()
 
         # only send summary emails on Tuesday
-        if datetime.datetime.today().weekday() == 1:
+        if True:#datetime.datetime.today().weekday() == 1:
             project.__summarize__()
 
