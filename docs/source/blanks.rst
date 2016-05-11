@@ -42,6 +42,8 @@ Finally we apply an opening operation to remove isolated points (noise) - (http:
 
     opening = cv2.morphologyEx(template, cv2.MORPH_OPEN, kernel)
 
+The full code is at - https://github.com/zooniverse/aggregation/blob/master/time.py
+
 Below are some examples - there are some false positives where a change in the sky is detected (we could filter out sky pixels) but false positives aren't bad. We see that animals are definitely detected. If we did DB scan we could look for clumps of "extreme" pixels - if there are none, we have a blank image.
 
 0
