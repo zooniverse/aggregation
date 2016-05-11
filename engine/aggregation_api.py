@@ -300,8 +300,6 @@ class AggregationAPI:
             # self.__describe__(workflow_id)
             classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
 
-            print(marking_tasks)
-
             # set up the clustering algorithms for the shapes we actually use
             used_shapes = set()
             for shapes in marking_tasks.values():
@@ -311,7 +309,6 @@ class AggregationAPI:
 
             # iterate subject by subject
             for ii,(raw_classifications,raw_markings,raw_surveys,image_dimensions) in enumerate(self.__sort_annotations__(workflow_id,subject_set)):
-
                 if survey_tasks == {}:
                     # do we have any marking tasks?
                     if marking_tasks != {}:
@@ -328,16 +325,20 @@ class AggregationAPI:
                     else:
                         survey_alg = survey_aggregation.Survey()
 
+                    print("aggregating survey results")
                     aggregations = survey_alg.__aggregate__(raw_surveys,aggregations)
 
                 # upsert at every 250th subject - not sure if that's actually ideal but might be a good trade off
                 if (ii > 0) and (ii % 250 == 0):
                     # finally, store the results
+                    print("upserting results")
                     self.__upsert_results__(workflow_id,aggregations,previously_aggregated)
                     aggregations = {}
 
+            print(aggregations)
             # finally upsert any left over results
             if aggregations != {}:
+                print("upserting results")
                 self.__upsert_results__(workflow_id,aggregations,previously_aggregated)
 
     def __extract_width_height__(self,metadata):
@@ -394,7 +395,6 @@ class AggregationAPI:
 
             for subject_id in s:
                 params = (subject_id,int(workflow_id),version)
-
                 statements_and_params.append((select_statement, params))
 
             results = execute_concurrent(self.cassandra_session, statements_and_params, raise_on_first_error=False)
@@ -1774,8 +1774,6 @@ class AggregationAPI:
         # load the classification, marking and survey json dicts - helps parse annotations
         classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
 
-        # todo - add support for reading in annotation from csv - honestly not sure if we even still want that option
-        # todo - refactor since we are doing this subject by subject - don't really need to include subject_id as a subkey in the classifications/markings/surveys dictionary
         for subject_id,user_list,annotation_list,dimensions in self.__yield_annotations__(workflow_id,subject_set):
             print(subject_id)
             # print(subject_id == 572437)
@@ -1979,7 +1977,7 @@ if __name__ == "__main__":
         workflow_id = None
 
     if len(sys.argv) > 4:
-        subject_set = [int(sys.argv[3])]
+        subject_set = [int(sys.argv[4])]
     else:
         subject_set = None
 
@@ -1991,4 +1989,4 @@ if __name__ == "__main__":
 
         with csv_output.CsvOut(project) as c:
             # c.__write_out__(subject_set=aggregated_subjects)
-            c.__write_out__()
+            c.__write_out__(subject_set)
