@@ -207,7 +207,7 @@ class TranscriptionOutput:
                     line += "<disagreement>"
                     for options in set(differences.values()):
                         # when printing out convert all of the tokens for tags back into string format
-                        for tag,token in self.reverse_tags.items():
+                        for token,tag in self.reverse_tags.items():
                             assert isinstance(token,int)
                             options = options.replace(chr(token),tag)
                         line += "<option>"+options+"</option>"
@@ -407,10 +407,11 @@ class AnnotateOutput(TranscriptionOutput):
         # original tag
         self.tags = self.project.text_algorithm.tags
         assert self.tags != {}
-        self.reverse_tags = dict()
 
-        for a,b in self.tags.items():
-            self.reverse_tags[b] = a
+        # for annotate - we don't need to do anything special when converting from token back into tag
+        self.reverse_tags = self.tags
+
+
 
 
 
