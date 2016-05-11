@@ -45,6 +45,7 @@ Finally we apply an opening operation to remove isolated points (noise) - (http:
 Below are some examples - there are some false positives where a change in the sky is detected (we could filter out sky pixels) but false positives aren't bad. We see that animals are definitely detected. If we did DB scan we could look for clumps of "extreme" pixels - if there are none, we have a blank image.
 
 0
+
 .. image:: images/0_original.jpg
     :width: 500px
     :align: center
@@ -54,7 +55,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 1
+
 .. image:: images/1_original.jpg
     :width: 500px
     :align: center
@@ -64,7 +67,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 2
+
 .. image:: images/2_original.jpg
     :width: 500px
     :align: center
@@ -74,7 +79,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 3
+
 .. image:: images/3_original.jpg
     :width: 500px
     :align: center
@@ -84,7 +91,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 4
+
 .. image:: images/4_original.jpg
     :width: 500px
     :align: center
@@ -94,7 +103,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 5
+
 .. image:: images/5_original.jpg
     :width: 500px
     :align: center
@@ -104,7 +115,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 6
+
 .. image:: images/6_original.jpg
     :width: 500px
     :align: center
@@ -114,7 +127,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 7
+
 .. image:: images/7_original.jpg
     :width: 500px
     :align: center
@@ -124,7 +139,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 8
+
 .. image:: images/8_original.jpg
     :width: 500px
     :align: center
@@ -134,7 +151,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 9
+
 .. image:: images/9_original.jpg
     :width: 500px
     :align: center
@@ -144,7 +163,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 10
+
 .. image:: images/10_original.jpg
     :width: 500px
     :align: center
@@ -154,7 +175,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 11
+
 .. image:: images/11_original.jpg
     :width: 500px
     :align: center
@@ -164,7 +187,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 12
+
 .. image:: images/12_original.jpg
     :width: 500px
     :align: center
@@ -174,7 +199,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 13
+
 .. image:: images/13_original.jpg
     :width: 500px
     :align: center
@@ -184,7 +211,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 14
+
 .. image:: images/14_original.jpg
     :width: 500px
     :align: center
@@ -194,7 +223,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 15
+
 .. image:: images/15_original.jpg
     :width: 500px
     :align: center
@@ -204,7 +235,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 16
+
 .. image:: images/16_original.jpg
     :width: 500px
     :align: center
@@ -214,7 +247,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 17
+
 .. image:: images/17_original.jpg
     :width: 500px
     :align: center
@@ -224,7 +259,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 18
+
 .. image:: images/18_original.jpg
     :width: 500px
     :align: center
@@ -234,7 +271,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 19
+
 .. image:: images/19_original.jpg
     :width: 500px
     :align: center
@@ -244,7 +283,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 20
+
 .. image:: images/20_original.jpg
     :width: 500px
     :align: center
@@ -254,7 +295,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 21
+
 .. image:: images/21_original.jpg
     :width: 500px
     :align: center
@@ -264,7 +307,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 22
+
 .. image:: images/22_original.jpg
     :width: 500px
     :align: center
@@ -274,7 +319,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 23
+
 .. image:: images/23_original.jpg
     :width: 500px
     :align: center
@@ -284,7 +331,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 24
+
 .. image:: images/24_original.jpg
     :width: 500px
     :align: center
@@ -294,7 +343,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 25
+
 .. image:: images/25_original.jpg
     :width: 500px
     :align: center
@@ -304,7 +355,9 @@ Below are some examples - there are some false positives where a change in the s
     :width: 500px
     :align: center
     :alt: average image
+
 26
+
 .. image:: images/26_original.jpg
     :width: 500px
     :align: center
