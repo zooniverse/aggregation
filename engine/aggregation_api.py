@@ -1228,7 +1228,7 @@ class AggregationAPI:
         while subjects_migrated != set():
             lower_bound_id,subjects_migrated = self.__migrate_with_id_limits__(select,lower_bound_id)
             all_subjects_migrated.update(subjects_migrated)
-            if self.environment in ["development"]:
+            if self.environment in ["development",["quasi"]]:
                 break
             print(lower_bound_id)
 
@@ -1925,7 +1925,10 @@ class AggregationAPI:
             postgres_cursor.execute("UPDATE aggregations SET aggregation = newvals"+str(self.project_id)+".aggregation FROM newvals"+str(self.project_id)+" WHERE newvals"+str(self.project_id)+".subject_id = aggregations.subject_id and newvals"+str(self.project_id)+".workflow_id = aggregations.workflow_id")
         if insert_str != "":
             print("inserting " + str(insert_counter) + " subjects")
-            postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
+            try:
+                postgres_cursor.execute("INSERT INTO aggregations (workflow_id, subject_id, aggregation, created_at, updated_at) VALUES " + insert_str[1:])
+            except psycopg2.IntegrityError:
+                print("duplicate error!!!!")
         self.postgres_writeable_session.commit()
 
     def __yield_aggregations__(self,workflow_id,subject_set=None):
