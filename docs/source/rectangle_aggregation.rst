@@ -2,7 +2,9 @@ Rectangle Clustering
 ####################
 
 One of the marking tools available through the PFE is rectangles. This allows users to outline a rectangular region of an image. A rectangle is just a special type of polygon and in fact you can basically use polygon aggregation on rectangles. This turned out to be overkill and rather slow so we created a clustering technique specifically for rectangles.
-The code for clustering rectangles is in rectangle_clustering.py
+The code for clustering rectangles is in rectangle_clustering.py. Rectangles are now treated as regular points - we reduce each rectangle to a 2-d value, i.e. the center of the rectangle and then do normal agglomerative clustering. The advantage of this approach is that it can handle overlapping entities.
+
+You could also use rectangles to mark regions (i.e. mark out a region of grass) - basically like polygons but probably faster. This originally what I thought rectangle markings would be used for. For this "area" use of marking, there really isn't the concept of overlapping entities. The code to do this type of area marking is still in rectangle.py and the explanation is given down below. Currently, the aggregation engine is set up to only do the entity type of clustering/aggregation. It might be nice to support both types (although you could always just get people to do polygon markings) but the aggregation engine doesn't really support doing two different types of aggregation for the same marking tool.
 
 The idea behind rectangle clustering is to find regions that multiple people have outlined. For example, the image below shows 3 overlapping rectangles and the region common to all 3 rectangles is shown in blue.
 
