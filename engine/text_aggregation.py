@@ -204,7 +204,7 @@ class TranscriptionAPI(AggregationAPI):
         else:
             assert False
 
-        self.image_algorithm = RectangleClustering("image",self,{})
+        self.image_algorithm = RectangleClustering("image",self,{"reduction":helper_functions.rectangle_reduction})
 
         self.only_retired_subjects = False
         self.only_recent_subjects = True
