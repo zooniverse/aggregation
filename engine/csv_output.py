@@ -117,7 +117,7 @@ class CsvOut:
                 # first check if there are any follow questions
                 if "followup_questions" not in self.instructions[workflow_id][task_id]["tools"][tool_id]:
                     continue
-                    
+
                 followup_questions = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"]
 
                 # go through each of the follow up questions
@@ -451,7 +451,10 @@ class CsvOut:
             instructions = self.instructions[workflow_id][task_id]["instruction"]
         # else a follow up question to a marking - so the instructions are stored in a sligghtly different spot
         else:
-            instructions = self.instructions[workflow_id][task_id]["tools"][tool_id]["followup_questions"][followup_id]["question"]
+            instructions = (
+                self.instructions[workflow_id][task_id]["tools"][tool_id]
+                    ["followup_questions"][followup_id].get("question",  "")
+            )
 
         fname = str(task_id) + instructions[:50]
         if summary:
