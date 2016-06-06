@@ -463,7 +463,7 @@ class AggregationAPI:
                     raise err
                 warning(err)
 
-        assert False
+        raise Exception('Could not connect to cassandra due to unknown error')
 
     def __register_run__(self):
         """
@@ -877,7 +877,7 @@ class AggregationAPI:
 
             else:
                 warning(task["type"])
-                assert False
+                raise Exception('Unknown task type: %s' % task["type"])
 
         return instructions
 
@@ -990,7 +990,7 @@ class AggregationAPI:
             elif "image/png" in image:
                 url = image["image/png"]
             else:
-                assert False
+                raise Exception('Unknown image type: %s' % image)
 
             slash_index = url.rfind("/")
             fname = url[slash_index+1:]
@@ -1051,7 +1051,7 @@ class AggregationAPI:
                     warning(agg1)
                     warning(agg2)
                     warning(kw)
-                    assert False
+                    raise
 
         assert isinstance(agg1,dict)
         return agg1
@@ -1376,6 +1376,7 @@ class AggregationAPI:
         # see http://matplotlib.org/users/artists.html
         fname = self.__image_setup__(subject_id)
 
+        exception = None
         for i in range(10):
             try:
                 # fig = plt.figure()
@@ -1386,12 +1387,13 @@ class AggregationAPI:
                 im = axes.imshow(image)
 
                 return self.__get_subject_dimension__(subject_id)
-            except IOError:
+            except IOError as e:
                 # try downloading that image again
                 os.remove(fname)
                 self.__image_setup__(subject_id)
+                exception = e
 
-        assert False
+        raise exception or Exception('Failed to plot image')
 
     def __get_cluster_markings__(self,workflow_id,subject_id,task_id,shape):
         """
@@ -1588,7 +1590,7 @@ class AggregationAPI:
                     if tool["type"] in ["line","ellipse","point","circle","rectangle","polygon", "bezier"]:
                         marking_tasks[task_id].append(tool["type"])
                     else:
-                        assert False
+                        raise Exception('Unknown tool type: %s' % tool['type'])
 
             elif task_type in ["single","multiple"]:
                 # multiple means that more than one response is allowed
@@ -1599,7 +1601,7 @@ class AggregationAPI:
                 warning(task)
                 warning(task["type"])
                 # unknown task type
-                assert False
+                raise Exception('Unknown task type: %s' % task['type'])
 
         # note that for follow up questions to marking tasks - the key used is the marking tool label
         # NOT the follow up question label
@@ -1830,7 +1832,7 @@ class AggregationAPI:
                         warning(marking_tasks,classification_tasks,survey_tasks)
                         warning(task_id)
                         warning(task)
-                        assert False
+                        raise Exception('Unknown task ID: %s' % task_id)
 
             yield raw_classifications,raw_markings,raw_surveys,image_dimensions
 
