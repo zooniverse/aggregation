@@ -1,7 +1,12 @@
 #!/usr/bin/env python
 __author__ = 'ggdhines'
+import codecs
+import cStringIO
+import csv
 import json
 import tarfile
+import os
+import re
 
 first = True
 count = 0
@@ -228,8 +233,86 @@ def json_dump(project):
         # assert False
         json.dump(aggregations_to_json,outfile)
 
+    json_to_csv_dump(project_id, aggregations_to_json)
+
     tar_file_path = "/tmp/" + project_id + "_export.tar.gz"
     with tarfile.open(tar_file_path, "w:gz") as tar:
-        tar.add("/tmp/"+project_id+".json")
+        tar.add(os.path.join('/', 'tmp', '{}.json'.format(project_id)))
+        tar.add(os.path.join('/', 'tmp', '{}.csv'.format(project_id)))
 
     return tar_file_path
+
+class UnicodeWriter:
+    """
+    A CSV writer which will write rows to CSV file "f",
+    which is encoded in the given encoding.
+    """
+
+    def __init__(self, f, dialect=csv.excel, encoding="utf-8", **kwds):
+        # Redirect output to a queue
+        self.queue = cStringIO.StringIO()
+        self.writer = csv.writer(self.queue, dialect=dialect, **kwds)
+        self.stream = f
+        self.encoder = codecs.getincrementalencoder(encoding)()
+
+    def writerow(self, row):
+        self.writer.writerow([s.encode("utf-8") for s in row])
+        # Fetch UTF-8 output from the queue ...
+        data = self.queue.getvalue()
+        data = data.decode("utf-8")
+        # ... and reencode it into the target encoding
+        data = self.encoder.encode(data)
+        # write to the target stream
+        self.stream.write(data)
+        # empty queue
+        self.queue.truncate(0)
+
+    def writerows(self, rows):
+        for row in rows:
+            self.writerow(row)
+
+def json_to_csv_dump(project_id, aggregation_data):
+    aggregation_out = [
+        ['subject_id', 'aggregated text', 'accuracy'],
+    ]
+
+    metadata_field_names = []
+
+    for subject_id, subject_aggregation in aggregation_data.items():
+        if not 'text' in subject_aggregation:
+            continue
+        subject_metadata = json.loads(
+            subject_aggregation['metadata']
+        )
+
+        metadata_field_names = subject_metadata.keys()
+        metadata_field_names.sort()
+
+        total_text = len(subject_aggregation['text'])
+        sum_accuracy = 0
+        aggregated_text = ""
+
+        for t in subject_aggregation['text']:
+            aggregated_text = aggregated_text + "\n" + re.sub(
+                             r'<disagreement>.*?</disagreement>',
+                             '?',
+                             t['aggregated_text']
+                     )
+
+            sum_accuracy += t['accuracy']
+
+        new_row = [
+            str(subject_id),
+            aggregated_text,
+            str(sum_accuracy/total_text)
+        ]
+
+        for field in metadata_field_names:
+            new_row.append(unicode(subject_metadata[field]))
+
+        aggregation_out.append(new_row)
+
+    aggregation_out[0] = aggregation_out[0] + metadata_field_names
+
+    with open(os.path.join('/', 'tmp', '{}.csv'.format(project_id)), 'w') as out_file:
+        UnicodeWriter(out_file).writerows(aggregation_out)
