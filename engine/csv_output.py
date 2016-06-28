@@ -862,7 +862,7 @@ class CsvOut:
         # on average, how many species did people see?
         # note - nothing here (or empty or what ever) counts as a species - we just won't give any follow up
         # answer responses
-        species_in_subject = aggregations["num species in image"]
+        species_in_subject = aggregations.get("num species in image", [])
 
         views_of_subject = aggregations["num users"]
 
