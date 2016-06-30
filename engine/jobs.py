@@ -7,6 +7,11 @@ from csv_output import CsvOut
 def aggregate(project_id, token, href, metadata, environment):
     from aggregation_api import AggregationAPI
 
+    # Hard-coded projects which can't be exported on demand
+    if project_id in (376, 245):
+        send_finished(metadata, token, href)
+        return
+
     with AggregationAPI(project_id, environment=environment) as project:
         project.__setup__()
         project.__aggregate__()
