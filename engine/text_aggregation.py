@@ -424,7 +424,7 @@ if __name__ == "__main__":
         warning('transcription.py -i <project_id> -e: <environment> -d: <end_date>')
         sys.exit(2)
 
-    environment = "development"
+    environment = os.environ.get('ENVIRONMENT', 'development')
     project_id = None
     end_date = None
     summary = False
