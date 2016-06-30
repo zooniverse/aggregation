@@ -1,22 +1,38 @@
-FROM zooniverse/aggregation-dependencies
+FROM ubuntu:14.04
 
 ENV DEBIAN_FRONTEND noninteractive
 
-RUN apt-get update
-RUN apt-get -y upgrade
-RUN apt-get install -y python python-dev python-setuptools python-pip \
-    python-numpy python-scipy python-pymongo python-networkx python-yaml \
-    python-psycopg2 python-matplotlib python-shapely python-pandas supervisor \
-    mafft vim python-wxgtk2.8 python-opencv
+RUN apt-get update && \
+    apt-get install -y \
+        python \
+        python-dev \
+        python-setuptools \
+        python-pip \
+        python-numpy \
+        python-scipy \
+        python-pymongo \
+        python-networkx \
+        python-yaml \
+        python-psycopg2 \
+        python-matplotlib \
+        python-shapely \
+        python-pandas \
+        python-wxgtk2.8 \
+        python-opencv \
+        supervisor \
+        mafft
 
 WORKDIR /app/
 
-ADD . /app/
+COPY requirements.txt /app/
 
-RUN pip install -U cassandra-driver Flask redis rq requests==2.4.3 rollbar termcolor boto3 setproctitle alignment scikit-learn boto descartes
-RUN pip install .
+RUN pip install -r requirements.txt
 
 ADD supervisord.conf /etc/supervisor/conf.d/cron.conf
+
+ADD . /app/
+
+RUN pip install .
 
 RUN ln -s /app/config/crontab /etc/cron.d/aggregation
 
