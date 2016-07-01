@@ -1,9 +1,13 @@
-from __future__ import print_function
-
+import codecs
+import cStringIO
+import csv
 import json
 import tarfile
+import os
+import re
 
 from abc import ABCMeta, abstractmethod
+from __future__ import print_function
 
 """
 sets up the output for transcription projects like Annotate and Shakespeare's
@@ -14,6 +18,35 @@ __author__ = 'ggdhines'
 
 class EmptyString(Exception):
     pass
+
+class UnicodeWriter:
+    """
+    A CSV writer which will write rows to CSV file "f",
+    which is encoded in the given encoding.
+    """
+
+    def __init__(self, f, dialect=csv.excel, encoding="utf-8", **kwds):
+        # Redirect output to a queue
+        self.queue = cStringIO.StringIO()
+        self.writer = csv.writer(self.queue, dialect=dialect, **kwds)
+        self.stream = f
+        self.encoder = codecs.getincrementalencoder(encoding)()
+
+    def writerow(self, row):
+        self.writer.writerow([s.encode("utf-8") for s in row])
+        # Fetch UTF-8 output from the queue ...
+        data = self.queue.getvalue()
+        data = data.decode("utf-8")
+        # ... and reencode it into the target encoding
+        data = self.encoder.encode(data)
+        # write to the target stream
+        self.stream.write(data)
+        # empty queue
+        self.queue.truncate(0)
+
+    def writerows(self, rows):
+        for row in rows:
+            self.writerow(row)
 
 class TranscriptionOutput:
     __metaclass__ = ABCMeta
@@ -35,6 +68,54 @@ class TranscriptionOutput:
         self.reverse_tags = None
 
         self.safe_tags = dict()
+
+    def write_csv_output(self, project_id, aggregation_data):
+        aggregation_out = [
+            ['subject_id', 'aggregated text', 'accuracy'],
+        ]
+
+        metadata_field_names = []
+
+        for subject_id, subject_aggregation in aggregation_data.items():
+            if not 'text' in subject_aggregation:
+                continue
+            subject_metadata = json.loads(
+                subject_aggregation['metadata']
+            )
+
+            metadata_field_names = subject_metadata.keys()
+            metadata_field_names.sort()
+
+            total_text = len(subject_aggregation['text'])
+            sum_accuracy = 0
+            aggregated_text = ""
+
+            for t in subject_aggregation['text']:
+                aggregated_text = aggregated_text + "\n" + re.sub(
+                                 r'<disagreement>.*?</disagreement>',
+                                 '?',
+                                 t['aggregated_text']
+                         )
+
+                sum_accuracy += t['accuracy']
+
+            new_row = [
+                str(subject_id),
+                aggregated_text,
+                str(sum_accuracy/total_text)
+            ]
+
+            for field in metadata_field_names:
+                new_row.append(unicode(subject_metadata[field]))
+
+            aggregation_out.append(new_row)
+
+        aggregation_out[0] = aggregation_out[0] + metadata_field_names
+
+        with open(
+            os.path.join('/', 'tmp', '{}.csv'.format(project_id)), 'w'
+        ) as out_file:
+            UnicodeWriter(out_file).writerows(aggregation_out)
 
     def __json_output__(self,subject_id_filter=None):
         aggregations_to_json = dict()
@@ -66,6 +147,7 @@ class TranscriptionOutput:
                 print("skipping " + str(subject_id))
 
         json.dump(aggregations_to_json, open("/tmp/" + str(self.project.project_id) + ".json", "wb"))
+        self.write_csv_output(self.project.project_id, aggregations_to_json)
         self.__tar_output__()
 
     @abstractmethod
