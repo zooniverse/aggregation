@@ -388,7 +388,7 @@ class TranscriptionAPI(AggregationAPI):
             Source='greg@zooniverse.org',
             Destination={
                 'ToAddresses': [
-                    'greg@zooniverse.org',self.email_recipients
+                    'sysadmins@zooniverse.org',self.email_recipients
                 ]#,
                 # 'CcAddresses': [
                 #     'string',

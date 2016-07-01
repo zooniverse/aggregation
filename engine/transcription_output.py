@@ -1,18 +1,52 @@
-from __future__ import print_function
+import codecs
+import cStringIO
+import csv
 import json
-from helper_functions import warning
 import tarfile
-import numpy as np
-from abc import ABCMeta, abstractmethod
-"""
-sets up the output for transcription projects like Annotate and Shakespeare's world
-before being emailed out
-"""
-__author__ = 'ggdhines'
+import os
+import re
 
+from abc import ABCMeta, abstractmethod
+from __future__ import print_function
+
+"""
+sets up the output for transcription projects like Annotate and Shakespeare's
+world before being emailed out
+"""
+
+__author__ = 'ggdhines'
 
 class EmptyString(Exception):
     pass
+
+class UnicodeWriter:
+    """
+    A CSV writer which will write rows to CSV file "f",
+    which is encoded in the given encoding.
+    """
+
+    def __init__(self, f, dialect=csv.excel, encoding="utf-8", **kwds):
+        # Redirect output to a queue
+        self.queue = cStringIO.StringIO()
+        self.writer = csv.writer(self.queue, dialect=dialect, **kwds)
+        self.stream = f
+        self.encoder = codecs.getincrementalencoder(encoding)()
+
+    def writerow(self, row):
+        self.writer.writerow([s.encode("utf-8") for s in row])
+        # Fetch UTF-8 output from the queue ...
+        data = self.queue.getvalue()
+        data = data.decode("utf-8")
+        # ... and reencode it into the target encoding
+        data = self.encoder.encode(data)
+        # write to the target stream
+        self.stream.write(data)
+        # empty queue
+        self.queue.truncate(0)
+
+    def writerows(self, rows):
+        for row in rows:
+            self.writerow(row)
 
 class TranscriptionOutput:
     __metaclass__ = ABCMeta
@@ -23,26 +57,78 @@ class TranscriptionOutput:
         self.workflow_id = self.project.workflows.keys()[0]
         self.metadata = self.project.__get_subject_metadata__(self.workflow_id)
 
-        # tags and reverse tags allow you to tokenize tags (convert a sub-string representing a character into
-        # a single character, i.e. a token) and then from that token back into the original string. Useful
-        # for making sure that everyone's strings are the same length
-        # there is a difference between tags and reverse_tags (i.e. you can't just switch the key/value pairs in tags)
-        # because with Folger we need to worry about removing "sw-" from the tags
+        # tags and reverse tags allow you to tokenize tags (convert a
+        # sub-string representing a character into # a single character, i.e. a
+        # token) and then from that token back into the original string. Useful
+        # for making sure that everyone's strings are the same length there
+        # is a difference between tags and reverse_tags (i.e. you can't just
+        # switch the key/value pairs in tags) # because with Folger we need to
+        # worry about removing "sw-" from the tags
         self.tags = None
         self.reverse_tags = None
 
         self.safe_tags = dict()
 
+    def write_csv_output(self, project_id, aggregation_data):
+        aggregation_out = [
+            ['subject_id', 'aggregated text', 'accuracy'],
+        ]
+
+        metadata_field_names = []
+
+        for subject_id, subject_aggregation in aggregation_data.items():
+            if not 'text' in subject_aggregation:
+                continue
+            subject_metadata = json.loads(
+                subject_aggregation['metadata']
+            )
+
+            metadata_field_names = subject_metadata.keys()
+            metadata_field_names.sort()
+
+            total_text = len(subject_aggregation['text'])
+            sum_accuracy = 0
+            aggregated_text = ""
+
+            for t in subject_aggregation['text']:
+                aggregated_text = aggregated_text + "\n" + re.sub(
+                                 r'<disagreement>.*?</disagreement>',
+                                 '?',
+                                 t['aggregated_text']
+                         )
+
+                sum_accuracy += t['accuracy']
+
+            new_row = [
+                str(subject_id),
+                aggregated_text,
+                str(sum_accuracy/total_text)
+            ]
+
+            for field in metadata_field_names:
+                new_row.append(unicode(subject_metadata[field]))
+
+            aggregation_out.append(new_row)
+
+        aggregation_out[0] = aggregation_out[0] + metadata_field_names
+
+        with open(
+            os.path.join('/', 'tmp', '{}.csv'.format(project_id)), 'w'
+        ) as out_file:
+            UnicodeWriter(out_file).writerows(aggregation_out)
+
     def __json_output__(self,subject_id_filter=None):
         aggregations_to_json = dict()
         print("creating json output ready")
-        # by using metadata.keys, we automatically restrict the results to retired subjects
+        # by using metadata.keys, we automatically restrict the results to
+        # retired subjects
 
-        for count, (subject_id, aggregations) in enumerate(self.project.__yield_aggregations__(self.workflow_id)):#self.metadata.keys())):
-            # we will have aggregation results for subjects which haven't been retired yet
-            # (so we can show the black dots)
-            # but we don't want to include these subjects in the aggregation results. self.metadata only includes
-            # metadata for retired subjects - so if subject_id not in self.metadata, skip
+        for count, (subject_id, aggregations) in enumerate(self.project.__yield_aggregations__(self.workflow_id)):
+            # we will have aggregation results for subjects which haven't been
+            # retired yet (so we can show the black dots) # but we don't want
+            # to include these subjects in the aggregation results.
+            # self.metadata only includes metadata for retired subjects - so
+            # if subject_id not in self.metadata, skip
 
             if subject_id not in self.metadata.keys():
                 continue
@@ -50,8 +136,9 @@ class TranscriptionOutput:
                 continue
             print(subject_id)
 
-            # on the off chance that the aggregations are in string format and not json (seems to happen sometimes)
-            # not sure if its because on running on Greg's computer vs. aws. But just playing it safe
+            # on the off chance that the aggregations are in string format and
+            # not json (seems to happen sometimes) not sure if its because on
+            # running on Greg's computer vs. aws. But just playing it safe
             if isinstance(aggregations, str):
                 aggregations = json.loads(aggregations)
             try:
@@ -60,6 +147,7 @@ class TranscriptionOutput:
                 print("skipping " + str(subject_id))
 
         json.dump(aggregations_to_json, open("/tmp/" + str(self.project.project_id) + ".json", "wb"))
+        self.write_csv_output(self.project.project_id, aggregations_to_json)
         self.__tar_output__()
 
     @abstractmethod
@@ -89,7 +177,8 @@ class TranscriptionOutput:
         # and now repeat with aggregated line
         aggregated_line = str(cluster["center"][-1])
 
-        # not sure why an empty aggregate string should exist but it does seem to happen every so often
+        # not sure why an empty aggregate string should exist but it does seem
+        # to happen every so often
         if aggregated_line == "":
             raise EmptyString()
 
@@ -135,8 +224,8 @@ class TranscriptionOutput:
         for coords,individual_text in self.__generate_transcriptions_and_coordinates__(cluster):
             assert isinstance(individual_text,unicode) or isinstance(individual_text,str)
 
-            # again, convert the tags to the ones needed by Folger or Tate (as opposed to the ones
-            # zooniverse is using)
+            # again, convert the tags to the ones needed by Folger or Tate (as
+            # opposed to the ones zooniverse is using)
             # assert isinstance(individual_text,str)
             # for old,new in replacement_tags.items():
             #     individual_text = individual_text.replace(old,new)
@@ -145,8 +234,9 @@ class TranscriptionOutput:
             skip = 0
             is_skip = False
 
-            # we need to "rebuild" the individual text so that we can insert <skip>X</skip>
-            # to denote that MAFFT inserted X spaces into the line
+            # we need to "rebuild" the individual text so that we can insert
+            # <skip>X</skip> to denote that MAFFT inserted X spaces into the
+            # line
             individual_text = ""
             for c in temp_text:
                 if ord(c) in [24,27]:
@@ -177,9 +267,10 @@ class TranscriptionOutput:
         differences = {}
 
         for c_i,c in enumerate(aggregated_line):
-            # if we have a disagreement (represented by either ord(c) = 27), keep on a running tally of
-            # what all the differences are over all users so we can report the disagreements per "word"
-            # of disagreement, not per character
+            # if we have a disagreement (represented by either ord(c) = 27),
+            # keep on a running tally of what all the differences are over
+            # all users so we can report the disagreements per "word" of
+            # disagreement, not per character
             if ord(c) == 27:
                 agreement = False
 
@@ -189,8 +280,9 @@ class TranscriptionOutput:
                 except IndexError:
                     raise
 
-                # add these characters to the running total - ord(c) == 24 is when MAFFT inserted
-                # a space to align the text, which corresponds to not having anything there
+                # add these characters to the running total - ord(c) == 24 is
+                # when MAFFT inserted a space to align the text, which
+                # corresponds to not having anything there
                 for ii,c in char_options:
                     if ord(c) != 24:
                         if ii not in differences:
@@ -206,7 +298,8 @@ class TranscriptionOutput:
                 if not agreement:
                     line += "<disagreement>"
                     for options in set(differences.values()):
-                        # when printing out convert all of the tokens for tags back into string format
+                        # when printing out convert all of the tokens for tags
+                        # back into string format
                         for token,tag in self.reverse_tags.items():
                             assert isinstance(token,int)
                             options = options.replace(chr(token),tag)
@@ -216,7 +309,8 @@ class TranscriptionOutput:
 
                 agreement = True
 
-                # untokenize any tokens we find - replace them with the original tag
+                # untokenize any tokens we find - replace them with the
+                # original tag
                 for token,tag in self.tags.items():
                     c = c.replace(chr(token),tag)
                 line += c
@@ -236,7 +330,6 @@ class TranscriptionOutput:
 
     def __subject_to_json__(self,subject_id,aggregation):
         """
-
         :param aggregation:
         :return subject_json:
         """
@@ -245,7 +338,8 @@ class TranscriptionOutput:
         subject_json["metadata"] = self.metadata[int(subject_id)]
 
         # are there any images in this subject?
-        # there will always be "all_users" so we can looking for a list longer than one
+        # there will always be "all_users" so we can looking for a list longer
+        # than one
         if ("image clusters" in aggregation["T2"]) and (len(aggregation["T2"]["image clusters"]) > 1):
             subject_json["images"] = self.__add_image_aggregation__(aggregation)
 
@@ -253,12 +347,12 @@ class TranscriptionOutput:
         if ("text clusters" in aggregation["T2"]) and (len(aggregation["T2"]["text clusters"]) > 1):
             subject_json["text"],subject_json["variants"] = self.__add_text_aggregation__(aggregation)
 
-        # finally, give all of the individual transcriptions (removing alignment tags) without regards to
-        # cluster - this way, people can tell if any text was ignored
+        # finally, give all of the individual transcriptions (removing
+        # alignment tags) without regards to cluster - this way, people can
+        # tell if any text was ignored
         subject_json["raw transcriptions"] = self.__add_global_transcriptions__(subject_id)
 
         return subject_json
-
 
     def __add_image_aggregation__(self,aggregation):
         """
@@ -275,10 +369,10 @@ class TranscriptionOutput:
         assert image_results != []
         return image_results
 
-
     def __add_text_aggregation__(self,aggregation):
         """
-        if a subject has text aggregation (which will happen most of the time),  add the aggregation results
+        if a subject has text aggregation (which will happen most of the time),
+        add the aggregation results
         :param aggregation:
         :return:
         """
@@ -307,10 +401,10 @@ class TranscriptionOutput:
         assert text_results != {}
         return text_results,variants_per_subject
 
-
     def __add_global_transcriptions__(self,subject_id):
         """
-        add the individual transcriptions without regards to the cluster - so people can tell if any
+        add the individual transcriptions without regards to the cluster - so
+        people can tell if any
         text was ignored
         :return:
         """
@@ -319,11 +413,13 @@ class TranscriptionOutput:
         workflow_id = self.project.workflows.keys()[0]
 
         for annotations in self.project.__sort_annotations__(workflow_id,[subject_id]):
-            # annotation[1] is the list of markings for this subject - annotation[0] is the list
-            # of classifications, [2] survey annotations and [3] image dimensions
+            # annotation[1] is the list of markings for this subject -
+            # annotation[0] is the list of classifications, [2] survey
+            # annotations and [3] image dimensions
             transcriptions = annotations[1]
 
-            # make sure that this user actually provided transcriptions, otherwise, just skip
+            # make sure that this user actually provided transcriptions,
+            # otherwise, just skip
             if "T2" in transcriptions:
                 for ii,(user_id,transcription,tool) in enumerate(transcriptions["T2"]["text"][subject_id]):
                     if transcription is None:
@@ -334,7 +430,8 @@ class TranscriptionOutput:
                     if "\n" in individual_text:
                         continue
 
-                    # convert to ascii - and if this is the folger project, remove "sw-"
+                    # convert to ascii - and if this is the folger project,
+                    # remove "sw-"
                     individual_text = individual_text.encode('ascii','ignore')
                     for original,safe in self.safe_tags.items():
                         individual_text = individual_text.replace(original,safe)
@@ -349,7 +446,6 @@ class TranscriptionOutput:
         with tarfile.open("/tmp/"+aws_tar,mode="w") as t:
             t.add("/tmp/"+str(self.project.project_id)+".json",arcname=self.project.project_name+".json")
 
-
 class ShakespearesWorldOutput(TranscriptionOutput):
     def __init__(self,project):
         TranscriptionOutput.__init__(self,project)
@@ -357,19 +453,22 @@ class ShakespearesWorldOutput(TranscriptionOutput):
         self.tags = self.project.text_algorithm.tags
         self.reverse_tags = dict()
 
-        # for annotate we'll have safe_tags = tags but here we need to get rid of the "sw-"
+        # for annotate we'll have safe_tags = tags but here we need to get rid
+        # of the "sw-"
         for tag in self.tags.values():
             self.safe_tags[tag] = tag.replace("sw-","")
 
-        # when converting from token back into string format, for folger we need to make sure that we are using the
-        # right, sw-safe tags. So we need a special self.reverse_tags
+        # when converting from token back into string format, for folger we
+        # need to make sure that we are using the right, sw-safe tags. So we
+        # need a special self.reverse_tags
         for key,tag in self.tags.items():
             assert isinstance(tag,str)
             self.reverse_tags[key] = self.safe_tags[tag]
 
     def __tokenize_individual_transcriptions__(self,cluster):
         """
-        convert each individual string into a tokenized representation (so each tag is just one character)
+        convert each individual string into a tokenized representation (so each
+        tag is just one character)
         :param cluster:
         :return:
         """
@@ -397,23 +496,18 @@ class ShakespearesWorldOutput(TranscriptionOutput):
 
         raise StopIteration()
 
-
-
 class AnnotateOutput(TranscriptionOutput):
     def __init__(self,project):
         TranscriptionOutput.__init__(self,project)
 
-        # set up the reverse tags - so we can take a token (representing a full tag) and replace it with the
-        # original tag
+        # set up the reverse tags - so we can take a token (representing a full
+        # tag) and replace it with the original tag
         self.tags = self.project.text_algorithm.tags
         assert self.tags != {}
 
-        # for annotate - we don't need to do anything special when converting from token back into tag
+        # for annotate - we don't need to do anything special when converting
+        # from token back into tag
         self.reverse_tags = self.tags
-
-
-
-
 
     def __generate_individual_transcriptions__(self,cluster):
         for annotation in cluster["cluster members"]:
@@ -421,7 +515,8 @@ class AnnotateOutput(TranscriptionOutput):
 
     def __tokenize_individual_transcriptions__(self,cluster):
         """
-        convert each individual string into a tokenized representation (so each tag is just one character)
+        convert each individual string into a tokenized representation (so each
+        tag is just one character)
         :param cluster:
         :return:
         """
@@ -445,6 +540,3 @@ class AnnotateOutput(TranscriptionOutput):
             yield coords,individual_text
 
         raise StopIteration()
-
-
-
