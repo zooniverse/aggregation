@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import codecs
 import cStringIO
 import csv
@@ -7,7 +9,6 @@ import os
 import re
 
 from abc import ABCMeta, abstractmethod
-from __future__ import print_function
 
 """
 sets up the output for transcription projects like Annotate and Shakespeare's
