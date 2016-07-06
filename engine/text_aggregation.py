@@ -141,7 +141,7 @@ class TranscriptionAPI(AggregationAPI):
 
         # just to stop me from using transcription on other projects
         if not int(project_id) in [245, 376]:
-            raise ValueError('project_id must be iether 245 or 376')
+            raise ValueError('project_id must be either 245 or 376')
 
     def __cluster__(self,used_shapes,raw_markings,image_dimensions,aggregations):
         """
@@ -205,7 +205,7 @@ class TranscriptionAPI(AggregationAPI):
             self.text_algorithm = folger.FolgerClustering("text",self,additional_text_args)
             self.output_tool = ShakespearesWorldOutput(self)
         else:
-            raise ValueError('project_id must be iether 245 or 376')
+            raise ValueError('project_id must be either 245 or 376')
 
         self.image_algorithm = RectangleClustering("image",self,{"reduction":helper_functions.rectangle_reduction})
 
@@ -285,7 +285,7 @@ class TranscriptionAPI(AggregationAPI):
 
             return classification_tasks,marking_tasks,{}
         else:
-            raise ValueError('project_id must be iether 245 or 376')
+            raise ValueError('project_id must be either 245 or 376')
 
 
 
