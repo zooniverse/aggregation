@@ -80,7 +80,9 @@ class SubjectRetirement(Classification):
         :return:
         """
 
-        assert isinstance(workflow_id,int)
+        if not isinstance(workflow_id, int):
+            raise TypeError('workflow_id must be an int')
+
         to_retire = set()
         # start by looking for empty subjects
         # "T0" really should always be there but we may have a set of classifications (really old ones before
@@ -98,7 +100,10 @@ class SubjectRetirement(Classification):
         # update every 30 minutes
         if time_delta.seconds > (30*60):
             self.token_date = datetime.datetime.now()
-            assert isinstance(self.project,AggregationAPI)
+            if not isinstance(self.project, AggregationAPI):
+                raise TypeError(
+                    'self.project must be an AggregationAPI instance'
+                )
             self.project.__panoptes_connect__()
 
         token = self.project.token
@@ -112,10 +117,7 @@ class SubjectRetirement(Classification):
                 headers = {"Accept":"application/vnd.api+json; version=1","Content-Type": "application/json", "Authorization":"Bearer "+token}
                 params = {"subject_id":retired_subject}
                 r = requests.post("https://panoptes.zooniverse.org/api/workflows/"+str(workflow_id)+"/retired_subjects",headers=headers,data=json.dumps(params))
-                # if self.environment != "production":
-                #     print(r.status_code)
-                # return an error if we have a 404 status
-                assert r.status_code == 200
+                r.raise_for_status()
             except TypeError as e:
                 warning(e)
                 rollbar.report_exc_info()
@@ -138,7 +140,8 @@ class TranscriptionAPI(AggregationAPI):
         AggregationAPI.__init__(self,project_id,environment,end_date=end_date)
 
         # just to stop me from using transcription on other projects
-        assert int(project_id) in [245,376]
+        if not int(project_id) in [245, 376]:
+            raise ValueError('project_id must be iether 245 or 376')
 
     def __cluster__(self,used_shapes,raw_markings,image_dimensions,aggregations):
         """
@@ -202,7 +205,7 @@ class TranscriptionAPI(AggregationAPI):
             self.text_algorithm = folger.FolgerClustering("text",self,additional_text_args)
             self.output_tool = ShakespearesWorldOutput(self)
         else:
-            assert False
+            raise ValueError('project_id must be iether 245 or 376')
 
         self.image_algorithm = RectangleClustering("image",self,{"reduction":helper_functions.rectangle_reduction})
 
@@ -241,7 +244,8 @@ class TranscriptionAPI(AggregationAPI):
         cursor.execute(selection_stmt)
 
         aggregated_text = cursor.fetchone()[0]["T2"]["text clusters"].values()
-        assert isinstance(aggregated_text,list)
+        if not isinstance(aggregated_text, list):
+            raise TypeError('aggregated_text must be a list')
         # remove the list of all users
         aggregated_text = [a for a in aggregated_text if isinstance(a,dict)]
 
@@ -281,7 +285,7 @@ class TranscriptionAPI(AggregationAPI):
 
             return classification_tasks,marking_tasks,{}
         else:
-            assert False
+            raise ValueError('project_id must be iether 245 or 376')
 
 
 
@@ -439,7 +443,8 @@ if __name__ == "__main__":
         elif opt in ["-s","--summary"]:
             summary = True
 
-    assert project_id is not None
+    if project_id is None:
+        raise ValueError('project_id is None')
 
     with TranscriptionAPI(project_id,environment,end_date) as project:
         project.__setup__()
