@@ -445,7 +445,18 @@ class TranscriptionOutput:
         aws_tar = self.project.__get_aws_tar_name__()
         print("saving json results")
         with tarfile.open("/tmp/"+aws_tar,mode="w") as t:
-            t.add("/tmp/"+str(self.project.project_id)+".json",arcname=self.project.project_name+".json")
+            t.add(
+                os.path.join('/', 'tmp', '{}.json'.format(
+                    self.project.project_id
+                )),
+                arcname=self.project.project_name+".json"
+            )
+            t.add(
+                os.path.join('/', 'tmp', '{}.csv'.format(
+                    self.project.project_id
+                )),
+                arcname=self.project.project_name+".csv"
+            )
 
 class ShakespearesWorldOutput(TranscriptionOutput):
     def __init__(self,project):
