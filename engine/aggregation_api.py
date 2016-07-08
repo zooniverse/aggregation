@@ -322,20 +322,20 @@ class AggregationAPI:
             print("aggregating " + str(len(subject_set)) + " subjects")
 
             # self.__describe__(workflow_id)
-            classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
+            tasks = self.workflows[workflow_id]
 
             # set up the clustering algorithms for the shapes we actually use
             used_shapes = set()
-            for shapes in marking_tasks.values():
+            for shapes in tasks['marking'].values():
                 used_shapes = used_shapes.union(shapes)
 
             aggregations = {}
 
             # iterate subject by subject
             for ii,(raw_classifications,raw_markings,raw_surveys,image_dimensions) in enumerate(self.__sort_annotations__(workflow_id,subject_set)):
-                if survey_tasks == {}:
+                if tasks['survey'] == {}:
                     # do we have any marking tasks?
-                    if marking_tasks != {}:
+                    if tasks['marking'] != {}:
                         aggregations = self.__cluster__(used_shapes,raw_markings,image_dimensions,aggregations)
                         # assert (clustering_aggregations != {}) and (clustering_aggregations is not None)
 
@@ -1576,11 +1576,12 @@ class AggregationAPI:
         task are relevant
         :return:
         """
-        # which of these tasks have classifications associated with them?
-        classification_tasks = {}
-        # which have drawings associated with them
-        marking_tasks = {}
-        survey_tasks = {}
+        tasks = {
+            'classification': {},
+            'marking': {},
+            'survey': {},
+            'unknown': {},
+        }
 
         # convert to json if necessary - not sure why this is necessary but it
         # does happen
@@ -1596,7 +1597,7 @@ class AggregationAPI:
             task_type = task["type"]
 
             if task_type == "drawing":
-                marking_tasks[task_id] = []
+                tasks['marking'][task_id] = []
                 # manage marking tools by the marking type and not the index
                 # so all ellipses will be clustered together
 
@@ -1613,14 +1614,16 @@ class AggregationAPI:
 
                         # is this the first follow up question associated with
                         # this task?
-                        if task_id not in classification_tasks:
-                            classification_tasks[task_id] = {}
-                        classification_tasks[task_id][tool_id] = []
+                        tasks['classification'].setdefault(task_id, {})
+                        tasks['classification'][task_id].setdefault(
+                            tool_id,
+                            []
+                        )
 
                         # note whether each of these questions are single or
                         # multiple response
                         for followup_question in tool["details"]:
-                            classification_tasks[task_id][tool_id].append(
+                            tasks['classification'][task_id][tool_id].append(
                                 followup_question["type"]
                             )
 
@@ -1635,25 +1638,25 @@ class AggregationAPI:
                         "polygon",
                         "bezier"
                     ):
-                        marking_tasks[task_id].append(tool["type"])
+                        tasks['marking'][task_id].append(tool["type"])
                     else:
                         raise Exception('Unknown tool type: %s' % tool['type'])
 
             elif task_type in ("single", "multiple"):
                 # multiple means that more than one response is allowed
-                classification_tasks[task_id] = task["type"]
+                tasks['classification'][task_id] = task["type"]
             elif task_type in ("survey", "flexibleSurvey"):
-                survey_tasks[task_id] = []
+                tasks['survey'][task_id] = []
             else:
                 warning(task)
                 warning(task["type"])
                 # unknown task type
-                raise Exception('Unknown task type: %s' % task['type'])
+                tasks['unknown'][task_id] = task['type']
 
         # note that for follow up questions to marking tasks - the key used is
         # the marking tool label NOT the follow up question label
 
-        return (classification_tasks, marking_tasks, survey_tasks)
+        return tasks
 
     def __set_classification_alg__(self,alg,params={}):
         self.classification_alg = alg(self.environment,params)
@@ -1821,7 +1824,7 @@ class AggregationAPI:
         """
 
         # load the classification, marking and survey json dicts - helps parse annotations
-        classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
+        tasks = self.workflows[workflow_id]
 
         for subject_id,user_list,annotation_list,dimensions in self.__yield_annotations__(workflow_id,subject_set):
             print(subject_id)
@@ -1857,10 +1860,10 @@ class AggregationAPI:
 
                     # see https://github.com/zooniverse/Panoptes-Front-End/issues/2155 for why this is needed
                     if self.project_id in self.survey_projects:
-                        task_id = survey_tasks.keys()[0]
+                        task_id = tasks['survey'].keys()[0]
 
                     # is this a marking task?
-                    if task_id in marking_tasks:
+                    if task_id in tasks['marking']:
                         # skip over any improperly formed annotations - due to browser problems etc.
                         if not isinstance(task["value"],list):
                             print("not properly formed marking - skipping")
@@ -1868,15 +1871,19 @@ class AggregationAPI:
 
                         # a marking task will have follow up classification tasks - even if none are explicitly asked
                         # i.e. existence, or how many users clicked on a given "area"
-                        raw_markings,raw_classifications = self.__add_markings_annotations__(subject_id,workflow_id,task_id,user_id,task["value"],raw_markings,raw_classifications,marking_tasks,classification_tasks,dimensions)
+                        raw_markings,raw_classifications = self.__add_markings_annotations__(subject_id,workflow_id,task_id,user_id,task["value"],raw_markings,raw_classifications,tasks['marking'],tasks['classification'],dimensions)
 
                     # we a have a pure classification task
-                    elif task_id in classification_tasks:
+                    elif task_id in tasks['classification']:
                         raw_classifications = self.__add_classification_annotation__(subject_id,user_id,task_id,task,raw_classifications)
-                    elif task_id in survey_tasks:
+                    elif task_id in tasks['survey']:
                         raw_surveys = self.__add_survey_annotation__(subject_id,user_id,task_id,task,raw_surveys)
                     else:
-                        warning(marking_tasks,classification_tasks,survey_tasks)
+                        warning(
+                            tasks['marking'],
+                            tasks['classification'],
+                            tasks['survey']
+                        )
                         warning(task_id)
                         warning(task)
                         raise Exception('Unknown task ID: %s' % task_id)

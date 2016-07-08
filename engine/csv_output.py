@@ -93,10 +93,10 @@ class CsvOut:
         :return:
         """
         # get the marking_tasks
-        _,marking_tasks,_ = self.workflows[workflow_id]
+        tasks = self.workflows[workflow_id]
         # go through each tool
 
-        all_shapes = set(marking_tasks[task_id])
+        all_shapes = set(tasks['marking'][task_id])
 
         # go through each shape separately
         for shape in all_shapes:
@@ -307,21 +307,21 @@ class CsvOut:
         :param followup_id: if not None - then this is a follow up question to a marking task
         :return:
         """
-        classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
+        tasks = self.workflows[workflow_id]
 
         # go through the classification tasks - they will either be simple c. tasks (one answer allowed)
         # multiple c. tasks (more than one answer allowed) and possibly a follow up question to a marking
-        for task_id in classification_tasks:
+        for task_id in tasks['classification']:
             # is this task a simple classification task?
             # don't care if the questions allows for multiple answers, or requires a single one
-            if classification_tasks[task_id] in ["single","multiple"]:
+            if tasks['classification'][task_id] in ["single","multiple"]:
                 self.__detailed_classification_file_setup__(output_directory,workflow_id,task_id)
                 self.__summary_classification_file_setup__(output_directory,workflow_id,task_id)
 
             else:
                 # this classification task is actually a follow up to a marking task
-                for tool_id in classification_tasks[task_id]:
-                    for followup_id,answer_type in enumerate(classification_tasks[task_id][tool_id]):
+                for tool_id in tasks['classification'][task_id]:
+                    for followup_id,answer_type in enumerate(tasks['classification'][task_id][tool_id]):
                         self.__detailed_classification_file_setup__(output_directory,workflow_id,task_id,tool_id,followup_id)
                         self.__summary_classification_file_setup__(output_directory,workflow_id,task_id,tool_id,followup_id)
 
@@ -526,10 +526,10 @@ class CsvOut:
         be printed out to different files - hence the multiple output files
         - we will give both a summary file and a detailed report file
         """
-        classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
+        tasks = self.workflows[workflow_id]
 
         # iterate over each task and the shapes (not tools) available for each task
-        for task_id,tools in marking_tasks.items():
+        for task_id,tools in tasks['marking'].items():
             for shape in set(tools):
                 # get the file name - and remove any characters (such as spaces) which should not be in a file name
                 fname = str(task_id) + self.instructions[workflow_id][task_id]["instruction"][:50]
@@ -684,19 +684,19 @@ class CsvOut:
         :return:
         """
         # get relevant information for this particular workflow
-        classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
+        tasks = self.workflows[workflow_id]
         instructions = self.instructions[workflow_id]
 
         # start with classification tasks
-        for task_id in classification_tasks.keys():
+        for task_id in tasks['classification'].keys():
             # a subject might not have results for all tasks
             if task_id not in aggregations:
                 continue
 
             # if this a marking task? - so we have follow up questions
-            if task_id in marking_tasks:
+            if task_id in tasks['marking']:
                 # need the instructions for printing out labels
-                followup_questions = classification_tasks[task_id]
+                followup_questions = tasks['classification'][task_id]
                 self.__marking_followup_rows__(workflow_id,task_id,subject_id,aggregations)
             else:
                 # we have a simple classification
@@ -705,7 +705,7 @@ class CsvOut:
                 self.__detailed_row__(workflow_id,task_id,subject_id,aggregations)
 
 
-        for task_id,possible_shapes in marking_tasks.items():
+        for task_id,possible_shapes in tasks['marking'].items():
             for shape in set(possible_shapes):
                 # not every task have been done for every aggregation
                 if task_id in aggregations:
@@ -717,7 +717,7 @@ class CsvOut:
                         self.__detailed_marking_row__(workflow_id,task_id,subject_id,aggregations[task_id],shape)
                         self.__marking_summary_row__(workflow_id,task_id,subject_id,aggregations,shape)
 
-        for task_id in survey_tasks:
+        for task_id in tasks['survey']:
             print(task_id)
             instructions = self.instructions[workflow_id][task_id]
 
@@ -763,9 +763,9 @@ class CsvOut:
         :param workflow_id:
         :return:
         """
-        classification_tasks,marking_tasks,survey_tasks = self.workflows[workflow_id]
+        tasks = self.workflows[workflow_id]
 
-        for task_id in survey_tasks:
+        for task_id in tasks['survey']:
             instructions = self.instructions[workflow_id][task_id]
 
             self.file_names[task_id] = output_directory+str(task_id) + ".csv"
