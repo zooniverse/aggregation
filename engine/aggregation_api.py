@@ -80,8 +80,8 @@ class AggregationAPI:
         self.environment = environment
 
         # a dictionary of clustering algorithms - one per shape
-        # todo - currently all possible algorithms are created for every shape, regardless of whether they are
-        # todo actually used
+        # TODO - currently all possible algorithms are created for every shape, regardless of whether they are
+        # TODO actually used
         self.cluster_algs = None
         # the one classification algorithm
         self.classification_alg = None
@@ -167,7 +167,7 @@ class AggregationAPI:
         # strings
         self.subject_id_type = "int"
 
-        # todo - some time in the far future - complete support for expert
+        # TODO - some time in the far future - complete support for expert
         # annotations
         self.experts = []
 
@@ -244,7 +244,7 @@ class AggregationAPI:
 
         # is there an entry for the project in the yaml file?
         # if so, has a specific workflow id has been provided?
-        # todo - this can be removed or rewritten
+        # TODO - this can be removed or rewritten
         if "workflow_id" in environment_details:
             workflow_id = int(environment_details["workflow_id"])
             try:
@@ -379,7 +379,7 @@ class AggregationAPI:
         if isinstance(metadata,str) or isinstance(metadata,unicode):
             metadata = json.loads(metadata)
 
-        # todo - not sure why this second conversion is needed, but seems to be
+        # TODO - not sure why this second conversion is needed, but seems to be
         if isinstance(metadata,str) or isinstance(metadata,unicode):
             metadata = json.loads(metadata)
 
@@ -571,8 +571,8 @@ class AggregationAPI:
     #     """
     #     for when we want to double check the number of classifications a subject has received
     #     """
-    #     # todo - implement correct version - subject_ids no longer exists in the postgres db
-    #     # todo - not sure if this function is ever called - so only fixed if it is actually called somewhere
+    #     # TODO - implement correct version - subject_ids no longer exists in the postgres db
+    #     # TODO - not sure if this function is ever called - so only fixed if it is actually called somewhere
     #     # print subject_id
     #     # # check to see if we have previously stored values, hopefully will task on calls to the DB
     #     # if workflow_id in self.classifications_per_subject:
@@ -619,8 +619,8 @@ class AggregationAPI:
         # check if another instance of the aggregation engine is already running
         # if so, raise an error
         # if not, create the lock file to prevent another instance from starting
-        # todo - maybe write something to the lock file in case another instance checks at the
-        # todo - exact same time. What about instances for different projects?
+        # TODO - maybe write something to the lock file in case another instance checks at the
+        # TODO - exact same time. What about instances for different projects?
 
         # if os.path.isfile(expanduser("~")+"/aggregation.lock"):
         #     raise InstanceAlreadyRunning()
@@ -960,12 +960,12 @@ class AggregationAPI:
         :return:
         """
         postgres_cursor = self.postgres_session.cursor()
-        # todo - generalize for panoptes
+        # TODO - generalize for panoptes
         stmt = "select aggregation from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = '" + str(subject_id) + "'"
         # stmt = "select aggregation from aggregations where subject_id = '" + str(subject_id) + "'"
         postgres_cursor.execute(stmt)
 
-        # todo - this should be a dict but doesn't seem to be - hmmmm :/
+        # TODO - this should be a dict but doesn't seem to be - hmmmm :/
         agg = postgres_cursor.fetchone()
 
         if agg is None:
@@ -987,7 +987,7 @@ class AggregationAPI:
             center = tuple(cluster["center"])
             print(cluster)
             users[center] = cluster["users"]
-            # # todo - should be only one way - check why both are necessary
+            # # TODO - should be only one way - check why both are necessary
             # if isinstance(cluster['existence'][0],dict):
             #     probabilities[center] = cluster['existence'][0]['1']
             # else:
@@ -1175,11 +1175,11 @@ class AggregationAPI:
 
             self.oldest_new_classification = min(self.oldest_new_classification,created_at)
 
-            # todo - not why exactly, but I guess gold_standard could be something other than boolean
+            # TODO - not why exactly, but I guess gold_standard could be something other than boolean
             if gold_standard != True:
                 gold_standard = False
 
-            # todo - again, not sure why exactly, but we might have something like user_id = None
+            # TODO - again, not sure why exactly, but we might have something like user_id = None
             if not isinstance(user_id,int):
                 user_id = -1
             # get only the major version of the workflow
@@ -1405,7 +1405,7 @@ class AggregationAPI:
 
 
     def __plot_image__(self,subject_id,axes):
-        # todo - still learning about Matplotlib and axes
+        # TODO - still learning about Matplotlib and axes
         # see http://matplotlib.org/users/artists.html
         fname = self.__image_setup__(subject_id)
 
@@ -1439,13 +1439,13 @@ class AggregationAPI:
         :return:
         """
         postgres_cursor = self.postgres_session.cursor()
-        # todo - generalize for panoptes
+        # TODO - generalize for panoptes
         stmt = "select aggregation from aggregations where workflow_id = " + str(workflow_id) + " and subject_id = '" + str(subject_id) + "'"
         # stmt = "select aggregation from aggregations where subject_id = '" + str(subject_id) + "'"
         postgres_cursor.execute(stmt)
         self.postgres_session.commit()
 
-        # todo - this should be a dict but doesn't seem to be - hmmmm :/
+        # TODO - this should be a dict but doesn't seem to be - hmmmm :/
         agg = postgres_cursor.fetchone()
 
         if agg is None:
@@ -1466,7 +1466,7 @@ class AggregationAPI:
 
             center = tuple(cluster["center"])
 
-            # todo - should be only one way - check why both are necessary
+            # TODO - should be only one way - check why both are necessary
             if isinstance(cluster['existence'][0],dict):
                 probabilities[center] = cluster['existence'][0]['1']
             else:
@@ -1788,7 +1788,7 @@ class AggregationAPI:
             raw_survey_annotations[task_id] = {}
         if subject_id not in raw_survey_annotations[task_id]:
             raw_survey_annotations[task_id][subject_id] = {}
-        # todo - think the below can happen when a task is skipped, double check
+        # TODO - think the below can happen when a task is skipped, double check
         # note that if a user sees more than one species - they will be recorded more than once
         # i..e their user id will show up more than once
         if task["value"] != [[]]:
@@ -1940,10 +1940,10 @@ class AggregationAPI:
         update_counter = 0
         insert_counter = 0
 
-        # todo - sort the subject ids so that searching is faster
+        # TODO - sort the subject ids so that searching is faster
 
         for subject_id in aggregations:
-            # todo - maybe get rid of param in subject_ids - end users won't see it anyways
+            # TODO - maybe get rid of param in subject_ids - end users won't see it anyways
             if subject_id == "param":
                 continue
 
@@ -1968,7 +1968,7 @@ class AggregationAPI:
 
         if update_str != "":
             # are there any updates to actually be done?
-            # todo - the updated and created at dates are not being maintained - I'm happy with that
+            # TODO - the updated and created at dates are not being maintained - I'm happy with that
             print("updating " + str(update_counter) + " subjects")
             postgres_cursor.execute("INSERT INTO newvals"+str(self.project_id)+" (workflow_id, subject_id, aggregation) VALUES " + update_str[1:])
             postgres_cursor.execute("UPDATE aggregations SET aggregation = newvals"+str(self.project_id)+".aggregation FROM newvals"+str(self.project_id)+" WHERE newvals"+str(self.project_id)+".subject_id = aggregations.subject_id and newvals"+str(self.project_id)+".workflow_id = aggregations.workflow_id")
@@ -2000,7 +2000,7 @@ class AggregationAPI:
             subject_id = r[0]
 
             # not efficient but will only really matter in development environment
-            # todo but could probably be made more efficient
+            # TODO but could probably be made more efficient
             if (subject_set is not None) and (subject_id not in subject_set):
                 continue
 
@@ -2015,7 +2015,7 @@ class AggregationAPI:
         raise StopIteration()
 
 if __name__ == "__main__":
-    # todo - use getopt
+    # TODO - use getopt
     project_identifier = sys.argv[1]
 
     if len(sys.argv) > 2:
