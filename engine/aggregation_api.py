@@ -1536,30 +1536,29 @@ class AggregationAPI:
 
         return previously_aggregated
 
-    def __readin_tasks__(self,task_dict):
+    def __readin_tasks__(self, task_dict):
         """
-        get the details for each task - for example, what tasks might we want to run clustering algorithms on
-        and if so, what params related to that task are relevant
+        get the details for each task - for example, what tasks might we want
+        to run clustering algorithms on and if so, what params related to that
+        task are relevant
         :return:
         """
         # which of these tasks have classifications associated with them?
         classification_tasks = {}
         # which have drawings associated with them
         marking_tasks = {}
-
         survey_tasks = {}
 
-        # convert to json if necessary - not sure why this is necessary but it does happen
+        # convert to json if necessary - not sure why this is necessary but it
+        # does happen
         # see https://github.com/zooniverse/aggregation/issues/7
-        if isinstance(task_dict,str) or isinstance(task_dict,unicode):
+        if isinstance(task_dict, str) or isinstance(task_dict, unicode):
             task_dict = json.loads(task_dict)
 
-        # print json.dumps(task_dict, sort_keys=True,indent=4, separators=(',', ': '))
-
-        for task_id,task in task_dict.items():
-
+        for task_id, task in task_dict.items():
             # self.task_type[task_id] = tasks[task_id]["type"]
-            # if the task is a drawing one, get the necessary details for clustering
+            # if the task is a drawing one, get the necessary details for
+            # clustering
 
             task_type = task["type"]
 
@@ -1568,34 +1567,49 @@ class AggregationAPI:
                 # manage marking tools by the marking type and not the index
                 # so all ellipses will be clustered together
 
-                # # see if mulitple tools are creating the same shape
-                # counter = {}
+                for tool_id, tool in enumerate(task["tools"]):
+                    # are there any classification questions associated with
+                    # this marking?
+                    if (
+                        ("details" in tool) and
+                        (tool["details"] is not None) and
+                        (tool["details"] != [])
+                    ):
+                        # extract the label of the tool - this means that
+                        # things don't have to ordered
 
-                for tool_id,tool in enumerate(task["tools"]):
-                    # are there any classification questions associated with this marking?
-                    if ("details" in tool) and (tool["details"] is not None) and (tool["details"] != []):
-                        # extract the label of the tool - this means that things don't have to ordered
-
-                        # is this the first follow up question associated with this task?
+                        # is this the first follow up question associated with
+                        # this task?
                         if task_id not in classification_tasks:
                             classification_tasks[task_id] = {}
                         classification_tasks[task_id][tool_id] = []
 
-                        # note whether each of these questions are single or multiple response
+                        # note whether each of these questions are single or
+                        # multiple response
                         for followup_question in tool["details"]:
-                            question_type = followup_question["type"]
-                            classification_tasks[task_id][tool_id].append(question_type)
+                            classification_tasks[task_id][tool_id].append(
+                                followup_question["type"]
+                            )
 
-                    # if the tool is the one of the recognized ones, add it. Otherwise report an error
-                    if tool["type"] in ["line","ellipse","point","circle","rectangle","polygon", "bezier"]:
+                    # if the tool is the one of the recognized ones, add it.
+                    # Otherwise report an error
+                    if tool["type"] in (
+                        "line",
+                        "ellipse",
+                        "point",
+                        "circle",
+                        "rectangle",
+                        "polygon",
+                        "bezier"
+                    ):
                         marking_tasks[task_id].append(tool["type"])
                     else:
                         raise Exception('Unknown tool type: %s' % tool['type'])
 
-            elif task_type in ["single","multiple"]:
+            elif task_type in ("single", "multiple"):
                 # multiple means that more than one response is allowed
                 classification_tasks[task_id] = task["type"]
-            elif task_type in ["survey","flexibleSurvey"]:
+            elif task_type in ("survey", "flexibleSurvey"):
                 survey_tasks[task_id] = []
             else:
                 warning(task)
@@ -1603,10 +1617,10 @@ class AggregationAPI:
                 # unknown task type
                 raise Exception('Unknown task type: %s' % task['type'])
 
-        # note that for follow up questions to marking tasks - the key used is the marking tool label
-        # NOT the follow up question label
+        # note that for follow up questions to marking tasks - the key used is
+        # the marking tool label NOT the follow up question label
 
-        return classification_tasks,marking_tasks,survey_tasks
+        return (classification_tasks, marking_tasks, survey_tasks)
 
     def __set_classification_alg__(self,alg,params={}):
         self.classification_alg = alg(self.environment,params)
