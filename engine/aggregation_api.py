@@ -881,9 +881,10 @@ class AggregationAPI:
 
         return instructions
 
-    def __get_workflow_details__(self,given_workflow_id=None):
+    def __get_workflow_details__(self, given_workflow_id=None):
         """
-        get everything about the workflows - if no id is provided, go with everything
+        get everything about the workflows - if no id is provided, go with
+        everything
         :param workflow_id:
         :return:
         """
@@ -899,22 +900,30 @@ class AggregationAPI:
             workflow_id = int(workflow["id"])
             tasks = workflow["tasks"]
 
-            if (given_workflow_id is None) or (workflow_id == given_workflow_id):
+            if (
+                (given_workflow_id is None) or
+                (workflow_id == given_workflow_id)
+            ):
                 # read in the basic structure of the workflow
                 workflows[workflow_id] = self.__readin_tasks__(tasks)
 
                 # and then the instructions - used for printing out csv files
-                instructions[workflow_id] = self.__get_workflow_instructions__(tasks)
+                instructions[workflow_id] = self.__get_workflow_instructions__(
+                    tasks
+                )
 
                 # read in when the workflow last went through a major change
-                # real problems with subjects that were retired before that date or classifications
-                # given for a subject before that date (since the workflow may have changed completely)
+                # real problems with subjects that were retired before that
+                # date or classifications given for a subject before that
+                # date (since the workflow may have changed completely)
                 updated_at_timestamps[workflow_id] = workflow["updated_at"]
 
                 # get the MAJOR version number
-                versions[workflow_id] = int(math.floor(float(workflow["version"])))
+                versions[workflow_id] = int(
+                    math.floor(float(workflow["version"]))
+                )
 
-        return workflows,versions,instructions,updated_at_timestamps
+        return (workflows, versions, instructions, updated_at_timestamps)
 
     def __get_users_per_cluster__(self,workflow_id,subject_id,task_id,shape):
         """
