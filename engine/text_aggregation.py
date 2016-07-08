@@ -1,23 +1,26 @@
 #!/usr/bin/env python
 from __future__ import print_function
-from aggregation_api import AggregationAPI
-from classification import Classification
-import rollbar
-import requests
-import datetime
-import helper_functions
-import yaml
-import json
-from rectangle_clustering import RectangleClustering
-import parser
-import getopt
-import sys
+
 import boto3
-from helper_functions import warning
+import datetime
+import getopt
+import helper_functions
+import json
 import os
-from boto.s3.key import Key
+import parser
+import requests
+import rollbar
+import sys
+import yaml
+
+from aggregation_api import AggregationAPI
 from boto.s3.connection import S3Connection
+from boto.s3.key import Key
+from classification import Classification
+from helper_functions import warning
+from rectangle_clustering import RectangleClustering
 from transcription_output import ShakespearesWorldOutput,AnnotateOutput
+
 __author__ = 'ggdhines'
 
 
