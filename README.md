@@ -3,7 +3,7 @@
 This repo allows you to do aggregation with Zooniverse projects. Aggregation is the process of taking classifications/markings/transcriptions from the multiple users who see each subject and combining them into a "final" answer that is useful for researchers. 
 For example, if 3 out of 4 people say that an image contains a zebra, aggregation would report that there is a 75% probability that the image does indeed contain a zebra.
 
-Documentation for the Zooniverse Aggregation code can be found at [https://developer.zooniverse.org/projects/aggregation/en/latest/]() (We are currently experiencing severe problems with loading (lots of 403 errors and pages just not loading). We've raised issue and are looking into alternative hosting options - but in the mean time just keep reloading until you get the site to show.)
+Documentation for the Zooniverse Aggregation code can be found at [https://developer.zooniverse.org/projects/aggregation/en/latest/](https://developer.zooniverse.org/projects/aggregation/en/latest/) (We are currently experiencing severe problems with loading (lots of 403 errors and pages just not loading). We've raised issue and are looking into alternative hosting options - but in the mean time just keep reloading until you get the site to show.)
 
 There is a draft of a paper that I was planning on writing on ocr and Tesseract. There is lots of random code in the active-weather directory and a [link](https://drive.google.com/open?id=0By-LeWaBxt31ZVBfZ2R6SXl4NWs) to an unfinished paper I was working on - that paper has some good ideas on how to do line detection/extraction for tabular data.
 
