@@ -69,7 +69,11 @@ class FolgerClustering(TextClustering):
 
         for c in text:
             if ord(c) > 128:
-                ret_text += self.folger_safe_tags[ord(c)]
+                ret_text += re.sub(
+                        r'</?(ex|del|ins|unclear|sup)>',
+                        '',
+                        self.folger_safe_tags[ord(c)]
+                    )
             else:
                 ret_text += c
 
@@ -585,13 +589,7 @@ class FolgerClustering(TextClustering):
                 # as well as the text - at the same time deal with tags (make them all 1 character long)
                 # and other special characters that MAFFT can't deal with
                 # -2 since -1 is for variants
-                tokenized_text = [
-                    re.sub(
-                        r'</?(ex|del|ins|unclear|sup)>',
-                        '',
-                        filtered_markings[i][4]
-                    ) for i in c
-                ]
+                tokenized_text = [filtered_markings[i][4] for i in c]
 
                 variants = [filtered_markings[i][5] for i in c]
 
