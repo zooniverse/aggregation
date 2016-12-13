@@ -353,38 +353,30 @@ class TranscriptionAPI(AggregationAPI):
 
         return url
 
-    def __summarize__(self,subject_filter=None):
-        # start by updating the json output
+    def __summarize__(self, subject_filter=None):
         self.output_tool.__json_output__(subject_filter)
-
-        # and then upload the files to s3
         self.__s3_upload__()
-
-        # and then get the url to send to people
         url = self.__get_signed_url__()
 
-        subject = "Aggregation summary for Project " + str(self.project_name)
+        subject = "Aggregation summary for {}".format(self.project_name)
 
-        body = "We have now retired/completed " + str(self.classification_alg.total_retired) + " documents. "
-        body += "The link to the json aggregation results for all retired subjects is " + url + "\n\n"
-        body += "For help understanding the json format please see https://developer.zooniverse.org/projects/aggregation/en/latest/json.html. The server currently hosting this site is having severe issues. We are looking into alternatives. In the mean time, if you get a message saying the the page doesn't exist or a 403 error, keep reloading (the page definitely does exist)."
+        body = (
+            "We have now retired/completed {} documents. The link to the "
+            "aggregation results for all retired subjects is:\n\n {}"
+            "\n\n- Zooniverse Team"
+        ).format(
+            self.classification_alg.total_retired,
+            url
+        )
 
-        body += "\n\n Greg Hines \n Zooniverse \n \n PS This email was automatically generated."
-
-        # send out the email
-        client = boto3.client('ses',region_name='us-east-1')
+        client = boto3.client('ses', region_name='us-east-1')
         response = client.send_email(
-            Source='greg@zooniverse.org',
+            Source='no-reply@zooniverse.org',
             Destination={
                 'ToAddresses': [
-                    'sysadmins@zooniverse.org'
-                ]#,
-                # 'CcAddresses': [
-                #     'string',
-                # ],
-                # 'BccAddresses': [
-                #     'string',
-                # ]
+                    'sysadmins@zooniverse.org',
+                    self.email_recipients
+                ]
             },
             Message={
                 'Subject': {
@@ -399,9 +391,9 @@ class TranscriptionAPI(AggregationAPI):
                 }
             },
             ReplyToAddresses=[
-                'greg@zooniverse.org',
+                'no-reply@zooniverse.org',
             ],
-            ReturnPath='greg@zooniverse.org'
+            ReturnPath='no-reply@zooniverse.org'
         )
         print("response from emailing results")
         print(response)
@@ -452,4 +444,6 @@ if __name__ == "__main__":
 
         processed_subjects = project.__aggregate__(workflow_id)
 
-        project.__summarize__()
+        # only send summary emails on Thursday
+        if datetime.datetime.today().weekday() == 3:
+            project.__summarize__()
