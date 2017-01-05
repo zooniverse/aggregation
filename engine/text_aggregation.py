@@ -19,7 +19,7 @@ from classification import Classification
 from helper_functions import warning
 from rectangle_clustering import RectangleClustering
 from transcription_output import ShakespearesWorldOutput,AnnotateOutput
-from panoptes_client import Workflow
+from panoptes_client import Project, Workflow
 from panoptes_client.panoptes import PanoptesAPIException
 
 __author__ = 'ggdhines'
@@ -180,7 +180,6 @@ class TranscriptionAPI(AggregationAPI):
         if "tags" in param_details[self.project_id]:
             additional_text_args["tags"] = param_details[self.project_id]["tags"]
 
-        self.email_recipients = param_details[self.project_id]["email"]
         self.project_name = param_details[self.project_id]["project_name"]
 
         # now that we have the additional text arguments, convert text_algorithm from a class
@@ -374,8 +373,14 @@ class TranscriptionAPI(AggregationAPI):
             Source='no-reply@zooniverse.org',
             Destination={
                 'ToAddresses': [
-                    'sysadmins@zooniverse.org',
-                    self.email_recipients
+                    u.email for u in Project.find(
+                        self.project_id
+                    ).collaborators(
+                        'owner',
+                        'collaborator',
+                        'researcher',
+                        'expert'
+                    )
                 ]
             },
             Message={

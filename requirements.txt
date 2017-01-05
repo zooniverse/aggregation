@@ -16,4 +16,4 @@ rq
 scikit-learn
 setproctitle
 termcolor
-panoptes-client>=0.4
+panoptes-client>=0.6

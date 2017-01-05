@@ -1351,7 +1351,8 @@ class AggregationAPI:
             Panoptes.connect(
                 endpoint=self.host,
                 username=self.user_name,
-                password=self.password
+                password=self.password,
+                admin=True
             )
 
         self.token = None
