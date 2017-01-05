@@ -439,11 +439,34 @@ if __name__ == "__main__":
     if project_id is None:
         raise ValueError('project_id is None')
 
-    with TranscriptionAPI(project_id,environment,end_date) as project:
+    with TranscriptionAPI(project_id, environment, end_date) as project:
         project.__setup__(workflow_id)
 
         processed_subjects = project.__aggregate__(workflow_id)
 
-        # only send summary emails on Thursday
-        if datetime.datetime.today().weekday() == 3:
+        email_last_path = os.path.join(
+            '/', 'var', 'run', 'aggregation-email-last-{}'.format(project_id)
+        )
+
+        if os.path.exists(email_last_path):
+            with open(email_last_path, 'r') as email_last_file:
+                try:
+                    email_last_time = datetime.datetime.fromtimestamp(
+                        float(email_last_file.read())
+                    )
+                except (ValueError, IOError):
+                    email_last_time = None
+        else:
+            email_last_time = None
+
+        if (
+            email_last_time and (
+                email_last_time <= (
+                    datetime.datetime.now() - datetime.timedelta(days=7)
+                )
+            )
+        ) or email_last_time is None:
             project.__summarize__()
+
+            with open(email_last_path, 'w') as email_last_file:
+                email_last_file.write(str(time.time()))
