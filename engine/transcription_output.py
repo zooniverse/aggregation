@@ -68,6 +68,19 @@ class UnicodeWriter:
         return v
 
 
+def flatten(l, o=None):
+    # We need to redefine o as a new list here, or on subsequent calls Python
+    # will reuse the same list instance for o
+    if o is None:
+        o = []
+    for x in l:
+        if isinstance(x, list):
+            flatten(x, o)
+        else:
+            o.append(x)
+    return o
+
+
 class TranscriptionOutput:
     __metaclass__ = ABCMeta
 
@@ -94,7 +107,7 @@ class TranscriptionOutput:
 
     def write_csv_output(self, project_id, aggregation_data):
         aggregation_out = [
-            ['subject_id', 'aggregated text', 'accuracy'],
+            ['subject_id', 'aggregated text', 'accuracy', 'variants'],
         ]
         clustered_out = [
             ['subject_id', 'cluster number', 'coordinates',
@@ -106,6 +119,7 @@ class TranscriptionOutput:
         for subject_id, subject_aggregation in aggregation_data.items():
             if not 'text' in subject_aggregation:
                 continue
+
             subject_metadata = json.loads(
                 subject_aggregation['metadata']
             )
@@ -134,10 +148,15 @@ class TranscriptionOutput:
                         transcription['text']
                     ])
 
+            variants = ", ".join(
+                flatten(subject_aggregation.get('variants', []))
+            )
+
             new_row = [
                 str(subject_id),
                 aggregated_text,
-                str(sum_accuracy/total_text)
+                str(sum_accuracy/total_text),
+                variants
             ]
 
             for field in metadata_field_names:
