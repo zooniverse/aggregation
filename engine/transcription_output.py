@@ -136,7 +136,11 @@ class TranscriptionOutput:
                     ])
 
             variants = ", ".join(
-                [v[0] for v in subject_aggregation.get('variants', [])]
+                [
+                    v[0]
+                    for x in subject_aggregation.get('variants', [])
+                    for v in x
+                ]
             )
 
             new_row = [
