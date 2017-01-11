@@ -68,19 +68,6 @@ class UnicodeWriter:
         return v
 
 
-def flatten(l, o=None):
-    # We need to redefine o as a new list here, or on subsequent calls Python
-    # will reuse the same list instance for o
-    if o is None:
-        o = []
-    for x in l:
-        if isinstance(x, list):
-            flatten(x, o)
-        else:
-            o.append(x)
-    return o
-
-
 class TranscriptionOutput:
     __metaclass__ = ABCMeta
 
@@ -149,7 +136,7 @@ class TranscriptionOutput:
                     ])
 
             variants = ", ".join(
-                flatten(subject_aggregation.get('variants', []))
+                [v[0] for v in subject_aggregation.get('variants', [])]
             )
 
             new_row = [
