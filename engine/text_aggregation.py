@@ -378,7 +378,7 @@ class TranscriptionAPI(AggregationAPI):
                     ).collaborators(
                         'owner',
                         'collaborator',
-                        'researcher',
+                        'scientist',
                         'expert'
                     )
                 ]
